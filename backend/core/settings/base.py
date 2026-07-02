@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     # Local
     "apps.accounts",
     "apps.pages",
+    "apps.registry",
 ]
 
 MIDDLEWARE = [

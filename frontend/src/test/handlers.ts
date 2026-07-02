@@ -10,4 +10,5 @@ export const handlers = [
   http.get(`${API}/api/health/`, () =>
     HttpResponse.json({ status: "ok" })
   ),
+  http.get(`${API}/api/registry/models/`, () => HttpResponse.json([])),
 ]

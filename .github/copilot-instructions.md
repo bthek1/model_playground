@@ -4,16 +4,22 @@
 > is the Claude Code counterpart and covers the same conventions — keep the two in sync.
 
 ## Project Overview
-This is a **template** for new Django + DRF + React projects. It is a monorepo containing a
-decoupled web application:
-- `backend/` — Django REST Framework API (Python) with PostgreSQL and Celery
-- `frontend/` — React SPA built with Vite (TypeScript) with TanStack Query + TanStack Router, Tailwind CSS, shadcn/ui, React Hook Form + Zod, Zustand, Vitest
+**Model Playground** — a web app for running ML models (LLMs, computer vision, custom networks)
+**directly in the browser on the user's GPU via raw WebGPU** (WGSL compute shaders — no
+Transformers.js/ONNX/WebLLM). It is a monorepo containing a decoupled web application:
+- `backend/` — Django REST Framework API (Python) with PostgreSQL and Celery. Acts as a **model
+  registry** (catalog metadata + inference-run records); it does **not** run inference.
+- `frontend/` — React SPA built with Vite (TypeScript) with TanStack Query + TanStack Router,
+  Tailwind CSS, shadcn/ui, React Hook Form + Zod, Zustand, Vitest. Owns the **WebGPU runtime**
+  in `src/webgpu/`; inference runs client-side in a Web Worker.
 
-The backend exposes only API endpoints. The frontend consumes them via HTTP.
-They are developed and deployed independently.
+The backend exposes only API endpoints. The frontend consumes them via HTTP. Model weights are
+fetched by the browser from a model host/CDN (`ModelCard.weights_url`), never proxied through
+Django. They are developed and deployed independently.
 
-Because this is a starter template, keep everything generic and reusable — avoid hardcoding
-project-specific names or data, and prefer documented conventions over one-off solutions.
+This began as a generic Django+React template, so keep shared infrastructure generic and reusable —
+prefer documented conventions over one-off solutions. WebGPU inference is the domain focus; see
+`docs/explanations/webgpu-inference.md`.
 
 ---
 
@@ -82,6 +88,14 @@ AUTH_USER_MODEL = "accounts.CustomUser"
 - Define tasks with `@shared_task` so they don't import the app instance directly
 - Run locally with `just celery-up` (worker + beat via Docker) or `just celery-worker` (worker outside Docker); `just flower` starts the Flower monitoring UI on port 5555
 - Full setup and the DRF dispatch/poll/revoke pattern: `docs/guides/celery_setup.md`
+
+**Model registry (`apps/registry/`):**
+- The catalog of browser-runnable models: `ModelCard` (metadata, `weights_url`, free-form `config`)
+  and `InferenceRun` (client-reported run metrics). Exposed under `/api/registry/` via DRF
+  `ViewSet`s + a `DefaultRouter` (`ModelCardViewSet`, `InferenceRunViewSet`).
+- Permissions: public read of public models; auth-gated create/update; users see only their own runs.
+- **The backend never runs inference** — it stores metadata only. `services.record_inference_run()`
+  persists what the client reports. Endpoints: `docs/standards/api-contracts.md`.
 
 ---
 
@@ -205,6 +219,22 @@ export const Route = createFileRoute('/users/$userId')({
 - Charts: **ECharts** via the lazy-loaded `src/components/charts/EChart.tsx` wrapper (`echarts` is heavy — keep it code-split with `lazy(() => import(...))`), or **Recharts** for lightweight composable SVG charts
 - Markdown / LLM output: render with the `src/components/Markdown.tsx` component (`react-markdown` + `remark-gfm`)
 
+**WebGPU inference (`src/webgpu/`) — raw WebGPU, no ML framework:**
+- Models are **WGSL compute shaders** in `src/webgpu/shaders/`, imported as strings via Vite's
+  `?raw` suffix (`import shader from "./shaders/x.wgsl?raw"`). Do **not** add Transformers.js,
+  ONNX Runtime, or WebLLM — kernels are hand-written for control and a minimal bundle.
+- GPU types come from `@webgpu/types` (registered in `tsconfig.app.json` `types`).
+- Pipeline (see `runtime.ts::runMatmul` for the reference): `getGPUDevice()` (memoised, re-acquires
+  after device-lost) → `createComputePipeline(device, wgsl)` → storage/uniform buffers (`buffers.ts`)
+  → bind group → `dispatchWorkgroups(ceil(dim/workgroupSize))` → `readBackFloat32`.
+- **Run heavy compute in the Web Worker** (`worker.ts`), driven from the main thread by
+  `workerClient.ts`, which transfers input/output `ArrayBuffer`s (zero-copy) and correlates responses
+  by request id. Never block the UI thread with a dispatch.
+- `capabilities.detectWebGPU()` never throws — it returns `status: "unsupported"` where
+  `navigator.gpu` is absent (Node/tests/older browsers). UI must degrade gracefully.
+- Cross-check every new kernel against a CPU reference during development (see `useGpuBenchmark`).
+- Adding a model = write the WGSL kernel + register a `ModelCard`. See `docs/guides/adding-a-model.md`.
+
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
 **Commands:**
@@ -256,7 +286,8 @@ Key commands:
 │   │   │   ├── views.py
 │   │   │   ├── urls.py
 │   │   │   └── migrations/
-│   │   └── pages/             # Health check and static page endpoints
+│   │   ├── pages/             # Health check and static page endpoints
+│   │   └── registry/          # Model catalog (ModelCard) + run metadata (InferenceRun)
 │   ├── conftest.py            # Root pytest fixtures
 │   ├── manage.py
 │   ├── pyproject.toml         # Dependencies (uv), pytest, ruff config
@@ -267,6 +298,7 @@ Key commands:
 │   │   ├── components/
 │   │   │   ├── ui/            # shadcn/ui copy-paste components
 │   │   │   └── charts/        # EChart wrapper (lazy-loaded); Recharts used inline
+│   │   ├── webgpu/            # Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
 │   │   ├── hooks/             # Custom hooks (business logic)
 │   │   ├── lib/               # Shared utilities: cn(), date wrappers
 │   │   ├── routes/            # TanStack Router file-based routes

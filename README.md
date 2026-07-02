@@ -1,9 +1,18 @@
-# django_react_template
+# model_playground
 
-A monorepo starter for a decoupled web application:
+Run machine-learning models — LLMs, computer vision, and custom networks —
+**directly in the browser on your GPU via raw WebGPU** (WGSL compute shaders, no
+ML framework). A decoupled monorepo:
 
-- **`backend/`** — Django REST Framework API (Python 3.13, PostgreSQL, Celery)
-- **`frontend/`** — React 18 SPA (TypeScript, Vite, TanStack Router, TanStack Query)
+- **`backend/`** — Django REST Framework API (Python 3.13, PostgreSQL, Celery).
+  A **model registry**: serves the catalog and stores inference-run metadata.
+  It does **not** run inference.
+- **`frontend/`** — React 19 SPA (TypeScript, Vite, TanStack Router, TanStack
+  Query). Owns the **WebGPU runtime** (`src/webgpu/`); inference runs client-side
+  in a Web Worker.
+
+Model weights are fetched by the browser from a model host/CDN — never proxied
+through Django. See [`docs/explanations/webgpu-inference.md`](docs/explanations/webgpu-inference.md).
 
 ---
 
@@ -11,7 +20,7 @@ A monorepo starter for a decoupled web application:
 
 ```bash
 # 1. Clone
-git clone <repo-url> && cd django_react_template
+git clone <repo-url> && cd model_playground
 
 # 2. Create env files
 cp backend/.env.example backend/.env
@@ -37,6 +46,8 @@ docker compose exec backend python manage.py migrate
 
 | Doc | Description |
 |-----|-------------|
+| [docs/explanations/webgpu-inference.md](docs/explanations/webgpu-inference.md) | How in-browser inference works (raw WebGPU pipeline) |
+| [docs/guides/adding-a-model.md](docs/guides/adding-a-model.md) | Add a model: WGSL kernel + registry entry |
 | [docs/guides/local-setup.md](docs/guides/local-setup.md) | Full local dev setup (Docker + without Docker) |
 | [docs/guides/onboarding.md](docs/guides/onboarding.md) | New developer orientation |
 | [docs/standards/api-contracts.md](docs/standards/api-contracts.md) | All API endpoints, request/response shapes |
@@ -57,15 +68,17 @@ docker compose exec backend python manage.py migrate
 │   ├── core/         Settings, URLs, WSGI
 │   ├── apps/         Domain applications
 │   │   ├── accounts/ User model (email-based), registration, JWT auth
-│   │   └── pages/    Health check
+│   │   ├── pages/    Health check
+│   │   └── registry/ Model catalog (ModelCard) + inference-run metadata
 │   └── manage.py
 ├── frontend/         React SPA
 │   └── src/
 │       ├── api/      Axios client, query keys, API functions
 │       ├── components/ui/  shadcn/ui components
-│       ├── hooks/    Custom hooks (auth, etc.)
+│       ├── webgpu/   Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
+│       ├── hooks/    Custom hooks (auth, useWebGPU, useGpuBenchmark, useModels)
 │       ├── lib/      cn() helper, date-fns wrappers
-│       ├── routes/   TanStack Router file-based routes
+│       ├── routes/   TanStack Router file-based routes (incl. /playground)
 │       ├── schemas/  Zod validation schemas
 │       ├── store/    Zustand global state slices
 │       └── types/    TypeScript types from API contracts
@@ -79,6 +92,7 @@ docker compose exec backend python manage.py migrate
 
 | Layer | Technology |
 |-------|-----------|
+| In-browser inference | Raw **WebGPU** + WGSL compute shaders (Web Worker) |
 | Backend language | Python 3.13 |
 | Backend framework | Django 5 + Django REST Framework |
 | Auth | JWT (`djangorestframework-simplejwt`) |
@@ -87,7 +101,7 @@ docker compose exec backend python manage.py migrate
 | Dependency manager | [uv](https://github.com/astral-sh/uv) |
 | Frontend language | TypeScript |
 | Frontend bundler | Vite |
-| UI framework | React 18 |
+| UI framework | React 19 |
 | Routing | TanStack Router |
 | Server state | TanStack Query v5 |
 | HTTP client | Axios |
@@ -95,6 +109,8 @@ docker compose exec backend python manage.py migrate
 | Forms | React Hook Form + Zod |
 | Global state | Zustand |
 | Testing (frontend) | Vitest + React Testing Library |
-| Utilities | date-fns, Plotly.js |
+| GPU types | @webgpu/types |
+| Charts | ECharts (lazy) + Recharts |
+| Utilities | date-fns |
 | Container | Docker Compose |
 | Task runner | [just](https://github.com/casey/just) |

@@ -35,7 +35,8 @@ frontend/src/
 ├── api/            # Axios client, endpoint functions, queryKeys
 ├── components/
 │   ├── ui/         # shadcn/ui copy-paste components (never modify directly)
-│   └── charts/     # PlotlyChart wrapper (always lazy-loaded)
+│   └── charts/     # EChart wrapper (lazy-loaded); Recharts used inline
+├── webgpu/         # Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
 ├── hooks/          # Custom hooks with business logic
 ├── lib/            # cn(), date wrappers
 ├── routes/         # TanStack Router file-based routes
@@ -124,6 +125,16 @@ const form = useForm<LoginSchema>({ resolver: zodResolver(loginSchema) })
 - Date formatting: `date-fns` — always via `src/lib/date.ts` wrappers, never call `date-fns` directly in components
 - Charts: `plotly.js-dist-min` — always via `src/components/charts/PlotlyChart.tsx`, always lazy-loaded
 
+**WebGPU inference (`src/webgpu/`) — raw WebGPU, no ML framework:**
+- Models are WGSL compute shaders in `src/webgpu/shaders/`, imported as strings via Vite `?raw`
+  (`import shader from "./shaders/x.wgsl?raw"`). Do **not** add Transformers.js / ONNX Runtime / WebLLM.
+- GPU types come from `@webgpu/types` (in `tsconfig.app.json` `types`).
+- Pipeline (ref: `runtime.ts::runMatmul`): `getGPUDevice()` → `createComputePipeline(wgsl)` →
+  storage/uniform buffers (`buffers.ts`) → `dispatchWorkgroups` → `readBackFloat32`.
+- Run heavy compute in the Web Worker (`worker.ts`) via `workerClient.ts` — never block the UI thread.
+- `detectWebGPU()` never throws; returns `status: "unsupported"` where `navigator.gpu` is absent. Degrade gracefully.
+- Cross-check every new kernel against a CPU reference. Adding a model: kernel + `ModelCard` (see `docs/guides/adding-a-model.md`).
+
 **Env Vars:**
 - Prefix with `VITE_`. Access via `import.meta.env.VITE_*`
 
@@ -152,3 +163,5 @@ const form = useForm<LoginSchema>({ resolver: zodResolver(loginSchema) })
 - Never call `date-fns` directly in components — use `src/lib/date.ts` wrappers
 - Never modify generated shadcn/ui files directly
 - Never make real HTTP calls in tests — mock Axios
+- Never add an ML inference framework (Transformers.js / ONNX Runtime / WebLLM) — kernels are raw WGSL
+- Never run a GPU dispatch on the main thread for heavy work — use the Web Worker (`src/webgpu/worker.ts`)

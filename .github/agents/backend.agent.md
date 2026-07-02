@@ -36,7 +36,8 @@ backend/
 │   └── wsgi.py
 ├── apps/
 │   ├── accounts/       # CustomUser, JWT auth endpoints
-│   └── pages/          # Health check, static page endpoints
+│   ├── pages/          # Health check, static page endpoints
+│   └── registry/       # Model catalog (ModelCard) + inference-run metadata
 ├── conftest.py         # Root pytest fixtures
 ├── manage.py
 └── pyproject.toml
@@ -99,6 +100,13 @@ AUTH_USER_MODEL = "accounts.CustomUser"
 - `drf-spectacular` is installed
 - Schema at `/api/schema/`, Swagger UI at `/api/schema/swagger-ui/`
 - Update `docs/standards/api-contracts.md` when endpoints change
+
+## Model Registry (`apps/registry/`)
+- Catalog of browser-runnable models: `ModelCard` (metadata, `weights_url`, free-form `config`) and
+  `InferenceRun` (client-reported metrics), exposed under `/api/registry/` via DRF `ViewSet`s + router
+- Public read of public models; auth-gated writes; users see only their own runs
+- **The backend never runs inference** — it stores metadata only. Inference happens in the browser via
+  WebGPU. `services.record_inference_run()` persists what the client reports.
 
 ## Scaffolding New Apps
 - Use `just be-startapp <name>` to scaffold a new Django app under `apps/`

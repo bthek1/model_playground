@@ -7,4 +7,8 @@ export const queryKeys = {
   tasks: {
     status: (taskId: string) => ["tasks", taskId] as const,
   },
+  models: {
+    all: ["models"] as const,
+    detail: (slug: string) => ["models", slug] as const,
+  },
 } as const;

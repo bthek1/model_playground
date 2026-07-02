@@ -2,25 +2,40 @@
 
 ## Overview
 
-This project is a **decoupled monorepo**: a Django REST Framework backend and a React SPA frontend, developed and deployed independently, communicating exclusively over HTTP.
+**Model Playground** runs machine-learning models — LLMs, computer vision, and
+custom networks — **directly in the browser on the user's GPU via raw WebGPU**.
+Inference never touches the server: weights are fetched to the client and all
+compute happens in WGSL shaders on the local device.
+
+It is a **decoupled monorepo**: a Django REST Framework backend and a React SPA
+frontend, developed and deployed independently, communicating over HTTP.
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        Monorepo root                         │
-│                                                              │
-│  ┌─────────────────────┐    HTTP/JSON    ┌────────────────┐  │
-│  │   frontend/         │ ─────────────► │   backend/     │  │
-│  │   React SPA         │ ◄──────────── │   DRF API      │  │
-│  │   (Vite, TS)        │                │   (Django)     │  │
-│  └─────────────────────┘                └───────┬────────┘  │
-│                                                  │           │
-│                                         ┌────────▼────────┐ │
-│                                         │   PostgreSQL    │ │
-│                                         └─────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                           Monorepo root                            │
+│                                                                    │
+│  ┌───────────────────────────┐   HTTP/JSON   ┌──────────────────┐ │
+│  │   frontend/  React SPA     │ ───────────► │  backend/  DRF   │ │
+│  │                            │ ◄─────────── │  model registry  │ │
+│  │  ┌──────────────────────┐  │  catalog +    └────────┬─────────┘ │
+│  │  │  WebGPU runtime      │  │  run metadata          │           │
+│  │  │  (device → pipeline  │  │               ┌────────▼────────┐  │
+│  │  │   → dispatch), in a  │  │               │   PostgreSQL    │  │
+│  │  │  Web Worker          │  │               └─────────────────┘  │
+│  │  └──────────┬───────────┘  │                                    │
+│  └─────────────┼──────────────┘                                    │
+│         ┌──────▼───────┐  weights fetched from a model host / CDN  │
+│         │  User's GPU  │  (not the Django backend)                 │
+│         └──────────────┘                                           │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-The two applications **share no code**. The API contract (documented in `docs/standards/api-contracts.md`) is the only interface between them.
+The backend is a **model registry**: it stores the catalog (metadata, weights
+URLs, per-model config) and records inference-run metrics reported by the
+client. It does **not** run inference. The two applications **share no code**;
+the API contract (`docs/standards/api-contracts.md`) is the only interface
+between them. How in-browser inference works is covered in
+`docs/explanations/webgpu-inference.md`.
 
 ---
 
@@ -44,8 +59,14 @@ backend/
 │   │   ├── services.py    Business logic (user creation, etc.)
 │   │   ├── views.py       Class-based API views
 │   │   └── urls.py
-│   └── pages/             Infrastructure endpoints
-│       └── views.py       /api/health/ liveness check
+│   ├── pages/             Infrastructure endpoints
+│   │   └── views.py       /api/health/ liveness check
+│   └── registry/          Model catalog + inference-run metadata
+│       ├── models.py      ModelCard (catalog entry), InferenceRun (run record)
+│       ├── serializers.py Catalog / run request-response shapes
+│       ├── services.py    record_inference_run()
+│       ├── views.py       ModelCardViewSet, InferenceRunViewSet (DRF router)
+│       └── urls.py        /api/registry/…
 ├── manage.py
 ├── pyproject.toml         Python dependencies (managed by uv)
 └── .env.example
@@ -61,6 +82,11 @@ backend/
 
 **UUID primary keys.** All models use `UUIDField(default=uuid4)` as the primary key to avoid exposing sequential integer IDs in the API.
 
+**Registry, not inference server.** The `registry` app is deliberately thin: it
+serves catalog metadata and stores client-reported run metrics. Weights live on
+a model host/CDN (`ModelCard.weights_url`); GPU compute happens in the browser.
+This keeps the backend cheap and stateless with respect to ML workloads.
+
 ---
 
 ## Frontend Structure
@@ -71,11 +97,24 @@ frontend/
 │   ├── api/
 │   │   ├── client.ts      Axios instance — base URL, JWT interceptor
 │   │   ├── auth.ts        Auth API call functions
+│   │   ├── models.ts      Registry API (list/get models, record runs)
 │   │   └── queryKeys.ts   Centralised TanStack Query key constants
 │   ├── components/        Shared / reusable UI components
 │   │   └── ui/            shadcn/ui copy-paste components (Button, Input, Form, Card…)
+│   ├── webgpu/            Raw-WebGPU runtime (no ML framework — see below)
+│   │   ├── capabilities.ts  detectWebGPU() — adapter/features/limits probe
+│   │   ├── device.ts        Shared GPUDevice (memoised, device-lost aware)
+│   │   ├── buffers.ts       Storage/uniform buffer + readback helpers
+│   │   ├── pipeline.ts      WGSL → GPUComputePipeline
+│   │   ├── runtime.ts       runMatmul() reference kernel + benchmark
+│   │   ├── worker.ts        Web Worker that owns the device, runs jobs
+│   │   ├── workerClient.ts  Main-thread promise API over the worker
+│   │   └── shaders/         WGSL compute shaders (matmul.wgsl, relu.wgsl)
 │   ├── hooks/             Custom hooks encapsulating business logic
-│   │   └── useAuth.ts     Auth state, login, logout
+│   │   ├── useAuth.ts     Auth state, login, logout
+│   │   ├── useWebGPU.ts   WebGPU capability probe (for the UI)
+│   │   ├── useGpuBenchmark.ts  Runs the matmul kernel via the worker
+│   │   └── useModels.ts   Model catalog query
 │   ├── lib/
 │   │   ├── utils.ts       cn() helper (clsx + tailwind-merge)
 │   │   └── date.ts        date-fns wrappers (formatDate, formatRelative)
@@ -83,6 +122,7 @@ frontend/
 │   │   ├── __root.tsx     Root layout
 │   │   ├── index.tsx      Home page
 │   │   ├── login.tsx      Login page
+│   │   ├── playground.tsx GPU capabilities + benchmark + model catalog
 │   │   └── demo.chart.tsx ECharts + Recharts demo
 │   ├── schemas/           Zod validation schemas (one file per domain)
 │   │   └── auth.ts        Login and register schemas
@@ -114,11 +154,42 @@ frontend/
 
 **Zustand for global UI state.** Lightweight slices in `src/store/` (one file per concern) hold UI flags that don't belong in TanStack Query (e.g. sidebar open/close, logout-in-progress). The `immer` middleware is used for all mutations. Server-fetched data stays in TanStack Query — never in Zustand.
 
-**Vitest + React Testing Library for tests.** Tests run in a `jsdom` environment configured in `vite.config.ts`. Test files are co-located with the source file they test (e.g. `useAuth.test.tsx` next to `useAuth.ts`).
+**Vitest + React Testing Library for tests.** Tests run in a `happy-dom` environment configured in `vite.config.ts`. Test files are co-located with the source file they test (e.g. `useAuth.test.tsx` next to `useAuth.ts`).
+
+**Raw WebGPU for inference — no ML framework.** The `src/webgpu/` module talks to
+the WebGPU API directly: acquire a `GPUDevice`, compile WGSL into a compute
+pipeline, upload inputs to storage buffers, dispatch, read results back. There is
+deliberately no Transformers.js / ONNX Runtime / WebLLM dependency — models are
+expressed as WGSL kernels for maximum control and a minimal bundle. Heavy compute
+runs in a **Web Worker** (`worker.ts`) so the UI thread stays responsive. See
+`docs/explanations/webgpu-inference.md` for the full pipeline and
+`docs/guides/adding-a-model.md` to add a model.
 
 ---
 
 ## Data Flow
+
+### In-browser inference flow (WebGPU)
+
+```
+Playground route
+  └─► useModels() ─► GET /api/registry/models/  (catalog metadata only)
+  └─► useGpuBenchmark() / model runner
+        └─► workerClient.ts  (postMessage, transfer input buffers)
+              └─► Web Worker (worker.ts)
+                    └─► runtime.ts
+                          ├─ getGPUDevice()            (device.ts)
+                          ├─ createComputePipeline()   (pipeline.ts, WGSL)
+                          ├─ upload storage buffers     (buffers.ts)
+                          ├─ dispatchWorkgroups()       → User's GPU
+                          └─ readBackFloat32()          (buffers.ts)
+        └─◄ result posted back (output buffer transferred)
+  └─► POST /api/registry/runs/  (optional: report metrics)
+```
+
+Weights referenced by `ModelCard.weights_url` are fetched by the client from a
+model host/CDN — not proxied through Django.
+
 
 ### Authenticated request flow
 
