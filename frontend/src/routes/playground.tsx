@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Cpu, Gauge, Layers } from "lucide-react";
+import { CheckCircle2, Cpu, Gauge, Layers, Loader2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +12,7 @@ import {
 import { useGpuBenchmark } from "@/hooks/useGpuBenchmark";
 import { useModels } from "@/hooks/useModels";
 import { useWebGPU } from "@/hooks/useWebGPU";
+import type { WebGPUCapabilities, WebGPUStatus } from "@/webgpu/types";
 
 export const Route = createFileRoute("/playground")({
   component: PlaygroundPage,
@@ -19,21 +20,80 @@ export const Route = createFileRoute("/playground")({
 
 const BENCH_SIZE = 512;
 
+// Human-readable summary for each capability status, keyed off the outcome of
+// detectWebGPU() (which now confirms a real GPUDevice can be acquired).
+const STATUS_INFO: Record<
+  WebGPUStatus,
+  { label: string; hint: string; ok: boolean }
+> = {
+  ready: {
+    label: "GPU accessible",
+    hint: "This browser can acquire a GPU device and run WebGPU compute.",
+    ok: true,
+  },
+  "no-device": {
+    label: "No GPU access",
+    hint: "An adapter was found but a GPU device could not be acquired — the driver may be blocked, out of resources, or unavailable.",
+    ok: false,
+  },
+  "no-adapter": {
+    label: "No GPU access",
+    hint: "WebGPU is present but no adapter was offered — likely no compatible GPU or driver in this environment.",
+    ok: false,
+  },
+  unsupported: {
+    label: "WebGPU unsupported",
+    hint: "This browser doesn't expose WebGPU. Use Chrome/Edge 113+, Firefox 141+, or Safari 26+.",
+    ok: false,
+  },
+};
+
 function CapabilityPanel() {
   const { capabilities, loading } = useWebGPU();
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Probing WebGPU…</p>;
-  }
-  if (!capabilities || capabilities.status !== "ready") {
     return (
-      <p className="text-sm text-destructive">
-        WebGPU is unavailable ({capabilities?.status ?? "unknown"}). Use a
-        Chromium-based browser with WebGPU enabled to run models here.
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" /> Checking GPU access…
       </p>
     );
   }
 
+  const status = capabilities?.status ?? "unsupported";
+  const info = STATUS_INFO[status];
+
+  return (
+    <div className="space-y-4 text-sm">
+      <div
+        className={`flex items-start gap-2 rounded-md border p-3 ${
+          info.ok
+            ? "border-emerald-500/30 bg-emerald-500/10"
+            : "border-destructive/30 bg-destructive/10"
+        }`}
+      >
+        {info.ok ? (
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        ) : (
+          <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+        )}
+        <div>
+          <p className="font-medium">{info.label}</p>
+          <p className="text-muted-foreground">{info.hint}</p>
+        </div>
+      </div>
+
+      {capabilities?.status === "ready" && (
+        <CapabilityDetails capabilities={capabilities} />
+      )}
+    </div>
+  );
+}
+
+function CapabilityDetails({
+  capabilities,
+}: {
+  capabilities: WebGPUCapabilities;
+}) {
   const { adapter, features, limits, isFallbackAdapter } = capabilities;
   return (
     <div className="space-y-4 text-sm">

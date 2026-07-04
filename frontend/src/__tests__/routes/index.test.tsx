@@ -62,10 +62,10 @@ describe('LandingPage', () => {
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
-  it('redirects to /demo/chart when user is authenticated', () => {
+  it('redirects to /playground when user is authenticated', () => {
     if (!LandingPage) throw new Error('LandingPage component not found')
     mockUseMe.mockReturnValue({ data: { id: '1', email: 'a@b.com' } })
     render(<LandingPage />, { wrapper })
-    expect(mockNavigate).toHaveBeenCalledWith({ to: '/demo/chart' })
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/playground' })
   })
 })

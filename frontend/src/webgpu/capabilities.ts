@@ -52,13 +52,17 @@ export async function detectWebGPU(): Promise<WebGPUCapabilities> {
     return { status: "unsupported", ...empty };
   }
 
-  const adapter = await navigator.gpu.requestAdapter();
+  let adapter: GPUAdapter | null = null;
+  try {
+    adapter = await navigator.gpu.requestAdapter();
+  } catch {
+    adapter = null;
+  }
   if (!adapter) {
     return { status: "no-adapter", ...empty };
   }
 
-  return {
-    status: "ready",
+  const report = {
     adapter: toAdapterInfo(adapter.info),
     isFallbackAdapter: Boolean(
       (adapter as unknown as { isFallbackAdapter?: boolean }).isFallbackAdapter,
@@ -66,4 +70,16 @@ export async function detectWebGPU(): Promise<WebGPUCapabilities> {
     features: [...adapter.features].sort(),
     limits: readLimits(adapter.limits),
   };
+
+  // An adapter alone is not proof of access — actually acquiring a GPUDevice is
+  // the real gate for running compute (the driver may be blocked or missing).
+  // Discard this probe device; the runtime acquires its own via getGPUDevice().
+  try {
+    const device = await adapter.requestDevice();
+    device.destroy();
+  } catch {
+    return { status: "no-device", ...report };
+  }
+
+  return { status: "ready", ...report };
 }

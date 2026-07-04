@@ -13,7 +13,6 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DemoChartRouteImport } from './routes/demo.chart'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -35,25 +34,18 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DemoChartRoute = DemoChartRouteImport.update({
-  id: '/demo/chart',
-  path: '/demo/chart',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
-  '/demo/chart': typeof DemoChartRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
-  '/demo/chart': typeof DemoChartRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,14 +53,13 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
-  '/demo/chart': typeof DemoChartRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/playground' | '/signup' | '/demo/chart'
+  fullPaths: '/' | '/login' | '/playground' | '/signup'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/playground' | '/signup' | '/demo/chart'
-  id: '__root__' | '/' | '/login' | '/playground' | '/signup' | '/demo/chart'
+  to: '/' | '/login' | '/playground' | '/signup'
+  id: '__root__' | '/' | '/login' | '/playground' | '/signup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,7 +67,6 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PlaygroundRoute: typeof PlaygroundRoute
   SignupRoute: typeof SignupRoute
-  DemoChartRoute: typeof DemoChartRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -109,13 +99,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/demo/chart': {
-      id: '/demo/chart'
-      path: '/demo/chart'
-      fullPath: '/demo/chart'
-      preLoaderRoute: typeof DemoChartRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -124,7 +107,6 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PlaygroundRoute: PlaygroundRoute,
   SignupRoute: SignupRoute,
-  DemoChartRoute: DemoChartRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

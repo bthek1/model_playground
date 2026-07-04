@@ -122,8 +122,7 @@ frontend/
 │   │   ├── __root.tsx     Root layout
 │   │   ├── index.tsx      Home page
 │   │   ├── login.tsx      Login page
-│   │   ├── playground.tsx GPU capabilities + benchmark + model catalog
-│   │   └── demo.chart.tsx ECharts + Recharts demo
+│   │   └── playground.tsx GPU capabilities + benchmark + model catalog
 │   ├── schemas/           Zod validation schemas (one file per domain)
 │   │   └── auth.ts        Login and register schemas
 │   ├── store/             Zustand global state (one file per concern)

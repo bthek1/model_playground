@@ -4,11 +4,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
+const { mockNavigate, mockMutate } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+  mockMutate: vi.fn(),
+}));
+
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    useNavigate: vi.fn().mockReturnValue(vi.fn()),
+    useNavigate: vi.fn().mockReturnValue(mockNavigate),
     Link: ({
       children,
       to,
@@ -26,7 +31,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 });
 
 vi.mock("@/hooks/useAuth", () => ({
-  useLogin: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
+  useLogin: vi.fn().mockReturnValue({ mutate: mockMutate, isPending: false }),
 }));
 
 vi.mock("@/hooks/useTheme", () => ({
@@ -72,5 +77,16 @@ describe("Login page", () => {
     render(<LoginComponent />, { wrapper });
     await user.click(screen.getByRole("button", { name: /sign in/i }));
     expect(await screen.findByText(/valid email/i)).toBeInTheDocument();
+  });
+
+  it("redirects to /playground on successful login", async () => {
+    if (!LoginComponent) return;
+    mockMutate.mockImplementation((_values, opts) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<LoginComponent />, { wrapper });
+    await user.type(screen.getByLabelText(/email/i), "user@example.com");
+    await user.type(screen.getByLabelText(/password/i), "password123");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    expect(mockNavigate).toHaveBeenCalledWith({ to: "/playground" });
   });
 });

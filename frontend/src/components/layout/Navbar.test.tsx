@@ -14,7 +14,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   return {
     ...actual,
     useNavigate: vi.fn().mockReturnValue(vi.fn()),
-    useRouterState: vi.fn().mockReturnValue("/demo/chart"),
+    useRouterState: vi.fn().mockReturnValue("/playground"),
     Link: ({
       children,
       to,

@@ -1,7 +1,11 @@
 // Shared types for the raw-WebGPU runtime. These describe capabilities we
 // surface to the UI and the shape of compute jobs the worker accepts.
 
-export type WebGPUStatus = "unsupported" | "no-adapter" | "ready";
+export type WebGPUStatus =
+  | "unsupported"
+  | "no-adapter"
+  | "no-device"
+  | "ready";
 
 export interface AdapterInfo {
   vendor: string;
