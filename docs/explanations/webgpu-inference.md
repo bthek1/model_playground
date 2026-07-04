@@ -70,6 +70,40 @@ requests by an incrementing `id`.
 > environments (happy-dom). `detectWebGPU()` returns `status: "unsupported"`
 > there rather than throwing — the UI degrades gracefully.
 
+## Browser support & requirements
+
+`detectWebGPU()` reports one of four statuses, which the GPU Capabilities panel
+turns into a plain-language message:
+
+| Status | Meaning | Typical cause / fix |
+|--------|---------|---------------------|
+| `ready` | A `GPUDevice` was actually acquired — compute will run. | — |
+| `no-device` | Adapter exists but `requestDevice()` failed. | Driver blocked/out of resources. |
+| `no-adapter` | `navigator.gpu` exists but offered no adapter. | No compatible GPU/driver in the environment. |
+| `unsupported` | `navigator.gpu` is absent entirely. | See the two gotchas below. |
+
+Note that `ready` means a device was **acquired**, not merely that an adapter was
+listed — `detectWebGPU()` calls `requestDevice()` (and discards the probe device)
+so the panel never claims access it can't back up.
+
+Two things commonly produce a false `unsupported` on a perfectly capable machine:
+
+- **Secure context required.** Browsers only expose `navigator.gpu` on HTTPS or
+  `http://localhost`/`127.0.0.1`. A plain-HTTP LAN origin (e.g.
+  `http://192.168.x.x:5174`) hides the API. The Vite dev server therefore runs
+  over HTTPS (`@vitejs/plugin-basic-ssl`) — see
+  [`local-setup.md`](../guides/local-setup.md). The panel detects
+  `window.isSecureContext === false` and says so.
+- **Firefox on Linux/macOS needs a flag.** Firefox enabled WebGPU by default on
+  Windows first; on Linux and macOS (even Firefox 152) it stays behind
+  `dom.webgpu.enabled` in `about:config` — set it to `true` and restart. The
+  panel special-cases Firefox and points users at the flag. (Firefox also blanks
+  `adapter.info.vendor`/`architecture` for anti-fingerprinting, so those show as
+  "unknown" — expected, not a bug.)
+
+Baseline targets: Chrome/Edge 113+, Firefox 141+ (Windows) / flag on Linux+macOS,
+Safari 26+.
+
 ## Benchmarking
 
 `runMatmul` times encode → submit → `onSubmittedWorkDone()` → readback and

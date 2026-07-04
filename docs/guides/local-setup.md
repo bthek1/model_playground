@@ -62,6 +62,14 @@ docker compose exec backend python manage.py createsuperuser
 - Django admin: [http://localhost:8000/admin/](http://localhost:8000/admin/)
 - Flower (Celery monitoring): `just flower` then open [http://localhost:5555](http://localhost:5555)
 
+> **The Vite dev server runs over HTTPS** (self-signed cert via
+> `@vitejs/plugin-basic-ssl`). WebGPU's `navigator.gpu` is only exposed in a
+> [secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts)
+> — HTTPS or `localhost` — so accessing the app from another machine over a plain
+> `http://<lan-ip>:5174` origin would hide WebGPU entirely. Use
+> `https://<lan-ip>:5174` and accept the one-time self-signed-cert warning
+> (in Chrome: **Advanced → Proceed**, or type `thisisunsafe` on the warning page).
+
 ---
 
 ## Option B — Backend Only (no Docker)

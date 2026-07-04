@@ -230,8 +230,13 @@ export const Route = createFileRoute('/users/$userId')({
 - **Run heavy compute in the Web Worker** (`worker.ts`), driven from the main thread by
   `workerClient.ts`, which transfers input/output `ArrayBuffer`s (zero-copy) and correlates responses
   by request id. Never block the UI thread with a dispatch.
-- `capabilities.detectWebGPU()` never throws — it returns `status: "unsupported"` where
-  `navigator.gpu` is absent (Node/tests/older browsers). UI must degrade gracefully.
+- `capabilities.detectWebGPU()` never throws — it returns one of `unsupported` / `no-adapter` /
+  `no-device` / `ready`. `ready` means a `GPUDevice` was actually acquired (it calls `requestDevice()`),
+  not just that an adapter was listed. UI must degrade gracefully on every non-`ready` status.
+- **`unsupported` usually isn't a real capability gap.** `navigator.gpu` is only exposed in a
+  **secure context** (HTTPS or `localhost`) — so the dev server runs over HTTPS (`@vitejs/plugin-basic-ssl`),
+  and a plain-HTTP LAN origin hides WebGPU. **Firefox on Linux/macOS** also needs `dom.webgpu.enabled`
+  in `about:config`. See `docs/explanations/webgpu-inference.md` → "Browser support & requirements".
 - Cross-check every new kernel against a CPU reference during development (see `useGpuBenchmark`).
 - Adding a model = write the WGSL kernel + register a `ModelCard`. See `docs/guides/adding-a-model.md`.
 

@@ -64,6 +64,29 @@ function CapabilityPanel() {
   const info = STATUS_INFO[status];
   const browser = detectBrowser();
 
+  // WebGPU is only exposed in a secure context (HTTPS or localhost). On a plain
+  // HTTP origin Chrome removes `navigator.gpu` entirely, which surfaces here as
+  // "unsupported" — a far more common cause than an actually-incapable browser.
+  const insecureContext =
+    status === "unsupported" &&
+    typeof window !== "undefined" &&
+    window.isSecureContext === false;
+  // Firefox on Linux/macOS still ships WebGPU behind a flag even on versions
+  // that enable it by default on Windows — point those users at the flag.
+  const firefoxNeedsFlag =
+    status === "unsupported" &&
+    !insecureContext &&
+    /firefox/i.test(browser.name);
+
+  let hint = info.hint;
+  if (insecureContext) {
+    hint =
+      "This page isn't a secure context, so the browser hides WebGPU. Open it over HTTPS or via http://localhost (e.g. an SSH tunnel) — not a plain-HTTP IP address.";
+  } else if (firefoxNeedsFlag) {
+    hint =
+      "Firefox hides WebGPU behind a flag on Linux and macOS. Open about:config, set dom.webgpu.enabled to true, then restart Firefox.";
+  }
+
   return (
     <div className="space-y-4 text-sm">
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
@@ -87,8 +110,14 @@ function CapabilityPanel() {
           <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
         )}
         <div>
-          <p className="font-medium">{info.label}</p>
-          <p className="text-muted-foreground">{info.hint}</p>
+          <p className="font-medium">
+            {insecureContext
+              ? "WebGPU hidden (insecure context)"
+              : firefoxNeedsFlag
+                ? "WebGPU disabled (Firefox flag)"
+                : info.label}
+          </p>
+          <p className="text-muted-foreground">{hint}</p>
         </div>
       </div>
 

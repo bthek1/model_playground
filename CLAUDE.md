@@ -123,8 +123,12 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   the reference (`runMatmul`).
 - **Heavy compute runs in the Web Worker** (`worker.ts`), driven from the main thread via
   `workerClient.ts` (transfers input/output `ArrayBuffer`s, correlates by request id). Never block the UI thread.
-- `detectWebGPU()` never throws — returns `status: "unsupported"` where `navigator.gpu` is absent
-  (Node/tests). UI must degrade gracefully. Cross-check every new kernel against a CPU reference.
+- `detectWebGPU()` never throws — returns `unsupported` / `no-adapter` / `no-device` / `ready`.
+  `ready` means a `GPUDevice` was actually acquired (it calls `requestDevice()`), not just that an
+  adapter exists. UI must degrade gracefully. Cross-check every new kernel against a CPU reference.
+- **A false `unsupported` is common:** `navigator.gpu` needs a **secure context** (HTTPS or `localhost`),
+  so the dev server runs over HTTPS and a plain-HTTP LAN origin hides WebGPU; **Firefox on Linux/macOS**
+  also needs `dom.webgpu.enabled` in `about:config`. See [`docs/explanations/webgpu-inference.md`](docs/explanations/webgpu-inference.md).
 - To add a model: write the kernel + register a `ModelCard`. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md).
 
 **Two Base UI gotchas (carried over from the Radix → Base UI migration):**
