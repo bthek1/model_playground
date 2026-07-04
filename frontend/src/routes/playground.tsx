@@ -12,6 +12,7 @@ import {
 import { useGpuBenchmark } from "@/hooks/useGpuBenchmark";
 import { useModels } from "@/hooks/useModels";
 import { useWebGPU } from "@/hooks/useWebGPU";
+import { detectBrowser } from "@/lib/browser";
 import type { WebGPUCapabilities, WebGPUStatus } from "@/webgpu/types";
 
 export const Route = createFileRoute("/playground")({
@@ -61,9 +62,18 @@ function CapabilityPanel() {
 
   const status = capabilities?.status ?? "unsupported";
   const info = STATUS_INFO[status];
+  const browser = detectBrowser();
 
   return (
     <div className="space-y-4 text-sm">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
+        <dt className="text-muted-foreground">Browser</dt>
+        <dd>
+          {browser.name}
+          {browser.version ? ` ${browser.version}` : ""}
+        </dd>
+      </dl>
+
       <div
         className={`flex items-start gap-2 rounded-md border p-3 ${
           info.ok
