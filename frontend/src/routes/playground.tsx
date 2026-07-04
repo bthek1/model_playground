@@ -13,6 +13,7 @@ import { useGpuBenchmark } from "@/hooks/useGpuBenchmark";
 import { useModels } from "@/hooks/useModels";
 import { useWebGPU } from "@/hooks/useWebGPU";
 import { detectBrowser } from "@/lib/browser";
+import { formatBytes, titleCase } from "@/lib/format";
 import type { WebGPUCapabilities, WebGPUStatus } from "@/webgpu/types";
 
 export const Route = createFileRoute("/playground")({
@@ -128,42 +129,89 @@ function CapabilityPanel() {
   );
 }
 
+// Friendly label + unit for each reported limit. `bytes: true` means the raw
+// value is a byte count and should be shown in IEC units.
+const LIMIT_META: Record<string, { label: string; bytes?: boolean }> = {
+  maxBufferSize: { label: "Max buffer size", bytes: true },
+  maxStorageBufferBindingSize: { label: "Max storage binding", bytes: true },
+  maxComputeWorkgroupStorageSize: { label: "Workgroup storage", bytes: true },
+  maxComputeInvocationsPerWorkgroup: { label: "Invocations / workgroup" },
+  maxComputeWorkgroupsPerDimension: { label: "Workgroups / dimension" },
+};
+
+// Features worth calling out — they change what kernels can do.
+const NOTABLE_FEATURES = new Set(["shader-f16", "timestamp-query"]);
+
+function formatUnknown(value: string | undefined): string {
+  if (!value || value === "unknown") return "—";
+  return titleCase(value);
+}
+
 function CapabilityDetails({
   capabilities,
 }: {
   capabilities: WebGPUCapabilities;
 }) {
   const { adapter, features, limits, isFallbackAdapter } = capabilities;
+  const vendor = formatUnknown(adapter?.vendor);
+  const architecture = formatUnknown(adapter?.architecture);
+
   return (
     <div className="space-y-4 text-sm">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
-        <dt className="text-muted-foreground">Vendor</dt>
-        <dd>{adapter?.vendor}</dd>
-        <dt className="text-muted-foreground">Architecture</dt>
-        <dd>{adapter?.architecture || "—"}</dd>
-        <dt className="text-muted-foreground">Fallback adapter</dt>
-        <dd>{isFallbackAdapter ? "yes (software)" : "no (hardware)"}</dd>
-      </dl>
+      <div>
+        <p className="mb-1.5 font-medium">Adapter</p>
+        <dl className="grid grid-cols-[10rem_1fr] gap-y-1">
+          <dt className="text-muted-foreground">Vendor</dt>
+          <dd>{vendor}</dd>
+          <dt className="text-muted-foreground">Architecture</dt>
+          <dd>{architecture}</dd>
+          <dt className="text-muted-foreground">Type</dt>
+          <dd>
+            {isFallbackAdapter ? (
+              <span className="text-amber-600 dark:text-amber-400">
+                Software (fallback)
+              </span>
+            ) : (
+              "Hardware"
+            )}
+          </dd>
+        </dl>
+      </div>
 
       <div>
-        <p className="mb-1 text-muted-foreground">Limits</p>
-        <ul className="space-y-0.5 font-mono text-xs">
-          {Object.entries(limits).map(([key, value]) => (
-            <li key={key}>
-              {key}: {value.toLocaleString()}
-            </li>
-          ))}
-        </ul>
+        <p className="mb-1.5 font-medium">Limits</p>
+        <dl className="grid grid-cols-[10rem_1fr] gap-y-1">
+          {Object.entries(limits).map(([key, value]) => {
+            const meta = LIMIT_META[key];
+            return (
+              <div key={key} className="contents">
+                <dt className="text-muted-foreground">{meta?.label ?? key}</dt>
+                <dd className="font-mono text-xs" title={value.toLocaleString()}>
+                  {meta?.bytes ? formatBytes(value) : value.toLocaleString()}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
       </div>
 
       {features.length > 0 && (
         <div>
-          <p className="mb-1 text-muted-foreground">Features</p>
+          <p className="mb-1.5 font-medium">
+            Features{" "}
+            <span className="font-normal text-muted-foreground">
+              ({features.length})
+            </span>
+          </p>
           <div className="flex flex-wrap gap-1">
             {features.map((f) => (
               <span
                 key={f}
-                className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+                className={`rounded px-1.5 py-0.5 font-mono text-xs ${
+                  NOTABLE_FEATURES.has(f)
+                    ? "bg-primary/15 text-primary"
+                    : "bg-muted"
+                }`}
               >
                 {f}
               </span>

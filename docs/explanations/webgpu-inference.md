@@ -25,6 +25,7 @@ The trade-off: you write kernels yourself. Start from the reference kernels in
 | `buffers.ts` | Create storage/uniform buffers, upload data, read results back. |
 | `pipeline.ts` | Compile a WGSL string into a `GPUComputePipeline`. |
 | `runtime.ts` | `runMatmul()` — the reference end-to-end kernel + benchmark. |
+| `tensorops.ts` | `runTensorOp()` — dispatch table for basic matrix arithmetic (add/sub/mul/div/matmul/transpose/scale), backing the Tensor Arithmetic page. |
 | `shaders/*.wgsl` | The compute kernels (imported as strings via Vite `?raw`). |
 | `worker.ts` | Web Worker that owns the device and runs jobs off the main thread. |
 | `workerClient.ts` | Main-thread promise API over the worker (request correlation). |

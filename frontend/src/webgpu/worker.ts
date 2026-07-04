@@ -7,11 +7,13 @@
 
 import { detectWebGPU } from "./capabilities";
 import { runMatmul } from "./runtime";
-import type { MatmulJob } from "./types";
+import { runTensorOp } from "./tensorops";
+import type { MatmulJob, TensorOpJob } from "./types";
 
 type WorkerRequest =
   | { type: "detect"; id: number }
-  | { type: "matmul"; id: number; job: MatmulJob };
+  | { type: "matmul"; id: number; job: MatmulJob }
+  | { type: "tensorOp"; id: number; job: TensorOpJob };
 
 const ctx = self as unknown as {
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
@@ -27,6 +29,11 @@ ctx.onmessage = async (event) => {
     }
     if (msg.type === "matmul") {
       const result = await runMatmul(msg.job);
+      ctx.postMessage({ id: msg.id, ok: true, result }, [result.data.buffer]);
+      return;
+    }
+    if (msg.type === "tensorOp") {
+      const result = await runTensorOp(msg.job);
       ctx.postMessage({ id: msg.id, ok: true, result }, [result.data.buffer]);
     }
   } catch (error) {

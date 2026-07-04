@@ -5,4 +5,5 @@ export * from "./device";
 export * from "./buffers";
 export * from "./pipeline";
 export * from "./runtime";
+export * from "./tensorops";
 export * from "./workerClient";

@@ -40,3 +40,36 @@ export interface MatmulResult {
   /** Throughput estimate: 2*M*K*N / time. */
   gflops: number;
 }
+
+/** Basic matrix/tensor operations the playground can dispatch to the GPU. */
+export type TensorOp =
+  | "add" // element-wise A + B (same shape)
+  | "sub" // element-wise A − B (same shape)
+  | "mul" // element-wise (Hadamard) A ⊙ B (same shape)
+  | "div" // element-wise A ÷ B (same shape)
+  | "matmul" // matrix product A(MxK) · B(KxN)
+  | "transpose" // Aᵀ (unary)
+  | "scale"; // scalar · A (unary)
+
+/**
+ * A single tensor-arithmetic job. Operands are stored row-major and flattened;
+ * `b` and `scalar` are only required for the operations that consume them.
+ */
+export interface TensorOpJob {
+  op: TensorOp;
+  a: Float32Array;
+  aRows: number;
+  aCols: number;
+  b?: Float32Array;
+  bRows?: number;
+  bCols?: number;
+  scalar?: number;
+}
+
+export interface TensorOpResult {
+  data: Float32Array;
+  rows: number;
+  cols: number;
+  /** Wall-clock time for encode → submit → readback, in milliseconds. */
+  gpuTimeMs: number;
+}

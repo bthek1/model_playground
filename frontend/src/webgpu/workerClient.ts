@@ -1,7 +1,13 @@
 // Main-thread client for the WebGPU worker. Handles worker creation and
 // request/response correlation so callers get plain promises.
 
-import type { MatmulJob, MatmulResult, WebGPUCapabilities } from "./types";
+import type {
+  MatmulJob,
+  MatmulResult,
+  TensorOpJob,
+  TensorOpResult,
+  WebGPUCapabilities,
+} from "./types";
 
 interface WorkerResponse<T> {
   id: number;
@@ -51,4 +57,14 @@ export function runMatmulInWorker(
     job.a.buffer,
     job.b.buffer,
   ]);
+}
+
+export function runTensorOpInWorker(
+  worker: Worker,
+  job: TensorOpJob,
+): Promise<TensorOpResult> {
+  // Transfer the operand buffers to avoid a copy; `job`'s arrays are consumed.
+  const transfer: Transferable[] = [job.a.buffer];
+  if (job.b) transfer.push(job.b.buffer);
+  return call<TensorOpResult>(worker, { type: "tensorOp", job }, transfer);
 }
