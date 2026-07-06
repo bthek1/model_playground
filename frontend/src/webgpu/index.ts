@@ -4,6 +4,7 @@ export * from "./capabilities";
 export * from "./device";
 export * from "./buffers";
 export * from "./pipeline";
+export * from "./linearModel";
 export * from "./runtime";
 export * from "./tensorops";
 export * from "./workerClient";

@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TensorRouteImport } from './routes/tensor'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TrainingRoute = TrainingRouteImport.update({
+  id: '/training',
+  path: '/training',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TensorRoute = TensorRouteImport.update({
   id: '/tensor',
   path: '/tensor',
@@ -47,6 +53,7 @@ export interface FileRoutesByFullPath {
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
+  '/training': typeof TrainingRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +61,7 @@ export interface FileRoutesByTo {
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
+  '/training': typeof TrainingRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,13 +70,27 @@ export interface FileRoutesById {
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
+  '/training': typeof TrainingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/playground' | '/signup' | '/tensor'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/playground'
+    | '/signup'
+    | '/tensor'
+    | '/training'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/playground' | '/signup' | '/tensor'
-  id: '__root__' | '/' | '/login' | '/playground' | '/signup' | '/tensor'
+  to: '/' | '/login' | '/playground' | '/signup' | '/tensor' | '/training'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/playground'
+    | '/signup'
+    | '/tensor'
+    | '/training'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -77,10 +99,18 @@ export interface RootRouteChildren {
   PlaygroundRoute: typeof PlaygroundRoute
   SignupRoute: typeof SignupRoute
   TensorRoute: typeof TensorRoute
+  TrainingRoute: typeof TrainingRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/training': {
+      id: '/training'
+      path: '/training'
+      fullPath: '/training'
+      preLoaderRoute: typeof TrainingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tensor': {
       id: '/tensor'
       path: '/tensor'
@@ -125,6 +155,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlaygroundRoute: PlaygroundRoute,
   SignupRoute: SignupRoute,
   TensorRoute: TensorRoute,
+  TrainingRoute: TrainingRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
