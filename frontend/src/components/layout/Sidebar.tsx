@@ -58,7 +58,7 @@ export function Sidebar() {
         )}
       >
         <span className="font-semibold text-sidebar-foreground truncate">
-          {sidebarOpen ? "My App" : "M"}
+          {sidebarOpen ? "Model Playground" : "MP"}
         </span>
       </div>
 

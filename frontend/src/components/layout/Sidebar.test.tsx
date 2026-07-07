@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -23,6 +23,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 });
 
 import { Sidebar, SidebarNav } from "./Sidebar";
+import { useUIStore } from "@/store/ui";
 
 describe("SidebarNav", () => {
   it("renders all nav items", () => {
@@ -45,10 +46,28 @@ describe("SidebarNav", () => {
 });
 
 describe("Sidebar", () => {
+  afterEach(() => {
+    // reset to the store default so tests don't leak state
+    useUIStore.setState({ sidebarOpen: true });
+  });
+
   it("renders with full width class when open", () => {
     // sidebarOpen defaults to true in the store
     const { container } = render(<Sidebar />);
     const aside = container.querySelector("aside");
     expect(aside?.className).toContain("w-64");
+  });
+
+  it("renders the full brand name when open", () => {
+    render(<Sidebar />);
+    expect(screen.getByText("Model Playground")).toBeInTheDocument();
+  });
+
+  it("renders the collapsed brand initials when closed", () => {
+    useUIStore.setState({ sidebarOpen: false });
+    const { container } = render(<Sidebar />);
+    expect(screen.getByText("MP")).toBeInTheDocument();
+    expect(screen.queryByText("Model Playground")).not.toBeInTheDocument();
+    expect(container.querySelector("aside")?.className).toContain("w-16");
   });
 });

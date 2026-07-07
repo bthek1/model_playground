@@ -96,6 +96,8 @@ describe("TrainingPage", () => {
 
   it("loads the dataset for the configured train+test size", () => {
     renderPage();
+    // Dataset controls live in a popup now — open it first.
+    fireEvent.click(screen.getByRole("button", { name: /^dataset$/i }));
     fireEvent.click(screen.getByRole("button", { name: /load mnist/i }));
     expect(hookState.loadData).toHaveBeenCalledWith(
       DEFAULTS.trainSize + DEFAULTS.testSize,
@@ -104,15 +106,13 @@ describe("TrainingPage", () => {
 
   it("keeps Start disabled until the dataset is ready", () => {
     renderPage();
-    expect(
-      screen.getByRole("button", { name: /start training/i }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^start$/i })).toBeDisabled();
   });
 
   it("dispatches training with the current settings once ready", () => {
     hookState.datasetStatus = "ready";
     renderPage();
-    const start = screen.getByRole("button", { name: /start training/i });
+    const start = screen.getByRole("button", { name: /^start$/i });
     expect(start).not.toBeDisabled();
     fireEvent.click(start);
     expect(hookState.start).toHaveBeenCalledWith(DEFAULTS);
@@ -135,10 +135,12 @@ describe("TrainingPage", () => {
     ];
     renderPage();
 
+    // Stat strip is always visible once metrics exist.
     expect(screen.getByText("1.5000")).toBeInTheDocument(); // batch loss
     expect(screen.getByText("80.00%")).toBeInTheDocument(); // train acc
     expect(screen.getByText("75.00%")).toBeInTheDocument(); // test acc
-    // Two lazy charts (loss + accuracy) resolve through Suspense.
+    // Charts live behind a popover — open it, then the two lazy charts resolve.
+    fireEvent.click(screen.getByRole("button", { name: /^charts$/i }));
     expect(await screen.findAllByTestId("echart")).toHaveLength(2);
   });
 
@@ -151,7 +153,8 @@ describe("TrainingPage", () => {
     };
     renderPage();
 
-    expect(screen.getByText(/the model/i)).toBeInTheDocument();
+    // Templates live behind the Weights popover.
+    fireEvent.click(screen.getByRole("button", { name: /^weights$/i }));
     // One labelled canvas per class (digits 0–9).
     expect(
       screen.getByLabelText(/weight template for digit 0/i),
@@ -161,11 +164,14 @@ describe("TrainingPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows dataset and training errors", () => {
+  it("shows a training error inline and a dataset error in its popup", () => {
     hookState.datasetError = "could not load sprite";
     hookState.trainError = "shapes must match";
     renderPage();
-    expect(screen.getByText(/could not load sprite/i)).toBeInTheDocument();
+    // Training errors surface on the transport bar.
     expect(screen.getByText(/shapes must match/i)).toBeInTheDocument();
+    // Dataset errors live inside the Dataset popup.
+    fireEvent.click(screen.getByRole("button", { name: /^dataset$/i }));
+    expect(screen.getByText(/could not load sprite/i)).toBeInTheDocument();
   });
 });

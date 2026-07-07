@@ -44,7 +44,7 @@ export function Navbar() {
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-72 p-0">
           <SheetHeader className="flex h-14 flex-row items-center border-b px-4">
-            <SheetTitle className="text-base font-semibold">My App</SheetTitle>
+            <SheetTitle className="text-base font-semibold">Model Playground</SheetTitle>
           </SheetHeader>
           <SidebarNav onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
@@ -61,7 +61,7 @@ export function Navbar() {
         <Menu className="h-5 w-5" />
       </Button>
 
-      <span className="hidden text-sm font-semibold md:block">My App</span>
+      <span className="hidden text-sm font-semibold md:block">Model Playground</span>
 
       <div className="flex-1" />
 

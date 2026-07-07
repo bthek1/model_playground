@@ -27,6 +27,14 @@ The trade-off: you write kernels yourself. Start from the reference kernels in
 | `runtime.ts` | `runMatmul()` — the reference end-to-end kernel + benchmark. |
 | `tensorops.ts` | `runTensorOp()` — dispatch table for basic matrix arithmetic (add/sub/mul/div/matmul/transpose/scale), backing the Tensor Arithmetic page. |
 | `linearModel.ts` | `LinearTrainer` — mini-batch SGD training of a softmax classifier; the heavy matmuls use an injected `MatmulFn` (GPU in the worker, CPU in tests). Backs the Training page. |
+
+> **Training-page visualization.** The Training route renders the model as a
+> full-bleed animated **stage** (`components/training/NetworkBackground.tsx`): the
+> 28×28 input field is pooled to a 7×7 grid (49 nodes, 490 edges) whose colour/width
+> encode pooled weight sign/magnitude, easing toward each live `WeightSnapshot`.
+> Dataset and hyperparameter forms live in `dialog`/`popover` overlays; the sidebar
+> and navbar (`AppLayout`) are unchanged. This is presentation only — it reads the
+> same weight stream and never touches the trainer or the GPU compute path.
 | `shaders/*.wgsl` | The compute kernels (imported as strings via Vite `?raw`). |
 | `worker.ts` | Web Worker that owns the device and runs jobs off the main thread. |
 | `workerClient.ts` | Main-thread promise API over the worker (request correlation). |
