@@ -16,6 +16,14 @@ vi.mock("@/lib/mnist", () => ({
   sliceDataset: (...args: unknown[]) => mockSliceDataset(...args),
 }));
 
+const mockLoadCachedPool = vi.fn();
+const mockSaveCachedPool = vi.fn();
+
+vi.mock("@/lib/mnistCache", () => ({
+  loadCachedPool: (...args: unknown[]) => mockLoadCachedPool(...args),
+  saveCachedPool: (...args: unknown[]) => mockSaveCachedPool(...args),
+}));
+
 const mockCreateWorker = vi.fn(() => ({ terminate: vi.fn() }));
 const mockTrainLinearInWorker = vi.fn();
 
@@ -55,6 +63,9 @@ beforeEach(() => {
   capturedOnProgress = null;
   mockLoadMnistPool.mockResolvedValue(POOL);
   mockSliceDataset.mockReturnValue(DATASET);
+  // Default: nothing cached, writes succeed. Individual tests override.
+  mockLoadCachedPool.mockResolvedValue(null);
+  mockSaveCachedPool.mockResolvedValue(undefined);
   mockTrainLinearInWorker.mockImplementation(
     (_worker: unknown, _req: unknown, onProgress: (m: TrainMetrics) => void) => {
       capturedOnProgress = onProgress;
@@ -101,6 +112,44 @@ describe("useLinearTraining — dataset", () => {
     });
     expect(result.current.datasetStatus).toBe("error");
     expect(result.current.datasetError).toBe("offline");
+  });
+
+  it("persists a freshly downloaded pool to the cache", async () => {
+    const { result } = await loadPool(100);
+    expect(mockLoadMnistPool).toHaveBeenCalledTimes(1);
+    expect(mockSaveCachedPool).toHaveBeenCalledWith(POOL);
+    expect(result.current.datasetStatus).toBe("ready");
+  });
+
+  it("restores a cached pool on mount without downloading", async () => {
+    mockLoadCachedPool.mockResolvedValue(POOL);
+    const { result } = renderHook(() => useLinearTraining());
+    // Let the mount-effect restore resolve.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.datasetStatus).toBe("ready");
+    expect(result.current.poolCount).toBe(100);
+    expect(mockLoadMnistPool).not.toHaveBeenCalled();
+  });
+
+  it("reuses a cached pool in loadData instead of re-downloading", async () => {
+    mockLoadCachedPool.mockResolvedValue(POOL);
+    const { result } = await loadPool(100);
+    expect(result.current.datasetStatus).toBe("ready");
+    expect(result.current.poolCount).toBe(100);
+    expect(mockLoadMnistPool).not.toHaveBeenCalled();
+    expect(mockSaveCachedPool).not.toHaveBeenCalled();
+  });
+
+  it("re-downloads when the cached pool is too small for the request", async () => {
+    mockLoadCachedPool.mockResolvedValue({ ...POOL, count: 50 });
+    const { result } = renderHook(() => useLinearTraining());
+    await act(async () => {
+      await result.current.loadData(100);
+    });
+    expect(mockLoadMnistPool).toHaveBeenCalledTimes(1);
+    expect(result.current.poolCount).toBe(100);
   });
 });
 

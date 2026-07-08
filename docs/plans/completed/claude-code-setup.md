@@ -19,7 +19,7 @@ setup are part of the product, not an afterthought. Two gaps existed:
 1. **No Claude Code configuration.** There was guidance for GitHub Copilot
    (`.github/copilot-instructions.md` + `.github/agents/`) but nothing Claude-native, and no
    `.claude/settings.json` to streamline the local permission loop.
-2. **Docs drifted from code.** Celery + Redis were added (see [backend-celery.md](backend-celery.md)
+2. **Docs drifted from code.** Celery + Redis were added (see [backend-celery.md](../in-progress/backend-celery.md)
    and [celery-full-implementation.md](celery-full-implementation.md)) but the README, the Copilot
    instructions, and the docs-agent file still described a Celery-free stack.
 

@@ -7,6 +7,7 @@ import {
   NUM_CLASSES,
   sliceDataset,
 } from "@/lib/mnist";
+import { loadCachedPool, saveCachedPool } from "@/lib/mnistCache";
 import type { TrainMetrics, TrainResult } from "@/webgpu/linearModel";
 import {
   createWebGPUWorker,
@@ -65,12 +66,39 @@ export function useLinearTraining() {
     };
   }, []);
 
+  // Restore a previously-downloaded pool from IndexedDB on mount so the dataset
+  // survives a page reload instead of forcing a fresh download.
+  useEffect(() => {
+    let cancelled = false;
+    void loadCachedPool().then((pool) => {
+      if (cancelled || !pool || poolRef.current) return;
+      poolRef.current = pool;
+      setPoolCount(pool.count);
+      setDatasetStatus((s) => (s === "idle" ? "ready" : s));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const loadData = useCallback(async (count: number) => {
+    // Already have enough in memory (e.g. restored from cache)? Skip the network.
+    if (poolRef.current && poolRef.current.count >= count) {
+      setPoolCount(poolRef.current.count);
+      setDatasetStatus("ready");
+      return;
+    }
+
     setDatasetStatus("loading");
     setDatasetError(null);
     setDatasetProgress(0);
     try {
-      const pool = await loadMnistPool(count, setDatasetProgress);
+      // A cached pool from a prior session may cover this request without a fetch.
+      let pool = await loadCachedPool();
+      if (!pool || pool.count < count) {
+        pool = await loadMnistPool(count, setDatasetProgress);
+        void saveCachedPool(pool);
+      }
       poolRef.current = pool;
       setPoolCount(pool.count);
       setDatasetStatus("ready");

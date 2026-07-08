@@ -10,3 +10,6 @@
 
 - [ ] model to do chat to text
 - [ ] model to use camera - object detection
+
+
+- [ ] make the background like a canves with vertical scroll and i can drag, zoom in, zoom out etc

@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { EChartsOption } from "echarts";
 import {
   BarChart3,
-  Grid3x3,
   Loader2,
   Play,
   Settings2,
@@ -13,8 +12,8 @@ import { lazy, Suspense, useMemo, useState } from "react";
 
 import { DatasetDialog } from "@/components/training/DatasetDialog";
 import { HyperparamsDialog } from "@/components/training/HyperparamsDialog";
-import { ModelWeights } from "@/components/training/ModelWeights";
-import { NetworkBackground } from "@/components/training/NetworkBackground";
+import { ModelArchitecture } from "@/components/training/ModelArchitecture";
+import { PanZoom } from "@/components/training/PanZoom";
 import { pct, Stat } from "@/components/training/controls";
 import { Button } from "@/components/ui/button";
 import {
@@ -84,13 +83,16 @@ function TrainingPage() {
 
   return (
     <div className="relative -m-6 h-[calc(100%+3rem)] w-[calc(100%+3rem)] overflow-hidden">
-      {/* Background: live model-structure visualization */}
-      <NetworkBackground
-        weights={snapshot?.weights ?? EMPTY_WEIGHTS}
-        bias={snapshot?.bias}
-        active={training}
-        className="absolute inset-0 h-full w-full text-foreground"
-      />
+      {/* Background: a pan/zoom canvas holding the architecture schematic */}
+      <PanZoom className="absolute inset-0">
+        <div className="w-max p-8">
+          <ModelArchitecture
+            weights={snapshot?.weights ?? EMPTY_WEIGHTS}
+            bias={snapshot?.bias}
+            epoch={snapshot?.epoch}
+          />
+        </div>
+      </PanZoom>
 
       {/* Foreground HUD ------------------------------------------------- */}
       {/* Top-left: title, status, live stats */}
@@ -208,38 +210,8 @@ function TrainingPage() {
         )}
       </div>
 
-      {/* Bottom-right: collapsible panels for templates + charts */}
+      {/* Bottom-right: collapsible charts panel */}
       <div className="pointer-events-auto absolute right-4 bottom-4 flex gap-2">
-        {snapshot && (
-          <Popover>
-            <PopoverTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="bg-card/70 backdrop-blur-md"
-                />
-              }
-            >
-              <Grid3x3 className="size-4" /> Weights
-            </PopoverTrigger>
-            <PopoverContent
-              side="top"
-              align="end"
-              className="w-[min(92vw,34rem)]"
-            >
-              <p className="mb-2 text-xs text-muted-foreground">
-                Each tile is one digit detector: its 784 weights reshaped to
-                28×28. Red pixels vote for the digit, blue against.
-              </p>
-              <ModelWeights
-                weights={snapshot.weights}
-                bias={snapshot.bias}
-                epoch={snapshot.epoch}
-              />
-            </PopoverContent>
-          </Popover>
-        )}
         {metrics.length > 0 && (
           <Popover>
             <PopoverTrigger

@@ -54,7 +54,7 @@ docker compose exec backend python manage.py migrate
 | [docs/explanations/architecture.md](docs/explanations/architecture.md) | Monorepo structure and design decisions |
 | [docs/explanations/auth-flow.md](docs/explanations/auth-flow.md) | JWT auth flow end to end |
 | [docs/guides/celery_setup.md](docs/guides/celery_setup.md) | Celery + Redis async task setup |
-| [docs/plans/](docs/plans/) | Phased feature plans and ADRs (kept as a record) |
+| [docs/plans/](docs/plans/) | Phased feature plans and ADRs — [`in-progress/`](docs/plans/in-progress/) (active) and [`completed/`](docs/plans/completed/) (kept as a record) |
 
 **AI assistants:** [CLAUDE.md](CLAUDE.md) (Claude Code) and [.github/copilot-instructions.md](.github/copilot-instructions.md) (GitHub Copilot) describe the project conventions for AI tooling. Keep both in sync when conventions change.
 

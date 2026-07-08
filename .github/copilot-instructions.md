@@ -370,14 +370,16 @@ The `docs/` folder is the single source of truth for project knowledge. It is ke
 **Structure:**
 - `docs/standards/` — Coding standards, style guides, naming conventions, API contracts
 - `docs/guides/` — Step-by-step how-to guides, onboarding, local setup, deployment
-- `docs/plans/` — Feature plans, ADRs, roadmaps, spike notes
+- `docs/plans/` — Feature plans, ADRs, roadmaps, spike notes. Active plans live in
+  `docs/plans/in-progress/`; finished ones are moved to `docs/plans/completed/`
 - `docs/explanations/` — Concept explanations, design rationale, background context
 
 **Rules:**
 - When a feature, API endpoint, or architectural pattern is added or changed, update the relevant doc in `docs/` as part of the same change
 - New backend apps or frontend modules should have a corresponding explanation or guide in `docs/`
 - API contract changes (new endpoints, modified request/response shapes) must be reflected in `docs/standards/`
-- Architecture or design decisions must be recorded as an ADR in `docs/plans/`
+- Architecture or design decisions must be recorded as an ADR under `docs/plans/` (in `in-progress/`
+  while active, moved to `completed/` when finalised)
 - Docs are written for the next developer — assume no prior context
 
 ---
@@ -386,7 +388,15 @@ The `docs/` folder is the single source of truth for project knowledge. It is ke
 
 Every non-trivial feature or change must have a plan file before implementation begins.
 
-**File naming:** `docs/plans/<feature-name>.md`
+**Folder layout:** Plans live in one of two subfolders by status:
+- `docs/plans/in-progress/` — new and active plans (`Draft` / `In Progress`)
+- `docs/plans/completed/` — plans that have reached `Complete`
+
+Create every new plan in `docs/plans/in-progress/`. When a plan reaches `Complete`, move it with
+`git mv docs/plans/in-progress/<name>.md docs/plans/completed/<name>.md`. Completed plans are kept
+(not deleted) as a record of decisions made.
+
+**File naming:** `docs/plans/in-progress/<feature-name>.md`
 
 **Required plan structure:**
 ```markdown
@@ -426,6 +436,7 @@ Any known risks, open questions, or decisions deferred.
 - Every plan must include a **Testing** section covering unit tests, integration tests, and manual steps
 - Do not start implementation without a plan for any feature that touches more than one file
 - Update plan status (`Draft → In Progress → Complete`) as work progresses
+- When a plan reaches `Complete`, `git mv` it from `docs/plans/in-progress/` to `docs/plans/completed/`
 - Completed plans are kept (not deleted) as a record of decisions made
 
 ---

@@ -42,7 +42,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | API endpoints & request/response shapes | [`docs/standards/api-contracts.md`](docs/standards/api-contracts.md) |
 | Local dev setup | [`docs/guides/local-setup.md`](docs/guides/local-setup.md) |
 | Celery / async tasks | [`docs/guides/celery_setup.md`](docs/guides/celery_setup.md) |
-| Feature plans (phased) | [`docs/plans/`](docs/plans/) |
+| Feature plans (phased) | [`docs/plans/in-progress/`](docs/plans/in-progress/) (active), [`docs/plans/completed/`](docs/plans/completed/) (done) |
 
 ---
 
@@ -84,9 +84,10 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 
 - **Docs travel with code.** A code change that affects behaviour, endpoints, or setup must
   update the relevant file under `docs/`. Add new endpoints to `docs/standards/api-contracts.md`.
-- **Plans are phased.** Any feature touching more than one file gets a plan under `docs/plans/`
-  first — phased, with a Testing section. Update its `Status` (`Draft → In Progress → Complete`)
-  as work progresses. Completed plans are kept as a record, not deleted.
+- **Plans are phased.** Any feature touching more than one file gets a plan first — phased, with a
+  Testing section. New plans go in **`docs/plans/in-progress/`**. Update the plan's `Status`
+  (`Draft → In Progress → Complete`) as work progresses; when it reaches `Complete`, **move the file
+  to `docs/plans/completed/`** (`git mv`). Completed plans are kept as a record, not deleted.
 - **Never commit `.env` files.** `.env.example` is the source of truth for required vars.
 - **Backend ↔ frontend communicate only via the API contract** — never mix their concerns.
 - **Ask before destructive or remote actions.** Do not `git commit`, `git push`, `git reset --hard`,

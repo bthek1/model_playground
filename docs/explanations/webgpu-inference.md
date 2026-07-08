@@ -27,17 +27,24 @@ The trade-off: you write kernels yourself. Start from the reference kernels in
 | `runtime.ts` | `runMatmul()` — the reference end-to-end kernel + benchmark. |
 | `tensorops.ts` | `runTensorOp()` — dispatch table for basic matrix arithmetic (add/sub/mul/div/matmul/transpose/scale), backing the Tensor Arithmetic page. |
 | `linearModel.ts` | `LinearTrainer` — mini-batch SGD training of a softmax classifier; the heavy matmuls use an injected `MatmulFn` (GPU in the worker, CPU in tests). Backs the Training page. |
-
-> **Training-page visualization.** The Training route renders the model as a
-> full-bleed animated **stage** (`components/training/NetworkBackground.tsx`): the
-> 28×28 input field is pooled to a 7×7 grid (49 nodes, 490 edges) whose colour/width
-> encode pooled weight sign/magnitude, easing toward each live `WeightSnapshot`.
-> Dataset and hyperparameter forms live in `dialog`/`popover` overlays; the sidebar
-> and navbar (`AppLayout`) are unchanged. This is presentation only — it reads the
-> same weight stream and never touches the trainer or the GPU compute path.
 | `shaders/*.wgsl` | The compute kernels (imported as strings via Vite `?raw`). |
 | `worker.ts` | Web Worker that owns the device and runs jobs off the main thread. |
 | `workerClient.ts` | Main-thread promise API over the worker (request correlation). |
+
+> **Training-page visualization.** The Training route is a full-bleed **stage**
+> whose background *is* the model's architecture schematic
+> (`components/training/ModelArchitecture.tsx`): `INPUT (784) ─► z=W·x+b ─►
+> softmax ─► 10 probs`, the 7,850-parameter budget, and each output class drawn as
+> a real 28×28 input grid and every parameter: the 10 per-class weight templates
+> (`ModelWeights.tsx`, each a 28×28 image of all 784 weights, red = for the digit /
+> blue = against, plus the bias), which sharpen into digit shapes as training runs.
+> The schematic sits on a pan/zoom canvas (`components/training/PanZoom.tsx`) —
+> drag to pan, wheel to scroll, ⌘/Ctrl-wheel or the buttons to zoom, double-click
+> to fit. Dataset and hyperparameter forms live in `dialog`/`popover` overlays; the
+> loss/accuracy charts are a collapsible HUD popover. The sidebar and navbar
+> (`AppLayout`) are unchanged. The decoded MNIST pool is cached in IndexedDB
+> (`lib/mnistCache.ts`) so it survives page reloads. This is presentation only — it
+> reads the same weight stream and never touches the trainer or the GPU compute path.
 
 ## The compute pipeline
 
@@ -134,4 +141,4 @@ to catch a broken kernel or driver. This same number is what you'd `POST` to
 
 - API for the catalog / run metadata: [`../standards/api-contracts.md`](../standards/api-contracts.md)
 - System architecture: [`architecture.md`](architecture.md)
-- Roadmap: [`../plans/webgpu-model-playground.md`](../plans/webgpu-model-playground.md)
+- Roadmap: [`../plans/in-progress/webgpu-model-playground.md`](../plans/in-progress/webgpu-model-playground.md)

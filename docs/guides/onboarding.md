@@ -13,7 +13,7 @@ Welcome to the project. This guide gives you everything you need to understand t
 ├── docs/             Project knowledge base
 │   ├── standards/    API contracts, coding conventions
 │   ├── guides/       How-to guides (setup, deployment)
-│   ├── plans/        Architecture decisions, roadmaps
+│   ├── plans/        Phased plans & ADRs (in-progress/ + completed/)
 │   └── explanations/ Concept backgrounds, design rationale
 └── docker-compose.yml  Local dev orchestration
 ```

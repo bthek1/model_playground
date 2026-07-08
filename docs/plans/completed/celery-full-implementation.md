@@ -11,7 +11,7 @@ Complete the Celery integration by adding persistent DB-backed task results (`dj
 
 ## Background
 
-Phase 1–3 of [backend-celery.md](backend-celery.md) are complete: Celery runs with Redis as broker, the worker starts via Docker, and `just dev` wires everything together. What remains is everything needed to make async tasks observable and testable end-to-end:
+Phase 1–3 of [backend-celery.md](../in-progress/backend-celery.md) are complete: Celery runs with Redis as broker, the worker starts via Docker, and `just dev` wires everything together. What remains is everything needed to make async tasks observable and testable end-to-end:
 
 - Task results currently live only in Redis and are ephemeral. `django-celery-results` stores them in Postgres, making them queryable via the ORM and inspectable in Django admin.
 - `django-celery-beat` allows periodic task schedules to be managed in Django admin at runtime without code changes. The `celery_beat` Docker service exists but is commented out pending this dependency.

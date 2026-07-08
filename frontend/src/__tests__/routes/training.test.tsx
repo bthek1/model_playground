@@ -83,6 +83,13 @@ describe("TrainingPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders the model-architecture schematic as the stage background", () => {
+    renderPage();
+    // The schematic is always present now — it *is* the background, not a dialog.
+    expect(screen.getByText(/linear softmax classifier/i)).toBeInTheDocument();
+    expect(screen.getByText("7,850")).toBeInTheDocument(); // parameter budget
+  });
+
   it("warns when WebGPU is unavailable", () => {
     gpuState.supported = false;
     renderPage();
@@ -144,7 +151,7 @@ describe("TrainingPage", () => {
     expect(await screen.findAllByTestId("echart")).toHaveLength(2);
   });
 
-  it("renders the model weight templates once a snapshot arrives", () => {
+  it("renders a weight template per class in the background schematic", () => {
     hookState.datasetStatus = "ready";
     hookState.snapshot = {
       epoch: 0,
@@ -153,14 +160,12 @@ describe("TrainingPage", () => {
     };
     renderPage();
 
-    // Templates live behind the Weights popover.
-    fireEvent.click(screen.getByRole("button", { name: /^weights$/i }));
-    // One labelled canvas per class (digits 0–9).
+    // The 10 templates are part of the always-on background — no popover.
     expect(
-      screen.getByLabelText(/weight template for digit 0/i),
-    ).toBeInTheDocument();
+      screen.getAllByLabelText(/weight template for digit/i),
+    ).toHaveLength(10);
     expect(
-      screen.getByLabelText(/weight template for digit 9/i),
+      screen.getByLabelText(/28×28 input pixel grid/i),
     ).toBeInTheDocument();
   });
 
