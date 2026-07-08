@@ -211,6 +211,10 @@ diagram canvas instead.
 - `routes/training.tsx` wraps the schematic in `<PanZoom>` (a `w-max` content
   layer so the diagram takes its natural width and pans as one canvas — no nested
   scroll), replacing the old centered scroll box.
+- Scaled the diagram up now that the canvas can pan/zoom: `ModelWeights` gained a
+  `tileSize` prop (default `size-16`); the schematic uses `size-32` templates
+  (128px), a `w-40` input grid, `size-10` output nodes, and big `⟶` connectors so
+  the parameters and connections read clearly.
 
 ## Files touched
 

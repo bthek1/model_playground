@@ -25,11 +25,14 @@ export function ModelWeights({
   bias,
   numClasses = 10,
   epoch,
+  tileSize = "size-16",
 }: {
   weights: Float32Array;
   bias?: Float32Array;
   numClasses?: number;
   epoch?: number;
+  /** Tailwind size class for each template tile (e.g. "size-16", "size-32"). */
+  tileSize?: string;
 }) {
   // Normalise colour intensity by the largest-magnitude weight so classes are
   // directly comparable.
@@ -52,6 +55,7 @@ export function ModelWeights({
               cls={c}
               numClasses={numClasses}
               maxAbs={maxAbs}
+              tileSize={tileSize}
             />
             <span className="font-mono text-xs tabular-nums text-muted-foreground">
               {c}
@@ -76,11 +80,13 @@ function ClassTemplate({
   cls,
   numClasses,
   maxAbs,
+  tileSize,
 }: {
   weights: Float32Array;
   cls: number;
   numClasses: number;
   maxAbs: number;
+  tileSize: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -109,7 +115,7 @@ function ClassTemplate({
       ref={canvasRef}
       width={SIDE}
       height={SIDE}
-      className="size-16 rounded border bg-muted/30 [image-rendering:pixelated]"
+      className={`${tileSize} rounded border bg-muted/30 [image-rendering:pixelated]`}
       aria-label={`Weight template for digit ${cls}`}
     />
   );

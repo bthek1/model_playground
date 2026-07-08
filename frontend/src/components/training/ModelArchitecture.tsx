@@ -58,19 +58,19 @@ export function ModelArchitecture({
       </div>
 
       {/* Flow: INPUT ──► WEIGHTS (10 × 28×28) ──► OUTPUT */}
-      <div className="flex flex-col items-stretch gap-3 xl:flex-row xl:items-center">
+      <div className="flex flex-col items-stretch gap-5 xl:flex-row xl:items-center">
         <Stage title="INPUT LAYER" sub="28×28 = 784 px">
-          <div className="mx-auto w-24">
+          <div className="mx-auto w-40">
             <div
               aria-label="28×28 input pixel grid"
               className="aspect-square w-full rounded border bg-muted/30"
               style={{
                 backgroundImage:
-                  "linear-gradient(to right, rgba(148,163,184,0.25) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.25) 1px, transparent 1px)",
+                  "linear-gradient(to right, rgba(148,163,184,0.3) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.3) 1px, transparent 1px)",
                 backgroundSize: `${100 / SIDE}% ${100 / SIDE}%`,
               }}
             />
-            <p className="mt-1 text-center font-mono text-[10px] text-muted-foreground">
+            <p className="mt-1.5 text-center font-mono text-xs text-muted-foreground">
               x₀ … x₇₈₃
             </p>
           </div>
@@ -87,19 +87,20 @@ export function ModelArchitecture({
             bias={bias}
             numClasses={numClasses}
             epoch={epoch}
+            tileSize="size-32"
           />
         </Stage>
 
         <Arrow label="softmax" />
 
         <Stage title="OUTPUT" sub="10 logits → probabilities">
-          <div className="space-y-1">
+          <div className="space-y-2">
             {Array.from({ length: numClasses }, (_, c) => (
-              <div key={c} className="flex items-center gap-1.5">
-                <span className="font-mono text-[10px] text-muted-foreground">
+              <div key={c} className="flex items-center gap-2">
+                <span className="font-mono text-xs text-muted-foreground">
                   z{c}+b{c}→
                 </span>
-                <span className="flex size-5 items-center justify-center rounded-full border font-mono text-xs tabular-nums">
+                <span className="flex size-10 items-center justify-center rounded-full border-2 font-mono text-lg font-semibold tabular-nums">
                   {c}
                 </span>
               </div>
@@ -159,10 +160,14 @@ function Stage({
 
 function Arrow({ label }: { label: string }) {
   return (
-    <div className="flex shrink-0 flex-col items-center justify-center text-muted-foreground">
-      <span className="font-mono text-[10px]">{label}</span>
-      <span aria-hidden className="rotate-90 text-lg leading-none xl:rotate-0">
-        →
+    <div className="flex shrink-0 flex-col items-center justify-center gap-1 text-muted-foreground">
+      <span className="font-mono text-xs">{label}</span>
+      {/* Big long-arrow connector; rotates to point down when stages stack. */}
+      <span
+        aria-hidden
+        className="rotate-90 text-5xl leading-none xl:rotate-0"
+      >
+        ⟶
       </span>
     </div>
   );
