@@ -285,8 +285,13 @@ diagram canvas instead.
   the zoom-in button is clickable. *(happy-dom has no layout, so `fit()` no-ops and
   the transform stays at its initial value — the tests assert mount + interaction
   safety, not pixel math.)*
+- `src/components/training/ModelWeights.test.tsx` *(new, 6 tests)* — one labelled
+  template per class; the `tileSize` prop defaults to `size-16` and applies a
+  custom value (`size-32`); per-class bias chips; the colour legend + epoch marker;
+  the `maxAbs || 1` fallback for all-zero weights. Plus a `ModelArchitecture` test
+  asserting the schematic renders its templates at the enlarged `size-32`.
 
-Full suite: **206 tests / 35 files** green (was 177).
+Full suite: **213 tests / 36 files** green (was 177).
 
 **Done — build/lint:** `just fe-build` (type-check + production build) green;
 `fe-lint` clean on all touched files (one pre-existing, unrelated

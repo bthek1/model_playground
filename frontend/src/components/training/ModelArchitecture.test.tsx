@@ -38,6 +38,14 @@ describe("ModelArchitecture", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders the templates at the enlarged tile size", () => {
+    render(<ModelArchitecture weights={new Float32Array(784 * 10)} />);
+    // The schematic scales the templates up to size-32 (128px).
+    expect(screen.getByLabelText(/weight template for digit 0/i)).toHaveClass(
+      "size-32",
+    );
+  });
+
   it("prompts to train until the weights carry signal", () => {
     // All-zero weights (pre-training) → the templates are blank, so show a hint.
     render(<ModelArchitecture weights={new Float32Array(784 * 10)} />);

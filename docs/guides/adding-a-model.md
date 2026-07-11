@@ -106,9 +106,21 @@ After a run, `POST /api/registry/runs/` with `params` and `metrics`
 (`latency_ms`, `tokens_per_sec`, `gflops`, adapter info) so the playground can
 show history and benchmarks.
 
-## 5. Verify
+## 5. Visualize the model
+
+Give the model a view that shows the user its identity, structure, parameters, and
+performance. Follow the UI standard in
+[`../standards/model-visualization.md`](../standards/model-visualization.md): reuse the
+stage/arrow schematic, canvas weight/activation heatmaps, param chips, theme-token colors,
+and lazy charts (reference impl: `components/training/ModelArchitecture.tsx` +
+`ModelWeights.tsx`). Drive it from the real `ModelCard.config` and weight stream — not a stock
+diagram — and make sure it still renders its structure with no GPU. Work through the checklist
+at the end of that document.
+
+## 6. Verify
 
 - `just fe-lint && just fe-build` — kernel imports and types compile.
 - `just be-test` — registry endpoints still pass.
 - Open `/playground`, confirm the model appears in the catalog and your kernel
   runs on the GPU.
+- Toggle light/dark and confirm the model's visualization reads correctly in both.

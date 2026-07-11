@@ -218,6 +218,14 @@ export const Route = createFileRoute('/users/$userId')({
 - Date formatting: `date-fns` — always import via `src/lib/date.ts` wrappers, never call `date-fns` directly in components
 - Charts: **ECharts** via the lazy-loaded `src/components/charts/EChart.tsx` wrapper (`echarts` is heavy — keep it code-split with `lazy(() => import(...))`), or **Recharts** for lightweight composable SVG charts
 - Markdown / LLM output: render with the `src/components/Markdown.tsx` component (`react-markdown` + `remark-gfm`)
+- **Visualizing a model or its internal structure** follows the UI standard in
+  `docs/standards/model-visualization.md` — a shared grammar of left-to-right stage/arrow
+  schematics (`Stage`/`Arrow`/`ParamChip` in `components/viz/schematic.tsx`), canvas
+  weight/activation heatmaps (diverging red=+ / blue=−, alpha=magnitude; `HeatmapTile` +
+  `DivergingLegend` in `components/viz/heatmap.tsx`), theme-token (`--chart-1…5`) colors resolved
+  via `getCSSVar()`, and lazy charts. The Training route (`components/training/`) and Tensor route
+  (`routes/tensor.tsx`) are the reference callers. Reuse those primitives; render the real
+  `ModelCard`/weight data, not stock diagrams; pass both themes and every WebGPU status.
 
 **WebGPU inference (`src/webgpu/`) — raw WebGPU, no ML framework:**
 - Models are **WGSL compute shaders** in `src/webgpu/shaders/`, imported as strings via Vite's
@@ -368,7 +376,8 @@ services:
 The `docs/` folder is the single source of truth for project knowledge. It is kept in sync with the codebase.
 
 **Structure:**
-- `docs/standards/` — Coding standards, style guides, naming conventions, API contracts
+- `docs/standards/` — Coding standards, style guides, naming conventions, API contracts, the
+  model-visualization UI standard (`model-visualization.md`)
 - `docs/guides/` — Step-by-step how-to guides, onboarding, local setup, deployment
 - `docs/plans/` — Feature plans, ADRs, roadmaps, spike notes. Active plans live in
   `docs/plans/in-progress/`; finished ones are moved to `docs/plans/completed/`

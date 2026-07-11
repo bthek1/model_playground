@@ -25,7 +25,9 @@ import {
   type TrainingSettings,
   useLinearTraining,
 } from "@/hooks/useLinearTraining";
+import { useTheme } from "@/hooks/useTheme";
 import { useWebGPU } from "@/hooks/useWebGPU";
+import { getCSSVar } from "@/lib/theme";
 
 const EChart = lazy(() => import("@/components/charts/EChart"));
 
@@ -297,12 +299,41 @@ function ChartPanel({
   );
 }
 
+// Resolve the design-system chart/text tokens to concrete colours so ECharts
+// (which can't read CSS vars) recolours when the theme flips. `theme` is only a
+// dependency to force re-read on toggle.
+function useChartTheme() {
+  const { theme } = useTheme();
+  return useMemo(
+    () => ({
+      axis: getCSSVar("mutedForeground"),
+      series: [getCSSVar("chart2"), getCSSVar("chart4")],
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme],
+  );
+}
+
 function LossChart({ metrics }: { metrics: { step: number; loss: number }[] }) {
+  const colors = useChartTheme();
   const option = useMemo<EChartsOption>(
     () => ({
-      grid: { left: 48, right: 16, top: 16, bottom: 32 },
-      xAxis: { type: "value", name: "step", min: 1 },
-      yAxis: { type: "value", name: "loss", min: 0 },
+      color: [colors.series[0]],
+      grid: { left: 48, right: 16, top: 16, bottom: 36 },
+      xAxis: {
+        type: "value",
+        name: "step",
+        min: 1,
+        axisLabel: { color: colors.axis },
+        nameTextStyle: { color: colors.axis },
+      },
+      yAxis: {
+        type: "value",
+        name: "loss",
+        min: 0,
+        axisLabel: { color: colors.axis },
+        nameTextStyle: { color: colors.axis },
+      },
       tooltip: { trigger: "axis" },
       animation: false,
       series: [
@@ -313,7 +344,7 @@ function LossChart({ metrics }: { metrics: { step: number; loss: number }[] }) {
         },
       ],
     }),
-    [metrics],
+    [metrics, colors],
   );
   return <EChart option={option} />;
 }
@@ -323,13 +354,28 @@ function AccuracyChart({
 }: {
   metrics: { step: number; trainAcc: number | null; testAcc: number | null }[];
 }) {
+  const colors = useChartTheme();
   const option = useMemo<EChartsOption>(() => {
     const evals = metrics.filter((m) => m.testAcc !== null);
     return {
-      grid: { left: 48, right: 16, top: 24, bottom: 32 },
-      legend: { top: 0 },
-      xAxis: { type: "value", name: "step", min: 1 },
-      yAxis: { type: "value", name: "acc", min: 0, max: 1 },
+      color: colors.series,
+      grid: { left: 48, right: 16, top: 24, bottom: 36 },
+      legend: { top: 0, textStyle: { color: colors.axis } },
+      xAxis: {
+        type: "value",
+        name: "step",
+        min: 1,
+        axisLabel: { color: colors.axis },
+        nameTextStyle: { color: colors.axis },
+      },
+      yAxis: {
+        type: "value",
+        name: "acc",
+        min: 0,
+        max: 1,
+        axisLabel: { color: colors.axis },
+        nameTextStyle: { color: colors.axis },
+      },
       tooltip: { trigger: "axis" },
       animation: false,
       series: [
@@ -345,6 +391,6 @@ function AccuracyChart({
         },
       ],
     };
-  }, [metrics]);
+  }, [metrics, colors]);
   return <EChart option={option} />;
 }

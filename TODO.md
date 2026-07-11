@@ -12,4 +12,4 @@
 - [ ] model to use camera - object detection
 
 
-- [x] make the background like a canves with vertical scroll and i can drag, zoom in, zoom out etc
+- [x] add docs on models visuals etc and colour → `docs/standards/model-visualization.md`

@@ -114,6 +114,32 @@ describe("TensorArithmeticPage", () => {
     }
   });
 
+  it("renders the result as a diverging heatmap with its legend", () => {
+    mockHookState.result = {
+      data: new Float32Array([8, 10, 12, 14]),
+      rows: 2,
+      cols: 2,
+      gpuTimeMs: 1.5,
+    };
+    renderPage();
+
+    // Canvas heatmap (per the model-visualization standard) + the value→colour
+    // key that must accompany it.
+    expect(screen.getByLabelText(/result value heatmap/i)).toBeInTheDocument();
+    expect(screen.getByText(/positive/i)).toBeInTheDocument();
+    expect(screen.getByText(/negative/i)).toBeInTheDocument();
+  });
+
+  it("lays out operands as a dataflow schematic with an op chip", () => {
+    renderPage();
+    // Op summary chip (accent ParamChip) reflects the selected operation.
+    expect(screen.getByText("op")).toBeInTheDocument();
+    expect(screen.getByText("binary")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /transpose/i }));
+    expect(screen.getByText("unary")).toBeInTheDocument();
+  });
+
   it("shows a compute error from the hook", () => {
     mockHookState.error = "No WebGPU adapter available";
     renderPage();

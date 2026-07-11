@@ -10,6 +10,8 @@
 
 import { useMemo } from "react";
 
+import { Arrow, ParamChip, Stage } from "@/components/viz/schematic";
+
 import { ModelWeights } from "./ModelWeights";
 
 const IMAGE_SIZE = 784;
@@ -114,61 +116,6 @@ export function ModelArchitecture({
           Start training to watch each weight template sharpen into a digit shape.
         </p>
       )}
-    </div>
-  );
-}
-
-function ParamChip({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
-  return (
-    <span
-      className={`rounded px-1.5 py-0.5 ${
-        accent ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
-      }`}
-    >
-      {label} <span className="font-semibold">{value}</span>
-    </span>
-  );
-}
-
-function Stage({
-  title,
-  sub,
-  children,
-  className,
-}: {
-  title: string;
-  sub: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`rounded-lg border bg-card/60 p-2.5 ${className ?? ""}`}>
-      <p className="text-[11px] font-semibold tracking-wide">{title}</p>
-      <p className="mb-2 text-[10px] text-muted-foreground">{sub}</p>
-      {children}
-    </div>
-  );
-}
-
-function Arrow({ label }: { label: string }) {
-  return (
-    <div className="flex shrink-0 flex-col items-center justify-center gap-1 text-muted-foreground">
-      <span className="font-mono text-xs">{label}</span>
-      {/* Big long-arrow connector; rotates to point down when stages stack. */}
-      <span
-        aria-hidden
-        className="rotate-90 text-5xl leading-none xl:rotate-0"
-      >
-        ⟶
-      </span>
     </div>
   );
 }
