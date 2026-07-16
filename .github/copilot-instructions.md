@@ -5,8 +5,10 @@
 
 ## Project Overview
 **Model Playground** — a web app for running ML models (LLMs, computer vision, custom networks)
-**directly in the browser on the user's GPU via raw WebGPU** (WGSL compute shaders — no
-Transformers.js/ONNX/WebLLM). It is a monorepo containing a decoupled web application:
+**directly in the browser on the user's GPU/CPU**. Two client-side inference paths coexist: a
+**raw-WebGPU runtime** (`src/webgpu/`, hand-written WGSL compute shaders) for custom kernels, and
+**Transformers.js / ONNX Runtime Web** for running pretrained models (e.g. audio tasks) in the UI.
+It is a monorepo containing a decoupled web application:
 - `backend/` — Django REST Framework API (Python) with PostgreSQL and Celery. Acts as a **model
   registry** (catalog metadata + inference-run records); it does **not** run inference.
 - `frontend/` — React SPA built with Vite (TypeScript) with TanStack Query + TanStack Router,
@@ -230,7 +232,10 @@ export const Route = createFileRoute('/users/$userId')({
 **WebGPU inference (`src/webgpu/`) — raw WebGPU, no ML framework:**
 - Models are **WGSL compute shaders** in `src/webgpu/shaders/`, imported as strings via Vite's
   `?raw` suffix (`import shader from "./shaders/x.wgsl?raw"`). Do **not** add Transformers.js,
-  ONNX Runtime, or WebLLM — kernels are hand-written for control and a minimal bundle.
+  ONNX Runtime, or WebLLM *to this runtime* — its kernels are hand-written for control and a minimal
+  bundle. That constraint is scoped to `src/webgpu/`: running **pretrained** models in the UI (audio
+  ASR/TTS/classification, etc.) may use Transformers.js / ONNX Runtime Web on WebGPU or WASM. See
+  `docs/plans/in-progress/audio-models-in-browser.md`.
 - GPU types come from `@webgpu/types` (registered in `tsconfig.app.json` `types`).
 - Pipeline (see `runtime.ts::runMatmul` for the reference): `getGPUDevice()` (memoised, re-acquires
   after device-lost) → `createComputePipeline(device, wgsl)` → storage/uniform buffers (`buffers.ts`)

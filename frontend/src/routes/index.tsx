@@ -15,7 +15,7 @@ function LandingPage() {
   // Redirect authenticated users to the main app
   useEffect(() => {
     if (me) {
-      navigate({ to: "/playground" });
+      navigate({ to: "/home" });
     }
   }, [me, navigate]);
 

@@ -38,7 +38,7 @@ function LoginPage() {
 
   function onSubmit(values: LoginSchema) {
     login.mutate(values, {
-      onSuccess: () => navigate({ to: "/playground" }),
+      onSuccess: () => navigate({ to: "/home" }),
       onError: () =>
         form.setError("root", {
           message: "Invalid credentials. Please try again.",

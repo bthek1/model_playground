@@ -9,7 +9,8 @@
 
 
 - [ ] model to do chat to text
+- [ ] model to do depth estimation
 - [ ] model to use camera - object detection
 
 
-- [x] add docs on models visuals etc and colour → `docs/standards/model-visualization.md`
+- [ ] ai naviable

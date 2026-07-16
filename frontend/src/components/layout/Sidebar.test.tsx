@@ -25,34 +25,79 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 import { Sidebar, SidebarNav } from "./Sidebar";
 import { useUIStore } from "@/store/ui";
 
+const DEFAULT_UI = { sidebarOpen: true, expandedCategories: {} };
+
 describe("SidebarNav", () => {
-  it("renders all nav items", () => {
-    render(<SidebarNav />);
-    expect(screen.getByText("Playground")).toBeInTheDocument();
+  afterEach(() => {
+    useUIStore.setState(DEFAULT_UI);
   });
 
-  it('marks the active link with aria-current="page"', () => {
+  it("renders a top-level Home link", () => {
     render(<SidebarNav />);
-    const link = screen.getByText("Playground").closest("a");
+    const home = screen.getByText("Home").closest("a");
+    expect(home).toHaveAttribute("href", "/home");
+  });
+
+  it("renders every category header", () => {
+    render(<SidebarNav />);
+    for (const label of [
+      "Audio",
+      "Computer Vision",
+      "Multimodal",
+      "Natural Language Processing",
+      "Other",
+      "Reinforcement Learning",
+      "Tabular",
+      "Theory",
+    ]) {
+      expect(screen.getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
+    }
+  });
+
+  it("hides a category's tasks until it is expanded", () => {
+    const { rerender } = render(<SidebarNav />);
+    // Audio starts collapsed
+    expect(screen.queryByText("Text to Speech")).not.toBeInTheDocument();
+
+    useUIStore.setState({ expandedCategories: { Audio: true } });
+    rerender(<SidebarNav />);
+    expect(screen.getByText("Text to Speech")).toBeInTheDocument();
+  });
+
+  it("auto-expands the category owning the active route", () => {
+    // pathname is mocked to /playground, which Text Generation (NLP) maps to
+    render(<SidebarNav />);
+    expect(screen.getByText("Text Generation")).toBeInTheDocument();
+  });
+
+  it('marks the active task with aria-current="page"', () => {
+    render(<SidebarNav />);
+    const link = screen.getByText("Text Generation").closest("a");
     expect(link).toHaveAttribute("aria-current", "page");
   });
 
-  it("renders icon-only labels as title attributes when collapsed", () => {
+  it("renders category icons with titles and no task labels when collapsed", () => {
     render(<SidebarNav collapsed />);
-    expect(screen.queryByText("Playground")).not.toBeInTheDocument();
-    const link = screen.getByTitle("Playground");
-    expect(link).toBeInTheDocument();
+    expect(screen.queryByText("Text to Speech")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Audio")).toBeInTheDocument();
+  });
+
+  it("links the Theory tools to their real routes when expanded", () => {
+    useUIStore.setState({ expandedCategories: { Theory: true } });
+    render(<SidebarNav />);
+    const training = screen.getByText("Linear Model Training").closest("a");
+    const tensor = screen.getByText("Tensor Arithmetic").closest("a");
+    expect(training).toHaveAttribute("href", "/training");
+    expect(tensor).toHaveAttribute("href", "/tensor");
   });
 });
 
 describe("Sidebar", () => {
   afterEach(() => {
-    // reset to the store default so tests don't leak state
-    useUIStore.setState({ sidebarOpen: true });
+    useUIStore.setState(DEFAULT_UI);
   });
 
   it("renders with full width class when open", () => {
-    // sidebarOpen defaults to true in the store
     const { container } = render(<Sidebar />);
     const aside = container.querySelector("aside");
     expect(aside?.className).toContain("w-64");

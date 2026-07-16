@@ -11,8 +11,11 @@ update both.
 ## What this repo is
 
 **Model Playground** — a web app for running ML models (LLMs, computer vision, custom
-networks) **directly in the browser on the user's GPU via raw WebGPU** (WGSL compute
-shaders — no Transformers.js/ONNX/WebLLM). It is a decoupled monorepo:
+networks) **directly in the browser on the user's GPU/CPU**. Two client-side inference
+paths coexist: (1) a **raw-WebGPU runtime** (`src/webgpu/`, hand-written WGSL compute
+shaders) for custom kernels and teaching demos, and (2) **Transformers.js / ONNX Runtime
+Web** for running *pretrained* models (e.g. the audio tasks) in the UI. It is a decoupled
+monorepo:
 
 - **`backend/`** — Django REST Framework API (Python 3.13, PostgreSQL, Celery). Acts as a
   **model registry**: catalog metadata + inference-run records. It does **not** run inference.
@@ -111,6 +114,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - React 19 + TypeScript ~6.0 + Vite 8 (dev server on `:5174`). Functional components only.
 - All API calls go through `src/api/client.ts` (Axios + JWT with silent 401 refresh).
 - Server state lives in TanStack Query; global UI flags in Zustand + Immer (`src/store/`, one file per concern) — never put server data in Zustand.
+- The sidebar is **taxonomy-driven**: categories/tasks live in `components/layout/taskTaxonomy.ts` (data), rendered by `components/layout/Sidebar.tsx`. To add a task, add a data entry — map it to a real route via `REAL_ROUTES` (e.g. the Theory tools Linear Model Training → `/training` and Tensor Arithmetic → `/tensor`), else it falls through to the generic `routes/tasks.$slug.tsx` placeholder. Per-category expand state is in `store/ui.ts`.
 - Forms use React Hook Form + Zod schemas (`src/schemas/`, one file per domain).
 - Styling is Tailwind v4 (CSS-first, no config file) + shadcn/ui in the **`base-nova`** style, built on **`@base-ui/react`** primitives (NOT Radix). Add components with `npx shadcn@latest add <component>`.
 - Charts: ECharts via the lazy `src/components/charts/EChart.tsx` wrapper, or Recharts inline. Render Markdown/LLM output with `src/components/Markdown.tsx` (`react-markdown` + `remark-gfm`).
@@ -119,8 +123,12 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 
 ### WebGPU essentials (`src/webgpu/`)
 
-- **Raw WebGPU only — no ML framework.** Models are WGSL compute shaders in `webgpu/shaders/`
-  (imported as strings via Vite `?raw`). Types come from `@webgpu/types` (in `tsconfig.app.json` `types`).
+- **Raw WebGPU only — no ML framework** *in `src/webgpu/`*. Custom-kernel models are WGSL compute
+  shaders in `webgpu/shaders/` (imported as strings via Vite `?raw`). Types come from `@webgpu/types`
+  (in `tsconfig.app.json` `types`). This rule scopes to the hand-written runtime — running *pretrained*
+  models in the UI (audio ASR/TTS/classification, etc.) may use **Transformers.js / ONNX Runtime Web**,
+  which run the same HF checkpoints on WebGPU or WASM. See
+  [`docs/plans/in-progress/audio-models-in-browser.md`](docs/plans/in-progress/audio-models-in-browser.md).
 - The pipeline: `getGPUDevice()` (memoised, device-lost aware) → `createComputePipeline(wgsl)` →
   storage/uniform buffers (`buffers.ts`) → `dispatchWorkgroups` → `readBackFloat32`. `runtime.ts` is
   the reference (`runMatmul`).

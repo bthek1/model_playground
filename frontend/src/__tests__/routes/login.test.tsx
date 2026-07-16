@@ -79,7 +79,7 @@ describe("Login page", () => {
     expect(await screen.findByText(/valid email/i)).toBeInTheDocument();
   });
 
-  it("redirects to /playground on successful login", async () => {
+  it("redirects to /home on successful login", async () => {
     if (!LoginComponent) return;
     mockMutate.mockImplementation((_values, opts) => opts?.onSuccess?.());
     const user = userEvent.setup();
@@ -87,6 +87,6 @@ describe("Login page", () => {
     await user.type(screen.getByLabelText(/email/i), "user@example.com");
     await user.type(screen.getByLabelText(/password/i), "password123");
     await user.click(screen.getByRole("button", { name: /sign in/i }));
-    expect(mockNavigate).toHaveBeenCalledWith({ to: "/playground" });
+    expect(mockNavigate).toHaveBeenCalledWith({ to: "/home" });
   });
 });

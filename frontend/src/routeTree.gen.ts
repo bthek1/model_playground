@@ -14,7 +14,11 @@ import { Route as TensorRouteImport } from './routes/tensor'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as HomeRouteImport } from './routes/home'
+import { Route as AudioClassificationRouteImport } from './routes/audio-classification'
+import { Route as AsrRouteImport } from './routes/asr'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TasksSlugRouteImport } from './routes/tasks.$slug'
 
 const TrainingRoute = TrainingRouteImport.update({
   id: '/training',
@@ -41,65 +45,119 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HomeRoute = HomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AudioClassificationRoute = AudioClassificationRouteImport.update({
+  id: '/audio-classification',
+  path: '/audio-classification',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AsrRoute = AsrRouteImport.update({
+  id: '/asr',
+  path: '/asr',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TasksSlugRoute = TasksSlugRouteImport.update({
+  id: '/tasks/$slug',
+  path: '/tasks/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/asr': typeof AsrRoute
+  '/audio-classification': typeof AudioClassificationRoute
+  '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
   '/training': typeof TrainingRoute
+  '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/asr': typeof AsrRoute
+  '/audio-classification': typeof AudioClassificationRoute
+  '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
   '/training': typeof TrainingRoute
+  '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/asr': typeof AsrRoute
+  '/audio-classification': typeof AudioClassificationRoute
+  '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
   '/training': typeof TrainingRoute
+  '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/asr'
+    | '/audio-classification'
+    | '/home'
     | '/login'
     | '/playground'
     | '/signup'
     | '/tensor'
     | '/training'
+    | '/tasks/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/playground' | '/signup' | '/tensor' | '/training'
+  to:
+    | '/'
+    | '/asr'
+    | '/audio-classification'
+    | '/home'
+    | '/login'
+    | '/playground'
+    | '/signup'
+    | '/tensor'
+    | '/training'
+    | '/tasks/$slug'
   id:
     | '__root__'
     | '/'
+    | '/asr'
+    | '/audio-classification'
+    | '/home'
     | '/login'
     | '/playground'
     | '/signup'
     | '/tensor'
     | '/training'
+    | '/tasks/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AsrRoute: typeof AsrRoute
+  AudioClassificationRoute: typeof AudioClassificationRoute
+  HomeRoute: typeof HomeRoute
   LoginRoute: typeof LoginRoute
   PlaygroundRoute: typeof PlaygroundRoute
   SignupRoute: typeof SignupRoute
   TensorRoute: typeof TensorRoute
   TrainingRoute: typeof TrainingRoute
+  TasksSlugRoute: typeof TasksSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -139,6 +197,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/home': {
+      id: '/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof HomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audio-classification': {
+      id: '/audio-classification'
+      path: '/audio-classification'
+      fullPath: '/audio-classification'
+      preLoaderRoute: typeof AudioClassificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/asr': {
+      id: '/asr'
+      path: '/asr'
+      fullPath: '/asr'
+      preLoaderRoute: typeof AsrRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -146,16 +225,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tasks/$slug': {
+      id: '/tasks/$slug'
+      path: '/tasks/$slug'
+      fullPath: '/tasks/$slug'
+      preLoaderRoute: typeof TasksSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AsrRoute: AsrRoute,
+  AudioClassificationRoute: AudioClassificationRoute,
+  HomeRoute: HomeRoute,
   LoginRoute: LoginRoute,
   PlaygroundRoute: PlaygroundRoute,
   SignupRoute: SignupRoute,
   TensorRoute: TensorRoute,
   TrainingRoute: TrainingRoute,
+  TasksSlugRoute: TasksSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

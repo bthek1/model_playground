@@ -1,7 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, Cpu, Gauge, Layers, Loader2, XCircle } from "lucide-react";
+// The inference workspace. GPU capability details and the compute benchmark now
+// live on the Home dashboard (routes/home.tsx); this page is where you pick a
+// model and run it in the browser.
 
-import { Button } from "@/components/ui/button";
+import { createFileRoute } from "@tanstack/react-router";
+import { Cpu } from "lucide-react";
+
+import { ModelCatalogCard } from "@/components/home/ModelCatalogCard";
 import {
   Card,
   CardContent,
@@ -9,338 +13,40 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useGpuBenchmark } from "@/hooks/useGpuBenchmark";
-import { useModels } from "@/hooks/useModels";
-import { useWebGPU } from "@/hooks/useWebGPU";
-import { detectBrowser } from "@/lib/browser";
-import { formatBytes, titleCase } from "@/lib/format";
-import type { WebGPUCapabilities, WebGPUStatus } from "@/webgpu/types";
 
 export const Route = createFileRoute("/playground")({
   component: PlaygroundPage,
 });
 
-const BENCH_SIZE = 512;
-
-// Human-readable summary for each capability status, keyed off the outcome of
-// detectWebGPU() (which now confirms a real GPUDevice can be acquired).
-const STATUS_INFO: Record<
-  WebGPUStatus,
-  { label: string; hint: string; ok: boolean }
-> = {
-  ready: {
-    label: "GPU accessible",
-    hint: "This browser can acquire a GPU device and run WebGPU compute.",
-    ok: true,
-  },
-  "no-device": {
-    label: "No GPU access",
-    hint: "An adapter was found but a GPU device could not be acquired — the driver may be blocked, out of resources, or unavailable.",
-    ok: false,
-  },
-  "no-adapter": {
-    label: "No GPU access",
-    hint: "WebGPU is present but no adapter was offered — likely no compatible GPU or driver in this environment.",
-    ok: false,
-  },
-  unsupported: {
-    label: "WebGPU unsupported",
-    hint: "This browser doesn't expose WebGPU. Use Chrome/Edge 113+, Firefox 141+, or Safari 26+.",
-    ok: false,
-  },
-};
-
-function CapabilityPanel() {
-  const { capabilities, loading } = useWebGPU();
-
-  if (loading) {
-    return (
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Checking GPU access…
-      </p>
-    );
-  }
-
-  const status = capabilities?.status ?? "unsupported";
-  const info = STATUS_INFO[status];
-  const browser = detectBrowser();
-
-  // WebGPU is only exposed in a secure context (HTTPS or localhost). On a plain
-  // HTTP origin Chrome removes `navigator.gpu` entirely, which surfaces here as
-  // "unsupported" — a far more common cause than an actually-incapable browser.
-  const insecureContext =
-    status === "unsupported" &&
-    typeof window !== "undefined" &&
-    window.isSecureContext === false;
-  // Firefox on Linux/macOS still ships WebGPU behind a flag even on versions
-  // that enable it by default on Windows — point those users at the flag.
-  const firefoxNeedsFlag =
-    status === "unsupported" &&
-    !insecureContext &&
-    /firefox/i.test(browser.name);
-
-  let hint = info.hint;
-  if (insecureContext) {
-    hint =
-      "This page isn't a secure context, so the browser hides WebGPU. Open it over HTTPS or via http://localhost (e.g. an SSH tunnel) — not a plain-HTTP IP address.";
-  } else if (firefoxNeedsFlag) {
-    hint =
-      "Firefox hides WebGPU behind a flag on Linux and macOS. Open about:config, set dom.webgpu.enabled to true, then restart Firefox.";
-  }
-
-  return (
-    <div className="space-y-4 text-sm">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
-        <dt className="text-muted-foreground">Browser</dt>
-        <dd>
-          {browser.name}
-          {browser.version ? ` ${browser.version}` : ""}
-        </dd>
-      </dl>
-
-      <div
-        className={`flex items-start gap-2 rounded-md border p-3 ${
-          info.ok
-            ? "border-emerald-500/30 bg-emerald-500/10"
-            : "border-destructive/30 bg-destructive/10"
-        }`}
-      >
-        {info.ok ? (
-          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-        ) : (
-          <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
-        )}
-        <div>
-          <p className="font-medium">
-            {insecureContext
-              ? "WebGPU hidden (insecure context)"
-              : firefoxNeedsFlag
-                ? "WebGPU disabled (Firefox flag)"
-                : info.label}
-          </p>
-          <p className="text-muted-foreground">{hint}</p>
-        </div>
-      </div>
-
-      {capabilities?.status === "ready" && (
-        <CapabilityDetails capabilities={capabilities} />
-      )}
-    </div>
-  );
-}
-
-// Friendly label + unit for each reported limit. `bytes: true` means the raw
-// value is a byte count and should be shown in IEC units.
-const LIMIT_META: Record<string, { label: string; bytes?: boolean }> = {
-  maxBufferSize: { label: "Max buffer size", bytes: true },
-  maxStorageBufferBindingSize: { label: "Max storage binding", bytes: true },
-  maxComputeWorkgroupStorageSize: { label: "Workgroup storage", bytes: true },
-  maxComputeInvocationsPerWorkgroup: { label: "Invocations / workgroup" },
-  maxComputeWorkgroupsPerDimension: { label: "Workgroups / dimension" },
-};
-
-// Features worth calling out — they change what kernels can do.
-const NOTABLE_FEATURES = new Set(["shader-f16", "timestamp-query"]);
-
-function formatUnknown(value: string | undefined): string {
-  if (!value || value === "unknown") return "—";
-  return titleCase(value);
-}
-
-function CapabilityDetails({
-  capabilities,
-}: {
-  capabilities: WebGPUCapabilities;
-}) {
-  const { adapter, features, limits, isFallbackAdapter } = capabilities;
-  const vendor = formatUnknown(adapter?.vendor);
-  const architecture = formatUnknown(adapter?.architecture);
-
-  return (
-    <div className="space-y-4 text-sm">
-      <div>
-        <p className="mb-1.5 font-medium">Adapter</p>
-        <dl className="grid grid-cols-[10rem_1fr] gap-y-1">
-          <dt className="text-muted-foreground">Vendor</dt>
-          <dd>{vendor}</dd>
-          <dt className="text-muted-foreground">Architecture</dt>
-          <dd>{architecture}</dd>
-          <dt className="text-muted-foreground">Type</dt>
-          <dd>
-            {isFallbackAdapter ? (
-              <span className="text-amber-600 dark:text-amber-400">
-                Software (fallback)
-              </span>
-            ) : (
-              "Hardware"
-            )}
-          </dd>
-        </dl>
-      </div>
-
-      <div>
-        <p className="mb-1.5 font-medium">Limits</p>
-        <dl className="grid grid-cols-[10rem_1fr] gap-y-1">
-          {Object.entries(limits).map(([key, value]) => {
-            const meta = LIMIT_META[key];
-            return (
-              <div key={key} className="contents">
-                <dt className="text-muted-foreground">{meta?.label ?? key}</dt>
-                <dd className="font-mono text-xs" title={value.toLocaleString()}>
-                  {meta?.bytes ? formatBytes(value) : value.toLocaleString()}
-                </dd>
-              </div>
-            );
-          })}
-        </dl>
-      </div>
-
-      {features.length > 0 && (
-        <div>
-          <p className="mb-1.5 font-medium">
-            Features{" "}
-            <span className="font-normal text-muted-foreground">
-              ({features.length})
-            </span>
-          </p>
-          <div className="flex flex-wrap gap-1">
-            {features.map((f) => (
-              <span
-                key={f}
-                className={`rounded px-1.5 py-0.5 font-mono text-xs ${
-                  NOTABLE_FEATURES.has(f)
-                    ? "bg-primary/15 text-primary"
-                    : "bg-muted"
-                }`}
-              >
-                {f}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BenchmarkPanel() {
-  const { running, result, error, run } = useGpuBenchmark(BENCH_SIZE);
-
-  return (
-    <div className="space-y-3 text-sm">
-      <p className="text-muted-foreground">
-        Runs a {BENCH_SIZE}×{BENCH_SIZE} matrix multiply on the GPU (in a Web
-        Worker) using the raw WGSL kernel in{" "}
-        <code>src/webgpu/shaders/matmul.wgsl</code>.
-      </p>
-      <Button onClick={run} disabled={running}>
-        {running ? "Running…" : "Run GPU benchmark"}
-      </Button>
-
-      {error && <p className="text-destructive">Error: {error}</p>}
-
-      {result && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 font-mono text-xs">
-          <dt className="text-muted-foreground">Throughput</dt>
-          <dd>{result.gflops.toFixed(1)} GFLOP/s</dd>
-          <dt className="text-muted-foreground">Wall time</dt>
-          <dd>{result.gpuTimeMs.toFixed(2)} ms</dd>
-          <dt className="text-muted-foreground">Correctness</dt>
-          <dd className={result.correct ? "" : "text-destructive"}>
-            {result.correct ? "verified vs CPU" : "MISMATCH"}
-          </dd>
-        </dl>
-      )}
-    </div>
-  );
-}
-
-function ModelCatalog() {
-  const { data: models, isLoading, isError } = useModels();
-
-  if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading catalog…</p>;
-  }
-  if (isError) {
-    return (
-      <p className="text-sm text-destructive">Could not load the catalog.</p>
-    );
-  }
-  if (!models || models.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No models yet. Add one via the Django admin or{" "}
-        <code>POST /api/registry/models/</code>. See
-        docs/guides/adding-a-model.md.
-      </p>
-    );
-  }
-
-  return (
-    <ul className="divide-y">
-      {models.map((model) => (
-        <li key={model.id} className="flex items-baseline gap-3 py-2 text-sm">
-          <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs uppercase">
-            {model.task}
-          </span>
-          <span className="font-medium">{model.name}</span>
-          <span className="truncate text-muted-foreground">
-            {model.description}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function PlaygroundPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
       <div>
-        <h1 className="mb-1 text-2xl font-semibold">Model Playground</h1>
+        <h1 className="mb-1 text-2xl font-semibold">Playground</h1>
         <p className="text-sm text-muted-foreground">
-          Run models directly on your GPU via raw WebGPU. Nothing is sent to a
-          server — the backend only serves the model catalog.
+          Pick a model and run inference in the browser. See your GPU details on
+          the{" "}
+          <a href="/home" className="underline">
+            Home dashboard
+          </a>
+          .
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Cpu className="size-4" /> GPU Capabilities
-            </CardTitle>
-            <CardDescription>What this browser exposes.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CapabilityPanel />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Gauge className="size-4" /> Compute Benchmark
-            </CardTitle>
-            <CardDescription>Verify the WebGPU pipeline end to end.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <BenchmarkPanel />
-          </CardContent>
-        </Card>
-      </div>
+      <ModelCatalogCard />
 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Layers className="size-4" /> Model Catalog
+            <Cpu className="size-4" /> Run
           </CardTitle>
           <CardDescription>
-            Registered models, served from the backend registry.
+            In-browser inference is wired up per task — see the sidebar.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <ModelCatalog />
+        <CardContent className="text-sm text-muted-foreground">
+          Select a task from the sidebar to run a model. Text generation and
+          other inference surfaces are added as their kernels land.
         </CardContent>
       </Card>
     </div>

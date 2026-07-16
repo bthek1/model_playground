@@ -52,7 +52,7 @@ export async function detectWebGPU(): Promise<WebGPUCapabilities> {
     return { status: "unsupported", ...empty };
   }
 
-  let adapter: GPUAdapter | null = null;
+  let adapter: GPUAdapter | null;
   try {
     adapter = await navigator.gpu.requestAdapter();
   } catch {
