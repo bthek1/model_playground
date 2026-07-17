@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TrainingRouteImport } from './routes/training'
+import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
 import { Route as TensorRouteImport } from './routes/tensor'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PlaygroundRouteImport } from './routes/playground'
@@ -23,6 +24,11 @@ import { Route as TasksSlugRouteImport } from './routes/tasks.$slug'
 const TrainingRoute = TrainingRouteImport.update({
   id: '/training',
   path: '/training',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TextToSpeechRoute = TextToSpeechRouteImport.update({
+  id: '/text-to-speech',
+  path: '/text-to-speech',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TensorRoute = TensorRouteImport.update({
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
+  '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
+  '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
+  '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/playground'
     | '/signup'
     | '/tensor'
+    | '/text-to-speech'
     | '/training'
     | '/tasks/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/playground'
     | '/signup'
     | '/tensor'
+    | '/text-to-speech'
     | '/training'
     | '/tasks/$slug'
   id:
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/playground'
     | '/signup'
     | '/tensor'
+    | '/text-to-speech'
     | '/training'
     | '/tasks/$slug'
   fileRoutesById: FileRoutesById
@@ -156,6 +168,7 @@ export interface RootRouteChildren {
   PlaygroundRoute: typeof PlaygroundRoute
   SignupRoute: typeof SignupRoute
   TensorRoute: typeof TensorRoute
+  TextToSpeechRoute: typeof TextToSpeechRoute
   TrainingRoute: typeof TrainingRoute
   TasksSlugRoute: typeof TasksSlugRoute
 }
@@ -167,6 +180,13 @@ declare module '@tanstack/react-router' {
       path: '/training'
       fullPath: '/training'
       preLoaderRoute: typeof TrainingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/text-to-speech': {
+      id: '/text-to-speech'
+      path: '/text-to-speech'
+      fullPath: '/text-to-speech'
+      preLoaderRoute: typeof TextToSpeechRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tensor': {
@@ -244,6 +264,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlaygroundRoute: PlaygroundRoute,
   SignupRoute: SignupRoute,
   TensorRoute: TensorRoute,
+  TextToSpeechRoute: TextToSpeechRoute,
   TrainingRoute: TrainingRoute,
   TasksSlugRoute: TasksSlugRoute,
 }

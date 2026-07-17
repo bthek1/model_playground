@@ -137,8 +137,9 @@ describe("useLiveAsr", () => {
     expect(transcribe).toHaveBeenCalledTimes(1);
   });
 
-  it("stops capture, runs a final pass, and releases the mic", async () => {
-    installDecodeMocks(new Float32Array([0.3]));
+  it("stops capture, runs a final pass, retains the take, and releases the mic", async () => {
+    const rendered = new Float32Array([0.3]);
+    installDecodeMocks(rendered);
     installMediaMocks();
     transcribe.mockResolvedValue({ text: "final" });
 
@@ -147,6 +148,7 @@ describe("useLiveAsr", () => {
     await act(async () => {
       await result.current.start();
     });
+    expect(result.current.stream).not.toBeNull(); // exposed for the live waveform
     await act(async () => lastRecorder.emitChunk());
     await flush();
 
@@ -156,12 +158,56 @@ describe("useLiveAsr", () => {
     expect(lastRecorder.stop).toHaveBeenCalled();
     expect(track.stop).toHaveBeenCalled();
     expect(result.current.recording).toBe(false);
+    expect(result.current.stream).toBeNull();
     expect(result.current.text).toBe("final");
+    // The full take is retained for visualization/playback/re-transcription…
+    expect(result.current.clip).toBe(rendered);
+    // …so the model must have received a copy, not the retained array.
+    for (const [audio] of transcribe.mock.calls) expect(audio).not.toBe(rendered);
   });
 
-  it("transcribeClip runs a one-shot transcription and sets the text", async () => {
+  it("runs the final pass even while a live tick is still in flight", async () => {
+    installDecodeMocks(new Float32Array([0.2]));
+    installMediaMocks();
+    // The in-flight tick never resolves; the final pass must not be skipped.
+    transcribe.mockReturnValue(new Promise<AsrResult>(() => {}));
+
+    const { useLiveAsr } = await import("./useLiveAsr");
+    const { result } = renderHook(() => useLiveAsr());
+    await act(async () => {
+      await result.current.start();
+    });
+    await act(async () => lastRecorder.emitChunk());
+    await flush();
+    act(() => result.current.stop());
+    await flush();
+
+    expect(transcribe).toHaveBeenCalledTimes(2); // live tick + forced final pass
+  });
+
+  it("transcribeClip transcribes a copy, retains the clip, and sets the text", async () => {
     installMediaMocks();
     transcribe.mockResolvedValue({ text: "from a file" });
+
+    const { useLiveAsr } = await import("./useLiveAsr");
+    const { result } = renderHook(() => useLiveAsr());
+
+    const clip = new Float32Array([0.5]);
+    await act(async () => {
+      await result.current.transcribeClip(clip);
+    });
+
+    expect(transcribe).toHaveBeenCalledWith(new Float32Array([0.5]), undefined);
+    // The original is retained; the worker got a copy (transfer would detach it).
+    expect(result.current.clip).toBe(clip);
+    expect(transcribe.mock.calls[0][0]).not.toBe(clip);
+    expect(result.current.text).toBe("from a file");
+  });
+
+  it("clears the previous take when a new capture starts", async () => {
+    installDecodeMocks(new Float32Array([0.1]));
+    installMediaMocks();
+    transcribe.mockResolvedValue({ text: "x" });
 
     const { useLiveAsr } = await import("./useLiveAsr");
     const { result } = renderHook(() => useLiveAsr());
@@ -169,8 +215,11 @@ describe("useLiveAsr", () => {
     await act(async () => {
       await result.current.transcribeClip(new Float32Array([0.5]));
     });
+    expect(result.current.clip).not.toBeNull();
 
-    expect(transcribe).toHaveBeenCalledWith(new Float32Array([0.5]), undefined);
-    expect(result.current.text).toBe("from a file");
+    await act(async () => {
+      await result.current.start();
+    });
+    expect(result.current.clip).toBeNull();
   });
 });

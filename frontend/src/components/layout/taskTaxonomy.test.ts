@@ -44,9 +44,12 @@ describe("taskCategories", () => {
     const all = taskCategories.flatMap((c) => c.tasks);
     const textGen = all.find((t) => t.slug === "text-generation")!;
     const textToSpeech = all.find((t) => t.slug === "text-to-speech")!;
+    const textToAudio = all.find((t) => t.slug === "text-to-audio")!;
 
     expect(textGen.to).toBe("/playground");
-    expect(textToSpeech.to).toBe("/tasks/text-to-speech");
+    expect(textToSpeech.to).toBe("/text-to-speech");
+    // Unmapped tasks fall through to the generic placeholder route.
+    expect(textToAudio.to).toBe("/tasks/text-to-audio");
   });
 
   it("maps the real Theory tools to their implemented routes", () => {

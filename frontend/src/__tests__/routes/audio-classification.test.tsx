@@ -1,7 +1,15 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseAudioClassifierResult } from "@/hooks/useAudioClassifier";
+
+// Mock the mic/decode helpers so the record button resolves without real
+// AudioContext/getUserMedia (absent in the test env).
+const recordMic = vi.fn().mockResolvedValue(new Float32Array([0.1]));
+vi.mock("@/audio/io", () => ({
+  recordMic: (...args: unknown[]) => recordMic(...args),
+  decodeToMono: vi.fn(),
+}));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -100,5 +108,21 @@ describe("AudioClassificationPage", () => {
     mockState = { ...baseState, loading: false, ready: true, error: "add at least one label" };
     renderPage();
     expect(screen.getByText(/add at least one label/i)).toBeInTheDocument();
+  });
+
+  it("parses newline/comma-separated prompts and passes them to classify on record", async () => {
+    mockState = { ...baseState, status: "ready", loading: false, ready: true, isZeroShot: true };
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(/labels to score against/i), {
+      target: { value: " cat \ndog, bird\n\n" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /record 5s/i }));
+
+    await waitFor(() => expect(mockClassify).toHaveBeenCalledTimes(1));
+    expect(recordMic).toHaveBeenCalledWith(5);
+    const [audio, labels] = mockClassify.mock.calls[0];
+    expect(audio).toBeInstanceOf(Float32Array);
+    expect(labels).toEqual(["cat", "dog", "bird"]);
   });
 });

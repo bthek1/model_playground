@@ -1,16 +1,20 @@
 // Automatic Speech Recognition — real-time, in-browser voice-to-text. A
 // Whisper/Moonshine ONNX model runs client-side in a Web Worker (WebGPU, with a
 // WASM fallback); the mic is captured continuously and the transcript updates
-// live as you speak. Audio is decoded to 16 kHz mono via the Web Audio API.
+// live as you speak. Audio is decoded to 16 kHz mono via the Web Audio API. The
+// take is retained and visualized as a waveform (live while recording, static
+// after) and can be replayed, downloaded, or re-transcribed with another model.
 // See docs/plans/in-progress/audio-models-in-browser.md.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Mic, Square, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { AudioLines, Download, Loader2, Mic, Play, Square, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
-import { decodeToMono } from "@/audio/io";
+import { decodeToMono, play, toWavBlob } from "@/audio/io";
 import { ASR_MODELS, DEFAULT_ASR_MODEL } from "@/audio/types";
+import { formatDuration } from "@/audio/waveform";
 import { ModelStatus } from "@/components/audio/ModelStatus";
+import { LiveWaveform, Waveform } from "@/components/audio/Waveform";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,6 +37,9 @@ function AsrPage() {
     progress,
     backend,
     recording,
+    stream,
+    clip,
+    sampleRate,
     text,
     error,
     start,
@@ -43,6 +50,7 @@ function AsrPage() {
   const [decoding, setDecoding] = useState(false);
   const [ioError, setIoError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const playbackRef = useRef<AudioContext | null>(null);
 
   const busy = recording || decoding;
   const shownError = ioError ?? error;
@@ -63,6 +71,27 @@ function AsrPage() {
       }
     })();
   };
+
+  const onPlay = () => {
+    if (!clip) return;
+    void playbackRef.current?.close(); // restart from the top on replay
+    playbackRef.current = play(clip, sampleRate);
+  };
+
+  const onDownload = () => {
+    if (!clip) return;
+    const url = URL.createObjectURL(toWavBlob(clip, sampleRate));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "recording.wav";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Stop playback when the page unmounts.
+  useEffect(() => {
+    return () => void playbackRef.current?.close();
+  }, []);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
@@ -137,6 +166,54 @@ function AsrPage() {
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {shownError}
         </div>
+      )}
+
+      {/* Audio — live waveform while recording, the retained take after */}
+      {(recording || clip) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AudioLines className="size-4" /> Audio
+              {clip && !recording && (
+                <span className="font-mono text-xs font-normal text-muted-foreground tabular-nums">
+                  {formatDuration(clip.length, sampleRate)} · 16 kHz mono
+                </span>
+              )}
+            </CardTitle>
+            <CardDescription>
+              {recording
+                ? "Live microphone signal"
+                : "Your take — replay it, download it, or run another model on it"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {recording && stream ? (
+              <LiveWaveform stream={stream} />
+            ) : (
+              clip && (
+                <>
+                  <Waveform samples={clip} />
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={onPlay}>
+                      <Play className="size-4" /> Play
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={onDownload}>
+                      <Download className="size-4" /> Download WAV
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!ready || busy}
+                      onClick={() => void transcribeClip(clip)}
+                    >
+                      <AudioLines className="size-4" /> Transcribe clip
+                    </Button>
+                  </div>
+                </>
+              )
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Live transcript */}

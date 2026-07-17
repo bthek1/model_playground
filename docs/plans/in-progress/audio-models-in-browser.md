@@ -1,6 +1,6 @@
 # Audio Models in the Browser (Transformers.js / ONNX Runtime Web)
 
-**Status:** In Progress (Phases 1–3 complete — ASR real-time + audio classification ship end-to-end; Phases 4–6 pending)
+**Status:** In Progress (Phases 1–4 complete — real-time ASR, audio classification, and TTS ship end-to-end; Phases 5–6 pending)
 
 Bring the audio tasks from the `DL_tasks/nbs/Audio/` notebooks into the React frontend,
 running the models **client-side** on the user's GPU (WebGPU) or CPU (WASM) — no Python
@@ -102,6 +102,18 @@ Unit-tested: engine protocol, hook lifecycle, `/asr` route rendering, audio I/O 
 (`decodeToMono`/`play`/`recordMic`/`toWavBlob`), and taxonomy mapping — all green (0 lint errors, clean
 build). **Manual browser check still pending** (needs HTTPS + a real model download; see Testing).*
 
+**Record + visualize + re-apply — done.** The ASR page now fulfils the
+waveform half of the model-visualization design decision: `audio/waveform.ts`
+(`computePeaks`/`formatDuration`, unit-tested) feeds two theme-aware canvases in
+`components/audio/Waveform.tsx` — `<LiveWaveform>` (AnalyserNode-driven scrolling mic
+signal while recording) and `<Waveform>` (static min/max-peak view of a clip; bars ride
+`currentColor` so both themes work). `useLiveAsr` retains the take: it exposes the live
+`stream` for visualization and, after `stop()` (or an upload via `transcribeClip`), the
+decoded 16 kHz `clip` — copies are sent to the worker since `transcribe` transfers its
+buffer. The route's Audio card offers **Play** (`io.play`), **Download WAV** (`toWavBlob`),
+and **Transcribe clip** (re-apply the currently selected model to the retained take).
+The final pass on stop is no longer skipped when a live tick is in flight.
+
 **Real-time captioning (streaming) — done.** The page now does live voice-to-text rather than a
 one-shot "record 5 s → transcribe". `hooks/useLiveAsr.ts` captures the mic continuously with
 `MediaRecorder` (1.5 s timeslice) and, on each chunk, decodes the take-so-far and re-transcribes its last
@@ -156,7 +168,19 @@ Direct port of `04_Audio_Classification`; all families export to ONNX:
   and a free-text prompt list for zero-shot CLAP (the notebook's open-set path).
 - ✅ Map `audio-classification → /audio-classification` in `REAL_ROUTES`.
 
-## Phase 4 — Text-to-Speech (in-browser; pick the right model)
+## Phase 4 — Text-to-Speech (in-browser; pick the right model) ✅
+
+*Done: `kokoro-js@1.2.1` installed. `audio/tts.ts` (catalogue: Kokoro-82M default with six named voices ·
+MMS-VITS · SpeechT5 with the x-vector speaker embedding — plus the worker protocol), `ttsEngine.ts`
+(testable handler; result audio buffer **transferred** back to the main thread), `tts.worker.ts` (two
+engines behind one `TtsSynthesizer` interface — `KokoroTTS.from_pretrained` and the `text-to-speech`
+pipeline), `ttsClient.ts`, `hooks/useTts.ts`, and `routes/text-to-speech.tsx` (model + voice picker, text
+input, Speak → immediate playback, replay + download-WAV via the Phase-1 `play`/`toWavBlob`).
+`REAL_ROUTES["text-to-speech"] = "/text-to-speech"` wired. TTS gets its **own worker** (not the generic
+pipeline worker) deliberately: the modality differs (text in → audio out) and kokoro-js is heavy — it
+bundles as its own ~2.7 MB chunk so classification users never download it. Unit-tested: engine
+(load/synthesise/transfer/dispose/errors), `useTts` lifecycle, route rendering (voice-picker visibility,
+synthesise-and-play flow), taxonomy mapping. **Manual browser check pending** (real model downloads).*
 
 Port of `00_Text_to_Speech`. Uses the Phase-1 `play`/`toWavBlob` output helpers.
 

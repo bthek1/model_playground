@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseLiveAsrResult } from "@/hooks/useLiveAsr";
@@ -25,6 +25,9 @@ const baseState: UseLiveAsrResult = {
   progress: null,
   backend: null,
   recording: false,
+  stream: null,
+  clip: null,
+  sampleRate: 16000,
   text: "",
   error: null,
   start: mockStart,
@@ -114,6 +117,49 @@ describe("AsrPage", () => {
     renderPage();
     expect(screen.getByText("the quick brown fox")).toBeInTheDocument();
     expect(screen.getByText(/final transcript/i)).toBeInTheDocument();
+  });
+
+  it("hides the audio card until there is something to show", () => {
+    mockState = { ...baseState, status: "ready", loading: false, ready: true };
+    renderPage();
+    expect(screen.queryByText(/^audio$/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /waveform/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the live waveform while recording", () => {
+    mockState = {
+      ...baseState,
+      status: "ready",
+      loading: false,
+      ready: true,
+      recording: true,
+      stream: {} as MediaStream,
+    };
+    renderPage();
+    expect(
+      screen.getByRole("img", { name: /live microphone waveform/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/live microphone signal/i)).toBeInTheDocument();
+  });
+
+  it("shows the retained take with play / download / re-transcribe actions", () => {
+    const clip = new Float32Array(16000 * 2); // 2 s of silence
+    mockState = {
+      ...baseState,
+      status: "ready",
+      loading: false,
+      ready: true,
+      clip,
+      text: "hello",
+    };
+    renderPage();
+    expect(screen.getByRole("img", { name: /audio waveform/i })).toBeInTheDocument();
+    expect(screen.getByText(/0:02\.0/)).toBeInTheDocument(); // duration chip
+    expect(screen.getByRole("button", { name: /play/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /download wav/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /transcribe clip/i }));
+    expect(mockTranscribeClip).toHaveBeenCalledWith(clip);
   });
 
   it("surfaces a load error from the hook", () => {

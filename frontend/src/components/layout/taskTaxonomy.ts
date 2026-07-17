@@ -50,6 +50,7 @@ const REAL_ROUTES: Record<string, string> = {
   "tensor-arithmetic": "/tensor",
   "automatic-speech-recognition": "/asr",
   "audio-classification": "/audio-classification",
+  "text-to-speech": "/text-to-speech",
 };
 
 function task(label: string): TaskItem {
