@@ -59,14 +59,23 @@ export async function recordMic(
   }
 }
 
-/** Play mono `Float32` samples through the speakers. Returns the `AudioContext`. */
-export function play(samples: Float32Array, sampleRate: number): AudioContext {
+/**
+ * Play mono `Float32` samples through the speakers. Returns the `AudioContext`
+ * so the caller can `suspend()` (pause) / `resume()` / `close()` (stop) it.
+ * `onEnded` fires when the clip finishes on its own (not on `close()`).
+ */
+export function play(
+  samples: Float32Array,
+  sampleRate: number,
+  onEnded?: () => void,
+): AudioContext {
   const ctx = new AudioContext();
   const buf = ctx.createBuffer(1, samples.length, sampleRate);
   buf.getChannelData(0).set(samples);
   const src = ctx.createBufferSource();
   src.buffer = buf;
   src.connect(ctx.destination);
+  if (onEnded) src.onended = () => onEnded();
   src.start();
   return ctx;
 }

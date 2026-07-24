@@ -19,6 +19,8 @@ export interface UseLiveAsrResult {
   backend: string | null;
   /** True while the mic is live and transcription is updating. */
   recording: boolean;
+  /** True while a transcription request is in flight (mic tick or clip). */
+  running: boolean;
   /** The live mic stream while recording (for waveform visualization). */
   stream: MediaStream | null;
   /**
@@ -167,6 +169,7 @@ export function useLiveAsr(model: string = DEFAULT_ASR_MODEL): UseLiveAsrResult 
     progress: asr.progress,
     backend: asr.backend,
     recording,
+    running: asr.running,
     stream,
     clip,
     sampleRate: TARGET_RATE,
