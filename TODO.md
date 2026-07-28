@@ -7,10 +7,15 @@
 - [ ] Phase 4 — LLM (tokenizer, KV-cache, quantized kernels)
 - [ ] Phase 5 — Registry UX
 
+## Audio
+- [ ] chat to text
+- [ ] Audio classification
+- [ ] voice activity detection
 
-- [ ] model to do chat to text
+## Computer Vision
 - [ ] model to do depth estimation
 - [ ] model to use camera - object detection
+- [ ] model to do keypoint detection
 
 
 - [ ] ai naviable
