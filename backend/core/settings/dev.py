@@ -13,7 +13,7 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@example.com")
 
 CORS_ALLOWED_ORIGINS = env.list(
-    "CORS_ALLOWED_ORIGINS", default=["http://localhost:5174"]
+    "CORS_ALLOWED_ORIGINS", default=["http://localhost:5180"]
 )
 
 # Allow LAN origins over both http and https — the Vite dev server runs over
@@ -28,7 +28,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 CSRF_TRUSTED_ORIGINS = [
     *env.list(
         "CSRF_TRUSTED_ORIGINS",
-        default=["http://localhost:5174", "https://localhost:5174"],
+        default=["http://localhost:5180", "https://localhost:5180"],
     ),
     # Regex isn't supported here; the wildcard covers the LAN /24 blocks.
     "https://192.168.*.*:*",

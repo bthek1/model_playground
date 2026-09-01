@@ -216,6 +216,7 @@ Component
 | `DATABASE_URL` | `backend/.env` | PostgreSQL connection string |
 | `DJANGO_SETTINGS_MODULE` | `backend/.env` | Which settings file to load |
 | `CORS_ALLOWED_ORIGINS` | `backend/.env` | Frontend origin(s) allowed cross-origin |
-| `VITE_API_BASE_URL` | `frontend/.env` | Backend base URL for Axios |
+| `VITE_API_BASE_URL` | `frontend/.env` | Axios base URL. Empty by default: the app calls `/api` same-origin |
+| `VITE_API_PROXY_TARGET` | `frontend/.env` | Where the Vite dev server proxies `/api` (default `http://localhost:8006`) |
 
 All secrets and environment-specific config live in `.env` files that are **never committed**. Use `.env.example` as the template.

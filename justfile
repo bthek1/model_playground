@@ -56,7 +56,7 @@ be-install:
 
 # Run the Django dev server locally
 be-dev: be-makemigrations be-migrate
-    cd backend && uv run python manage.py runserver 0.0.0.0:8005
+    cd backend && uv run python manage.py runserver 0.0.0.0:8006
 
 # Apply database migrations
 be-migrate:
@@ -111,7 +111,7 @@ fe-install:
 
 # Run the Vite dev server locally
 fe-dev:
-    cd frontend && npm run dev -- --host 0.0.0.0 --port 5174
+    cd frontend && npm run dev -- --host 0.0.0.0 --port 5180
 
 # Build the frontend for production
 fe-build:
@@ -172,8 +172,8 @@ celery-logs:
 dev: db-up celery-up
     #!/usr/bin/env bash
     echo "Starting backend and frontend dev servers..."
-    echo "  Backend : http://localhost:8005"
-    echo "  Frontend: http://localhost:5174"
+    echo "  Backend : http://localhost:8006"
+    echo "  Frontend: http://localhost:5180"
     _pids=()
     _cleanup() {
         echo ""

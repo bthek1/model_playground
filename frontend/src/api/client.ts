@@ -1,6 +1,9 @@
 import axios from "axios";
 
-const BASE_URL: string = import.meta.env.VITE_API_BASE_URL;
+// Empty by default: requests go to the page's own origin and the Vite dev
+// server (or the production reverse proxy) forwards /api to Django. Set
+// VITE_API_BASE_URL only when the API lives on a genuinely different origin.
+const BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,

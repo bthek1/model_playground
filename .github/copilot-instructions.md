@@ -103,11 +103,11 @@ AUTH_USER_MODEL = "accounts.CustomUser"
 
 ## Frontend (`frontend/`)
 
-**Stack:** React 19, TypeScript ~6.0, Vite 8 (dev server on `:5174`), TanStack Router, TanStack Query v5, Axios, Tailwind CSS v4, shadcn/ui (`base-nova` style on `@base-ui/react`), React Hook Form, Zod, Zustand (+ Immer), Vitest + MSW, date-fns, ECharts + Recharts, react-markdown. ESLint 10.
+**Stack:** React 19, TypeScript ~6.0, Vite 8 (dev server on `:5180`), TanStack Router, TanStack Query v5, Axios, Tailwind CSS v4, shadcn/ui (`base-nova` style on `@base-ui/react`), React Hook Form, Zod, Zustand (+ Immer), Vitest + MSW, date-fns, ECharts + Recharts, react-markdown. ESLint 10.
 
 **Conventions:**
 - Functional components only — no class components
-- All API calls go through `src/api/client.ts` (Axios instance with JWT interceptor)
+- All API calls go through `src/api/client.ts` (Axios instance with JWT interceptor). Its base URL is **empty by default** — requests hit `/api` on the page's own origin and the Vite dev server proxies them to `VITE_API_PROXY_TARGET`, so LAN/HTTPS access isn't blocked by mixed content, CORS, or Local Network Access
 - **Server state** managed exclusively by TanStack Query (`useQuery`, `useMutation`, `useInfiniteQuery`)
 - **Global/UI state** managed by Zustand stores in `src/store/` — never store server data in Zustand
 - **Routing** managed by TanStack Router — file-based routes under `src/routes/`

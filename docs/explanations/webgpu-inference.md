@@ -107,7 +107,7 @@ Two things commonly produce a false `unsupported` on a perfectly capable machine
 
 - **Secure context required.** Browsers only expose `navigator.gpu` on HTTPS or
   `http://localhost`/`127.0.0.1`. A plain-HTTP LAN origin (e.g.
-  `http://192.168.x.x:5174`) hides the API. The Vite dev server therefore runs
+  `http://192.168.x.x:5180`) hides the API. The Vite dev server therefore runs
   over HTTPS (`@vitejs/plugin-basic-ssl`) — see
   [`local-setup.md`](../guides/local-setup.md). The panel detects
   `window.isSecureContext === false` and says so.

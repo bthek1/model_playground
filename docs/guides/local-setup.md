@@ -66,8 +66,8 @@ docker compose exec backend python manage.py createsuperuser
 > `@vitejs/plugin-basic-ssl`). WebGPU's `navigator.gpu` is only exposed in a
 > [secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts)
 > — HTTPS or `localhost` — so accessing the app from another machine over a plain
-> `http://<lan-ip>:5174` origin would hide WebGPU entirely. Use
-> `https://<lan-ip>:5174` and accept the one-time self-signed-cert warning
+> `http://<lan-ip>:5180` origin would hide WebGPU entirely. Use
+> `https://<lan-ip>:5180` and accept the one-time self-signed-cert warning
 > (in Chrome: **Advanced → Proceed**, or type `thisisunsafe` on the warning page).
 
 ---
@@ -106,7 +106,8 @@ Backend is available at `http://localhost:8000`.
 ```bash
 cd frontend
 cp .env.example .env
-# VITE_API_BASE_URL defaults to http://localhost:8000
+# VITE_API_BASE_URL stays empty — the app calls /api on its own origin and the
+# Vite dev server proxies it to VITE_API_PROXY_TARGET (default localhost:8006).
 ```
 
 ### 2. Install dependencies and start

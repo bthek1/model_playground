@@ -111,8 +111,8 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 
 ### Frontend essentials
 
-- React 19 + TypeScript ~6.0 + Vite 8 (dev server on `:5174`). Functional components only.
-- All API calls go through `src/api/client.ts` (Axios + JWT with silent 401 refresh).
+- React 19 + TypeScript ~6.0 + Vite 8 (dev server on `:5180`). Functional components only.
+- All API calls go through `src/api/client.ts` (Axios + JWT with silent 401 refresh). Its base URL is **empty by default** — requests hit `/api` on the page's own origin and the Vite dev server proxies them to `VITE_API_PROXY_TARGET`. This keeps LAN/HTTPS access working: a page served from `https://192.168.x.x:5180` calling `http://localhost:8006` directly is blocked by mixed content, CORS, and Local Network Access.
 - Server state lives in TanStack Query; global UI flags in Zustand + Immer (`src/store/`, one file per concern) — never put server data in Zustand.
 - The sidebar is **taxonomy-driven**: categories/tasks live in `components/layout/taskTaxonomy.ts` (data), rendered by `components/layout/Sidebar.tsx`. To add a task, add a data entry — map it to a real route via `REAL_ROUTES` (e.g. the Theory tools Linear Model Training → `/training` and Tensor Arithmetic → `/tensor`), else it falls through to the generic `routes/tasks.$slug.tsx` placeholder. Per-category expand state is in `store/ui.ts`.
 - Forms use React Hook Form + Zod schemas (`src/schemas/`, one file per domain).
