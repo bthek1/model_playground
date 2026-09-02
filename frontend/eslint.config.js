@@ -30,4 +30,17 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Playwright end-to-end tests. These are Node scripts driving a browser,
+    // not React code: the fixture callback is named `use`, which the
+    // rules-of-hooks rule mistakes for React's `use` hook.
+    files: ['e2e/**/*.ts', 'playwright.config.ts'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 )

@@ -155,6 +155,26 @@ frontend/
 
 **Vitest + React Testing Library for tests.** Tests run in a `happy-dom` environment configured in `vite.config.ts`. Test files are co-located with the source file they test (e.g. `useAuth.test.tsx` next to `useAuth.ts`).
 
+**A three-layer test pyramid.** pytest covers the backend; Vitest + React Testing
+Library + MSW cover frontend units and components in `happy-dom`; **Playwright**
+(`frontend/e2e/`) covers real-browser end-to-end flows. The split is deliberate —
+E2E is reserved for what happy-dom structurally cannot reach: TanStack Router
+navigation and the app shell, JWT auth against a real browser (including the
+silent 401 refresh), and **WebGPU**, which only exists in a real browser. GPU specs
+are their own Playwright project and skip when no GPU device is available, so the
+suite stays green on a GPU-less machine, while the graceful-degradation specs run
+everywhere. See [`../guides/e2e-testing.md`](../guides/e2e-testing.md).
+
+**Every task page is Select → Load → Run → Output.** The routes under `src/routes/` that
+run a model — text-to-speech, ASR, audio classification, tensor arithmetic, training —
+share one four-stage pipeline: pick a model, load its weights, run it on an input, show
+the result. Two orthogonal state machines back it: a *load* machine per worker
+(`idle → loading → ready | error`) and a *run* machine of id-correlated requests. Task
+hooks all return the same contract, so the worker plumbing lives once and a new task page
+is four slots to fill rather than a page to design. `idle` is the default — nothing
+downloads until the user consents to the size. See
+[`../standards/model-page-pattern.md`](../standards/model-page-pattern.md).
+
 **Raw WebGPU for inference — no ML framework.** The `src/webgpu/` module talks to
 the WebGPU API directly: acquire a `GPUDevice`, compile WGSL into a compute
 pipeline, upload inputs to storage buffers, dispatch, read results back. There is

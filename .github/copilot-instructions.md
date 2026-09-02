@@ -216,6 +216,20 @@ export const Route = createFileRoute('/users/$userId')({
 - Mock Axios at the module level, or intercept at the network level with MSW — never make real HTTP calls in tests
 - Zod schemas are tested as pure unit tests (no DOM)
 
+**End-to-end testing — Playwright:**
+- Run with `just fe-e2e` (or `cd frontend && npm run test:e2e`); `just fe-e2e-install` downloads the browsers once
+- Specs live in `frontend/e2e/specs/**/*.spec.ts` — E2E is `*.spec.ts` under `e2e/`, Vitest is `*.test.tsx` under `src/`
+- **Write a Vitest test by default.** Use Playwright only for what happy-dom can't do: routing/app shell, real-browser auth (JWT persistence, the silent 401 refresh), and WebGPU
+- Import `test`/`expect` from `e2e/fixtures/base`, never from `@playwright/test` directly
+- The default run is fully mocked — no Django, no Postgres. Specs tagged `@backend` are excluded unless you run `just fe-e2e-full` (which calls `just be-seed-e2e` first)
+- Shared mock payloads live in `src/test/fixtures/models.ts`, imported by both the MSW handlers and the Playwright mock so the two layers can't drift
+- **Never `page.route("**/api/**")`** — that glob also matches the dev server's own module URLs (`/src/api/client.ts`), replacing the app's API client with JSON so it never boots. Match on `url.pathname.startsWith("/api/")` instead
+- The dev server is HTTPS with a self-signed cert (WebGPU needs a secure context), so `ignoreHTTPSErrors: true` is set on both `use` and `webServer`
+- Keep the `test.include`/`test.exclude` block in `vite.config.ts` pinned to `src/` — Vitest's default glob would otherwise swallow the E2E specs
+- WebGPU specs are their own project and skip when no GPU device is available; the graceful-degradation specs run everywhere
+- No `waitForTimeout`, no order dependence; a new spec must pass three consecutive runs
+- Full detail: `docs/guides/e2e-testing.md`
+
 **Utilities:**
 - Date formatting: `date-fns` — always import via `src/lib/date.ts` wrappers, never call `date-fns` directly in components
 - Charts: **ECharts** via the lazy-loaded `src/components/charts/EChart.tsx` wrapper (`echarts` is heavy — keep it code-split with `lazy(() => import(...))`), or **Recharts** for lightweight composable SVG charts
@@ -253,6 +267,70 @@ export const Route = createFileRoute('/users/$userId')({
 - Cross-check every new kernel against a CPU reference during development (see `useGpuBenchmark`).
 - Adding a model = write the WGSL kernel + register a `ModelCard`. See `docs/guides/adding-a-model.md`.
 
+**Model task pages — Select → Load → Run → Output:**
+
+Every task route is the same four-stage pipeline: *pick a model, load its weights, run it on an input,
+show the output*. The modality changes; the pipeline does not. Full contract in
+`docs/standards/model-page-pattern.md` — read it before adding a task route.
+
+```
+  ┌────────┐    ┌──────┐    ┌─────┐    ┌────────┐
+  │ SELECT │───▶│ LOAD │───▶│ RUN │───▶│ OUTPUT │
+  └────────┘    └──────┘    └─────┘    └────────┘
+   ModelPicker   ModelStatus  InputPanel  OutputPanel
+```
+
+- **Two state machines, kept orthogonal — never collapse them into one enum.**
+  - *Load* (`status`, one per worker): `idle → loading → ready | error`. `progress` events are a
+    self-loop on `loading`. `retry()` goes `error → loading`; changing the selected model tears the
+    worker down and returns to `idle`.
+  - *Run* (per request): id-correlated promises in a pending map. `running` is derived from an
+    **in-flight count**, not a boolean — a boolean is wrong the moment two requests overlap.
+  - The `id` on an error message is the discriminator: `id != null` is a run failure (`status` stays
+    `ready`); `id == null` is a load failure (`status → error`).
+- **Every task hook returns the same shape:** `status` / `idle` / `loading` / `ready` / `progress` /
+  `backend` / `load` / `run` / `running` / `result` / `error`, plus whatever is genuinely
+  task-specific. Wrap the shared worker plumbing (`useModelWorker`) — do not re-derive the pending
+  map, the teardown, or the response switch per task.
+- **`idle` is the default — nothing downloads on mount.** Weights are the user's bandwidth and the
+  tab's memory. Show the size estimate and the large-model warning *first*, start the download on an
+  explicit action. Compile-only tasks (WGSL pipeline compile) may `autoLoad`.
+- **Slot rules:** SELECT disabled while `loading`/`running`; LOAD is the only slot with a progress
+  bar; RUN controls are `disabled={!ready || running}`; OUTPUT always renders (empty / running /
+  result / error) so the page never jumps when a result lands.
+- **Errors render in the slot that produced them** — load error in LOAD, decode error in RUN,
+  inference error in OUTPUT. A failed inference must leave the page usable.
+- Backend selection (`webgpu` → `wasm`) resolves once in the worker before `ready` and is fixed for
+  that worker's life. No silent re-negotiation — it would make the timings the user reads meaningless.
+
+**In-browser pretrained models (`src/audio/`) — Transformers.js / ONNX Runtime Web:**
+- This is the carve-out from the raw-WebGPU rule above. Pretrained HF checkpoints (audio ASR / TTS /
+  classification) run here via `@huggingface/transformers` (plus `kokoro-js` for TTS). Keep it out of
+  `src/webgpu/` — the two runtimes never mix.
+- **One worker per modality, not per task.** Discriminative tasks share the generic
+  `pipeline.worker.ts` (task string travels in the `load` message). ASR keeps its own worker (it
+  drives the real-time capture loop). `tts.worker.ts` owns the whole **text→audio** modality —
+  Kokoro, MMS/SpeechT5 *and* MusicGen — since they all fit one `TtsSynthesizer` interface. Each engine (`asrEngine` / `pipelineEngine` / `ttsEngine`) is a pure message
+  handler, unit-tested against a fake pipeline factory; the `*.worker.ts` file is a thin wrapper.
+- Every engine owes three behaviours: **one model live at a time** (null the reference *first*, then
+  dispose via `disposeQuietly`, so a failed teardown can't leave a stale model live); **warm-up on
+  load** (one throwaway inference before posting `ready`, posting `{ status: "warmup" }`; never fail
+  the load if it throws); and **never block the main thread**.
+- **Precision is per backend, and ASR is a special case.** `loadOpts()` gives fp16 on WebGPU / q8 on
+  WASM. ASR uses **`asrLoadOpts()`** instead, which keeps the decoder at **fp32 on WASM**: the
+  quantized Whisper/Moonshine decoders cannot open a session on the ONNX Runtime bundled with
+  `@huggingface/transformers` 4.2.0 (`qdq_actions.cc:137 … Missing required scale`). Do not "simplify"
+  this back to a uniform q8 — it breaks the universal fallback. Re-test when ORT updates.
+- **Verify a model id against the Hub before shipping it.** Two catalogue entries once pointed at
+  `onnx-community/*` repos that don't exist (401 → "Unauthorized access to file"). `just fe-e2e-models`
+  checks all of them in seconds.
+- Every catalogue entry carries `params` (millions) driving the **size-before-load guardrail**
+  (`audio/size.ts` + `components/audio/ModelPicker.tsx`): the picker quotes the download for both
+  backends and warns past `LARGE_MODEL_BYTES`. Add measured `bytes` when the params estimate would
+  mislead (ASR's fp32 decoder makes WASM ~3x the estimate).
+- Adding a task: catalogue entry → worker (reuse the generic one) → hook → route → `REAL_ROUTES`.
+  See `docs/guides/adding-a-model.md` §8.
+
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
 **Commands:**
@@ -261,6 +339,8 @@ export const Route = createFileRoute('/users/$userId')({
 - Lint: `just fe-lint`
 - Test: `just fe-test`
 - Test UI: `just fe-test-ui`
+- End-to-end: `just fe-e2e` (browsers: `just fe-e2e-install`; UI: `just fe-e2e-ui`)
+- Real model loads: `just fe-e2e-slow` (minutes, needs network); ids only: `just fe-e2e-models`
 - Install deps: `just fe-install`
 
 ---
@@ -283,6 +363,12 @@ Key commands:
 | `just fe-build` | Production build |
 | `just fe-test` | Run frontend test suite |
 | `just fe-test-ui` | Run frontend tests with Vitest UI |
+| `just fe-e2e` | Run Playwright end-to-end tests (mocked API) |
+| `just fe-e2e-full` | Run E2E tests against the real Django API |
+| `just fe-e2e-install` | Download the Playwright browsers (once) |
+| `just fe-e2e-slow` | `@slow` specs: real model downloads + real ONNX sessions |
+| `just fe-e2e-models` | Check every audio model id resolves on the HF Hub (seconds) |
+| `just be-seed-e2e` | Create/reset the E2E test user (dev only) |
 | `just be-startapp name` | Scaffold a new Django app |
 
 ---
@@ -322,10 +408,15 @@ Key commands:
 │   │   ├── routes/            # TanStack Router file-based routes
 │   │   ├── schemas/           # Zod validation schemas (one file per domain)
 │   │   ├── store/             # Zustand stores (one file per concern)
-│   │   ├── test/              # Vitest setup file
+│   │   ├── test/              # Vitest setup, MSW handlers, shared mock fixtures
 │   │   ├── types/             # Shared TypeScript types from API contracts
 │   │   └── main.tsx
+│   ├── e2e/                   # Playwright end-to-end tests
+│   │   ├── fixtures/          # base test object, mock API, WebGPU probe
+│   │   ├── pages/             # page objects
+│   │   └── specs/             # *.spec.ts (webgpu/ is its own project)
 │   ├── vite.config.ts
+│   ├── playwright.config.ts
 │   ├── package.json
 │   └── .env.example
 ├── docs/
@@ -382,7 +473,8 @@ The `docs/` folder is the single source of truth for project knowledge. It is ke
 
 **Structure:**
 - `docs/standards/` — Coding standards, style guides, naming conventions, API contracts, the
-  model-visualization UI standard (`model-visualization.md`)
+  model-page interaction standard (`model-page-pattern.md`) and the model-visualization UI
+  standard (`model-visualization.md`)
 - `docs/guides/` — Step-by-step how-to guides, onboarding, local setup, deployment
 - `docs/plans/` — Feature plans, ADRs, roadmaps, spike notes. Active plans live in
   `docs/plans/in-progress/`; finished ones are moved to `docs/plans/completed/`

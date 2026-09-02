@@ -25,7 +25,9 @@ describe("createTtsHandler", () => {
       return synth;
     });
 
-    const handle = createTtsHandler((m) => posted.push(m), factory);
+    const handle = createTtsHandler((m) => posted.push(m), factory, {
+      warmup: false,
+    });
     await handle({ type: "load", model: "onnx-community/Kokoro-82M-v1.0-ONNX" });
 
     expect(factory).toHaveBeenCalledWith(
@@ -62,6 +64,48 @@ describe("createTtsHandler", () => {
     expect(last.transfer).toEqual([audio.buffer]); // zero-copy back to main
   });
 
+  it("synthesises a short warm-up phrase before reporting ready", async () => {
+    clearGpu();
+    const posted: TtsResponse[] = [];
+    const synth = vi
+      .fn()
+      .mockResolvedValue({ audio: new Float32Array(4), sampleRate: 24000 }) as unknown as TtsSynthesizer;
+    const handle = createTtsHandler((m) => posted.push(m), async () => synth);
+
+    await handle({ type: "load", model: "m", opts: { device: "wasm", dtype: "q8" } });
+
+    expect(synth).toHaveBeenCalledTimes(1);
+    // A tiny token budget: MusicGen would otherwise generate 256 tokens (~5 s of
+    // music) on every load just to warm up.
+    expect(synth).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ maxNewTokens: expect.any(Number) }),
+    );
+    const [, warmOpts] = (synth as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(warmOpts.maxNewTokens).toBeLessThanOrEqual(32);
+    expect(posted).toEqual([
+      { type: "progress", progress: { status: "warmup" } },
+      { type: "ready", model: "m", backend: "wasm" },
+    ]);
+  });
+
+  it("still reports ready when the warm-up synthesis throws", async () => {
+    clearGpu();
+    const posted: TtsResponse[] = [];
+    const synth = vi
+      .fn()
+      .mockRejectedValue(new Error("no voice")) as unknown as TtsSynthesizer;
+    const handle = createTtsHandler((m) => posted.push(m), async () => synth);
+
+    await handle({ type: "load", model: "m", opts: { device: "wasm", dtype: "q8" } });
+
+    expect(posted[posted.length - 1]).toEqual({
+      type: "ready",
+      model: "m",
+      backend: "wasm",
+    });
+  });
+
   it("errors a run when no model is loaded", async () => {
     const posted: TtsResponse[] = [];
     const handle = createTtsHandler((m) => posted.push(m), async () => vi.fn() as never);
@@ -95,11 +139,35 @@ describe("createTtsHandler", () => {
     const first = Object.assign(vi.fn(), { dispose }) as unknown as TtsSynthesizer;
     const second = vi.fn() as unknown as TtsSynthesizer;
     const factory = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
-    const handle = createTtsHandler(() => {}, factory);
+    const handle = createTtsHandler(() => {}, factory, { warmup: false });
 
     await handle({ type: "load", model: "a", opts: { device: "wasm", dtype: "q8" } });
     await handle({ type: "load", model: "b", opts: { device: "wasm", dtype: "q8" } });
 
     expect(dispose).toHaveBeenCalledTimes(1);
+    expect(second).not.toBe(first); // the new model is the live one
+  });
+
+  it("loads the next model even when disposing the previous one fails", async () => {
+    const dispose = vi.fn().mockRejectedValue(new Error("device lost"));
+    const first = Object.assign(vi.fn(), { dispose }) as unknown as TtsSynthesizer;
+    const audio = new Float32Array([0.5]);
+    const second = vi
+      .fn()
+      .mockResolvedValue({ audio, sampleRate: 16000 }) as unknown as TtsSynthesizer;
+    const posted: TtsResponse[] = [];
+    const factory = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const handle = createTtsHandler((m) => posted.push(m), factory, { warmup: false });
+
+    await handle({ type: "load", model: "a", opts: { device: "wasm", dtype: "q8" } });
+    await handle({ type: "load", model: "b", opts: { device: "wasm", dtype: "q8" } });
+    await handle({ type: "run", id: 1, text: "hi" });
+
+    expect(second).toHaveBeenCalledWith("hi", undefined);
+    expect(posted[posted.length - 1]).toEqual({
+      type: "result",
+      id: 1,
+      result: { audio, sampleRate: 16000 },
+    });
   });
 });

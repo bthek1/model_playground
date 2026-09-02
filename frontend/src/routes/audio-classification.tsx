@@ -15,6 +15,7 @@ import {
 } from "@/audio/classification";
 import { decodeToMono, recordMic } from "@/audio/io";
 import type { ClassLabel } from "@/audio/pipelineTypes";
+import { ModelPicker } from "@/components/audio/ModelPicker";
 import { ModelStatus } from "@/components/audio/ModelStatus";
 import { Button } from "@/components/ui/button";
 import {
@@ -84,21 +85,13 @@ function AudioClassificationPage() {
         </p>
       </div>
 
-      {/* Model picker */}
-      <div className="flex flex-wrap gap-2">
-        {CLASSIFIER_MODELS.map((m) => (
-          <Button
-            key={m.id}
-            variant={m.id === model ? "default" : "outline"}
-            size="sm"
-            disabled={busy}
-            onClick={() => setModel(m.id)}
-            title={m.hint}
-          >
-            {m.label}
-          </Button>
-        ))}
-      </div>
+      {/* Model picker — carries the size-before-load estimate + warning */}
+      <ModelPicker
+        models={CLASSIFIER_MODELS}
+        value={model}
+        onChange={(m) => setModel(m.id)}
+        disabled={busy}
+      />
 
       <ModelStatus loading={loading} ready={ready} backend={backend} progress={progress} />
 

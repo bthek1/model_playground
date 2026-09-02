@@ -51,6 +51,7 @@ const REAL_ROUTES: Record<string, string> = {
   "automatic-speech-recognition": "/asr",
   "audio-classification": "/audio-classification",
   "text-to-speech": "/text-to-speech",
+  "text-to-audio": "/text-to-audio",
 };
 
 function task(label: string): TaskItem {

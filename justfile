@@ -78,6 +78,10 @@ be-shell:
 be-superuser:
     cd backend && uv run python manage.py createsuperuser --noinput
 
+# Create/reset the user the Playwright E2E suite signs in as (dev only)
+be-seed-e2e:
+    cd backend && uv run python manage.py seed_e2e_user
+
 # Collect static files
 be-collectstatic:
     cd backend && uv run python manage.py collectstatic --noinput
@@ -132,6 +136,42 @@ fe-test:
 # Run frontend tests in watch mode with Vitest UI
 fe-test-ui:
     cd frontend && npm run test:ui
+
+# Install the Playwright browsers (run once after fe-install)
+fe-e2e-install:
+    cd frontend && npx playwright install --with-deps chromium firefox
+
+# Run the Playwright end-to-end tests (mocked API — no backend needed)
+fe-e2e:
+    cd frontend && npm run test:e2e
+
+# Run E2E tests against the real Django API (needs `just dev` + `just be-seed-e2e`)
+fe-e2e-full: be-seed-e2e
+    cd frontend && E2E_BACKEND=1 npm run test:e2e
+
+# Run the @slow E2E specs: real model downloads + real ONNX sessions (minutes)
+fe-e2e-slow:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 audio-models.spec.ts
+
+# Check every audio model id still resolves on the Hugging Face Hub (seconds)
+fe-e2e-models:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "resolves on the Hugging Face"
+
+# Run E2E tests in the interactive Playwright UI
+fe-e2e-ui:
+    cd frontend && npm run test:e2e:ui
+
+# Run E2E tests in a headed browser
+fe-e2e-headed:
+    cd frontend && npm run test:e2e:headed
+
+# Run only the WebGPU E2E project (needs a real GPU)
+fe-e2e-webgpu:
+    cd frontend && npx playwright test --project=webgpu
+
+# Open the last Playwright HTML report
+fe-e2e-report:
+    cd frontend && npm run test:e2e:report
 
 # ── Dev ────────────────────────────────────────────────────────────────────────
 

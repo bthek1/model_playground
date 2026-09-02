@@ -1,8 +1,13 @@
 # Guide: Adding a Model
 
-A model in this project is two things: a **WGSL kernel** (how it computes, in the
-browser) and a **registry entry** (its metadata, in the backend). This guide
-walks through both. Background: [`../explanations/webgpu-inference.md`](../explanations/webgpu-inference.md).
+There are two kinds of model here, and they take different routes:
+
+- **A custom kernel** — you write the maths yourself as a **WGSL compute shader**
+  in `src/webgpu/`, plus a **registry entry** for its metadata. Sections 1–6 below.
+- **A pretrained model** — an off-the-shelf Hugging Face checkpoint run through
+  **Transformers.js / ONNX Runtime Web**. No kernel, no WGSL. [Section 7](#7-adding-a-pretrained-transformersjs-task).
+
+Background: [`../explanations/webgpu-inference.md`](../explanations/webgpu-inference.md).
 
 ## 1. Write the kernel (frontend)
 
@@ -106,7 +111,19 @@ After a run, `POST /api/registry/runs/` with `params` and `metrics`
 (`latency_ms`, `tokens_per_sec`, `gflops`, adapter info) so the playground can
 show history and benchmarks.
 
-## 5. Visualize the model
+## 5. Build the task page
+
+Every task route is the same pipeline — **Select → Load → Run → Output**. Do not design a
+new page shape; fill in the four slots. The contract (the two orthogonal state machines,
+the hook shape every task hook returns, the slot rules, and the deferred-load guardrail) is
+in [`../standards/model-page-pattern.md`](../standards/model-page-pattern.md), which ends
+with a checklist for exactly this step.
+
+The short version: wrap the shared worker plumbing rather than re-deriving it, default to
+`idle` so nothing downloads until the user asks, gate every run control on `ready`, always
+render the OUTPUT slot, and put each error in the slot that produced it.
+
+## 6. Visualize the model
 
 Give the model a view that shows the user its identity, structure, parameters, and
 performance. Follow the UI standard in
@@ -117,10 +134,92 @@ and lazy charts (reference impl: `components/training/ModelArchitecture.tsx` +
 diagram — and make sure it still renders its structure with no GPU. Work through the checklist
 at the end of that document.
 
-## 6. Verify
+## 7. Verify
 
 - `just fe-lint && just fe-build` — kernel imports and types compile.
 - `just be-test` — registry endpoints still pass.
 - Open `/playground`, confirm the model appears in the catalog and your kernel
   runs on the GPU.
 - Toggle light/dark and confirm the model's visualization reads correctly in both.
+
+---
+
+## 8. Adding a pretrained (Transformers.js) task
+
+Running a *pretrained* checkpoint is a different job from writing a kernel: the
+model already exists as ONNX on the Hub, so there is no WGSL to write. These live
+in their own domain folder (`frontend/src/audio/` for the audio tasks) and are
+explicitly carved out of the raw-WebGPU-only rule, which scopes to `src/webgpu/`.
+Reference implementations: the ASR, audio-classification, and text-to-speech
+routes ([`../plans/completed/audio-models-in-browser.md`](../plans/completed/audio-models-in-browser.md)).
+
+The shape is always the same four pieces:
+
+**a. Catalogue entry.** Add the model to the task's catalogue (`audio/types.ts`
+for ASR, `audio/classification.ts`, `audio/tts.ts`). Every entry carries a
+`params` count in millions — that drives the **size-before-load guardrail** in
+`ModelPicker`, which quotes the download for both backends and warns past
+`LARGE_MODEL_BYTES` (300 MB). Weights are fp16 on WebGPU, quantized q8 on WASM.
+
+```ts
+{
+  id: "onnx-community/whisper-base",   // must be ONNX-exported on the Hub
+  label: "Whisper base",
+  hint: "Timestamps, 99 languages, translate.",
+  params: 74,                          // millions — drives the size estimate
+}
+```
+
+**b. Worker.** For a discriminative task, reuse the **generic pipeline worker** —
+add the pipeline string to `PipelineTask` in `audio/pipelineTypes.ts` and give it
+warm-up args in `pipelineEngine.ts`; no new worker file. Write a dedicated worker
+only when the modality differs (TTS is text → audio) or the dependency is heavy
+enough that it should bundle separately (kokoro-js). A dedicated engine mirrors
+`asrEngine.ts`: a testable `create…Handler(post, factory, { warmup })` plus a thin
+`*.worker.ts` wrapper that wires it to `self`.
+
+Every engine owes three behaviours:
+
+- **One model live at a time.** Null the reference *first*, then dispose, so a
+  failed teardown can't leave a stale model held (`disposeQuietly`).
+- **Warm up on load.** Run one throwaway inference (silence, or a two-word
+  phrase) before posting `ready`, so the first real request doesn't pay to
+  compile the WebGPU shaders / JIT the WASM module. Post a
+  `{ status: "warmup" }` progress; never fail the load if it throws.
+- **Never block the main thread.** Inference runs in the worker; buffers are
+  transferred, not copied.
+
+**c. Hook + route.** `usePipeline(task, model)` already handles load, progress,
+id-correlated runs, and worker teardown — wrap it in a task hook that shapes the
+run args (see `useAudioClassifier.ts`). The route composes `ModelPicker` +
+`ModelStatus` with the task's own controls, and must degrade gracefully when the
+backend is WASM-only.
+
+**d. Taxonomy.** Map the task slug to the real route in `REAL_ROUTES`
+(`components/layout/taskTaxonomy.ts`), or it falls through to the
+`/tasks/$slug` placeholder.
+
+### Two traps this cost us
+
+- **Verify the repo id against the Hub before shipping it.** Two catalogue entries
+  pointed at `onnx-community/*` repos that don't exist; the Hub answers **401** and
+  the model fails at load with "Unauthorized access to file". A quick
+  `curl -s -o /dev/null -w "%{http_code}" https://huggingface.co/api/models/<id>`
+  would have caught both. Unit tests can't — they never touch the network.
+- **A model that downloads is not a model that runs.** The quantized Whisper and
+  Moonshine *decoders* cannot open an ONNX Runtime session on the WASM execution
+  provider bundled with `@huggingface/transformers` 4.2.0 (it throws
+  `qdq_actions.cc:137 … Missing required scale`). `asrLoadOpts` works around it by
+  keeping the decoder at `fp32` on WASM. When a new task fails only on the WASM
+  fallback, suspect the quantized weights before your own code, and check whether
+  a per-module dtype (`{ encoder_model: "q8", decoder_model_merged: "fp32" }`)
+  clears it.
+
+### Verify
+
+Neither WebGPU nor the Web Audio API exists in the test env, so unit tests mock
+both: cover the engine against a fake pipeline factory (no download), the hook
+against a fake `Worker`, and the route's rendering. Then check it for real —
+`just fe-dev` over **HTTPS** (`navigator.gpu` needs a secure context), load the
+model on WebGPU *and* with WebGPU disabled to force the WASM fallback, and switch
+models a few times watching that memory doesn't grow.

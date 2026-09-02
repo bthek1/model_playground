@@ -1,6 +1,8 @@
 # Audio Models in the Browser (Transformers.js / ONNX Runtime Web)
 
-**Status:** In Progress (Phases 1–4 complete — real-time ASR, audio classification, and TTS ship end-to-end; Phases 5–6 pending)
+**Status:** In Progress (Phases 1–4 and 6 complete; Phase 5 partially complete — Text-to-Audio
+shipped, Audio-to-Audio deliberately left server-side. All in-browser tasks **verified in a real
+browser**.)
 
 Bring the audio tasks from the `DL_tasks/nbs/Audio/` notebooks into the React frontend,
 running the models **client-side** on the user's GPU (WebGPU) or CPU (WASM) — no Python
@@ -97,7 +99,12 @@ ORT WASM asset cleanly.*
 *Done: `src/audio/types.ts` (protocol + model catalogue), `asrEngine.ts` (testable message handler,
 one-model-live dispose), `asr.worker.ts` (thin wrapper), `asrClient.ts` (worker factory),
 `hooks/useAsr.ts` (id-correlated `transcribe`), and `routes/asr.tsx` (model picker, mic/upload,
-load-progress, timestamped transcript). `REAL_ROUTES["automatic-speech-recognition"] = "/asr"` wired.
+load-progress, transcript). `REAL_ROUTES["automatic-speech-recognition"] = "/asr"` wired.
+**Correction (Phase 6 verification):** the route renders the transcript as **plain text, without
+per-chunk timestamps** — the worker still requests `return_timestamps: true` and `useAsr` still
+exposes `chunks`, but the streaming rewrite to `useLiveAsr` surfaces only `text`, and the route
+never renders a timestamp. Earlier revisions of this plan claimed timestamps shipped; they did not.
+See the open follow-up below.
 Unit-tested: engine protocol, hook lifecycle, `/asr` route rendering, audio I/O helpers
 (`decodeToMono`/`play`/`recordMic`/`toWavBlob`), and taxonomy mapping — all green (0 lint errors, clean
 build). **Manual browser check still pending** (needs HTTPS + a real model download; see Testing).*
@@ -158,8 +165,8 @@ Direct port of `04_Audio_Classification`; all families export to ONNX:
 
 | Notebook model | Browser model | Pipeline |
 |----------------|---------------|----------|
-| AST AudioSet tagging | `onnx-community/ast-finetuned-audioset-10-10-0.4593` | `audio-classification` |
-| wav2vec2 keyword spotting | `onnx-community/wav2vec2-base-superb-ks` | `audio-classification` |
+| AST AudioSet tagging | `Xenova/ast-finetuned-audioset-10-10-0.4593` | `audio-classification` |
+| wav2vec2 keyword spotting | `Xenova/wav2vec2-base-superb-ks` | `audio-classification` |
 | CLAP zero-shot | `Xenova/clap-htsat-unfused` | `zero-shot-audio-classification` |
 
 - ✅ Generalized the Phase-2 worker into a small task-agnostic worker factory (pipeline type + model id +
@@ -195,34 +202,93 @@ Port of `00_Text_to_Speech`. Uses the Phase-1 `play`/`toWavBlob` output helpers.
 - `src/routes/text-to-speech.tsx` (+ hook): text input, voice/model picker, play + download-WAV.
 - Map `text-to-speech → /text-to-speech`.
 
-## Phase 5 — Partial / server-boundary tasks (Text-to-Audio, Audio-to-Audio)
+## Phase 5 — Partial / server-boundary tasks (Text-to-Audio, Audio-to-Audio) 🟡
 
-These are where in-browser stops being the right call — plan them as **degraded/optional** or as a
-thin client over a server API. Adds a **direct** `onnxruntime-web` dependency for the custom-model path.
+*Text-to-Audio **shipped**; Audio-to-Audio **researched and deliberately not built** — the
+in-browser path is a DSP project, not a wiring job. Details below.*
 
-- **Text-to-Audio** (`01`): `Xenova/musicgen-small` via `text-to-audio` *can* run in-browser but is
-  autoregressive (~50 tok/s of audio) — fine for a 5–10 s toy, painful longer. AudioLDM / Stable Audio
-  are `diffusers` latent-diffusion with **no** Transformers.js path → server-side only. Ship the MusicGen
-  toy behind an explicit "experimental / slow" gate; document the server route as the production path.
-- **Audio-to-Audio** (`03`): no `audio-to-audio` pipeline exists in `transformers` *or* Transformers.js.
-  Realistic in-browser option is **DeepFilterNet** speech enhancement via `onnxruntime-web/webgpu` on
-  framed audio (you own the STFT framing / overlap-add that `torchaudio`/`speechbrain` do in Python).
-  Demucs stem separation is large + non-causal → prefer server-side. Custom-ONNX session skeleton:
-  `ort.InferenceSession.create(url, { executionProviders: ["webgpu", "wasm"] })`.
-- **Audio-Text-to-Text** (multimodal): audio LLMs (Qwen2-Audio, …) are multi-billion-param with no
-  browser runtime → **server API only**. Out of scope for in-browser work.
+### Text-to-Audio (`01`) — done ✅
 
-## Phase 6 — Memory, performance, and docs polish
+`routes/text-to-audio.tsx` + `audio/textToAudio.ts`, reusing the **TTS worker** (same modality:
+text in → audio out, so `TtsSynthesizer` already described it) rather than adding a fourth worker.
+`REAL_ROUTES["text-to-audio"] = "/text-to-audio"` wired. Verified in a real browser: downloads,
+warms up, reports ready on WASM, and generates a 0.9 s clip at 32 kHz in ~6 s.
 
-- **Warm-up inference** on model load (compiles WebGPU shaders / JITs WASM) so the first real request is fast.
-- Enforce **one-model-live**: dispose + null before loading another; verify no leak across model switches.
-- **Size-before-load** guardrail: warn on models past a few hundred M params (fp16 ≈ params × 2 bytes;
-  Whisper-base ≈ 150 MB).
-- Add a short `docs/guides/` note (or extend [`adding-a-model.md`](../../guides/adding-a-model.md)) on
-  adding a Transformers.js audio task: worker factory + hook + route + `REAL_ROUTES` entry.
-- Update [`docs/standards/api-contracts.md`](../../standards/api-contracts.md) **only if** Phase 5 adds a
-  server inference endpoint (none for Phases 1–4 — all client-side).
-- Move this plan to `docs/plans/completed/` when `Status` reaches `Complete`.
+Three things the build turned up:
+
+- **The `text-to-audio` pipeline is broken for MusicGen** on `@huggingface/transformers` 4.2.0 —
+  `pipeline("text-to-audio", …)("prompt")` throws *"Missing the following inputs: input_ids"*. The
+  worker therefore drives `MusicgenForConditionalGeneration` + `AutoTokenizer` directly. Re-test on
+  upgrade. (The ONNX sessions themselves open fine — this is not the ASR/QDQ bug.)
+- **The route is gated, not lazy-loaded.** MusicGen is **571 MB** quantized (**~1.05 GB** at fp16):
+  a text encoder, a decoder and an EnCodec vocoder. Auto-downloading that on navigation would be
+  hostile, so `useTts` is only mounted after an explicit opt-in that states the size and the speed
+  caveat up front. An E2E spec asserts **zero** Hugging Face requests before the click.
+- **Warm-up needed a token budget.** The generic warm-up called `synth(text)` with no options, so
+  MusicGen fell through to its 256-token default and spent **37 s** generating five seconds of music
+  nobody hears. `WARMUP_TOKENS = 16` cut it to ~3 s. The speech engines ignore the field.
+
+Speed measured on WASM (no GPU): ~50 audio tokens per second of compute, i.e. roughly 6× slower
+than real time. Fine for the 1–15 s toy the route offers; the slider caps at 15 s for that reason.
+
+### Audio-to-Audio (`03`) — not built, and here is why ❌
+
+The plan proposed **DeepFilterNet** speech enhancement via `onnxruntime-web` on framed audio. The
+research says that is a much bigger job than "add a dependency":
+
+- The available exports (`soniqo/DeepFilterNet3-ONNX` and friends) are, in the author's own words,
+  **"the neural graph only"**. The model takes `feat_erb [1,1,T,32]` and `feat_spec [1,2,T,96]` and
+  returns an ERB mask plus complex deep-filter coefficients — **not** audio in, audio out.
+- Making it useful means writing, in TypeScript, the whole surrounding DSP contract: a 960-point
+  real FFT with a 480-sample hop and a Vorbis window at 48 kHz, a 32-band ERB filterbank, streaming
+  exponential feature normalisation with specified state initialisation (−60 dB → −90 dB), an
+  order-5 complex deep filter with 2 frames of lookahead applied to an immutable copy of the noisy
+  spectrum, and ISTFT overlap-add synthesis. The browser ships no real-FFT primitive, so that comes
+  too.
+- None of it is verifiable from inside this repo without a reference implementation to diff against,
+  and "subtly wrong DSP" doesn't fail loudly — it produces plausible audio with artefacts.
+
+That is a self-contained project with its own plan and its own testing story, not a phase of this
+one. **Recommendation:** keep Audio-to-Audio server-side (where `torchaudio`/`speechbrain` already
+do this correctly) and leave the taxonomy entry pointing at the `/tasks/$slug` placeholder — which a
+test now asserts, so nobody wires it up by accident. Demucs stem separation was already server-side
+in the original plan for the same class of reason.
+
+### Audio-Text-to-Text (multimodal) — out of scope, unchanged
+
+Audio LLMs (Qwen2-Audio, …) are multi-billion-parameter with no browser runtime. Server API only.
+
+## Phase 6 — Memory, performance, and docs polish ✅
+
+*Done: warm-up inference, a hardened one-model-live path, the size-before-load guardrail, and the docs
+note — all three engines and all three routes. Unit-tested and manually verified in a real browser
+(see Testing).*
+
+- ✅ **Warm-up inference** on model load. Each engine (`asrEngine` / `pipelineEngine` / `ttsEngine`) runs
+  one throwaway inference before posting `ready` — 0.25 s of silence for the audio tasks, `"Hi."` for TTS
+  — so the first real request doesn't pay to compile the WebGPU shaders / JIT the WASM module. The
+  generic pipeline worker picks warm-up args per task (`{ top_k: 1 }`, or a single candidate label for
+  zero-shot, which can't be called without one). A `{ status: "warmup" }` progress drives a
+  "Warming up the model…" line in `ModelStatus`; a warm-up that **throws is swallowed** — the model is
+  still usable, and the first real run just pays the compile cost instead. Handlers take
+  `{ warmup }` so tests can opt out.
+- ✅ **One-model-live, hardened.** The engines already disposed the previous model; they now null the
+  reference **first** and dispose through `disposeQuietly`, so a backend whose teardown throws (a lost
+  device, say) can't abort the load or leave the stale model live. Covered by a
+  "loads the next model even when disposing the previous one fails" test in all three engine suites.
+- ✅ **Size-before-load guardrail** (`audio/size.ts`). Every catalogue entry now carries a `params` count
+  in millions; `sizeEstimate()` derives the download for both backends (fp16 = 2 bytes/param,
+  q8 = 1) and flags anything past `LARGE_MODEL_BYTES` (300 MB). The new shared
+  `components/audio/ModelPicker.tsx` — which replaces the button row triplicated across the three audio
+  routes — shows the selected model's params + both estimates, and an amber warning on a large model.
+  CLAP (153M ⇒ ≈292 MB fp16) is the closest to the line today.
+- ✅ **Docs.** [`adding-a-model.md`](../../guides/adding-a-model.md) gained a
+  **§7 "Adding a pretrained (Transformers.js) task"** — catalogue entry (incl. `params`), when to reuse
+  the generic pipeline worker vs. write a dedicated one, the three behaviours every engine owes
+  (one-model-live, warm-up, never block the main thread), hook + route, the `REAL_ROUTES` entry, and how
+  to verify. The intro now splits the guide into the custom-kernel path (§1–6) and the pretrained path (§7).
+- n/a **`api-contracts.md`** — unchanged, as planned: Phases 1–4 and 6 add no server endpoint. Revisit in Phase 5.
+- ⏳ Move this plan to `docs/plans/completed/` when `Status` reaches `Complete` (after Phase 5).
 
 ---
 
@@ -233,8 +299,8 @@ thin client over a server API. Adds a **direct** `onnxruntime-web` dependency fo
 | **ASR** (`02`) | Yes — excellent | Whisper-base / Moonshine-tiny (ONNX) | WebGPU (WASM ok) | — | 2 |
 | **Audio classification** (`04`) | Yes — full | AST / wav2vec2 / CLAP (ONNX) | WASM or WebGPU | — | 3 |
 | **TTS** (`00`) | Yes | Kokoro-82M (`kokoro-js`), MMS-VITS, SpeechT5 | WebGPU (Kokoro) / WASM | Bark → server | 4 |
-| **Text-to-Audio** (`01`) | Partial | MusicGen-small (short demos only) | WebGPU | AudioLDM / Stable Audio → server | 5 |
-| **Audio-to-Audio** (`03`) | Partial | DeepFilterNet (custom ONNX) | WebGPU / WASM | Demucs / VC → server | 5 |
+| **Text-to-Audio** (`01`) | ✅ Yes, gated | MusicGen-small (1-15 s clips) | WebGPU / WASM | AudioLDM / Stable Audio → server | 5 |
+| **Audio-to-Audio** (`03`) | ❌ Not viable in scope | — (DFN export is graph-only; needs a full STFT/ERB stack) | — | DeepFilterNet / Demucs / VC → server | 5 |
 | **Audio-Text-to-Text** (multimodal) | No | — | — | server API | out |
 
 Rule of thumb: **discriminative + small** (ASR, classification, small TTS) runs great client-side;
@@ -267,10 +333,70 @@ below); later phases extend the same patterns.
   `categoryForPath("/asr") === "Audio"`.
 - ✅ **Lint / build** — `eslint` 0 errors; `vite build` clean, emitting `asr.worker-*.js` +
   `ort-wasm-*.wasm` (confirms the worker + ONNX Runtime WASM bundle correctly).
-- ⏳ **Manual (still pending — the real check):** `just fe-dev` over HTTPS — load Whisper-base on WebGPU
-  and on WASM (disable WebGPU to force fallback), transcribe an uploaded clip and a 5 s mic recording,
-  confirm timestamps, model switch frees memory (no growth across reloads), and the page degrades
-  gracefully with WebGPU off.
+- ✅ **Manual browser verification — done** (2026-09-01, headless Chromium against the HTTPS dev
+  server). This machine has no GPU (`requestAdapter()` returns null), so it exercised the **WASM
+  fallback end to end** — which is the path that turned out to be broken. Results:
+  - `/asr` — Whisper-base downloads, warms up, reports **"Model ready · running on WASM"**, and the
+    JFK sample transcribes **exactly** to the reference: *"And so my fellow Americans, ask not what
+    your country can do for you, ask what you can do for your country."*
+  - `/audio-classification` — AST loads and reaches ready; CLAP zero-shot scores prompts sensibly
+    (`speech` 0.68 vs `music` 0.32 on silence-padded input).
+  - `/text-to-speech` — Kokoro-82M loads and synthesises (5.2 s @ 24 kHz), played back in-page.
+  - Graceful degradation confirmed: no GPU adapter → `pickBackend()` picks WASM, the UI says so, and
+    nothing crashes.
+  - Phase 6 features confirmed live: the **"Warming up the model…"** state appears between download
+    and ready, and the size note + amber **large-model warning** render on Whisper-base and CLAP.
+  - ⏳ **Still unverified:** the **WebGPU** path (no GPU on this machine) and the **mic** capture loop
+    (no audio input in headless). Both need a human on real hardware.
+- ✅ **Regression specs (2026-09-02).** The manual checks are now permanent Playwright specs:
+  - `e2e/specs/audio.spec.ts` — 10 specs in the **default** run (~5 s). Every Hugging Face request is
+    aborted, so they assert the route shell, the size-guardrail warning firing on the heavy model and
+    staying quiet on the light one, and that a blocked download **fails visibly** instead of spinning.
+  - `e2e/specs/audio-models.spec.ts` — 5 **`@slow`** specs (`just fe-e2e-slow`, ~2.5 min) that load
+    every catalogue model for real and assert Whisper transcribes JFK to the right words. These are
+    the only tests that open a real ONNX Runtime session — the layer both bugs lived in.
+  - `just fe-e2e-models` runs the id check alone in ~3 s.
+
+---
+
+## What manual verification found
+
+Two bugs that **every unit test missed**, because both live in the layer the tests mock away
+(a real ONNX Runtime session, and real Hugging Face repos). Both are fixed.
+
+1. **No ASR model could load on the WASM fallback — the universal path.** ONNX Runtime failed at
+   session creation with
+   `qdq_actions.cc:137 TransposeDQWeightsForMatMulNBits Missing required scale:
+   model.decoder.embed_tokens.weight_merged_0_scale`.
+   Isolated by probing the Hub directly from the page: it reproduces on **every** ASR repo tried
+   (`onnx-community/whisper-base`, `onnx-community/whisper-tiny.en`, `Xenova/whisper-tiny.en`,
+   `moonshine-tiny`) and at every dtype whose **decoder** is quantized — so it is a bug in the ORT
+   build bundled with `@huggingface/transformers` 4.2.0 (already the latest release), not a bad
+   export. The **encoder** quantizes fine.
+   **Fix:** `asrLoadOpts()` in `audio/backend.ts` — WASM now loads
+   `{ encoder_model: "q8", decoder_model_merged: "fp32" }`; WebGPU is unchanged at fp16. Cost is
+   size, not correctness: Whisper-base on WASM is ~221 MB instead of ~71 MB. Worth it against a
+   fallback that could not load a model at all. Revisit when the bundled ORT updates.
+
+2. **Two of the three classification models did not exist.**
+   `onnx-community/ast-finetuned-audioset-10-10-0.4593` and
+   `onnx-community/wav2vec2-base-superb-ks` both return **401** from the Hub — the load failed with
+   "Unauthorized access to file". The real repos are under **`Xenova/`**. Verified all five audio
+   repos against the Hub API before changing. **Fix:** corrected ids in `audio/classification.ts`.
+
+A third finding shaped Phase 6 itself: the params-based size estimate was **badly wrong** for ASR
+once the decoder went fp32 (it claimed 71 MB for a 221 MB download). Catalogue entries now carry
+optional **measured** `bytes`, `sizeEstimate` prefers them, and `large` keys off the **bigger** of
+the two backends rather than fp16 — otherwise the ASR warning would never fire. The threshold moved
+from 300 MB to **200 MB**: at 300 MB nothing we ship would have tripped it, making the guardrail
+dead code. It now fires on exactly the two heavy models (Whisper-base, CLAP) and stays quiet on the
+rest — asserted by a test, so a future catalogue change can't silently kill it.
+
+**Method note:** the checks were driven with Playwright against the real HTTPS dev server, since
+`navigator.gpu` and the Web Audio API need a real browser. They are now **permanent specs** rather
+than throwaway scripts — see the Testing section and
+[`e2e-testing.md`](../../guides/e2e-testing.md). The model-id check reproduces bug 2 in 2.6 s and
+names the offending repo, verified by temporarily reverting the id.
 
 ---
 
@@ -284,6 +410,17 @@ below); later phases extend the same patterns.
   the accompanying `api-contracts.md` changes.
 - Aligning backend `ModelCard.pipeline_tag` values with these audio tasks so runs are recorded in the registry.
 - A shared `<AudioModelRunner>` shell (upload / mic / progress / dispose) factored out once 2–3 audio routes exist.
+  *(Partly done in Phase 6: `components/audio/ModelPicker.tsx` now factors out the picker + size
+  guardrail that was triplicated across the three routes; the transport controls are still per-route.)*
+- **Per-chunk timestamps in the ASR transcript.** `return_timestamps: true` is requested and the
+  worker returns `chunks`, but `routes/asr.tsx` renders only `text` — the streaming rewrite dropped
+  them. Restoring them means surfacing `chunks` from `useLiveAsr` and rendering `[mm:ss]` per segment.
+- ~~Fold the audio browser checks into the Playwright suite~~ — **done** (2026-09-02):
+  `e2e/specs/audio.spec.ts` (10 fast specs, downloads blocked) runs in the default suite, and
+  `e2e/specs/audio-models.spec.ts` (5 `@slow` specs) loads every catalogue model for real via
+  `just fe-e2e-slow`. `just fe-e2e-models` checks the ids alone in ~3 s.
+- **Re-test the ASR quantized decoder** when `@huggingface/transformers` ships a newer ONNX Runtime;
+  if fixed, drop the fp32 decoder override in `asrLoadOpts` and reclaim ~150 MB on the WASM path.
 
 ---
 

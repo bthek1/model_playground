@@ -5,7 +5,9 @@ import type { TtsAudio } from "@/audio/tts";
 import type { UseTtsResult } from "@/hooks/useTts";
 
 // Mock playback/encoding — no Web Audio in the test env.
-const play = vi.fn(() => ({ close: vi.fn() }));
+const play = vi.fn<(...args: unknown[]) => { close: () => void }>(() => ({
+  close: vi.fn(),
+}));
 vi.mock("@/audio/io", () => ({
   play: (...args: unknown[]) => play(...args),
   toWavBlob: vi.fn(() => new Blob()),

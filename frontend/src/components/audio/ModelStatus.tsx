@@ -27,6 +27,17 @@ export function ModelStatus({
   }
   if (!loading) return null;
 
+  // The engines post a `warmup` progress after the download, while the first
+  // (throwaway) inference compiles shaders / JITs the WASM module.
+  if (progress?.status === "warmup") {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 className="size-3.5 animate-spin" />
+        Warming up the model…
+      </p>
+    );
+  }
+
   const pct =
     progress && typeof progress.progress === "number"
       ? Math.round(progress.progress)

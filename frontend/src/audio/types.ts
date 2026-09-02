@@ -3,12 +3,20 @@
 // and `useAsr` (main-thread side).
 
 import type { LoadOpts } from "./backend";
+import type { MeasuredBytes } from "./size";
 
 /** A selectable ASR model. Both are ONNX-exported with WebGPU + WASM support. */
 export interface AsrModel {
   id: string;
   label: string;
   hint: string;
+  /** Parameter count in millions — drives the size-before-load estimate. */
+  params: number;
+  /**
+   * Measured download bytes. ASR needs these because the WASM path keeps the
+   * decoder at fp32 (`asrLoadOpts`), so a uniform-q8 estimate understates it ~3x.
+   */
+  bytes: MeasuredBytes;
 }
 
 /** ONNX ASR models with first-class Transformers.js support (see the plan). */
@@ -16,12 +24,18 @@ export const ASR_MODELS: AsrModel[] = [
   {
     id: "onnx-community/whisper-base",
     label: "Whisper base",
-    hint: "Timestamps, 99 languages, translate. ~150 MB.",
+    hint: "Timestamps, 99 languages, translate.",
+    params: 74,
+    // fp16 39.4 + 99.9 MB · WASM q8 encoder 22.1 + fp32 decoder 198.9 MB
+    bytes: { webgpu: 146_276_352, wasm: 231_735_296 },
   },
   {
     id: "onnx-community/moonshine-tiny-ONNX",
     label: "Moonshine tiny",
     hint: "English, low latency — best for live captioning.",
+    params: 27,
+    // WASM q8 encoder 7.6 + fp32 decoder 74.6 MB
+    bytes: { wasm: 86_179_840 },
   },
 ];
 

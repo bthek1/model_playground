@@ -24,6 +24,7 @@ import { decodeToMono, play, toWavBlob } from "@/audio/io";
 import { AUDIO_SAMPLES, type AudioSample } from "@/audio/samples";
 import { ASR_MODELS, DEFAULT_ASR_MODEL } from "@/audio/types";
 import { formatDuration } from "@/audio/waveform";
+import { ModelPicker } from "@/components/audio/ModelPicker";
 import { ModelStatus } from "@/components/audio/ModelStatus";
 import { LiveWaveform, Waveform } from "@/components/audio/Waveform";
 import { Button } from "@/components/ui/button";
@@ -174,21 +175,13 @@ function AsrPage() {
         </p>
       </div>
 
-      {/* Model picker */}
-      <div className="flex flex-wrap gap-2">
-        {ASR_MODELS.map((m) => (
-          <Button
-            key={m.id}
-            variant={m.id === model ? "default" : "outline"}
-            size="sm"
-            disabled={busy}
-            onClick={() => setModel(m.id)}
-            title={m.hint}
-          >
-            {m.label}
-          </Button>
-        ))}
-      </div>
+      {/* Model picker — carries the size-before-load estimate + warning */}
+      <ModelPicker
+        models={ASR_MODELS}
+        value={model}
+        onChange={(m) => setModel(m.id)}
+        disabled={busy}
+      />
 
       {/* Model load status */}
       <ModelStatus loading={loading} ready={ready} backend={backend} progress={progress} />

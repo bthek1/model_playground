@@ -18,6 +18,8 @@ export interface TtsModel {
   id: string;
   label: string;
   hint: string;
+  /** Parameter count in millions — drives the size-before-load estimate. */
+  params: number;
   engine: "kokoro" | "pipeline";
   /** Named voices — Kokoro only. */
   voices?: TtsVoice[];
@@ -30,6 +32,7 @@ export const TTS_MODELS: TtsModel[] = [
     id: "onnx-community/Kokoro-82M-v1.0-ONNX",
     label: "Kokoro 82M",
     hint: "Best small-model quality; purpose-built for the browser (WebGPU).",
+    params: 82,
     engine: "kokoro",
     voices: [
       { id: "af_heart", label: "Heart — US female" },
@@ -44,12 +47,14 @@ export const TTS_MODELS: TtsModel[] = [
     id: "Xenova/mms-tts-eng",
     label: "MMS English",
     hint: "Tiny end-to-end VITS; swap the model id for 1,000+ languages.",
+    params: 36,
     engine: "pipeline",
   },
   {
     id: "Xenova/speecht5_tts",
     label: "SpeechT5",
     hint: "Microsoft SpeechT5 with an x-vector speaker embedding.",
+    params: 144,
     engine: "pipeline",
     speakerEmbeddings:
       "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin",
@@ -69,6 +74,11 @@ export interface TtsRunOpts {
   voice?: string;
   /** Kokoro speaking speed multiplier. */
   speed?: number;
+  /**
+   * MusicGen only: how many audio tokens to generate (~50 per second of audio).
+   * Ignored by the speech models.
+   */
+  maxNewTokens?: number;
 }
 
 // --- Worker message protocol -------------------------------------------------

@@ -43,6 +43,11 @@ export default defineConfig(({ mode }) => {
       environment: "happy-dom",
       setupFiles: ["./src/test/setup.ts"],
       globals: true,
+      // Vitest's default `include` glob matches `**/*.spec.ts`, which would
+      // sweep up the Playwright specs in `e2e/` and fail on importing
+      // @playwright/test. E2E belongs to Playwright; Vitest owns `src/` only.
+      include: ["src/**/*.{test,spec}.?(c|m)[jt]s?(x)"],
+      exclude: ["node_modules/**", "dist/**", "e2e/**"],
     },
   };
 });

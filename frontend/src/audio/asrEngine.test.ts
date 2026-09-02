@@ -25,12 +25,19 @@ describe("createAsrHandler", () => {
       return pipe;
     });
 
-    const handle = createAsrHandler((m) => posted.push(m), factory);
+    const handle = createAsrHandler((m) => posted.push(m), factory, {
+      warmup: false,
+    });
     await handle({ type: "load", model: "onnx-community/whisper-base" });
 
+    // On WASM the decoder stays fp32 — the quantized one can't open a session
+    // in the bundled ONNX Runtime (see `asrLoadOpts`).
     expect(factory).toHaveBeenCalledWith(
       "onnx-community/whisper-base",
-      expect.objectContaining({ device: "wasm", dtype: "q8" }),
+      expect.objectContaining({
+        device: "wasm",
+        dtype: { encoder_model: "q8", decoder_model_merged: "fp32" },
+      }),
     );
     expect(posted).toEqual([
       { type: "progress", progress: { status: "download", file: "model.onnx", progress: 42 } },
@@ -101,6 +108,42 @@ describe("createAsrHandler", () => {
     expect(posted[posted.length - 1]).toEqual({ type: "error", error: "download failed" });
   });
 
+  it("warms the model up with silence before reporting ready", async () => {
+    clearGpu();
+    const posted: AsrResponse[] = [];
+    const pipe = vi.fn().mockResolvedValue({ text: "" }) as unknown as AsrPipeline;
+    const handle = createAsrHandler((m) => posted.push(m), async () => pipe);
+
+    await handle({ type: "load", model: "m", opts: { device: "wasm", dtype: "q8" } });
+
+    // One throwaway inference on silence, before `ready`.
+    expect(pipe).toHaveBeenCalledTimes(1);
+    const [audio] = (pipe as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(audio).toBeInstanceOf(Float32Array);
+    expect(audio.every((v: number) => v === 0)).toBe(true);
+    expect(posted).toEqual([
+      { type: "progress", progress: { status: "warmup" } },
+      { type: "ready", model: "m", backend: "wasm" },
+    ]);
+  });
+
+  it("still reports ready when the warm-up inference throws", async () => {
+    clearGpu();
+    const posted: AsrResponse[] = [];
+    const pipe = vi
+      .fn()
+      .mockRejectedValue(new Error("shader compile failed")) as unknown as AsrPipeline;
+    const handle = createAsrHandler((m) => posted.push(m), async () => pipe);
+
+    await handle({ type: "load", model: "m", opts: { device: "wasm", dtype: "q8" } });
+
+    expect(posted[posted.length - 1]).toEqual({
+      type: "ready",
+      model: "m",
+      backend: "wasm",
+    });
+  });
+
   it("disposes the previous model before loading a new one", async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
     const first = Object.assign(vi.fn(), { dispose }) as unknown as AsrPipeline;
@@ -109,11 +152,34 @@ describe("createAsrHandler", () => {
       .fn()
       .mockResolvedValueOnce(first)
       .mockResolvedValueOnce(second);
-    const handle = createAsrHandler(() => {}, factory);
+    const handle = createAsrHandler(() => {}, factory, { warmup: false });
 
     await handle({ type: "load", model: "a", opts: { device: "wasm", dtype: "q8" } });
     await handle({ type: "load", model: "b", opts: { device: "wasm", dtype: "q8" } });
 
     expect(dispose).toHaveBeenCalledTimes(1);
+    expect(second).not.toBe(first); // the new model is the live one
+  });
+
+  it("loads the next model even when disposing the previous one fails", async () => {
+    const dispose = vi.fn().mockRejectedValue(new Error("device lost"));
+    const first = Object.assign(vi.fn(), { dispose }) as unknown as AsrPipeline;
+    const second = vi.fn().mockResolvedValue({ text: "second" }) as unknown as AsrPipeline;
+    const posted: AsrResponse[] = [];
+    const factory = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const handle = createAsrHandler((m) => posted.push(m), factory, { warmup: false });
+
+    await handle({ type: "load", model: "a", opts: { device: "wasm", dtype: "q8" } });
+    await handle({ type: "load", model: "b", opts: { device: "wasm", dtype: "q8" } });
+    await handle({ type: "run", id: 1, audio: new Float32Array([0]) });
+
+    // A failed dispose must not abort the load or leave the old model live.
+    expect(posted).toContainEqual({ type: "ready", model: "b", backend: "wasm" });
+    expect(second).toHaveBeenCalled();
+    expect(posted[posted.length - 1]).toEqual({
+      type: "result",
+      id: 1,
+      result: { text: "second" },
+    });
   });
 });

@@ -1,10 +1,15 @@
 import { http, HttpResponse } from "msw"
 
+import { mockModels } from "./fixtures/models"
+
 const API = import.meta.env.VITE_API_BASE_URL ?? ""
 
 /**
  * Default request handlers used by every test. Override per-test with
  * `server.use(...)` from `@/test/server` to simulate errors or edge cases.
+ *
+ * Response bodies come from `./fixtures/models`, which the Playwright mock-API
+ * fixture imports too — so the unit-test and E2E mocks can't drift apart.
  */
 export const handlers = [
   http.get(`${API}/api/health/`, () =>
@@ -12,3 +17,9 @@ export const handlers = [
   ),
   http.get(`${API}/api/registry/models/`, () => HttpResponse.json([])),
 ]
+
+/** Opt-in handler for tests that want a populated catalog. */
+export const populatedRegistryHandler = http.get(
+  `${API}/api/registry/models/`,
+  () => HttpResponse.json(mockModels)
+)

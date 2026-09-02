@@ -25,7 +25,9 @@ describe("createPipelineHandler", () => {
       return pipe;
     });
 
-    const handle = createPipelineHandler((m) => posted.push(m), factory);
+    const handle = createPipelineHandler((m) => posted.push(m), factory, {
+      warmup: false,
+    });
     await handle({
       type: "load",
       task: "audio-classification",
@@ -84,6 +86,59 @@ describe("createPipelineHandler", () => {
     expect(pipe).toHaveBeenCalledWith(audio, ["a dog", "rain"]);
   });
 
+  it("warms up with task-appropriate args before reporting ready", async () => {
+    clearGpu();
+    const posted: PipelineResponse[] = [];
+    const pipe = vi.fn().mockResolvedValue([]) as unknown as CallablePipeline;
+    const handle = createPipelineHandler((m) => posted.push(m), async () => pipe);
+
+    await handle({
+      type: "load",
+      task: "audio-classification",
+      model: "m",
+      opts: { device: "wasm", dtype: "q8" },
+    });
+    expect(pipe).toHaveBeenCalledWith(expect.any(Float32Array), { top_k: 1 });
+
+    // Zero-shot can't be called without at least one candidate label.
+    const zeroShot = vi.fn().mockResolvedValue([]) as unknown as CallablePipeline;
+    const handle2 = createPipelineHandler(() => {}, async () => zeroShot);
+    await handle2({
+      type: "load",
+      task: "zero-shot-audio-classification",
+      model: "m",
+      opts: { device: "wasm", dtype: "q8" },
+    });
+    expect(zeroShot).toHaveBeenCalledWith(expect.any(Float32Array), ["speech"]);
+
+    expect(posted).toEqual([
+      { type: "progress", progress: { status: "warmup" } },
+      { type: "ready", model: "m", backend: "wasm" },
+    ]);
+  });
+
+  it("still reports ready when the warm-up inference throws", async () => {
+    clearGpu();
+    const posted: PipelineResponse[] = [];
+    const pipe = vi
+      .fn()
+      .mockRejectedValue(new Error("shader compile failed")) as unknown as CallablePipeline;
+    const handle = createPipelineHandler((m) => posted.push(m), async () => pipe);
+
+    await handle({
+      type: "load",
+      task: "audio-classification",
+      model: "m",
+      opts: { device: "wasm", dtype: "q8" },
+    });
+
+    expect(posted[posted.length - 1]).toEqual({
+      type: "ready",
+      model: "m",
+      backend: "wasm",
+    });
+  });
+
   it("errors a run when no model is loaded", async () => {
     const posted: PipelineResponse[] = [];
     const handle = createPipelineHandler((m) => posted.push(m), async () => vi.fn() as never);
@@ -122,12 +177,32 @@ describe("createPipelineHandler", () => {
     const first = Object.assign(vi.fn(), { dispose }) as unknown as CallablePipeline;
     const second = vi.fn() as unknown as CallablePipeline;
     const factory = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
-    const handle = createPipelineHandler(() => {}, factory);
+    const handle = createPipelineHandler(() => {}, factory, { warmup: false });
 
     const load = { type: "load", model: "m", opts: { device: "wasm", dtype: "q8" } } as const;
     await handle({ ...load, task: "audio-classification" });
     await handle({ ...load, task: "zero-shot-audio-classification" });
 
     expect(dispose).toHaveBeenCalledTimes(1);
+    expect(second).not.toBe(first); // the new model is the live one
+  });
+
+  it("loads the next model even when disposing the previous one fails", async () => {
+    const dispose = vi.fn().mockRejectedValue(new Error("device lost"));
+    const first = Object.assign(vi.fn(), { dispose }) as unknown as CallablePipeline;
+    const second = vi.fn().mockResolvedValue(["ok"]) as unknown as CallablePipeline;
+    const posted: PipelineResponse[] = [];
+    const factory = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const handle = createPipelineHandler((m) => posted.push(m), factory, {
+      warmup: false,
+    });
+
+    const load = { type: "load", model: "m", opts: { device: "wasm", dtype: "q8" } } as const;
+    await handle({ ...load, task: "audio-classification" });
+    await handle({ ...load, task: "audio-classification" });
+    await handle({ type: "run", id: 2, input: new Float32Array([0]) });
+
+    expect(second).toHaveBeenCalled();
+    expect(posted[posted.length - 1]).toEqual({ type: "result", id: 2, result: ["ok"] });
   });
 });

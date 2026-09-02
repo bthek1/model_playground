@@ -108,7 +108,7 @@ docker compose exec backend python manage.py migrate
 | Styling | Tailwind CSS v4 + shadcn/ui |
 | Forms | React Hook Form + Zod |
 | Global state | Zustand |
-| Testing (frontend) | Vitest + React Testing Library |
+| Testing (frontend) | Vitest + React Testing Library (unit) · Playwright (end-to-end) |
 | GPU types | @webgpu/types |
 | Charts | ECharts (lazy) + Recharts |
 | Utilities | date-fns |

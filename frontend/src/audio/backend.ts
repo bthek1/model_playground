@@ -25,10 +25,21 @@ export async function pickBackend(): Promise<Backend> {
   return "wasm";
 }
 
+/**
+ * Weight precision: fp16 on GPU (matches the notebooks), quantized on CPU.
+ * `fp32` is the escape hatch for modules that can't be quantized — see `asrLoadOpts`.
+ */
+export type Dtype = "fp16" | "q8" | "fp32";
+
+/**
+ * A precision for the whole model, or one per ONNX module (`encoder_model`,
+ * `decoder_model_merged`, …) when they can't share one — see `asrLoadOpts`.
+ */
+export type DtypeSpec = Dtype | Record<string, Dtype>;
+
 export interface LoadOpts {
   device: Backend;
-  /** Weight precision: fp16 on GPU (matches the notebooks), quantized on CPU. */
-  dtype: "fp16" | "q8";
+  dtype: DtypeSpec;
 }
 
 /**
@@ -40,4 +51,27 @@ export function loadOpts(backend: Backend): LoadOpts {
   return backend === "webgpu"
     ? { device: "webgpu", dtype: "fp16" }
     : { device: "wasm", dtype: "q8" };
+}
+
+/**
+ * Load options for the **ASR** models specifically. Identical to `loadOpts`
+ * except on WASM, where the decoder must stay **fp32**.
+ *
+ * Why: the quantized (q8) Whisper/Moonshine decoders fail to even open a session
+ * on the WASM execution provider bundled with `@huggingface/transformers` 4.2.0 —
+ * ONNX Runtime throws `qdq_actions.cc:137 TransposeDQWeightsForMatMulNBits
+ * Missing required scale: model.decoder.embed_tokens.weight_merged_0_scale`. It
+ * reproduces on every ASR repo tried (`onnx-community/whisper-base`,
+ * `whisper-tiny.en`, `Xenova/whisper-tiny.en`, `moonshine-tiny`) and at every
+ * dtype whose decoder is quantized, so it is an ORT bug, not a bad export. The
+ * **encoder** quantizes fine, so only the decoder pays full precision.
+ *
+ * Cost: whisper-base on WASM is ~221 MB instead of ~71 MB (see `bytes` in the
+ * ASR catalogue). Worth it — the alternative is a fallback path that cannot load
+ * a model at all. Revisit when the bundled ORT version updates.
+ */
+export function asrLoadOpts(backend: Backend): LoadOpts {
+  return backend === "webgpu"
+    ? { device: "webgpu", dtype: "fp16" }
+    : { device: "wasm", dtype: { encoder_model: "q8", decoder_model_merged: "fp32" } };
 }

@@ -41,10 +41,12 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | System architecture & design decisions | [`docs/explanations/architecture.md`](docs/explanations/architecture.md) |
 | **In-browser inference (WebGPU)** | [`docs/explanations/webgpu-inference.md`](docs/explanations/webgpu-inference.md) |
 | **Adding a model (kernel + registry entry)** | [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) |
+| **Building a task page (Select → Load → Run → Output)** | [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md) |
 | **Visualizing a model & its structure (UI standard)** | [`docs/standards/model-visualization.md`](docs/standards/model-visualization.md) |
 | Auth flow (JWT) | [`docs/explanations/auth-flow.md`](docs/explanations/auth-flow.md) |
 | API endpoints & request/response shapes | [`docs/standards/api-contracts.md`](docs/standards/api-contracts.md) |
 | Local dev setup | [`docs/guides/local-setup.md`](docs/guides/local-setup.md) |
+| **End-to-end tests (Playwright)** | [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md) |
 | Celery / async tasks | [`docs/guides/celery_setup.md`](docs/guides/celery_setup.md) |
 | Feature plans (phased) | [`docs/plans/in-progress/`](docs/plans/in-progress/) (active), [`docs/plans/completed/`](docs/plans/completed/) (done) |
 
@@ -69,7 +71,12 @@ just be-makemigrations [app]
 # Frontend
 just fe-dev         # vite dev server
 just fe-build       # type-check + build
-just fe-test        # vitest
+just fe-test        # vitest (unit/component)
+just fe-e2e         # playwright end-to-end (mocked API, no backend needed)
+just fe-e2e-slow    # @slow specs: real model downloads + real ONNX sessions (minutes)
+just fe-e2e-models  # check every audio model id resolves on the HF Hub (seconds)
+just fe-e2e-install # download the playwright browsers (once)
+just fe-e2e-ui      # playwright interactive UI
 just fe-lint        # eslint
 
 # Celery
@@ -118,8 +125,11 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - Forms use React Hook Form + Zod schemas (`src/schemas/`, one file per domain).
 - Styling is Tailwind v4 (CSS-first, no config file) + shadcn/ui in the **`base-nova`** style, built on **`@base-ui/react`** primitives (NOT Radix). Add components with `npx shadcn@latest add <component>`.
 - Charts: ECharts via the lazy `src/components/charts/EChart.tsx` wrapper, or Recharts inline. Render Markdown/LLM output with `src/components/Markdown.tsx` (`react-markdown` + `remark-gfm`).
+- **Every task page is the same pipeline: Select → Load → Run → Output** — pick a model, load its weights, run it on an input, show the result. This is the standard in [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md); read it before adding a task route. Two state machines, kept orthogonal: **load** (`idle → loading → ready | error`, with `progress` as a self-loop and `retry()` out of `error`) and **run** (id-correlated requests, `running` derived from an in-flight *count*, never a boolean). Task hooks (`useTts`, `useAsr`, `usePipeline`, `useAudioClassifier`) all return the same contract — `status`/`progress`/`backend`/`load`/`run`/`running`/`result`/`error` — so wrap the shared worker plumbing rather than re-deriving it. Nothing downloads until the user asks: `idle` is the default and the size estimate + large-model warning are shown first. Errors render in the slot that produced them.
 - **Visualizing models & their structure** follows [`docs/standards/model-visualization.md`](docs/standards/model-visualization.md) — a shared grammar of stage/arrow schematics, canvas weight/activation heatmaps (diverging red=+/blue=−, alpha=magnitude), param chips, theme-token colors, and lazy charts. The primitives live in `components/viz/` (`schematic.tsx`: Stage/Arrow/ParamChip · `heatmap.tsx`: HeatmapTile/DivergingLegend); the Training route (`components/training/`) and Tensor route (`routes/tensor.tsx`) are the reference callers. Reuse those primitives; don't invent parallel ones.
 - Tests: Vitest + Testing Library + MSW (`src/test/server.ts`, `handlers.ts`). `src/test/setup.ts` also polyfills `localStorage` because Node ≥25 ships a stub that shadows the DOM env's.
+- **End-to-end tests are Playwright** (`e2e/`), covering what happy-dom can't: routing/app shell, real-browser auth, and WebGPU. Default run is fully mocked (no backend); `@backend`-tagged specs need `just be-seed-e2e`, and
+  `@slow`-tagged specs (real Hugging Face downloads + real ONNX sessions) need `just fe-e2e-slow`. Import `test`/`expect` from `e2e/fixtures/base`, not `@playwright/test`. Two traps: never `page.route("**/api/**")` (it also matches `/src/api/*` module URLs and stops the app booting), and keep the `test.include`/`test.exclude` block in `vite.config.ts` pinned to `src/` or Vitest swallows the E2E specs. See [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md).
 
 ### WebGPU essentials (`src/webgpu/`)
 
@@ -141,6 +151,43 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   so the dev server runs over HTTPS and a plain-HTTP LAN origin hides WebGPU; **Firefox on Linux/macOS**
   also needs `dom.webgpu.enabled` in `about:config`. See [`docs/explanations/webgpu-inference.md`](docs/explanations/webgpu-inference.md).
 - To add a model: write the kernel + register a `ModelCard`. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md).
+
+
+### In-browser pretrained models (`src/audio/`)
+
+The carve-out from the raw-WebGPU rule: pretrained HF checkpoints (audio ASR/TTS/classification) run
+through **Transformers.js** (`@huggingface/transformers`, plus `kokoro-js` for TTS). Keep this out of
+`src/webgpu/` — the two runtimes never mix. See
+[`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §8 for the full recipe.
+
+- **One worker per modality, not per task.** Discriminative tasks share the generic
+  `pipeline.worker.ts` (the task string travels in the `load` message). ASR keeps its own worker (it
+  drives the real-time capture loop). `tts.worker.ts` owns the whole **text→audio** modality — Kokoro,
+  MMS/SpeechT5 *and* MusicGen — because they all fit one `TtsSynthesizer` interface; a fourth worker
+  would have bought nothing. Each engine (`asrEngine`/`pipelineEngine`/`ttsEngine`) is a pure,
+  unit-testable message handler; the `*.worker.ts` file is a thin wrapper around it.
+- **Every engine owes three behaviours:** *one model live at a time* (null the reference **first**,
+  then dispose via `disposeQuietly` — a failed teardown must not leave a stale model live);
+  *warm-up on load* (one throwaway inference before `ready`, posting `{ status: "warmup" }`, and never
+  failing the load if it throws); and *never block the main thread*.
+- **ASR precision is a deliberate special case.** `loadOpts()` = fp16 on WebGPU / q8 on WASM, but ASR
+  uses **`asrLoadOpts()`**, which keeps the **decoder at fp32 on WASM**. The quantized
+  Whisper/Moonshine decoders cannot open a session on the ONNX Runtime bundled with
+  `@huggingface/transformers` 4.2.0 (`qdq_actions.cc:137 … Missing required scale`), so a uniform q8
+  breaks the universal fallback entirely. Don't "simplify" it away; re-test when ORT updates.
+- **Check a model id against the Hub before shipping it.** Two entries once pointed at
+  `onnx-community/*` repos that don't exist (401). `just fe-e2e-models` verifies all of them in seconds.
+- **Size-before-load guardrail:** every catalogue entry carries `params` (millions); `audio/size.ts` +
+  `components/audio/ModelPicker.tsx` quote the download for both backends and warn past
+  `LARGE_MODEL_BYTES`. Supply measured `bytes` when the params estimate would mislead — ASR's fp32
+  decoder makes the WASM download ~3x the estimate.
+- **Heavy/experimental models are gated, not auto-loaded.** `/text-to-audio` (MusicGen, 571 MB q8 /
+  ~1 GB fp16) states its size and speed cost and downloads nothing until the user opts in — an E2E
+  spec asserts zero Hub requests before the click. Use the same pattern for anything this heavy.
+  MusicGen also needs `MusicgenForConditionalGeneration` directly: the `text-to-audio` **pipeline**
+  throws "Missing the following inputs: input_ids" on 4.2.0.
+- **Unit tests mock the network and ORT, so they cannot catch a broken model.** Both bugs above
+  shipped past a green suite. The `@slow` E2E specs (`e2e/specs/audio-models.spec.ts`) are the guard.
 
 **Two Base UI gotchas (carried over from the Radix → Base UI migration):**
 

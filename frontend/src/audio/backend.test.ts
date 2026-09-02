@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { loadOpts, pickBackend } from "./backend";
+import { asrLoadOpts, loadOpts, pickBackend } from "./backend";
 
 /** Install (or remove) a fake `navigator.gpu` for the duration of a test. */
 function setGpu(gpu: unknown) {
@@ -42,5 +42,17 @@ describe("loadOpts", () => {
   it("uses fp16 on WebGPU and q8 on WASM", () => {
     expect(loadOpts("webgpu")).toEqual({ device: "webgpu", dtype: "fp16" });
     expect(loadOpts("wasm")).toEqual({ device: "wasm", dtype: "q8" });
+  });
+});
+
+describe("asrLoadOpts", () => {
+  it("keeps the decoder at fp32 on WASM but stays fp16 on WebGPU", () => {
+    // The quantized Whisper/Moonshine decoders fail to open a session on the
+    // WASM execution provider bundled with @huggingface/transformers 4.2.0.
+    expect(asrLoadOpts("wasm")).toEqual({
+      device: "wasm",
+      dtype: { encoder_model: "q8", decoder_model_merged: "fp32" },
+    });
+    expect(asrLoadOpts("webgpu")).toEqual({ device: "webgpu", dtype: "fp16" });
   });
 });

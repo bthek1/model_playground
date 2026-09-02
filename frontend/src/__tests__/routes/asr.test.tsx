@@ -13,7 +13,7 @@ const playCtx = {
   resume: vi.fn(),
   close: vi.fn(),
 };
-const playMock = vi.fn((..._args: unknown[]) => playCtx);
+const playMock = vi.fn<(...args: unknown[]) => typeof playCtx>(() => playCtx);
 vi.mock("@/audio/io", () => ({
   decodeToMono: vi.fn().mockResolvedValue(decoded),
   play: (...args: unknown[]) => playMock(...args),
