@@ -2,7 +2,7 @@
 // wav2vec2-KS) return top-k tags via `audio-classification`; CLAP scores the clip
 // against your own free-text prompts via `zero-shot-audio-classification`. Both
 // run client-side in the generic pipeline Web Worker (WebGPU, WASM fallback);
-// audio is decoded to 16 kHz mono. See docs/plans/…/audio-models-in-browser.md.
+// audio is decoded to 16 kHz mono. See docs/plans/completed/audio-models-in-browser.md.
 
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, Mic, Tags, Upload } from "lucide-react";

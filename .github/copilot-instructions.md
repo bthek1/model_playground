@@ -263,7 +263,7 @@ export const Route = createFileRoute('/users/$userId')({
   ONNX Runtime, or WebLLM *to this runtime* — its kernels are hand-written for control and a minimal
   bundle. That constraint is scoped to `src/webgpu/`: running **pretrained** models in the UI (audio
   ASR/TTS/classification, etc.) may use Transformers.js / ONNX Runtime Web on WebGPU or WASM. See
-  `docs/plans/in-progress/audio-models-in-browser.md`.
+  `docs/plans/completed/audio-models-in-browser.md`.
 - GPU types come from `@webgpu/types` (registered in `tsconfig.app.json` `types`).
 - Pipeline (see `runtime.ts::runMatmul` for the reference): `getGPUDevice()` (memoised, re-acquires
   after device-lost) → `createComputePipeline(device, wgsl)` → storage/uniform buffers (`buffers.ts`)
@@ -349,13 +349,29 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   speed cost and downloads nothing until the user opts in; an E2E spec asserts zero Hub requests
   before the click. MusicGen also needs `MusicgenForConditionalGeneration` directly — the
   `text-to-audio` *pipeline* throws "Missing the following inputs: input_ids" on 4.2.0.
-- **Audio-to-Audio stays server-side.** The DeepFilterNet ONNX exports are the neural graph only
-  (ERB/spectral features in, mask + filter coefficients out); a browser port means hand-writing a
-  48 kHz STFT, ERB filterbank, streaming normalisation and overlap-add. See the plan.
+- **Audio-to-Audio (`src/audio/enhance/`) is the one task with no Transformers.js path.** The
+  DeepFilterNet3 export is the neural graph only (normalised ERB/spectral features in, mask + complex
+  filter coefficients out), so it runs on **`onnxruntime-web` directly** and the STFT, ERB filterbank,
+  feature normalisation, deep filtering and overlap-add are all ours. Four rules:
+  - **48 kHz, not 16 kHz.** Native rate for DFN3, and the only audio route that isn't 16 kHz. Pass
+    `SAMPLE_RATE` to `decodeToMono` / `recordMic`; a 16 kHz assumption leaking in from ASR throws
+    away exactly the band the model repairs.
+  - **Import ORT as `onnxruntime-web/webgpu`** — the same subpath `@huggingface/transformers` uses, so
+    Vite emits one shared WASM asset. The bare entry adds a second 26 MB build. It is also listed in
+    `optimizeDeps.include`, because discovering it inside a Worker mid-session forces a reload that
+    resets a route mid-load.
+  - **Validate `deepfilter-auxiliary.bin` on load and refuse to run on a mismatch** (`parseAux`). It is
+    124 KB of untyped float32; the forward matrix is `[481,32]` and the inverse `[32,481]` — *different*
+    orders, and a transposed read still looks like a valid matrix.
+  - **Wrong DSP fails silently**, so it is pinned against the official implementation (libDF) via a
+    captured fixture, not against our own expectations. The scaling constant in particular
+    (`SPEC_SCALE = 2*hop/fft²`) is load-bearing: the unit-norm feature divides by `sqrt(state)` and is
+    not level-invariant, so dropping it makes the network mask clean speech away. `just fe-e2e-enhance`
+    measures a real SDR improvement end to end.
 - **Unit tests mock the network and ORT, so they cannot catch a broken model.** The `@slow` E2E
   specs (`e2e/specs/audio-models.spec.ts`) are the guard.
 - Adding a task: catalogue entry → worker (reuse the generic one) → hook → route → `REAL_ROUTES`.
-  See `docs/guides/adding-a-model.md` §8.
+  See `docs/guides/adding-a-model.md` §8 (Transformers.js) or §9 (a bare ONNX graph, like DFN3).
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
@@ -366,7 +382,8 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - Test: `just fe-test`
 - Test UI: `just fe-test-ui`
 - End-to-end: `just fe-e2e` (browsers: `just fe-e2e-install`; UI: `just fe-e2e-ui`)
-- Real model loads: `just fe-e2e-slow` (minutes, needs network); ids only: `just fe-e2e-models`
+- Real model loads: `just fe-e2e-slow` (minutes, needs network); ids only: `just fe-e2e-models`;
+  speech enhancement only: `just fe-e2e-enhance`
 - Install deps: `just fe-install`
 
 ---

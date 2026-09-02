@@ -52,6 +52,7 @@ const REAL_ROUTES: Record<string, string> = {
   "audio-classification": "/audio-classification",
   "text-to-speech": "/text-to-speech",
   "text-to-audio": "/text-to-audio",
+  "audio-to-audio": "/audio-to-audio",
 };
 
 function task(label: string): TaskItem {

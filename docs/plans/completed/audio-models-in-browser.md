@@ -1,8 +1,12 @@
 # Audio Models in the Browser (Transformers.js / ONNX Runtime Web)
 
-**Status:** In Progress (Phases 1–4 and 6 complete; Phase 5 partially complete — Text-to-Audio
-shipped, Audio-to-Audio deliberately left server-side. All in-browser tasks **verified in a real
-browser**.)
+**Status:** Complete (2026-09-02)
+
+All six phases are done and verified in a real browser, on both backends. ASR, audio
+classification, text-to-speech and text-to-audio all run client-side; WebGPU and the mic capture
+loop were confirmed on real hardware by the maintainer. **Audio-to-Audio continues under its own
+plan** — [`audio-to-audio-deepfilternet.md`](./audio-to-audio-deepfilternet.md) — because a
+client-side DeepFilterNet is a DSP subsystem in its own right, not a phase of this one.
 
 Bring the audio tasks from the `DL_tasks/nbs/Audio/` notebooks into the React frontend,
 running the models **client-side** on the user's GPU (WebGPU) or CPU (WASM) — no Python
@@ -208,10 +212,10 @@ Port of `00_Text_to_Speech`. Uses the Phase-1 `play`/`toWavBlob` output helpers.
 - `src/routes/text-to-speech.tsx` (+ hook): text input, voice/model picker, play + download-WAV.
 - Map `text-to-speech → /text-to-speech`.
 
-## Phase 5 — Partial / server-boundary tasks (Text-to-Audio, Audio-to-Audio) 🟡
+## Phase 5 — Partial / server-boundary tasks (Text-to-Audio, Audio-to-Audio) ✅
 
-*Text-to-Audio **shipped**; Audio-to-Audio **researched and deliberately not built** — the
-in-browser path is a DSP project, not a wiring job. Details below.*
+*Text-to-Audio **shipped**. Audio-to-Audio was researched here, then **split into its own plan**
+once the maintainer chose to build it client-side — the research below is why it needed one.*
 
 ### Text-to-Audio (`01`) — done ✅
 
@@ -237,7 +241,22 @@ Three things the build turned up:
 Speed measured on WASM (no GPU): ~50 audio tokens per second of compute, i.e. roughly 6× slower
 than real time. Fine for the 1–15 s toy the route offers; the slider caps at 15 s for that reason.
 
-### Audio-to-Audio (`03`) — not built, and here is why ❌
+### Audio-to-Audio (`03`) — client-side, per maintainer decision ➡️
+
+**Decision (2026-09-02): this ships client-side.** The recommendation below was to keep it
+server-side; the maintainer has decided otherwise, so it is being built in the browser. The
+research still stands as the statement of what that costs — it is a real DSP implementation, not
+a wiring job — so it gets **its own phased plan** rather than being squeezed in here:
+[`audio-to-audio-deepfilternet.md`](./audio-to-audio-deepfilternet.md).
+
+One material find since: the export ships a **`deepfilter-auxiliary.bin`** containing the canonical
+**ERB matrices and Vorbis window** (verified: 481x32 forward band-mean matrix whose columns sum to
+1, 481x32 inverse broadcast matrix whose column sums are the band widths, and a 960-sample window
+that is symmetric and power-complementary to 7e-8). That removes the largest correctness risk —
+the ERB band edges no longer have to be re-derived and hoped to match.
+
+<details>
+<summary>Original research (the case for server-side)</summary>
 
 The plan proposed **DeepFilterNet** speech enhancement via `onnxruntime-web` on framed audio. The
 research says that is a much bigger job than "add a dependency":
@@ -255,10 +274,10 @@ research says that is a much bigger job than "add a dependency":
   and "subtly wrong DSP" doesn't fail loudly — it produces plausible audio with artefacts.
 
 That is a self-contained project with its own plan and its own testing story, not a phase of this
-one. **Recommendation:** keep Audio-to-Audio server-side (where `torchaudio`/`speechbrain` already
-do this correctly) and leave the taxonomy entry pointing at the `/tasks/$slug` placeholder — which a
-test now asserts, so nobody wires it up by accident. Demucs stem separation was already server-side
-in the original plan for the same class of reason.
+one. **Recommendation (superseded):** keep Audio-to-Audio server-side. Demucs stem separation stays
+server-side regardless — it is large and non-causal.
+
+</details>
 
 ### Audio-Text-to-Text (multimodal) — out of scope, unchanged
 
@@ -294,7 +313,7 @@ note — all three engines and all three routes. Unit-tested and manually verifi
   (one-model-live, warm-up, never block the main thread), hook + route, the `REAL_ROUTES` entry, and how
   to verify. The intro now splits the guide into the custom-kernel path (§1–6) and the pretrained path (§7).
 - n/a **`api-contracts.md`** — unchanged, as planned: Phases 1–4 and 6 add no server endpoint. Revisit in Phase 5.
-- ⏳ Move this plan to `docs/plans/completed/` when `Status` reaches `Complete` (after Phase 5).
+- ✅ Moved to `docs/plans/completed/` on completion (2026-09-02).
 
 ---
 
@@ -306,7 +325,7 @@ note — all three engines and all three routes. Unit-tested and manually verifi
 | **Audio classification** (`04`) | Yes — full | AST / wav2vec2 / CLAP (ONNX) | WASM or WebGPU | — | 3 |
 | **TTS** (`00`) | Yes | Kokoro-82M (`kokoro-js`), MMS-VITS, SpeechT5 | WebGPU (Kokoro) / WASM | Bark → server | 4 |
 | **Text-to-Audio** (`01`) | ✅ Yes, gated | MusicGen-small (1-15 s clips) | WebGPU / WASM | AudioLDM / Stable Audio → server | 5 |
-| **Audio-to-Audio** (`03`) | ❌ Not viable in scope | — (DFN export is graph-only; needs a full STFT/ERB stack) | — | DeepFilterNet / Demucs / VC → server | 5 |
+| **Audio-to-Audio** (`03`) | ➡️ Client-side, own plan | DeepFilterNet3 (custom ONNX + our STFT/ERB stack) | WASM / WebGPU | Demucs / VC → server | [own plan](./audio-to-audio-deepfilternet.md) |
 | **Audio-Text-to-Text** (multimodal) | No | — | — | server API | out |
 
 Rule of thumb: **discriminative + small** (ASR, classification, small TTS) runs great client-side;
@@ -352,8 +371,9 @@ below); later phases extend the same patterns.
     nothing crashes.
   - Phase 6 features confirmed live: the **"Warming up the model…"** state appears between download
     and ready, and the size note + amber **large-model warning** render on Whisper-base and CLAP.
-  - ⏳ **Still unverified:** the **WebGPU** path (no GPU on this machine) and the **mic** capture loop
-    (no audio input in headless). Both need a human on real hardware.
+  - ✅ **WebGPU and the mic capture loop confirmed working by the maintainer on real hardware
+    (2026-09-02)** — the two things this environment could not exercise (no GPU device, no audio
+    input in headless). All backends and both input paths are now verified.
 - ✅ **Regression specs (2026-09-02).** The manual checks are now permanent Playwright specs:
   - `e2e/specs/audio.spec.ts` — 10 specs in the **default** run (~5 s). Every Hugging Face request is
     aborted, so they assert the route shell, the size-guardrail warning firing on the heavy model and

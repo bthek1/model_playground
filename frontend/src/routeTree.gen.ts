@@ -17,6 +17,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
 import { Route as AudioClassificationRouteImport } from './routes/audio-classification'
 import { Route as AsrRouteImport } from './routes/asr'
 import { Route as IndexRouteImport } from './routes/index'
@@ -62,6 +63,11 @@ const HomeRoute = HomeRouteImport.update({
   path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AudioToAudioRoute = AudioToAudioRouteImport.update({
+  id: '/audio-to-audio',
+  path: '/audio-to-audio',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AudioClassificationRoute = AudioClassificationRouteImport.update({
   id: '/audio-classification',
   path: '/audio-classification',
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/asr': typeof AsrRoute
   '/audio-classification': typeof AudioClassificationRoute
+  '/audio-to-audio': typeof AudioToAudioRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
@@ -101,6 +108,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/asr': typeof AsrRoute
   '/audio-classification': typeof AudioClassificationRoute
+  '/audio-to-audio': typeof AudioToAudioRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
@@ -116,6 +124,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/asr': typeof AsrRoute
   '/audio-classification': typeof AudioClassificationRoute
+  '/audio-to-audio': typeof AudioToAudioRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
@@ -132,6 +141,7 @@ export interface FileRouteTypes {
     | '/'
     | '/asr'
     | '/audio-classification'
+    | '/audio-to-audio'
     | '/home'
     | '/login'
     | '/playground'
@@ -146,6 +156,7 @@ export interface FileRouteTypes {
     | '/'
     | '/asr'
     | '/audio-classification'
+    | '/audio-to-audio'
     | '/home'
     | '/login'
     | '/playground'
@@ -160,6 +171,7 @@ export interface FileRouteTypes {
     | '/'
     | '/asr'
     | '/audio-classification'
+    | '/audio-to-audio'
     | '/home'
     | '/login'
     | '/playground'
@@ -175,6 +187,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AsrRoute: typeof AsrRoute
   AudioClassificationRoute: typeof AudioClassificationRoute
+  AudioToAudioRoute: typeof AudioToAudioRoute
   HomeRoute: typeof HomeRoute
   LoginRoute: typeof LoginRoute
   PlaygroundRoute: typeof PlaygroundRoute
@@ -244,6 +257,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/audio-to-audio': {
+      id: '/audio-to-audio'
+      path: '/audio-to-audio'
+      fullPath: '/audio-to-audio'
+      preLoaderRoute: typeof AudioToAudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/audio-classification': {
       id: '/audio-classification'
       path: '/audio-classification'
@@ -279,6 +299,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AsrRoute: AsrRoute,
   AudioClassificationRoute: AudioClassificationRoute,
+  AudioToAudioRoute: AudioToAudioRoute,
   HomeRoute: HomeRoute,
   LoginRoute: LoginRoute,
   PlaygroundRoute: PlaygroundRoute,

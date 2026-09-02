@@ -19,6 +19,15 @@ export default defineConfig(({ mode }) => {
       // like https://192.168.2.106:5180 needs TLS for the GPU API to appear.
       basicSsl(),
     ],
+    // Pre-bundle the ONNX Runtime entry the enhancement worker imports. Left to
+    // discovery, Vite first meets it inside a Web Worker mid-session, re-optimises,
+    // and triggers a full page reload — which resets a route that had just started
+    // loading a model. Naming it here means the optimiser has it before the server
+    // accepts a request. (`@huggingface/transformers` imports the same subpath, so
+    // this is one shared bundle, not a second copy — see audio/enhance/session.ts.)
+    optimizeDeps: {
+      include: ["onnxruntime-web/webgpu"],
+    },
     resolve: {
       alias: {
         "@": resolve(__dirname, "./src"),

@@ -48,6 +48,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | API endpoints & request/response shapes | [`docs/standards/api-contracts.md`](docs/standards/api-contracts.md) |
 | Local dev setup | [`docs/guides/local-setup.md`](docs/guides/local-setup.md) |
 | **End-to-end tests (Playwright)** | [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md) |
+| **A model with no Transformers.js task (bare ONNX)** | [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §9 |
 | Celery / async tasks | [`docs/guides/celery_setup.md`](docs/guides/celery_setup.md) |
 | Feature plans (phased) | [`docs/plans/in-progress/`](docs/plans/in-progress/) (active), [`docs/plans/completed/`](docs/plans/completed/) (done) |
 
@@ -75,6 +76,7 @@ just fe-build       # type-check + build
 just fe-test        # vitest (unit/component)
 just fe-e2e         # playwright end-to-end (mocked API, no backend needed)
 just fe-e2e-slow    # @slow specs: real model downloads + real ONNX sessions (minutes)
+just fe-e2e-enhance # @slow speech-enhancement specs (DeepFilterNet3, WASM + WebGPU)
 just fe-e2e-models  # check every audio model id resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -147,7 +149,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   (in `tsconfig.app.json` `types`). This rule scopes to the hand-written runtime — running *pretrained*
   models in the UI (audio ASR/TTS/classification, etc.) may use **Transformers.js / ONNX Runtime Web**,
   which run the same HF checkpoints on WebGPU or WASM. See
-  [`docs/plans/in-progress/audio-models-in-browser.md`](docs/plans/in-progress/audio-models-in-browser.md).
+  [`docs/plans/completed/audio-models-in-browser.md`](docs/plans/completed/audio-models-in-browser.md).
 - The pipeline: `getGPUDevice()` (memoised, device-lost aware) → `createComputePipeline(wgsl)` →
   storage/uniform buffers (`buffers.ts`) → `dispatchWorkgroups` → `readBackFloat32`. `runtime.ts` is
   the reference (`runMatmul`).
@@ -165,9 +167,10 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 ### In-browser pretrained models (`src/audio/`)
 
 The carve-out from the raw-WebGPU rule: pretrained HF checkpoints (audio ASR/TTS/classification) run
-through **Transformers.js** (`@huggingface/transformers`, plus `kokoro-js` for TTS). Keep this out of
-`src/webgpu/` — the two runtimes never mix. See
-[`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §8 for the full recipe.
+through **Transformers.js** (`@huggingface/transformers`, plus `kokoro-js` for TTS), and one task —
+speech enhancement — runs on **`onnxruntime-web` directly**. Keep both out of `src/webgpu/` — the
+runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §8
+(Transformers.js) and §9 (a bare ONNX graph) for the full recipes.
 
 - **One worker per modality, not per task.** Discriminative tasks share the generic
   `pipeline.worker.ts` (the task string travels in the `load` message). ASR keeps its own worker (it
@@ -198,8 +201,25 @@ through **Transformers.js** (`@huggingface/transformers`, plus `kokoro-js` for T
   spec asserts zero Hub requests before the click. Use the same pattern for anything this heavy.
   MusicGen also needs `MusicgenForConditionalGeneration` directly: the `text-to-audio` **pipeline**
   throws "Missing the following inputs: input_ids" on 4.2.0.
+- **Audio-to-Audio (`src/audio/enhance/`) has no Transformers.js path at all.** DeepFilterNet3
+  publishes the neural graph only — normalised ERB/spectral features in, an ERB mask plus complex
+  deep-filter coefficients out — so the STFT, ERB filterbank, feature normalisation, deep filtering
+  and overlap-add are ours. Its four standing rules:
+  - **48 kHz, not 16 kHz** — the only audio route that isn't. Pass `SAMPLE_RATE` to `decodeToMono` /
+    `recordMic`; a 16 kHz assumption leaking in from ASR discards the band the model repairs.
+  - **Import ORT as `onnxruntime-web/webgpu`**, the same subpath Transformers.js uses, so Vite emits
+    one shared WASM asset (the bare entry adds a second 26 MB build). It is in `optimizeDeps.include`
+    too: discovered inside a Worker mid-session, Vite re-optimises and reloads the page mid-load.
+  - **Validate `deepfilter-auxiliary.bin` on load and refuse to run on a mismatch** (`parseAux`) —
+    124 KB of untyped float32 whose forward matrix is `[481,32]` and inverse `[32,481]`, *different*
+    orders, where a transposed read still looks like a valid matrix.
+  - **Wrong DSP fails silently**, so it is pinned against the official implementation (libDF) through a
+    captured fixture rather than against our own expectations. `SPEC_SCALE = 2*hop/fft²` is
+    load-bearing: the unit-norm feature divides by `sqrt(state)` and is *not* level-invariant, so
+    dropping it makes the network mask clean speech away as noise.
 - **Unit tests mock the network and ORT, so they cannot catch a broken model.** Both bugs above
-  shipped past a green suite. The `@slow` E2E specs (`e2e/specs/audio-models.spec.ts`) are the guard.
+  shipped past a green suite. The `@slow` E2E specs (`e2e/specs/audio-models.spec.ts`) are the guard;
+  `just fe-e2e-enhance` additionally measures a real SDR improvement for the enhancement route.
 
 **Two Base UI gotchas (carried over from the Radix → Base UI migration):**
 

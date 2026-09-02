@@ -72,6 +72,7 @@ from Hugging Face (80–220 MB per model) and open a real ONNX Runtime session:
 ```bash
 just fe-e2e-slow      # sets E2E_SLOW=1 — ~2.5 min, needs network
 just fe-e2e-models    # the cheap half: every model id must resolve (~3 s)
+just fe-e2e-enhance   # speech enhancement on both backends (~20 s + download)
 ```
 
 **These are not optional nice-to-haves.** Two audio bugs shipped past a fully
@@ -86,6 +87,16 @@ green unit suite because both lived in exactly what the unit tests mock away:
 A mocked test cannot see either. `audio-models.spec.ts` asserts that each model
 actually reaches "Model ready", and that Whisper transcribes the JFK sample to
 the right *words* — a model that loads but decodes garbage is still broken.
+
+`/audio-to-audio` raises the bar again, because its pre/post-processing is ours
+rather than Transformers.js's, and wrong DSP produces plausible audio instead of
+an error. Its spec therefore **measures**: `e2e/utils/enhance.ts` runs the real
+graph in the page over a synthetic noisy clip and asserts the scale-invariant
+SDR improves by at least 6 dB. It drives the modules directly via `page.evaluate`
+(`import("/src/audio/enhance/session.ts")` — the Vite dev server serves the app's
+own TypeScript) rather than the UI, because the route offers no way to read
+samples back out and "a waveform appeared" cannot tell good audio from metallic.
+The WebGPU half lives in `webgpu/enhance.spec.ts` and skips without a real GPU.
 
 ---
 
@@ -106,6 +117,8 @@ frontend/
       audio.spec.ts        # audio routes with downloads blocked — fast, default run
       audio-models.spec.ts # @slow: real weights, real ONNX sessions
       webgpu/              # the GPU-only project
+    utils/
+      enhance.ts           # in-page enhancement run + SDR measurement
 ```
 
 **Every spec imports `test` and `expect` from `../fixtures/base`**, never from

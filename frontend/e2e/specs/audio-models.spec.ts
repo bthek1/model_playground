@@ -1,4 +1,5 @@
 import { AudioPage } from "../pages/AudioPage";
+import { MIN_SDR_GAIN_DB, measureEnhancement } from "../utils/enhance";
 import { expect, test } from "../fixtures/base";
 
 // @slow — these download real ONNX weights from Hugging Face (80-220 MB each)
@@ -120,6 +121,62 @@ test.describe("@slow real model loads", () => {
   });
 });
 
+// The enhancement route is a different kind of risk from the others. Its model
+// loads or doesn't like any other, but its *DSP* is ours — and wrong DSP does
+// not throw, it produces plausible audio with artefacts. The unit tests pin the
+// pipeline against arrays captured from the reference implementation; these
+// close the loop by running the real graph in a real browser and measuring.
+//
+// This file covers the WASM path — the universal fallback, and the one the
+// `["webgpu", "wasm"]` provider list has to reach on its own. The WebGPU half
+// lives in `webgpu/enhance.spec.ts`, which needs a real GPU.
+test.describe("@slow speech enhancement", () => {
+  test.describe.configure({ mode: "serial", timeout: DOWNLOAD_BUDGET_MS });
+
+  test("enhances a noisy clip on wasm", async ({ page, mockApi }) => {
+    await mockApi();
+    await page.goto("/audio-to-audio");
+
+    const { before, after, samples } = await measureEnhancement(page, "wasm");
+
+    expect(samples).toBeGreaterThan(0);
+    expect(before).toBeLessThan(1);
+    expect(after - before).toBeGreaterThan(MIN_SDR_GAIN_DB);
+  });
+
+  test("the route enhances an uploaded file end to end", async ({
+    page,
+    mockApi,
+    request,
+  }) => {
+    await mockApi();
+    const audio = new AudioPage(page);
+    await page.goto("/audio-to-audio");
+
+    await page.getByTestId("load-model").click();
+    await audio.waitForReady(DOWNLOAD_BUDGET_MS);
+    expect(["webgpu", "wasm"]).toContain(await audio.backend());
+
+    const clip = await request.get(
+      "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav",
+    );
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "jfk.wav",
+      mimeType: "audio/wav",
+      buffer: await clip.body(),
+    });
+
+    // Both rows only render once real samples came back from the worker.
+    await expect(page.getByText("Noisy input")).toBeVisible({
+      timeout: DOWNLOAD_BUDGET_MS,
+    });
+    await expect(page.getByText("Enhanced")).toBeVisible({
+      timeout: DOWNLOAD_BUDGET_MS,
+    });
+    await expect(audio.error).toHaveCount(0);
+  });
+});
+
 test.describe("@slow model catalogue", () => {
   test("every catalogue model id resolves on the Hugging Face Hub", async ({
     request,
@@ -130,12 +187,14 @@ test.describe("@slow model catalogue", () => {
     const { CLASSIFIER_MODELS } = await import("../../src/audio/classification");
     const { TTS_MODELS } = await import("../../src/audio/tts");
     const { MUSIC_MODELS } = await import("../../src/audio/textToAudio");
+    const { ENHANCE_MODELS } = await import("../../src/audio/enhance/types");
 
     const ids = [
       ...ASR_MODELS,
       ...CLASSIFIER_MODELS,
       ...TTS_MODELS,
       ...MUSIC_MODELS,
+      ...ENHANCE_MODELS,
     ].map((m) => m.id);
     expect(ids.length).toBeGreaterThan(0);
 

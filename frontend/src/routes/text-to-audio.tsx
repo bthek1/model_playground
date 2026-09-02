@@ -5,7 +5,7 @@
 // autoregressive (seconds of compute per second of audio), so nothing is
 // downloaded until the user explicitly opts in. Longer-form music and the
 // diffusion models (AudioLDM, Stable Audio) have no browser path — those belong
-// on a server. See docs/plans/in-progress/audio-models-in-browser.md.
+// on a server. See docs/plans/completed/audio-models-in-browser.md.
 
 import { createFileRoute } from "@tanstack/react-router";
 import {

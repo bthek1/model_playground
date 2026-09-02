@@ -66,6 +66,46 @@ test.describe("audio routes", () => {
     await expect(page.getByLabel(/Prompt/)).toBeVisible();
   });
 
+  // /audio-to-audio is the one route with no Transformers.js path — the DSP is
+  // ours and the model is a bare ONNX graph. It is small (~8 MB), but it still
+  // downloads on an explicit action, so the gate is the spec here too.
+  test("/audio-to-audio downloads nothing until Load model is clicked", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const audio = new AudioPage(page);
+
+    const hubRequests: string[] = [];
+    await page.route(
+      (url) => url.hostname.endsWith("huggingface.co"),
+      (route) => {
+        hubRequests.push(route.request().url());
+        return route.abort();
+      },
+    );
+
+    await page.goto("/audio-to-audio");
+    await expect(
+      page.getByRole("heading", { name: "Audio to Audio" }),
+    ).toBeVisible();
+    // The native rate is called out — every other audio route is 16 kHz.
+    await expect(page.getByText(/48\s*kHz/).first()).toBeVisible();
+    await expect(audio.sizeNote).toBeVisible();
+    // 8 MB is nowhere near the guardrail, so it must stay quiet.
+    await expect(audio.largeModelWarning).toHaveCount(0);
+    expect(hubRequests, "no weights before the user asks").toEqual([]);
+
+    // Transport is dead until a model is loaded.
+    await expect(audio.modelButton(/Upload audio/)).toBeDisabled();
+    await expect(audio.modelButton(/Record/)).toBeDisabled();
+
+    await page.getByTestId("load-model").click();
+    // With the Hub blocked the load must fail visibly rather than spin forever.
+    await expect(audio.error).toBeVisible({ timeout: 30_000 });
+    expect(hubRequests.length).toBeGreaterThan(0);
+  });
+
   for (const route of ROUTES) {
     test(`${route.path} renders its shell without a model download`, async ({
       page,

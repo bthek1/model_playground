@@ -4,7 +4,7 @@
 // live as you speak. Audio is decoded to 16 kHz mono via the Web Audio API. The
 // take is retained and visualized as a waveform (live while recording, static
 // after) and can be replayed, downloaded, or re-transcribed with another model.
-// See docs/plans/in-progress/audio-models-in-browser.md.
+// See docs/plans/completed/audio-models-in-browser.md.
 
 import { createFileRoute } from "@tanstack/react-router";
 import {

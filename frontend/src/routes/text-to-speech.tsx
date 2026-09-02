@@ -2,7 +2,7 @@
 // default; MMS-VITS and SpeechT5 run via the Transformers.js `text-to-speech`
 // pipeline. Synthesis runs client-side in the TTS Web Worker (WebGPU, WASM
 // fallback); the result plays through the Web Audio API and downloads as WAV.
-// See docs/plans/in-progress/audio-models-in-browser.md.
+// See docs/plans/completed/audio-models-in-browser.md.
 
 import { createFileRoute } from "@tanstack/react-router";
 import { AudioLines, Download, Loader2, Play, Volume2 } from "lucide-react";

@@ -223,3 +223,67 @@ against a fake `Worker`, and the route's rendering. Then check it for real —
 `just fe-dev` over **HTTPS** (`navigator.gpu` needs a secure context), load the
 model on WebGPU *and* with WebGPU disabled to force the WASM fallback, and switch
 models a few times watching that memory doesn't grow.
+
+---
+
+## 9. Adding a custom-ONNX task (no Transformers.js)
+
+Some models have no Transformers.js task at all: they publish a bare ONNX graph
+that takes hand-built feature tensors and returns hand-interpreted outputs.
+`/audio-to-audio` (DeepFilterNet3) is the reference example — see
+[`docs/plans/completed/audio-to-audio-deepfilternet.md`](../plans/completed/audio-to-audio-deepfilternet.md)
+and `src/audio/enhance/`.
+
+The route, worker, hook and page pattern are **unchanged** — reuse
+`useModelWorker`, the engine's three duties, `ModelPicker`, `ModelStatus`. Only
+the layer below the engine differs:
+
+**a. Import ONNX Runtime from the same entry Transformers.js uses.**
+
+```ts
+import * as ort from "onnxruntime-web/webgpu";
+```
+
+`onnxruntime-web` is pinned in `package.json` to the exact version
+`@huggingface/transformers` depends on, so npm dedupes to one copy. The
+**subpath matters as much as the version**: the bare `onnxruntime-web` entry
+resolves to a different build and makes Vite emit a *second* 26 MB WASM asset.
+Import `/webgpu` and both share one. Add the subpath to `optimizeDeps.include`
+in `vite.config.ts` too — discovered mid-session inside a Web Worker, Vite
+re-optimises and triggers a full page reload that resets a route mid-load.
+
+Check what actually shipped after any change here:
+
+```bash
+just fe-build
+grep -o "ort-wasm[^\"']*\.wasm" frontend/dist/assets/*.worker-*.js | sort -u
+```
+
+**b. Own the pre/post-processing, and treat it as the risky part.** The graph is
+the easy half. `src/audio/enhance/` is ~600 lines of DSP against ~80 lines of
+session code, and none of the DSP fails loudly — a wrong constant yields
+plausible audio with artefacts, not an exception.
+
+So: **validate against the reference implementation, not against your
+expectations.** For DeepFilterNet3 that meant running the official
+`DeepFilterNet` package (its `libDF` wheel needs Python ≤3.11) over the same
+input and comparing arrays at each stage. That caught what reading the model
+card could not — the analysis spectrum has to carry libDF's `wnorm` scaling
+(`2 * hop / fft²`), because the unit-norm feature divides by `sqrt(state)` and
+is therefore *not* level-invariant. Without it the network sees a signal ~31x
+too loud and masks clean speech away as noise, silently. Capture the reference
+arrays as a JSON fixture (`src/audio/enhance/__fixtures__/`) so the unit tests
+keep checking against them.
+
+**c. Validate the constants file on load, and refuse to run on a mismatch.**
+DeepFilterNet3 ships `deepfilter-auxiliary.bin`: 124 KB of untyped float32 whose
+layout is documented in prose. `parseAux` asserts every invariant it can (band
+sums, contiguity, window symmetry and power-complementarity) and throws rather
+than emit noise. Note the model card describes the forward matrix as `[481,32]`
+and the inverse as `[32,481]` — they are stored in *different* orders, and
+reading either as the other still yields a plausible-looking matrix.
+
+**d. Add a `@slow` E2E that measures the output.** "A waveform appeared" cannot
+distinguish good audio from metallic. `e2e/utils/enhance.ts` runs the real graph
+in the page on a synthetic noisy clip and asserts the scale-invariant SDR
+improves by ≥6 dB; `e2e/specs/webgpu/enhance.spec.ts` repeats it on the GPU.

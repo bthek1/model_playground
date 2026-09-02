@@ -153,6 +153,11 @@ fe-e2e-full: be-seed-e2e
 fe-e2e-slow:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 audio-models.spec.ts
 
+# Run the @slow speech-enhancement specs (DeepFilterNet3). The WebGPU half runs
+# in the `webgpu` project and skips itself on a machine with no GPU device.
+fe-e2e-enhance:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --project=webgpu --workers=1 --grep "speech enhancement"
+
 # Check every audio model id still resolves on the Hugging Face Hub (seconds)
 fe-e2e-models:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "resolves on the Hugging Face"

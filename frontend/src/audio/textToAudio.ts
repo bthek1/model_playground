@@ -5,7 +5,7 @@
 // (571 MB quantized, ~1.05 GB at fp16). So it is deliberately gated behind an
 // explicit opt-in in the route and never auto-loads. AudioLDM / Stable Audio are
 // `diffusers` latent-diffusion with no Transformers.js path at all — those stay
-// server-side. See docs/plans/…/audio-models-in-browser.md.
+// server-side. See docs/plans/completed/audio-models-in-browser.md.
 //
 // It reuses the **TTS worker**, not a new one: the modality is the same
 // (text in → audio out) and `TtsSynthesizer` already describes it exactly.

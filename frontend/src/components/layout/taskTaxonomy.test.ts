@@ -45,15 +45,16 @@ describe("taskCategories", () => {
     const textGen = all.find((t) => t.slug === "text-generation")!;
     const textToSpeech = all.find((t) => t.slug === "text-to-speech")!;
     const textToAudio = all.find((t) => t.slug === "text-to-audio")!;
-    // Audio-to-Audio has no in-browser path (DeepFilterNet needs a hand-written
-    // STFT/ERB pipeline), so it is still a placeholder — see the plan.
     const audioToAudio = all.find((t) => t.slug === "audio-to-audio")!;
+    // Voice Activity Detection has no in-browser path yet.
+    const vad = all.find((t) => t.slug === "voice-activity-detection")!;
 
     expect(textGen.to).toBe("/playground");
     expect(textToSpeech.to).toBe("/text-to-speech");
     expect(textToAudio.to).toBe("/text-to-audio");
+    expect(audioToAudio.to).toBe("/audio-to-audio");
     // Unmapped tasks fall through to the generic placeholder route.
-    expect(audioToAudio.to).toBe("/tasks/audio-to-audio");
+    expect(vad.to).toBe("/tasks/voice-activity-detection");
   });
 
   it("maps the real Theory tools to their implemented routes", () => {
