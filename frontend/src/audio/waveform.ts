@@ -37,3 +37,14 @@ export function formatDuration(sampleCount: number, sampleRate: number): string 
   const s = total - m * 60;
   return `${m}:${s < 10 ? "0" : ""}${s.toFixed(1)}`;
 }
+
+/**
+ * `m:ss` for a transcript timestamp. Distinct from `formatDuration`, which
+ * shows tenths — a segment boundary reads better without them.
+ */
+export function formatTimestamp(seconds: number): string {
+  const safe = Math.max(0, seconds);
+  const m = Math.floor(safe / 60);
+  const s = Math.floor(safe - m * 60);
+  return `${m}:${s < 10 ? "0" : ""}${s}`;
+}

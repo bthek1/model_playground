@@ -23,7 +23,7 @@ import { useEffect, useRef, useState } from "react";
 import { decodeToMono, play, toWavBlob } from "@/audio/io";
 import { AUDIO_SAMPLES, type AudioSample } from "@/audio/samples";
 import { ASR_MODELS, DEFAULT_ASR_MODEL } from "@/audio/types";
-import { formatDuration } from "@/audio/waveform";
+import { formatDuration, formatTimestamp } from "@/audio/waveform";
 import { ModelPicker } from "@/components/audio/ModelPicker";
 import { ModelStatus } from "@/components/audio/ModelStatus";
 import { LiveWaveform, Waveform } from "@/components/audio/Waveform";
@@ -54,6 +54,7 @@ function AsrPage() {
     clip,
     sampleRate,
     text,
+    chunks,
     error,
     start,
     stop,
@@ -375,13 +376,31 @@ function AsrPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="min-h-16 text-sm leading-relaxed whitespace-pre-wrap">
-            {text.trim() || (
-              <span className="text-muted-foreground">
-                {recording ? "…" : "Your transcript will appear here."}
-              </span>
-            )}
-          </p>
+          {chunks.length > 0 ? (
+            // Timestamped segments when the model returns them (Whisper does;
+            // `return_timestamps: true`). Times are relative to the whole take.
+            <ol className="min-h-16 space-y-1.5">
+              {chunks.map((c, i) => (
+                <li
+                  key={`${c.timestamp[0]}-${i}`}
+                  className="flex gap-3 text-sm leading-relaxed"
+                >
+                  <span className="shrink-0 pt-0.5 font-mono text-xs text-muted-foreground tabular-nums">
+                    {formatTimestamp(c.timestamp[0])}
+                  </span>
+                  <span>{c.text.trim()}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="min-h-16 text-sm leading-relaxed whitespace-pre-wrap">
+              {text.trim() || (
+                <span className="text-muted-foreground">
+                  {recording ? "…" : "Your transcript will appear here."}
+                </span>
+              )}
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

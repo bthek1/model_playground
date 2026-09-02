@@ -1,6 +1,6 @@
 # Plan: Model Page Restructure — Select → Load → Run → Output
 
-**Status:** Draft
+**Status:** In Progress — Phase 1 complete (2026-09-02). Phases 2-6 pending.
 **Date:** 2026-09-02
 
 ---
@@ -47,24 +47,50 @@ an empty version of the same page.
 
 ## Phases
 
-### Phase 1 — Extract the state machine (no visible change)
+### Phase 1 — Extract the state machine (no visible change) ✅
 
-- [ ] Add `frontend/src/model/types.ts`: `ModelStatus` (`idle | loading | ready | error`),
+*Done 2026-09-02. The full suite passes with **378 tests** (up from 364 — the 14 new
+`useModelWorker` tests); every pre-existing hook, route and E2E test passed **unmodified**,
+which is this phase's proof of correctness. `tsc` clean, 0 lint errors, build green.*
+
+- [x] Add `frontend/src/model/types.ts`: `ModelStatus` (`idle | loading | ready | error`),
       `ModelProgress`, `ModelTask<TInput, TOutput, TOpts>` — the §3 contract
-- [ ] Add `frontend/src/model/useModelWorker.ts` — worker creation/teardown keyed on
+- [x] Add `frontend/src/model/useModelWorker.ts` — worker creation/teardown keyed on
       `(factory, model, …deps)`, the id-correlated pending map, the response switch,
       `load()` / `retry()` actions
-- [ ] Track **`inflight` as a count**; derive `running = inflight > 0` (fixes defect 2)
-- [ ] Add `retry()`: `error → loading` without a model change (fixes defect 3)
-- [ ] Keep `autoLoad` defaulting to `true` in this phase so behaviour is unchanged
-- [ ] Rewrite `useTts`, `usePipeline`, `useAsr` as thin wrappers; their public shapes stay
+- [x] Track **`inflight` as a count**; derive `running = inflight > 0` (fixes defect 2)
+- [x] Add `retry()`: `error → loading` without a model change (fixes defect 3)
+- [x] Keep `autoLoad` defaulting to `true` in this phase so behaviour is unchanged
+- [x] Rewrite `useTts`, `usePipeline`, `useAsr` as thin wrappers; their public shapes stay
       backward-compatible (`status`, `loading`, `ready`, `progress`, `backend`, `running`,
       `error`, plus task methods)
-- [ ] Unify the worker message protocols: fold `TtsRequest`/`TtsResponse` and
+- [x] Unify the worker message protocols: fold `TtsRequest`/`TtsResponse` and
       `AsrRequest`/`AsrResponse` into the generic `ModelRequest`/`ModelResponse` in
       `model/types.ts`, leaving only the payload types task-specific
 
-*Exit criteria: full unit + route + E2E suites pass unchanged. No JSX touched.*
+*Exit criteria: full unit + route + E2E suites pass unchanged. No JSX touched.* — **met.**
+
+**Notes from the build:**
+
+- `useModelWorker` keys the worker on a `key` string (`model`, or `` `${task}:${model}` ``)
+  rather than a spread dependency array, so `loadMessage` can be a fresh object each render
+  without respawning the worker. `createWorker`/`loadMessage` live in a ref for the same reason.
+- The protocol unification is **structural, not a rename**: `ModelRequest<TLoad, TRun>` and
+  `ModelResponse<TResult>` carry the envelope, and each task supplies its own payload
+  (`{ audio, args }`, `{ input, args }`, `{ text, opts }`). All three response unions turned out
+  to be identical apart from the result type, so `AsrResponse = ModelResponse<AsrResult>` and
+  friends are exact aliases — no worker or engine code changed, and the engine tests never moved.
+- `run()` forwards a transfer list **only when given one**, preserving TTS's transfer-free
+  `postMessage` call — a blanket `[]` would have been observably different.
+- **One test edit, and it is type-only:** three route tests build a mock hook result object, and
+  `UseTtsResult` / `UseAudioClassifierResult` grew `load` and `retry`. The mocks gained
+  `load: vi.fn(), retry: vi.fn()`. No assertion, behaviour, or expectation changed — the
+  additive-interface consequence the phase rule is not aimed at.
+- Defect 2's regression test was verified to actually catch the old behaviour: reverting the
+  decrement to a boolean-style `setInflight(0)` fails "keeps running true until BOTH overlapping
+  requests resolve", and nothing else.
+- `status` gained `"idle"` in the three public hook types. Nothing reaches it yet — `autoLoad`
+  stays `true` until Phase 3 — but the enum is now the standard's.
 
 ### Phase 2 — The page shell and shared slots
 

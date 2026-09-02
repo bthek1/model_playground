@@ -36,6 +36,9 @@ const baseState: UseTtsResult = {
   running: false,
   error: null,
   synthesize: mockSynthesize,
+  // Machine A actions — additive in the useModelWorker refactor.
+  load: vi.fn(),
+  retry: vi.fn(),
 };
 let mockState: UseTtsResult = { ...baseState };
 

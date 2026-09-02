@@ -6,8 +6,9 @@
 // (text in → audio out) and kokoro-js is a separate heavy dependency that would
 // bloat the classification worker bundle. See docs/plans/…/audio-models-in-browser.md.
 
+import type { ModelRequest, ModelResponse } from "@/model/types";
+
 import type { LoadOpts } from "./backend";
-import type { PipelineProgress } from "./pipelineTypes";
 
 export interface TtsVoice {
   id: string;
@@ -82,15 +83,15 @@ export interface TtsRunOpts {
 }
 
 // --- Worker message protocol -------------------------------------------------
+//
+// The envelope is shared with every other model worker (`model/types.ts`); only
+// the load/run payloads below are TTS-specific.
 
 /** Main thread → worker. */
-export type TtsRequest =
-  | { type: "load"; model: string; opts?: LoadOpts }
-  | { type: "run"; id: number; text: string; opts?: TtsRunOpts };
+export type TtsRequest = ModelRequest<
+  { model: string; opts?: LoadOpts },
+  { text: string; opts?: TtsRunOpts }
+>;
 
 /** Worker → main thread. The result's audio buffer is transferred (zero-copy). */
-export type TtsResponse =
-  | { type: "progress"; progress: PipelineProgress }
-  | { type: "ready"; model: string; backend: LoadOpts["device"] }
-  | { type: "result"; id: number; result: TtsAudio }
-  | { type: "error"; id?: number; error: string };
+export type TtsResponse = ModelResponse<TtsAudio>;

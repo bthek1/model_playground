@@ -43,6 +43,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Adding a model (kernel + registry entry)** | [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) |
 | **Building a task page (Select → Load → Run → Output)** | [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md) |
 | **Visualizing a model & its structure (UI standard)** | [`docs/standards/model-visualization.md`](docs/standards/model-visualization.md) |
+| **Driving a model page (SELECT→LOAD→RUN→OUTPUT)** | [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md) |
 | Auth flow (JWT) | [`docs/explanations/auth-flow.md`](docs/explanations/auth-flow.md) |
 | API endpoints & request/response shapes | [`docs/standards/api-contracts.md`](docs/standards/api-contracts.md) |
 | Local dev setup | [`docs/guides/local-setup.md`](docs/guides/local-setup.md) |
@@ -126,6 +127,14 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - Styling is Tailwind v4 (CSS-first, no config file) + shadcn/ui in the **`base-nova`** style, built on **`@base-ui/react`** primitives (NOT Radix). Add components with `npx shadcn@latest add <component>`.
 - Charts: ECharts via the lazy `src/components/charts/EChart.tsx` wrapper, or Recharts inline. Render Markdown/LLM output with `src/components/Markdown.tsx` (`react-markdown` + `remark-gfm`).
 - **Every task page is the same pipeline: Select → Load → Run → Output** — pick a model, load its weights, run it on an input, show the result. This is the standard in [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md); read it before adding a task route. Two state machines, kept orthogonal: **load** (`idle → loading → ready | error`, with `progress` as a self-loop and `retry()` out of `error`) and **run** (id-correlated requests, `running` derived from an in-flight *count*, never a boolean). Task hooks (`useTts`, `useAsr`, `usePipeline`, `useAudioClassifier`) all return the same contract — `status`/`progress`/`backend`/`load`/`run`/`running`/`result`/`error` — so wrap the shared worker plumbing rather than re-deriving it. Nothing downloads until the user asks: `idle` is the default and the size estimate + large-model warning are shown first. Errors render in the slot that produced them.
+- **Every task page is the same four-stage pipeline** — SELECT → LOAD → RUN → OUTPUT — specified in
+  [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md). The shared worker
+  plumbing lives in **`src/model/useModelWorker.ts`**: worker lifecycle keyed on a `key` string, the
+  id-correlated pending table, and the two state machines (A: `idle → loading → ready | error` with
+  `retry()`; B: per-request, `running` is an **inflight count**, never a boolean — a boolean lies the
+  moment two requests overlap). Task hooks (`useAsr`/`useTts`/`usePipeline`) are thin typed wrappers;
+  don't reimplement the plumbing. Worker messages share one envelope (`ModelRequest`/`ModelResponse`
+  in `src/model/types.ts`) with only the payload per task.
 - **Visualizing models & their structure** follows [`docs/standards/model-visualization.md`](docs/standards/model-visualization.md) — a shared grammar of stage/arrow schematics, canvas weight/activation heatmaps (diverging red=+/blue=−, alpha=magnitude), param chips, theme-token colors, and lazy charts. The primitives live in `components/viz/` (`schematic.tsx`: Stage/Arrow/ParamChip · `heatmap.tsx`: HeatmapTile/DivergingLegend); the Training route (`components/training/`) and Tensor route (`routes/tensor.tsx`) are the reference callers. Reuse those primitives; don't invent parallel ones.
 - Tests: Vitest + Testing Library + MSW (`src/test/server.ts`, `handlers.ts`). `src/test/setup.ts` also polyfills `localStorage` because Node ≥25 ships a stub that shadows the DOM env's.
 - **End-to-end tests are Playwright** (`e2e/`), covering what happy-dom can't: routing/app shell, real-browser auth, and WebGPU. Default run is fully mocked (no backend); `@backend`-tagged specs need `just be-seed-e2e`, and
@@ -177,6 +186,9 @@ through **Transformers.js** (`@huggingface/transformers`, plus `kokoro-js` for T
   breaks the universal fallback entirely. Don't "simplify" it away; re-test when ORT updates.
 - **Check a model id against the Hub before shipping it.** Two entries once pointed at
   `onnx-community/*` repos that don't exist (401). `just fe-e2e-models` verifies all of them in seconds.
+- **ASR timestamps are take-relative.** The live loop re-transcribes only the tail 30 s, so the
+  model's own timestamps restart at 0 on a longer take; `useLiveAsr`'s `shiftChunks()` offsets them
+  by the window start before the route renders `m:ss`. Don't render `chunks` straight from the worker.
 - **Size-before-load guardrail:** every catalogue entry carries `params` (millions); `audio/size.ts` +
   `components/audio/ModelPicker.tsx` quote the download for both backends and warn past
   `LARGE_MODEL_BYTES`. Supply measured `bytes` when the params estimate would mislead — ASR's fp32

@@ -2,6 +2,8 @@
 // shape, and the worker message protocol used by both the engine (worker side)
 // and `useAsr` (main-thread side).
 
+import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
+
 import type { LoadOpts } from "./backend";
 import type { MeasuredBytes } from "./size";
 
@@ -52,16 +54,8 @@ export interface AsrResult {
   chunks?: AsrChunk[];
 }
 
-/** Transformers.js `progress_callback` payload (loosely typed — many variants). */
-export interface AsrProgress {
-  status: string;
-  name?: string;
-  file?: string;
-  /** 0–100 while a file downloads. */
-  progress?: number;
-  loaded?: number;
-  total?: number;
-}
+/** Load/warm-up progress. Alias of the shared `ModelProgress`. */
+export type AsrProgress = ModelProgress;
 
 /** Options forwarded to the ASR pipeline call; mirrors the notebook's flags. */
 export interface AsrRunArgs {
@@ -72,15 +66,15 @@ export interface AsrRunArgs {
 }
 
 // --- Worker message protocol -------------------------------------------------
+//
+// The envelope is shared with every other model worker (`model/types.ts`); only
+// the load/run payloads below are ASR-specific.
 
 /** Main thread → worker. */
-export type AsrRequest =
-  | { type: "load"; model: string; opts?: LoadOpts }
-  | { type: "run"; id: number; audio: Float32Array; args?: AsrRunArgs };
+export type AsrRequest = ModelRequest<
+  { model: string; opts?: LoadOpts },
+  { audio: Float32Array; args?: AsrRunArgs }
+>;
 
 /** Worker → main thread. */
-export type AsrResponse =
-  | { type: "progress"; progress: AsrProgress }
-  | { type: "ready"; model: string; backend: LoadOpts["device"] }
-  | { type: "result"; id: number; result: AsrResult }
-  | { type: "error"; id?: number; error: string };
+export type AsrResponse = ModelResponse<AsrResult>;

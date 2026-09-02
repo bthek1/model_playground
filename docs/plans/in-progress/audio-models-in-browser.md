@@ -100,11 +100,17 @@ ORT WASM asset cleanly.*
 one-model-live dispose), `asr.worker.ts` (thin wrapper), `asrClient.ts` (worker factory),
 `hooks/useAsr.ts` (id-correlated `transcribe`), and `routes/asr.tsx` (model picker, mic/upload,
 load-progress, transcript). `REAL_ROUTES["automatic-speech-recognition"] = "/asr"` wired.
-**Correction (Phase 6 verification):** the route renders the transcript as **plain text, without
-per-chunk timestamps** — the worker still requests `return_timestamps: true` and `useAsr` still
-exposes `chunks`, but the streaming rewrite to `useLiveAsr` surfaces only `text`, and the route
-never renders a timestamp. Earlier revisions of this plan claimed timestamps shipped; they did not.
-See the open follow-up below.
+**Timestamps — restored 2026-09-02.** An earlier revision of this plan claimed a timestamped
+transcript; the streaming rewrite to `useLiveAsr` had dropped it, surfacing only `text`. Now fixed:
+`useLiveAsr` exposes `chunks`, and `routes/asr.tsx` renders each segment as `m:ss` + text, falling
+back to plain text when a model returns no segmentation.
+
+The subtlety is that the live loop only re-transcribes the tail 30 s, so the model's timestamps
+restart at 0 once a take is longer than that — on screen they would rewind mid-recording.
+`shiftChunks()` offsets them by the window start so they stay **relative to the whole take**.
+Unit-tested (offset, open-ended `end: null`, cleared on a new capture) plus `formatTimestamp`
+(`65 → "1:05"`, negatives clamped), and verified in a real browser: the JFK sample renders
+`0:00 · "And so my fellow Americans, ask not what your country can do for you…"`.
 Unit-tested: engine protocol, hook lifecycle, `/asr` route rendering, audio I/O helpers
 (`decodeToMono`/`play`/`recordMic`/`toWavBlob`), and taxonomy mapping — all green (0 lint errors, clean
 build). **Manual browser check still pending** (needs HTTPS + a real model download; see Testing).*
@@ -356,6 +362,9 @@ below); later phases extend the same patterns.
     every catalogue model for real and assert Whisper transcribes JFK to the right words. These are
     the only tests that open a real ONNX Runtime session — the layer both bugs lived in.
   - `just fe-e2e-models` runs the id check alone in ~3 s.
+  - A `@slow` spec asserts the transcript renders as **timestamped `<li>` segments** matching
+    `m:ss`, scoped to the Transcript card. The plan once claimed timestamps while the route rendered
+    plain text; this is the guard against that happening again silently.
 
 ---
 
@@ -412,9 +421,6 @@ names the offending repo, verified by temporarily reverting the id.
 - A shared `<AudioModelRunner>` shell (upload / mic / progress / dispose) factored out once 2–3 audio routes exist.
   *(Partly done in Phase 6: `components/audio/ModelPicker.tsx` now factors out the picker + size
   guardrail that was triplicated across the three routes; the transport controls are still per-route.)*
-- **Per-chunk timestamps in the ASR transcript.** `return_timestamps: true` is requested and the
-  worker returns `chunks`, but `routes/asr.tsx` renders only `text` — the streaming rewrite dropped
-  them. Restoring them means surfacing `chunks` from `useLiveAsr` and rendering `[mm:ss]` per segment.
 - ~~Fold the audio browser checks into the Playwright suite~~ — **done** (2026-09-02):
   `e2e/specs/audio.spec.ts` (10 fast specs, downloads blocked) runs in the default suite, and
   `e2e/specs/audio-models.spec.ts` (5 `@slow` specs) loads every catalogue model for real via

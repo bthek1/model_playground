@@ -36,6 +36,9 @@ const baseState: UseAudioClassifierResult = {
   isZeroShot: false,
   result: null,
   classify: mockClassify,
+  // Machine A actions — additive in the useModelWorker refactor.
+  load: vi.fn(),
+  retry: vi.fn(),
 };
 let mockState: UseAudioClassifierResult = { ...baseState };
 

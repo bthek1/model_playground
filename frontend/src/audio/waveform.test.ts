@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computePeaks, formatDuration } from "./waveform";
+import { computePeaks, formatDuration, formatTimestamp } from "./waveform";
 
 describe("computePeaks", () => {
   it("returns one interleaved [min, max] pair per bucket", () => {
@@ -44,5 +44,18 @@ describe("formatDuration", () => {
 
   it("formats minutes + seconds", () => {
     expect(formatDuration(75 * 16000, 16000)).toBe("1:15.0");
+  });
+});
+
+describe("formatTimestamp", () => {
+  it("renders m:ss without tenths", () => {
+    expect(formatTimestamp(0)).toBe("0:00");
+    expect(formatTimestamp(7.4)).toBe("0:07");
+    expect(formatTimestamp(65)).toBe("1:05");
+    expect(formatTimestamp(600)).toBe("10:00");
+  });
+
+  it("clamps a negative offset rather than rendering '-1:-5'", () => {
+    expect(formatTimestamp(-3)).toBe("0:00");
   });
 });

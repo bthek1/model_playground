@@ -243,6 +243,20 @@ export const Route = createFileRoute('/users/$userId')({
   (`routes/tensor.tsx`) are the reference callers. Reuse those primitives; render the real
   `ModelCard`/weight data, not stock diagrams; pass both themes and every WebGPU status.
 
+**Model pages (`src/model/`) — one pipeline, four slots:**
+- Every task page is SELECT → LOAD → RUN → OUTPUT, specified in
+  `docs/standards/model-page-pattern.md`. Shared worker plumbing is **`src/model/useModelWorker.ts`**
+  (creation/teardown keyed on a `key` string, id-correlated pending table, the response switch).
+- Two orthogonal state machines. **A**: `idle → loading → ready | error`, with `retry()` from `error`
+  and a model change returning to `idle`; `progress` never moves `status`. **B**: per request,
+  id-correlated — `running` is an **inflight count, not a boolean** (a boolean reports idle as soon as
+  the first of two overlapping requests returns). An error with an `id` is a run failure and leaves
+  `status === "ready"`; an id-less error is a load failure.
+- Task hooks (`useAsr`, `useTts`, `usePipeline`) are **thin typed wrappers** over it — don't
+  reimplement worker plumbing in a new hook.
+- Worker messages share one envelope: `ModelRequest<TLoad, TRun>` / `ModelResponse<TResult>` in
+  `src/model/types.ts`. Only the payload is task-specific; never rename the envelope fields.
+
 **WebGPU inference (`src/webgpu/`) — raw WebGPU, no ML framework:**
 - Models are **WGSL compute shaders** in `src/webgpu/shaders/`, imported as strings via Vite's
   `?raw` suffix (`import shader from "./shaders/x.wgsl?raw"`). Do **not** add Transformers.js,
@@ -328,6 +342,18 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   (`audio/size.ts` + `components/audio/ModelPicker.tsx`): the picker quotes the download for both
   backends and warns past `LARGE_MODEL_BYTES`. Add measured `bytes` when the params estimate would
   mislead (ASR's fp32 decoder makes WASM ~3x the estimate).
+- **ASR timestamps are take-relative.** The live loop re-transcribes only the tail 30 s, so the
+  model's timestamps restart at 0 on a longer take; `useLiveAsr`'s `shiftChunks()` offsets them by
+  the window start before the route renders `m:ss`. Don't render worker `chunks` unshifted.
+- **Gate anything heavy.** `/text-to-audio` (MusicGen: 571 MB q8, ~1 GB fp16) states its size and
+  speed cost and downloads nothing until the user opts in; an E2E spec asserts zero Hub requests
+  before the click. MusicGen also needs `MusicgenForConditionalGeneration` directly — the
+  `text-to-audio` *pipeline* throws "Missing the following inputs: input_ids" on 4.2.0.
+- **Audio-to-Audio stays server-side.** The DeepFilterNet ONNX exports are the neural graph only
+  (ERB/spectral features in, mask + filter coefficients out); a browser port means hand-writing a
+  48 kHz STFT, ERB filterbank, streaming normalisation and overlap-add. See the plan.
+- **Unit tests mock the network and ORT, so they cannot catch a broken model.** The `@slow` E2E
+  specs (`e2e/specs/audio-models.spec.ts`) are the guard.
 - Adding a task: catalogue entry → worker (reuse the generic one) → hook → route → `REAL_ROUTES`.
   See `docs/guides/adding-a-model.md` §8.
 

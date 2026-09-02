@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 
 import { createPipelineWorker } from "@/audio/pipelineClient";
-import type {
-  PipelineProgress,
-  PipelineResponse,
-  PipelineTask,
-} from "@/audio/pipelineTypes";
+import type { PipelineProgress, PipelineTask } from "@/audio/pipelineTypes";
+import { useModelWorker } from "@/model/useModelWorker";
 
-export type PipelineStatus = "loading" | "ready" | "error";
+export type PipelineStatus = "idle" | "loading" | "ready" | "error";
 
 export interface UsePipelineResult {
   status: PipelineStatus;
@@ -24,107 +21,49 @@ export interface UsePipelineResult {
    * or `[candidateLabels]`. Resolves with the raw pipeline output.
    */
   run: (input: Float32Array, args?: unknown[]) => Promise<unknown>;
+  /** Start the download (no-op unless idle) — see model-page-pattern.md §3. */
+  load: () => void;
+  /** Re-attempt a failed load. */
+  retry: () => void;
 }
 
 /**
  * Loads a Transformers.js pipeline for `task`/`model` in the generic pipeline
- * worker and exposes `run` as a promise. The worker is created once per
- * (task, model) and terminated on unmount / change (freeing the model + backend
- * context). Requests are correlated by an incrementing id so overlapping calls
- * resolve independently. ASR uses its own hook (`useAsr`) for the real-time loop;
- * discriminative tasks build on this.
+ * worker and exposes `run` as a promise. The worker lifecycle, id correlation
+ * and state machine live in `useModelWorker`. ASR uses its own hook (`useAsr`)
+ * for the real-time loop; discriminative tasks build on this.
  */
 export function usePipeline(
   task: PipelineTask,
   model: string,
+  autoLoad = true,
 ): UsePipelineResult {
-  const workerRef = useRef<Worker | null>(null);
-  const nextId = useRef(0);
-  const pending = useRef(
-    new Map<
-      number,
-      { resolve: (r: unknown) => void; reject: (e: Error) => void }
-    >(),
-  );
+  const worker = useModelWorker<unknown>({
+    createWorker: createPipelineWorker,
+    key: `${task}:${model}`,
+    loadMessage: { task, model },
+    autoLoad,
+    notReadyMessage: "Pipeline worker not ready",
+  });
 
-  const [status, setStatus] = useState<PipelineStatus>("loading");
-  const [progress, setProgress] = useState<PipelineProgress | null>(null);
-  const [backend, setBackend] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setStatus("loading");
-    setProgress(null);
-    setBackend(null);
-    setError(null);
-
-    const worker = createPipelineWorker();
-    workerRef.current = worker;
-    const inflight = pending.current;
-
-    worker.onmessage = (event: MessageEvent<PipelineResponse>) => {
-      const data = event.data;
-      switch (data.type) {
-        case "progress":
-          setProgress(data.progress);
-          break;
-        case "ready":
-          setStatus("ready");
-          setBackend(data.backend);
-          break;
-        case "result":
-          setRunning(false);
-          inflight.get(data.id)?.resolve(data.result);
-          inflight.delete(data.id);
-          break;
-        case "error":
-          if (data.id != null) {
-            setRunning(false);
-            inflight.get(data.id)?.reject(new Error(data.error));
-            inflight.delete(data.id);
-          } else {
-            setStatus("error");
-          }
-          setError(data.error);
-          break;
-      }
-    };
-
-    worker.postMessage({ type: "load", task, model });
-
-    return () => {
-      worker.terminate();
-      workerRef.current = null;
-      inflight.forEach(({ reject }) => reject(new Error("Worker terminated")));
-      inflight.clear();
-    };
-  }, [task, model]);
-
+  const { run: post } = worker;
   const run = useCallback(
-    (input: Float32Array, args?: unknown[]): Promise<unknown> => {
-      const worker = workerRef.current;
-      if (!worker) return Promise.reject(new Error("Pipeline worker not ready"));
-      const id = ++nextId.current;
-      setRunning(true);
-      setError(null);
-      return new Promise<unknown>((resolve, reject) => {
-        pending.current.set(id, { resolve, reject });
-        // Transfer the input buffer to avoid a copy; the caller's array is consumed.
-        worker.postMessage({ type: "run", id, input, args }, [input.buffer]);
-      });
-    },
-    [],
+    (input: Float32Array, args?: unknown[]): Promise<unknown> =>
+      // Transfer the input buffer to avoid a copy; the caller's array is consumed.
+      post({ input, args }, [input.buffer]),
+    [post],
   );
 
   return {
-    status,
-    loading: status === "loading",
-    ready: status === "ready",
-    progress,
-    backend,
-    running,
-    error,
+    status: worker.status,
+    loading: worker.loading,
+    ready: worker.ready,
+    progress: worker.progress,
+    backend: worker.backend,
+    running: worker.running,
+    error: worker.error,
     run,
+    load: worker.load,
+    retry: worker.retry,
   };
 }

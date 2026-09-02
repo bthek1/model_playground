@@ -4,6 +4,8 @@
 // per-task worker file. ASR keeps its own specialised worker because it drives
 // the real-time capture loop (`useLiveAsr`); everything else routes through here.
 
+import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
+
 import type { LoadOpts } from "./backend";
 
 /** Transformers.js pipeline task strings this generic worker supports. */
@@ -11,16 +13,8 @@ export type PipelineTask =
   | "audio-classification"
   | "zero-shot-audio-classification";
 
-/** Transformers.js `progress_callback` payload (loosely typed — many variants). */
-export interface PipelineProgress {
-  status: string;
-  name?: string;
-  file?: string;
-  /** 0–100 while a file downloads. */
-  progress?: number;
-  loaded?: number;
-  total?: number;
-}
+/** Load/warm-up progress. Alias of the shared `ModelProgress`. */
+export type PipelineProgress = ModelProgress;
 
 /** One `{ label, score }` prediction (audio-classification + zero-shot). */
 export interface ClassLabel {
@@ -29,15 +23,15 @@ export interface ClassLabel {
 }
 
 // --- Worker message protocol -------------------------------------------------
+//
+// The envelope is shared with every other model worker (`model/types.ts`); only
+// the load/run payloads below are pipeline-specific.
 
 /** Main thread → worker. `args` are spread as positional args to the pipeline. */
-export type PipelineRequest =
-  | { type: "load"; task: PipelineTask; model: string; opts?: LoadOpts }
-  | { type: "run"; id: number; input: Float32Array; args?: unknown[] };
+export type PipelineRequest = ModelRequest<
+  { task: PipelineTask; model: string; opts?: LoadOpts },
+  { input: Float32Array; args?: unknown[] }
+>;
 
 /** Worker → main thread. */
-export type PipelineResponse =
-  | { type: "progress"; progress: PipelineProgress }
-  | { type: "ready"; model: string; backend: LoadOpts["device"] }
-  | { type: "result"; id: number; result: unknown }
-  | { type: "error"; id?: number; error: string };
+export type PipelineResponse = ModelResponse<unknown>;

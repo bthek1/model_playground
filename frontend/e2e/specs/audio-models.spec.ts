@@ -43,6 +43,31 @@ test.describe("@slow real model loads", () => {
     ).toBeVisible({ timeout: DOWNLOAD_BUDGET_MS });
   });
 
+  test("/asr renders the transcript as timestamped segments", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const audio = new AudioPage(page);
+    await page.goto("/asr");
+    await audio.waitForReady(DOWNLOAD_BUDGET_MS);
+
+    await audio.modelButton(/JFK/).click();
+
+    // Scope to the Transcript card — the sample card also quotes the reference.
+    const transcript = page
+      .locator('[data-slot="card"]')
+      .filter({ hasText: /^Transcript/ })
+      .last();
+    const segments = transcript.locator("ol li");
+
+    // The plan claimed timestamps once before while the route rendered plain
+    // text; this is the guard against that regressing again silently.
+    await expect(segments.first()).toBeVisible({ timeout: DOWNLOAD_BUDGET_MS });
+    await expect(segments.first()).toContainText(/^\d+:\d\d/);
+    await expect(transcript).toContainText(/ask not what your country/i);
+  });
+
   test("/asr shows the warm-up state between download and ready", async ({
     page,
     mockApi,

@@ -204,6 +204,106 @@ describe("useLiveAsr", () => {
     expect(result.current.text).toBe("from a file");
   });
 
+  it("exposes timestamped segments from the model", async () => {
+    installDecodeMocks(new Float32Array([0.1]));
+    installMediaMocks();
+    transcribe.mockResolvedValue({
+      text: "hello world",
+      chunks: [
+        { text: " hello", timestamp: [0, 1] },
+        { text: " world", timestamp: [1, 2] },
+      ],
+    });
+
+    const { useLiveAsr } = await import("./useLiveAsr");
+    const { result } = renderHook(() => useLiveAsr());
+
+    await act(async () => {
+      await result.current.transcribeClip(new Float32Array([0.5]));
+    });
+
+    expect(result.current.chunks).toEqual([
+      { text: " hello", timestamp: [0, 1] },
+      { text: " world", timestamp: [1, 2] },
+    ]);
+  });
+
+  it("shifts live segment timestamps to be relative to the whole take", async () => {
+    // A take longer than the 30 s window: the model only sees the tail, so its
+    // timestamps restart at 0 and would rewind on screen without the offset.
+    const takeSeconds = 40;
+    const full = new Float32Array(takeSeconds * 16000);
+    installDecodeMocks(full);
+    installMediaMocks();
+    transcribe.mockResolvedValue({
+      text: "tail",
+      chunks: [{ text: " tail", timestamp: [2, 4] }],
+    });
+
+    const { useLiveAsr } = await import("./useLiveAsr");
+    const { result } = renderHook(() => useLiveAsr());
+
+    await act(async () => {
+      await result.current.start();
+    });
+    await act(async () => lastRecorder.emitChunk());
+    await flush();
+
+    // Window starts at 40 s − 30 s = 10 s, so [2,4] becomes [12,14].
+    await waitFor(() =>
+      expect(result.current.chunks).toEqual([
+        { text: " tail", timestamp: [12, 14] },
+      ]),
+    );
+  });
+
+  it("leaves an open-ended segment end null when shifting", async () => {
+    const full = new Float32Array(40 * 16000);
+    installDecodeMocks(full);
+    installMediaMocks();
+    transcribe.mockResolvedValue({
+      text: "open",
+      chunks: [{ text: " open", timestamp: [5, null] }],
+    });
+
+    const { useLiveAsr } = await import("./useLiveAsr");
+    const { result } = renderHook(() => useLiveAsr());
+
+    await act(async () => {
+      await result.current.start();
+    });
+    await act(async () => lastRecorder.emitChunk());
+    await flush();
+
+    await waitFor(() =>
+      expect(result.current.chunks).toEqual([
+        { text: " open", timestamp: [15, null] },
+      ]),
+    );
+  });
+
+  it("clears segments when a new capture starts", async () => {
+    installDecodeMocks(new Float32Array([0.1]));
+    installMediaMocks();
+    transcribe.mockResolvedValue({
+      text: "x",
+      chunks: [{ text: " x", timestamp: [0, 1] }],
+    });
+
+    const { useLiveAsr } = await import("./useLiveAsr");
+    const { result } = renderHook(() => useLiveAsr());
+
+    await act(async () => {
+      await result.current.transcribeClip(new Float32Array([0.5]));
+    });
+    expect(result.current.chunks).toHaveLength(1);
+
+    await act(async () => {
+      await result.current.start();
+    });
+    expect(result.current.chunks).toEqual([]);
+  });
+
   it("clears the previous take when a new capture starts", async () => {
     installDecodeMocks(new Float32Array([0.1]));
     installMediaMocks();

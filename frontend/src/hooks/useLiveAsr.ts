@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { decodeToMono } from "@/audio/io";
-import { DEFAULT_ASR_MODEL, type AsrRunArgs } from "@/audio/types";
+import {
+  DEFAULT_ASR_MODEL,
+  type AsrChunk,
+  type AsrRunArgs,
+} from "@/audio/types";
 import { useAsr } from "@/hooks/useAsr";
 
 const TARGET_RATE = 16000;
@@ -9,6 +13,24 @@ const TARGET_RATE = 16000;
 const WINDOW_SECONDS = 30;
 /** How often MediaRecorder emits a chunk (and we attempt a re-transcription). */
 const TIMESLICE_MS = 1500;
+
+/**
+ * Shift segment timestamps from window-relative to take-relative. The live loop
+ * only re-transcribes the tail {@link WINDOW_SECONDS}, so once a take is longer
+ * than that the model's timestamps restart at 0 and would otherwise rewind on
+ * screen mid-recording.
+ */
+function shiftChunks(chunks: AsrChunk[] | undefined, offset: number): AsrChunk[] {
+  if (!chunks?.length) return [];
+  if (!offset) return chunks;
+  return chunks.map((c) => ({
+    ...c,
+    timestamp: [
+      c.timestamp[0] + offset,
+      c.timestamp[1] == null ? null : c.timestamp[1] + offset,
+    ] as [number, number | null],
+  }));
+}
 
 export interface UseLiveAsrResult {
   /** Model-load status, forwarded from `useAsr`. */
@@ -32,6 +54,12 @@ export interface UseLiveAsrResult {
   sampleRate: number;
   /** The latest transcript text (grows/refines live while recording). */
   text: string;
+  /**
+   * The transcript split into timestamped segments, when the model returns them.
+   * Timestamps are relative to the **whole take**, not the re-transcribed window
+   * (see `runWindow`). Empty when the model returned no segmentation.
+   */
+  chunks: AsrChunk[];
   error: string | null;
   /** Begin live capture + transcription. Requests mic permission. */
   start: () => Promise<void>;
@@ -64,6 +92,7 @@ export function useLiveAsr(model: string = DEFAULT_ASR_MODEL): UseLiveAsrResult 
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [clip, setClip] = useState<Float32Array | null>(null);
   const [text, setText] = useState("");
+  const [chunks, setChunks] = useState<AsrChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const streamRef = useRef<MediaStream | null>(null);
@@ -86,9 +115,11 @@ export function useLiveAsr(model: string = DEFAULT_ASR_MODEL): UseLiveAsrResult 
         // Always slice (= copy): `transcribe` transfers the buffer, and the
         // retained `full` must stay usable for visualization/playback.
         const maxSamples = WINDOW_SECONDS * TARGET_RATE;
-        const windowed = full.slice(Math.max(0, full.length - maxSamples));
+        const start = Math.max(0, full.length - maxSamples);
+        const windowed = full.slice(start);
         const res = await transcribe(windowed);
         setText(res.text);
+        setChunks(shiftChunks(res.chunks, start / TARGET_RATE));
       } catch {
         /* transient decode/transcribe failure mid-capture — keep listening */
       } finally {
@@ -115,6 +146,7 @@ export function useLiveAsr(model: string = DEFAULT_ASR_MODEL): UseLiveAsrResult 
     }
     setError(null);
     setText("");
+    setChunks([]);
     setClip(null);
     try {
       const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -146,6 +178,7 @@ export function useLiveAsr(model: string = DEFAULT_ASR_MODEL): UseLiveAsrResult 
         // Send a copy — transfer would detach the retained clip's buffer.
         const res = await transcribe(audio.slice(), args);
         setText(res.text);
+        setChunks(res.chunks ?? []);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -174,6 +207,7 @@ export function useLiveAsr(model: string = DEFAULT_ASR_MODEL): UseLiveAsrResult 
     clip,
     sampleRate: TARGET_RATE,
     text,
+    chunks,
     error: error ?? asr.error,
     start,
     stop,

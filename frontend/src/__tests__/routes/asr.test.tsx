@@ -47,6 +47,7 @@ const baseState: UseLiveAsrResult = {
   clip: null,
   sampleRate: 16000,
   text: "",
+  chunks: [],
   error: null,
   start: mockStart,
   stop: mockStop,
@@ -272,5 +273,43 @@ describe("AsrPage", () => {
     mockState = { ...baseState, status: "error", loading: false, error: "download failed" };
     renderPage();
     expect(screen.getByText(/download failed/i)).toBeInTheDocument();
+  });
+
+  it("renders a timestamped transcript when the model returns segments", () => {
+    mockState = {
+      ...baseState,
+      status: "ready",
+      loading: false,
+      ready: true,
+      backend: "wasm",
+      text: "And so my fellow Americans ask not",
+      chunks: [
+        { text: " And so my fellow Americans", timestamp: [0, 4] },
+        { text: " ask not", timestamp: [65, 68] },
+      ],
+    };
+    renderPage();
+
+    expect(screen.getByText(/And so my fellow Americans/)).toBeInTheDocument();
+    expect(screen.getByText(/ask not/)).toBeInTheDocument();
+    // m:ss, take-relative — 65 s is 1:05, not 0:65.
+    expect(screen.getByText("0:00")).toBeInTheDocument();
+    expect(screen.getByText("1:05")).toBeInTheDocument();
+  });
+
+  it("falls back to plain text when the model returns no segments", () => {
+    mockState = {
+      ...baseState,
+      status: "ready",
+      loading: false,
+      ready: true,
+      backend: "wasm",
+      text: "no segmentation here",
+      chunks: [],
+    };
+    renderPage();
+
+    expect(screen.getByText("no segmentation here")).toBeInTheDocument();
+    expect(screen.queryByText(/^\d+:\d\d$/)).not.toBeInTheDocument();
   });
 });
