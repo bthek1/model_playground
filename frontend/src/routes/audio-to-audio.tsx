@@ -14,7 +14,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { AudioWaveform, Download, Loader2, Mic, Play, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   DEFAULT_ENHANCE_MODEL,
@@ -22,17 +22,14 @@ import {
   SAMPLE_RATE,
 } from "@/audio/enhance/types";
 import { decodeToMono, play, recordMic, toWavBlob } from "@/audio/io";
-import { ModelPicker } from "@/components/audio/ModelPicker";
-import { ModelStatus } from "@/components/audio/ModelStatus";
+import { sizeEstimate } from "@/audio/size";
 import { Waveform } from "@/components/audio/Waveform";
+import { InputPanel } from "@/components/model/InputPanel";
+import { ModelPage } from "@/components/model/ModelPage";
+import { ModelPicker } from "@/components/model/ModelPicker";
+import { ModelStatus } from "@/components/model/ModelStatus";
+import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { useEnhance } from "@/hooks/useEnhance";
 
 export const Route = createFileRoute("/audio-to-audio")({
@@ -43,8 +40,24 @@ const RECORD_SECONDS = 6;
 
 function AudioToAudioPage() {
   const [model, setModel] = useState(DEFAULT_ENHANCE_MODEL);
-  const { idle, loading, ready, progress, backend, running, result, error, load, retry, run } =
-    useEnhance(model);
+  const {
+    status,
+    loading,
+    ready,
+    progress,
+    backend,
+    running,
+    result,
+    error,
+    load,
+    retry,
+    run,
+  } = useEnhance(model);
+
+  const meta = useMemo(
+    () => ENHANCE_MODELS.find((m) => m.id === model) ?? ENHANCE_MODELS[0],
+    [model],
+  );
 
   const [input, setInput] = useState<Float32Array | null>(null);
   const [preparing, setPreparing] = useState<null | "file" | "mic">(null);
@@ -56,7 +69,10 @@ function AudioToAudioPage() {
   useEffect(() => () => void playbackRef.current?.close(), []);
 
   const busy = running || preparing !== null;
-  const shownError = ioError ?? error;
+  // Each error in the slot that produced it (§4): capture failures in RUN, a
+  // load failure in LOAD, an enhancement failure in OUTPUT.
+  const loadError = status === "error" ? error : null;
+  const runError = status === "error" ? null : error;
 
   function playClip(samples: Float32Array) {
     void playbackRef.current?.close();
@@ -103,128 +119,128 @@ function AudioToAudioPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-8">
-      <div>
-        <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold">
-          <AudioWaveform className="size-6" /> Audio to Audio
-        </h1>
-        <p className="text-sm text-muted-foreground">
+    <ModelPage
+      icon={AudioWaveform}
+      title="Audio to Audio"
+      description={
+        <>
           Remove background noise from speech with DeepFilterNet3, at its native
           48&nbsp;kHz. The model runs on your GPU (WebGPU) or CPU (WASM) in a Web
           Worker — the audio never leaves your machine.
-        </p>
-      </div>
-
-      <ModelPicker
-        models={ENHANCE_MODELS}
-        value={model}
-        onChange={(m) => setModel(m.id)}
-        disabled={busy || loading}
-      />
-
-      {/* LOAD — nothing downloads until asked (model-page-pattern.md §1.2). */}
-      {idle && (
-        <Button onClick={load} data-testid="load-model">
-          Load model
-        </Button>
-      )}
-      {error && !loading && (
-        <Button variant="outline" onClick={retry}>
-          Retry load
-        </Button>
-      )}
-      <ModelStatus loading={loading} ready={ready} backend={backend} progress={progress} />
-
-      {/* RUN */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          disabled={!ready || busy}
-          onClick={() =>
-            void enhanceFrom(() => recordMic(RECORD_SECONDS, SAMPLE_RATE), "mic")
-          }
-        >
-          {preparing === "mic" ? (
-            <>
-              <Loader2 className="size-4 animate-spin" /> Recording…
-            </>
-          ) : (
-            <>
-              <Mic className="size-4" /> Record {RECORD_SECONDS}s
-            </>
-          )}
-        </Button>
-
-        <Button
-          variant="outline"
-          disabled={!ready || busy}
-          onClick={() => fileRef.current?.click()}
-        >
-          {preparing === "file" ? (
-            <>
-              <Loader2 className="size-4 animate-spin" /> Decoding…
-            </>
-          ) : (
-            <>
-              <Upload className="size-4" /> Upload audio
-            </>
-          )}
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="audio/*"
-          className="hidden"
-          onChange={onFile}
+        </>
+      }
+      select={
+        <ModelPicker
+          models={ENHANCE_MODELS}
+          value={model}
+          onChange={(m) => setModel(m.id)}
+          disabled={busy || loading}
         />
-
-        {running && (
-          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Enhancing…
-          </span>
-        )}
-      </div>
-
-      {shownError && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {shownError}
-        </div>
-      )}
-
-      {/* OUTPUT — before and after, side by side, so the difference is audible
-          and visible rather than asserted. */}
-      {input && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Before / after</CardTitle>
-            <CardDescription>
-              Same clip, {(input.length / SAMPLE_RATE).toFixed(1)}s at 48&nbsp;kHz.
-              Play both and listen to the noise floor.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <ClipRow
-              title="Noisy input"
-              samples={input}
-              onPlay={() => playClip(input)}
-              tone="text-muted-foreground"
-            />
-            {result && (
-              <ClipRow
-                title="Enhanced"
-                samples={result.audio}
-                onPlay={() => playClip(result.audio)}
-                tone="text-primary"
-                action={
-                  <Button variant="outline" size="sm" onClick={download}>
-                    <Download className="size-4" /> WAV
-                  </Button>
+      }
+      load={
+        <ModelStatus
+          status={status}
+          backend={backend}
+          progress={progress}
+          error={loadError}
+          size={sizeEstimate(meta.params, meta.bytes)}
+          onLoad={load}
+          onRetry={retry}
+          disabled={busy}
+        />
+      }
+      run={
+        <InputPanel
+          ready={ready}
+          error={ioError}
+          disabledHint="Load the model to enhance a clip."
+          controls={
+            <>
+              <Button
+                disabled={!ready || busy}
+                onClick={() =>
+                  void enhanceFrom(
+                    () => recordMic(RECORD_SECONDS, SAMPLE_RATE),
+                    "mic",
+                  )
                 }
+              >
+                {preparing === "mic" ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Recording…
+                  </>
+                ) : (
+                  <>
+                    <Mic className="size-4" /> Record {RECORD_SECONDS}s
+                  </>
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                disabled={!ready || busy}
+                onClick={() => fileRef.current?.click()}
+              >
+                {preparing === "file" ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Decoding…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="size-4" /> Upload audio
+                  </>
+                )}
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={onFile}
               />
-            )}
-          </CardContent>
-        </Card>
-      )}
-    </div>
+            </>
+          }
+        />
+      }
+      output={
+        <OutputPanel
+          title="Before / after"
+          description={
+            input
+              ? `Same clip, ${(input.length / SAMPLE_RATE).toFixed(1)}s at 48 kHz. Play both and listen to the noise floor.`
+              : undefined
+          }
+          running={running}
+          runningLabel="Enhancing…"
+          error={runError}
+          empty="Record or upload a noisy clip — the original and the denoised version appear here, side by side."
+        >
+          {input && (
+            <div className="space-y-5">
+              <ClipRow
+                title="Noisy input"
+                samples={input}
+                onPlay={() => playClip(input)}
+                tone="text-muted-foreground"
+              />
+              {result && (
+                <ClipRow
+                  title="Enhanced"
+                  samples={result.audio}
+                  onPlay={() => playClip(result.audio)}
+                  tone="text-primary"
+                  action={
+                    <Button variant="outline" size="sm" onClick={download}>
+                      <Download className="size-4" /> WAV
+                    </Button>
+                  }
+                />
+              )}
+            </div>
+          )}
+        </OutputPanel>
+      }
+    />
   );
 }
 

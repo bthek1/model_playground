@@ -1,9 +1,18 @@
 # In-Browser Inference with Raw WebGPU
 
-This project runs models **on the user's GPU, inside the browser**, using the
-WebGPU API directly — no Transformers.js, ONNX Runtime, or WebLLM. Models are
-expressed as WGSL compute shaders. This document explains the pipeline; to add a
-model see [`../guides/adding-a-model.md`](../guides/adding-a-model.md).
+This project runs models **on the user's GPU, inside the browser**. This document
+covers the `src/webgpu/` runtime, which uses the WebGPU API directly — no
+Transformers.js, ONNX Runtime, or WebLLM — with models expressed as WGSL compute
+shaders. To add one see [`../guides/adding-a-model.md`](../guides/adding-a-model.md).
+
+> **Scope.** That "no framework" rule is about *this* module. Running pretrained
+> checkpoints is a separate concern living in `src/audio/`, on Transformers.js —
+> or, for speech enhancement, on `onnxruntime-web` directly. Those also target
+> WebGPU (falling back to WASM), but through ONNX Runtime's providers rather than
+> the pipeline below. See
+> [`architecture.md`](architecture.md#frontend) and
+> [`../guides/adding-a-model.md`](../guides/adding-a-model.md) §8–§9. The two
+> runtimes never mix inside a module.
 
 ## Why raw WebGPU
 

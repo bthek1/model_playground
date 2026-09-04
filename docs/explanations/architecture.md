@@ -166,7 +166,8 @@ suite stays green on a GPU-less machine, while the graceful-degradation specs ru
 everywhere. See [`../guides/e2e-testing.md`](../guides/e2e-testing.md).
 
 **Every task page is Select → Load → Run → Output.** The routes under `src/routes/` that
-run a model — text-to-speech, ASR, audio classification, tensor arithmetic, training —
+run a model — text-to-speech, text-to-audio, ASR, audio classification, speech
+enhancement, tensor arithmetic, training —
 share one four-stage pipeline: pick a model, load its weights, run it on an input, show
 the result. Two orthogonal state machines back it: a *load* machine per worker
 (`idle → loading → ready | error`) and a *run* machine of id-correlated requests. Task
@@ -175,14 +176,29 @@ is four slots to fill rather than a page to design. `idle` is the default — no
 downloads until the user consents to the size. See
 [`../standards/model-page-pattern.md`](../standards/model-page-pattern.md).
 
-**Raw WebGPU for inference — no ML framework.** The `src/webgpu/` module talks to
-the WebGPU API directly: acquire a `GPUDevice`, compile WGSL into a compute
-pipeline, upload inputs to storage buffers, dispatch, read results back. There is
-deliberately no Transformers.js / ONNX Runtime / WebLLM dependency — models are
-expressed as WGSL kernels for maximum control and a minimal bundle. Heavy compute
-runs in a **Web Worker** (`worker.ts`) so the UI thread stays responsive. See
-`docs/explanations/webgpu-inference.md` for the full pipeline and
+**Raw WebGPU for inference — no ML framework, *in `src/webgpu/`*.** That module
+talks to the WebGPU API directly: acquire a `GPUDevice`, compile WGSL into a
+compute pipeline, upload inputs to storage buffers, dispatch, read results back.
+Models are expressed as WGSL kernels for maximum control and a minimal bundle.
+Heavy compute runs in a **Web Worker** (`worker.ts`) so the UI thread stays
+responsive. See `docs/explanations/webgpu-inference.md` for the full pipeline and
 `docs/guides/adding-a-model.md` to add a model.
+
+**Two client-side runtimes, kept apart.** The rule above scopes to the
+hand-written runtime. Running *pretrained* checkpoints is a separate concern with
+its own dependencies, and lives in `src/audio/`:
+
+| Runtime | Where | Used by |
+|---|---|---|
+| Hand-written WGSL | `src/webgpu/` | tensor arithmetic, linear/MNIST training, benchmarks |
+| Transformers.js (`@huggingface/transformers`, `kokoro-js`) | `src/audio/` | ASR, audio classification, TTS, text-to-audio |
+| `onnxruntime-web` **directly** | `src/audio/enhance/` | speech enhancement (DeepFilterNet3) |
+
+The third row exists because DeepFilterNet3 has no Transformers.js task: the repo
+publishes a bare graph, so the STFT, ERB filterbank, feature normalisation, deep
+filtering and overlap-add around it are ours. The two audio runtimes share one ORT
+build — see `docs/guides/adding-a-model.md` §9. The runtimes never mix inside a
+single module.
 
 ---
 

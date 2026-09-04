@@ -91,6 +91,34 @@ describe("stft", () => {
   });
 });
 
+describe("stft padding", () => {
+  it("padFront chooses the framing — frame k starts at k*hop - padFront", () => {
+    // A unit impulse is the cleanest probe: with a rectangular-ish check we can
+    // just ask which frames see it. With padFront = hop, frame 0 covers
+    // [-480, 480) and frame 1 covers [0, 960), so an impulse at sample 0 lands
+    // in the *second* half of frame 0 and the first half of frame 1.
+    const sig = new Float32Array(4800);
+    sig[0] = 1;
+    const win = vorbisWindow(FFT_SIZE);
+    const spec = stft(sig, win, HOP_SIZE, FFT_BINS, HOP_SIZE, FFT_SIZE);
+
+    // |X[0]| of a windowed impulse is the window value at its offset.
+    const dcMagnitude = (frame: number) =>
+      Math.abs(spec.data[frame * FFT_BINS * 2]);
+    expect(dcMagnitude(0)).toBeCloseTo(win[HOP_SIZE], 6);
+    expect(dcMagnitude(1)).toBeCloseTo(win[0], 6);
+    expect(dcMagnitude(2)).toBeCloseTo(0, 6);
+  });
+
+  it("padBack adds enough tail frames to flush the last samples", () => {
+    const sig = randomSignal(4800, 3);
+    const win = vorbisWindow(FFT_SIZE);
+    const short = stft(sig, win, HOP_SIZE, FFT_BINS, HOP_SIZE, 0);
+    const full = stft(sig, win, HOP_SIZE, FFT_BINS, HOP_SIZE, FFT_SIZE);
+    expect(full.frames).toBe(short.frames + FFT_SIZE / HOP_SIZE);
+  });
+});
+
 describe("istft", () => {
   it("round-trips random noise", () => {
     const sig = randomSignal(12000, 9);
@@ -114,6 +142,18 @@ describe("istft", () => {
   it("round-trips a signal shorter than one window", () => {
     const sig = randomSignal(100, 21);
     const restored = istft(stft(sig), sig.length);
+    expect(maxError(restored, sig)).toBeLessThan(1e-4);
+  });
+
+  it("round-trips at DeepFilterNet3's framing (padFront = one hop)", () => {
+    // The DFN3 pipeline analyses with padFront = HOP_SIZE, not a whole window,
+    // because the streaming reference keeps a single hop of history. Both sides
+    // must agree, so the round-trip is the guard.
+    const sig = randomSignal(9600, 5);
+    const win = vorbisWindow(FFT_SIZE);
+    const spec = stft(sig, win, HOP_SIZE, FFT_BINS, HOP_SIZE, FFT_SIZE);
+    const restored = istft(spec, sig.length, win, HOP_SIZE, HOP_SIZE);
+    expect(restored.length).toBe(sig.length);
     expect(maxError(restored, sig)).toBeLessThan(1e-4);
   });
 

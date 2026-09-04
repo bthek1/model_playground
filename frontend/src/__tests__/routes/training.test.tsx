@@ -91,14 +91,16 @@ describe("TrainingPage", () => {
   });
 
   it("warns when WebGPU is unavailable", () => {
+    // Shared with the tensor route's LOAD band (`DeviceStatus`), so the wording
+    // lives there rather than in this route.
     gpuState.supported = false;
     renderPage();
-    expect(screen.getByText(/webgpu isn't available/i)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/doesn't expose WebGPU/i);
   });
 
   it("does not warn when WebGPU is ready", () => {
     renderPage();
-    expect(screen.queryByText(/webgpu isn't available/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("loads the dataset for the configured train+test size", () => {

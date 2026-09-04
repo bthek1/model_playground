@@ -64,15 +64,15 @@ test.describe("sidebar navigation", () => {
   }) => {
     await mockApi();
     await page.goto(placeholderTask.to);
-    // CardTitle renders a <div data-slot="card-title">, not a heading element.
+    // The placeholder is the four-slot model page with empty slots, so the task
+    // name is the page's own h1 — same as an implemented task.
     await expect(
-      page.locator('[data-slot="card-title"]', {
-        hasText: placeholderTask.label,
-      }),
+      page.getByRole("heading", { level: 1, name: placeholderTask.label }),
     ).toBeVisible();
-    await expect(
-      page.getByText("This task isn't available in the playground yet."),
-    ).toBeVisible();
+    await expect(page.locator("main").getByTestId("slot-4")).toBeVisible();
+    await expect(page.getByTestId("output-empty")).toContainText(
+      "on the roadmap",
+    );
   });
 
   test("an unknown slug renders the unknown-task card, not a crash", async ({

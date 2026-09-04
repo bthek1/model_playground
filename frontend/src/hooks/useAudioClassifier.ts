@@ -30,13 +30,14 @@ export interface UseAudioClassifierResult extends UsePipelineResult {
  */
 export function useAudioClassifier(
   model: string = DEFAULT_CLASSIFIER_MODEL,
+  autoLoad = true,
 ): UseAudioClassifierResult {
   const meta = useMemo(
     () => CLASSIFIER_MODELS.find((m) => m.id === model) ?? CLASSIFIER_MODELS[0],
     [model],
   );
   const isZeroShot = meta.task === "zero-shot-audio-classification";
-  const pipe = usePipeline(meta.task, meta.id);
+  const pipe = usePipeline(meta.task, meta.id, autoLoad);
   const { run } = pipe;
 
   const [result, setResult] = useState<ClassLabel[] | null>(null);

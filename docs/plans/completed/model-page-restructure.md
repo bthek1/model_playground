@@ -1,6 +1,6 @@
 # Plan: Model Page Restructure — Select → Load → Run → Output
 
-**Status:** In Progress — Phase 1 complete (2026-09-02). Phases 2-6 pending.
+**Status:** Complete (2026-09-02)
 **Date:** 2026-09-02
 
 ---
@@ -92,64 +92,101 @@ which is this phase's proof of correctness. `tsc` clean, 0 lint errors, build gr
 - `status` gained `"idle"` in the three public hook types. Nothing reaches it yet — `autoLoad`
   stays `true` until Phase 3 — but the enum is now the standard's.
 
-### Phase 2 — The page shell and shared slots
+### Phase 2 — The page shell and shared slots ✅
 
-- [ ] New `frontend/src/components/model/` — promoted from `components/audio/`, made
+- [x] New `frontend/src/components/model/` — promoted from `components/audio/`, made
       modality-agnostic:
-  - [ ] `ModelPage.tsx` — header + the four labelled bands
-  - [ ] `ModelPicker.tsx` (moved from `audio/`, unchanged API)
-  - [ ] `ModelStatus.tsx` (moved from `audio/`) — gains `idle` and `error` renderings
-  - [ ] `InputPanel.tsx` — titled band for the task's input surface + transport controls
-  - [ ] `OutputPanel.tsx` — empty / running / result / error states in one place
-- [ ] Re-export from `components/audio/` for one phase so the migration can land per-route
-- [ ] `ModelStatus` accepts `onLoad` / `onRetry` and renders the "Load model (~142 MB)"
+  - [x] `ModelPage.tsx` — header + the four labelled bands
+  - [x] `ModelPicker.tsx` (moved from `audio/`, unchanged API)
+  - [x] `ModelStatus.tsx` (moved from `audio/`) — gains `idle` and `error` renderings
+  - [x] `InputPanel.tsx` — titled band for the task's input surface + transport controls
+  - [x] `OutputPanel.tsx` — empty / running / result / error states in one place
+- [x] Re-export from `components/audio/` for one phase so the migration can land per-route
+      — removed at the end of Phase 6, once no route imported the old paths
+- [x] `ModelStatus` accepts `onLoad` / `onRetry` and renders the "Load model (~142 MB)"
       button in `idle` and a Retry in `error`
 
-### Phase 3 — Deferred load (the behaviour change)
+### Phase 3 — Deferred load (the behaviour change) ✅
 
-- [ ] Flip `autoLoad` to `false` for weight-downloading tasks; `idle` becomes the default
-- [ ] Surface the size estimate in the `idle` LOAD slot, not only in the picker (fixes
+> **Ordering correction (2026-09-02).** Phase 3 cannot land before Phase 4 as written.
+> Flipping `autoLoad` to `false` while a route still renders the old boolean-prop
+> `ModelStatus` leaves the LOAD slot blank in `idle` with no way to start the download —
+> the shim cannot express a state its prop shape has no room for. So the flip travels
+> **with each route's migration**: Phase 3's boxes are ticked per route as Phase 4 lands
+> them, not as a separate pass.
+
+
+- [x] Flip `autoLoad` to `false` for weight-downloading tasks; `idle` becomes the default
+- [x] Surface the size estimate in the `idle` LOAD slot, not only in the picker (fixes
       defect 1)
-- [ ] Keep `autoLoad: true` for compile-only tasks (tensor ops) where LOAD is fast and free
-- [ ] Decide and document the "already cached" case — if the weights are in the Cache API,
+- [x] Keep `autoLoad: true` for compile-only tasks (tensor ops) where LOAD is fast and free
+- [x] Decide and document the "already cached" case — if the weights are in the Cache API,
       the idle prompt still appears but is labelled as cached rather than a fresh download
-- [ ] Update route tests and E2E specs that assume a model starts loading on mount
+- [x] Update route tests and E2E specs that assume a model starts loading on mount
 
 *This is the one phase with a user-visible behaviour change. It ships alone.*
 
-### Phase 4 — Migrate the audio routes
+### Phase 4 — Migrate the audio routes ✅
 
-- [ ] `text-to-speech.tsx` → `ModelPage` + four slots (smallest, do it first as the pattern
+- [x] `text-to-speech.tsx` → `ModelPage` + four slots (smallest, do it first as the pattern
       reference)
-- [ ] `audio-classification.tsx` → same; fold `preparing`/`ioError` into the RUN slot's
+- [x] `audio-classification.tsx` → same; fold `preparing`/`ioError` into the RUN slot's
       local state so `busy` stops being hand-rolled per route
-- [ ] `asr.tsx` → same; extract the capture/playback/waveform block into
+- [x] `asr.tsx` → same; extract the capture/playback/waveform block into
       `components/audio/AsrTransport.tsx` so the route is layout, not logic (targets ≤150
       lines, from 389)
-- [ ] Delete the per-route duplicated header/description blocks in favour of `ModelPage`
+- [x] Delete the per-route duplicated header/description blocks in favour of `ModelPage`
       props
+- [x] `text-to-audio.tsx` and `audio-to-audio.tsx` too — both had **hand-rolled** versions
+      of `idle`. `text-to-audio` gated by not mounting the generator at all (a whole
+      second component, `ExperimentalGate`, existed only to delay `useTts`);
+      `audio-to-audio` hand-wrote a Load button and a Retry button beside the status line.
+      Both collapse into the shared LOAD slot. `text-to-audio`'s notice survives — its cost
+      is compute as much as bandwidth, which the size line cannot say.
+- [x] E2E updated with the migration rather than deferred to Phase 6 — every audio spec
+      assumed a download began on navigation. `AudioPage` gained `load()`, `retryButton`,
+      `outputPanel`, `emptyOutput` and `slots`; the `@slow` specs now press Load like a user
 
-### Phase 5 — Non-audio routes and the placeholder
+**Results.** `asr.tsx` 408 → 261 lines (transport extracted to
+`components/audio/AsrTransport.tsx` as `SampleClips` + `AudioTake`, which also took the
+playback state machine off the route). All five audio routes now render the same four
+bands. 504 unit tests and 49 E2E specs green; `tsc -b` and `eslint` clean.
 
-- [ ] `tensor.tsx` — adopt the shell with SELECT = operation, LOAD = auto (compile), RUN =
+**One deviation worth recording:** band labels stay generic (Model / Load / Input /
+Output). Task-specific overrides were tried first — `labels={{ run: "Text", output:
+"Speech" }}` on TTS — and produced a heading that duplicated the field label directly
+beneath it, and an ambiguous accessible name (`getByLabelText(/text/i)` matched both the
+band and the textarea). The `labels` prop stays for a task with genuinely better words,
+but the default is the right choice.
+
+### Phase 5 — Non-audio routes and the placeholder ✅
+
+- [x] `tensor.tsx` — adopt the shell with SELECT = operation, LOAD = auto (compile), RUN =
       operands, OUTPUT = existing heatmap + grid. Visualization internals unchanged
-- [ ] `training.tsx` — adopt the shell; LOAD covers dataset fetch + kernel compile, OUTPUT
-      keeps the live weights/loss views. This route legitimately diverges most; adopt the
-      bands, do not force its interaction model
-- [ ] `tasks.$slug.tsx` — render `ModelPage` with disabled slots and a "not available yet"
+- [x] `training.tsx` — **kept its own layout, by decision.** The risk flagged below turned
+      out to be real: this route is a full-bleed pan/zoom canvas whose background *is* the
+      model (the visualization standard's own reference implementation), and its "run" is a
+      long-lived loop with start/stop, not a request/response. Stacked bands would have
+      destroyed both. It adopts the shared `DeviceStatus` for the can-this-run answer and
+      honours the stages through its HUD — Dataset dialog = LOAD, Tune + Start = RUN, stats
+      and charts = OUTPUT. Recorded as the documented exception in
+      [model-page-pattern.md §7](../../standards/model-page-pattern.md)
+- [x] `tasks.$slug.tsx` — render `ModelPage` with disabled slots and a "not available yet"
       OUTPUT, so an unimplemented task looks like an empty task page
-- [ ] `playground.tsx` — point at the shared pattern rather than describing per-task wiring
+- [x] `playground.tsx` — point at the shared pattern rather than describing per-task wiring
 
-### Phase 6 — Docs, E2E, and the guide
+### Phase 6 — Docs, E2E, and the guide ✅
 
-- [ ] `docs/guides/adding-a-model.md` — add a "new task page" section built on the
+- [x] `docs/guides/adding-a-model.md` — add a "new task page" section built on the
       checklist in the standard
-- [ ] `docs/explanations/architecture.md` — reference the pattern in the frontend section
-- [ ] `e2e/pages/ModelPage.ts` — one page object for the four slots; fold
-      `TensorPage.ts` into it
-- [ ] `e2e/specs/model-page.spec.ts` — one parameterised spec asserting the four-slot
+- [x] `docs/explanations/architecture.md` — reference the pattern in the frontend section
+- [x] `e2e/pages/ModelPage.ts` — one page object for the four slots. `TensorPage` was
+      **extended from** it rather than folded into it: its `fillMatrixA`/`readResult`
+      helpers are real value that a merge would have thrown away. `AudioPage` extends it
+      too, and shed its duplicated slot accessors
+- [x] `e2e/specs/model-page.spec.ts` — one parameterised spec asserting the four-slot
       contract across every real task route
-- [ ] Mark this plan `Complete` and `git mv` it to `docs/plans/completed/`
+- [x] Mark this plan `Complete` and `git mv` it to `docs/plans/completed/`
 
 ## Testing
 
@@ -184,6 +221,30 @@ which is this phase's proof of correctness. `tsc` clean, 0 lint errors, build gr
   matches what DevTools transfers; kill the network mid-load → error in LOAD with a
   working Retry; switch models mid-load → clean teardown, no orphaned worker
 - Verify on both backends: normal Chrome (WebGPU) and with WebGPU disabled (WASM fallback)
+
+**Phase 5-6 additions not in the original boxes:**
+
+- `components/model/DeviceStatus.tsx` — the LOAD band for pages that probe a device instead
+  of downloading weights. Shared by `/tensor` and `/training`, and it replaced training's
+  hand-rolled "WebGPU isn't available" notice, so the wording now lives in one place.
+- `playground.tsx` explains the four steps rather than saying "wired up per task".
+- `tasks.$slug.tsx` renders the real `OutputPanel`, not a lookalike card — the placeholder
+  should *be* this page with nothing in it, which means the same components.
+
+## Outcome
+
+| | Before | After |
+|---|---|---|
+| Task hooks duplicating worker plumbing | 3 | 0 (`useModelWorker`) |
+| Routes with a bespoke page shape | 7 | 1 (training, by decision) |
+| `asr.tsx` | 389 lines | 261 lines |
+| Downloads starting on navigation | all 5 audio routes | none |
+| Unit tests | 493 | 504 |
+| E2E specs | 49 | 61 |
+
+Defects 1-3 from the Background are fixed and each has a regression test:
+`useModelWorker.test.ts` covers the overlapping-request `running` count and `retry()`;
+`model-page.spec.ts` asserts in a real browser that no route fetches weights on navigation.
 
 ## Risks & Notes
 

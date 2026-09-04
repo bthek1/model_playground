@@ -35,9 +35,12 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 const mockStart = vi.fn();
 const mockStop = vi.fn();
 const mockTranscribeClip = vi.fn();
+const mockLoad = vi.fn();
+const mockRetry = vi.fn();
 const baseState: UseLiveAsrResult = {
-  status: "loading",
-  loading: true,
+  status: "idle",
+  idle: true,
+  loading: false,
   ready: false,
   progress: null,
   backend: null,
@@ -52,6 +55,8 @@ const baseState: UseLiveAsrResult = {
   start: mockStart,
   stop: mockStop,
   transcribeClip: mockTranscribeClip,
+  load: mockLoad,
+  retry: mockRetry,
 };
 let mockState: UseLiveAsrResult = { ...baseState };
 
@@ -90,13 +95,34 @@ describe("AsrPage", () => {
     renderPage();
     expect(screen.getByRole("button", { name: /start listening/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /upload audio/i })).toBeDisabled();
-    expect(screen.getByText(/loading model/i)).toBeInTheDocument();
+    expect(screen.getByText(/load a model to start transcribing/i)).toBeInTheDocument();
+  });
+
+  it("downloads nothing on arrival and loads on request", () => {
+    renderPage();
+    expect(mockLoad).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /load model/i }));
+    expect(mockLoad).toHaveBeenCalledOnce();
+  });
+
+  it("offers a retry when the load failed", () => {
+    mockState = { ...baseState, status: "error", idle: false, error: "boom" };
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    expect(mockRetry).toHaveBeenCalledOnce();
+  });
+
+  it("renders the four slots with an empty transcript before any run", () => {
+    renderPage();
+    expect(screen.getAllByRole("region")).toHaveLength(4);
+    expect(screen.getByTestId("output-empty")).toBeInTheDocument();
   });
 
   it("enables controls and shows the backend once ready", () => {
     mockState = {
       ...baseState,
       status: "ready",
+      idle: false,
       loading: false,
       ready: true,
       backend: "webgpu",
@@ -113,6 +139,7 @@ describe("AsrPage", () => {
     mockState = {
       ...baseState,
       status: "ready",
+      idle: false,
       loading: false,
       ready: true,
       backend: "wasm",
@@ -132,6 +159,7 @@ describe("AsrPage", () => {
     mockState = {
       ...baseState,
       status: "ready",
+      idle: false,
       loading: false,
       ready: true,
       backend: "wasm",
@@ -143,7 +171,7 @@ describe("AsrPage", () => {
   });
 
   it("hides the audio card until there is something to show", () => {
-    mockState = { ...baseState, status: "ready", loading: false, ready: true };
+    mockState = { ...baseState, status: "ready", idle: false, ready: true };
     renderPage();
     expect(screen.queryByText(/^audio$/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /waveform/i })).not.toBeInTheDocument();
@@ -153,6 +181,7 @@ describe("AsrPage", () => {
     mockState = {
       ...baseState,
       status: "ready",
+      idle: false,
       loading: false,
       ready: true,
       recording: true,
@@ -170,6 +199,7 @@ describe("AsrPage", () => {
     mockState = {
       ...baseState,
       status: "ready",
+      idle: false,
       loading: false,
       ready: true,
       clip,
@@ -189,6 +219,7 @@ describe("AsrPage", () => {
     mockState = {
       ...baseState,
       status: "ready",
+      idle: false,
       loading: false,
       ready: true,
       clip: new Float32Array(16000),
@@ -218,6 +249,7 @@ describe("AsrPage", () => {
     mockState = {
       ...baseState,
       status: "ready",
+      idle: false,
       loading: false,
       ready: true,
       running: true,
@@ -241,7 +273,7 @@ describe("AsrPage", () => {
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
       }),
     );
-    mockState = { ...baseState, status: "ready", loading: false, ready: true };
+    mockState = { ...baseState, status: "ready", idle: false, ready: true };
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /^jfk$/i }));
@@ -258,7 +290,7 @@ describe("AsrPage", () => {
       "fetch",
       vi.fn().mockResolvedValue({ ok: false, status: 404 }),
     );
-    mockState = { ...baseState, status: "ready", loading: false, ready: true };
+    mockState = { ...baseState, status: "ready", idle: false, ready: true };
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /^jfk$/i }));
@@ -270,7 +302,7 @@ describe("AsrPage", () => {
   });
 
   it("surfaces a load error from the hook", () => {
-    mockState = { ...baseState, status: "error", loading: false, error: "download failed" };
+    mockState = { ...baseState, status: "error", idle: false, error: "download failed" };
     renderPage();
     expect(screen.getByText(/download failed/i)).toBeInTheDocument();
   });
@@ -279,6 +311,7 @@ describe("AsrPage", () => {
     mockState = {
       ...baseState,
       status: "ready",
+      idle: false,
       loading: false,
       ready: true,
       backend: "wasm",
@@ -301,6 +334,7 @@ describe("AsrPage", () => {
     mockState = {
       ...baseState,
       status: "ready",
+      idle: false,
       loading: false,
       ready: true,
       backend: "wasm",

@@ -1,17 +1,19 @@
 import type { Locator, Page } from "@playwright/test";
 
-/** /tensor — the reference WebGPU compute surface (raw WGSL in a Web Worker). */
-export class TensorPage {
+import { ModelPageObject } from "./ModelPage";
+
+/**
+ * /tensor — the reference WebGPU compute surface (raw WGSL in a Web Worker).
+ * A four-slot model page like the audio routes, except its LOAD stage is a
+ * device probe rather than a download (model-page-pattern.md §7).
+ */
+export class TensorPage extends ModelPageObject {
   readonly heading: Locator;
   readonly computeButton: Locator;
   readonly resultTable: Locator;
 
-  /** Everything is scoped to <main>: the sidebar contains a "Computer Vision"
-   * category whose button otherwise collides with the "Compute" button. */
-  private readonly main: Locator;
-
-  constructor(private readonly page: Page) {
-    this.main = page.locator("main");
+  constructor(page: Page) {
+    super(page);
     this.heading = this.main.getByRole("heading", { name: "Tensor Arithmetic" });
     this.computeButton = this.main.getByRole("button", {
       name: /^(Compute|Computing…)$/,

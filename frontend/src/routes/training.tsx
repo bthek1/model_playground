@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { lazy, Suspense, useMemo, useState } from "react";
 
+import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { DatasetDialog } from "@/components/training/DatasetDialog";
 import { HyperparamsDialog } from "@/components/training/HyperparamsDialog";
 import { ModelArchitecture } from "@/components/training/ModelArchitecture";
@@ -46,7 +47,7 @@ const DEFAULTS: TrainingSettings = {
 const EMPTY_WEIGHTS = new Float32Array(784 * 10);
 
 function TrainingPage() {
-  const { supported, loading: gpuLoading } = useWebGPU();
+  const { capabilities, supported, loading: gpuLoading } = useWebGPU();
   const {
     datasetStatus,
     datasetProgress,
@@ -171,11 +172,13 @@ function TrainingPage() {
         />
       </div>
 
-      {/* WebGPU unavailable notice */}
+      {/* The LOAD stage, such as it is: this route downloads no weights, so
+          "can it run" is a device probe. Same component the tensor route uses in
+          its LOAD band — see model-page-pattern.md §7 for why this page keeps its
+          own layout rather than the four-band shell. */}
       {!gpuLoading && !supported && (
-        <div className="pointer-events-auto absolute top-20 left-1/2 -translate-x-1/2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm backdrop-blur-md">
-          WebGPU isn't available here, so training can't run. See the Playground
-          page for details on enabling it.
+        <div className="pointer-events-auto absolute top-20 left-1/2 max-w-md -translate-x-1/2 backdrop-blur-md">
+          <DeviceStatus capabilities={capabilities} loading={false} />
         </div>
       )}
 

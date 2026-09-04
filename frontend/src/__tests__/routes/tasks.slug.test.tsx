@@ -47,10 +47,10 @@ describe("TaskPlaceholderPage", () => {
     renderPage();
     // Appears in both the title and the body sentence.
     expect(screen.getAllByText("Text to Speech").length).toBeGreaterThan(0);
-    expect(screen.getByText("Audio")).toBeInTheDocument();
-    expect(
-      screen.getByText(/isn't available in the playground yet/i),
-    ).toBeInTheDocument();
+    // The category now leads the description sentence rather than sitting in
+    // its own eyebrow line.
+    expect(screen.getByText(/^Audio ·/)).toBeInTheDocument();
+    expect(screen.getByText(/not available yet/i)).toBeInTheDocument();
   });
 
   it("renders an unknown-task fallback for a slug not in the taxonomy", () => {
@@ -66,9 +66,9 @@ describe("TaskPlaceholderPage", () => {
     mockParams = { slug: "discrete-maths" };
     renderPage();
     expect(screen.getAllByText("Discrete Maths").length).toBeGreaterThan(0);
-    expect(screen.getByText("Theory")).toBeInTheDocument();
+    expect(screen.getByText(/^Theory ·/)).toBeInTheDocument();
     expect(
-      screen.getByText(/isn't available in the playground yet/i),
+      screen.getByText(/not available yet/i),
     ).toBeInTheDocument();
   });
 });

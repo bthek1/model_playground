@@ -25,8 +25,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 
 const mockClassify = vi.fn();
 const baseState: UseAudioClassifierResult = {
-  status: "loading",
-  loading: true,
+  status: "idle",
+  idle: true,
+  loading: false,
   ready: false,
   progress: null,
   backend: null,
@@ -74,17 +75,30 @@ describe("AudioClassificationPage", () => {
     renderPage();
     expect(screen.getByRole("button", { name: /record 5s/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /upload audio/i })).toBeDisabled();
-    expect(screen.getByText(/loading model/i)).toBeInTheDocument();
+    expect(screen.getByText(/load a model to classify/i)).toBeInTheDocument();
+  });
+
+  it("downloads nothing on arrival and loads on request", () => {
+    renderPage();
+    expect(baseState.load).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /load model/i }));
+    expect(baseState.load).toHaveBeenCalledOnce();
+  });
+
+  it("renders the four slots with an empty OUTPUT before any run", () => {
+    renderPage();
+    expect(screen.getAllByRole("region")).toHaveLength(4);
+    expect(screen.getByTestId("output-empty")).toBeInTheDocument();
   });
 
   it("hides the labels textarea for a fixed-label model", () => {
-    mockState = { ...baseState, loading: false, ready: true, isZeroShot: false };
+    mockState = { ...baseState, status: "ready", idle: false, ready: true, isZeroShot: false };
     renderPage();
     expect(screen.queryByLabelText(/labels to score against/i)).not.toBeInTheDocument();
   });
 
   it("shows the labels textarea for a zero-shot model", () => {
-    mockState = { ...baseState, loading: false, ready: true, isZeroShot: true };
+    mockState = { ...baseState, status: "ready", idle: false, ready: true, isZeroShot: true };
     renderPage();
     expect(screen.getByLabelText(/labels to score against/i)).toBeInTheDocument();
   });
@@ -92,7 +106,8 @@ describe("AudioClassificationPage", () => {
   it("renders ranked predictions with percentages", () => {
     mockState = {
       ...baseState,
-      loading: false,
+      status: "ready",
+      idle: false,
       ready: true,
       backend: "wasm",
       result: [
@@ -108,13 +123,13 @@ describe("AudioClassificationPage", () => {
   });
 
   it("surfaces an error from the hook", () => {
-    mockState = { ...baseState, loading: false, ready: true, error: "add at least one label" };
+    mockState = { ...baseState, status: "ready", idle: false, ready: true, error: "add at least one label" };
     renderPage();
     expect(screen.getByText(/add at least one label/i)).toBeInTheDocument();
   });
 
   it("parses newline/comma-separated prompts and passes them to classify on record", async () => {
-    mockState = { ...baseState, status: "ready", loading: false, ready: true, isZeroShot: true };
+    mockState = { ...baseState, status: "ready", idle: false, ready: true, isZeroShot: true };
     renderPage();
 
     fireEvent.change(screen.getByLabelText(/labels to score against/i), {

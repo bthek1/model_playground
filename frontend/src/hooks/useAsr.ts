@@ -13,6 +13,8 @@ export type AsrStatus = "idle" | "loading" | "ready" | "error";
 
 export interface UseAsrResult {
   status: AsrStatus;
+  /** True before the user has asked for the weights. */
+  idle: boolean;
   /** True until the pipeline reports `ready`. */
   loading: boolean;
   ready: boolean;
@@ -60,6 +62,7 @@ export function useAsr(
 
   return {
     status: worker.status,
+    idle: worker.idle,
     loading: worker.loading,
     ready: worker.ready,
     progress: worker.progress,

@@ -1,8 +1,11 @@
-// Shared model picker for the in-browser audio routes (ASR, classification,
-// TTS). Beyond the buttons it carries the **size-before-load guardrail**: the
-// selected model's approximate download is always shown, and anything past
-// `LARGE_MODEL_BYTES` gets an explicit warning — a browser tab's memory budget
-// is far tighter than a workstation's, and the download is the user's bandwidth.
+// The SELECT slot — shared by every model page, audio or not. Beyond the buttons
+// it carries the **size-before-load guardrail**: the selected model's approximate
+// download is always shown, and anything past `LARGE_MODEL_BYTES` gets an
+// explicit warning — a browser tab's memory budget is far tighter than a
+// workstation's, and the download is the user's bandwidth.
+//
+// Disable it while `loading` or `running`: switching models mid-flight discards
+// work the user is waiting on (docs/standards/model-page-pattern.md §4).
 
 import { AlertTriangle } from "lucide-react";
 

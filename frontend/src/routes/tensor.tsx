@@ -9,6 +9,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, Sigma } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { DeviceStatus } from "@/components/model/DeviceStatus";
+import { InputPanel } from "@/components/model/InputPanel";
+import { ModelPage } from "@/components/model/ModelPage";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Arrow, ParamChip, Stage } from "@/components/viz/schematic";
@@ -18,6 +21,7 @@ import {
   useMaxAbs,
 } from "@/components/viz/heatmap";
 import { useTensorOp } from "@/hooks/useTensorOp";
+import { useWebGPU } from "@/hooks/useWebGPU";
 import { formatMatrix, parseMatrix } from "@/lib/matrix";
 import { isBinaryOp, tensorOpSymbol } from "@/webgpu/tensorops";
 import type { TensorOp, TensorOpJob, TensorOpResult } from "@/webgpu/types";
@@ -64,6 +68,9 @@ function TensorArithmeticPage() {
   const [scalar, setScalar] = useState("2");
   const [parseError, setParseError] = useState<string | null>(null);
   const { running, result, error, run, reset } = useTensorOp();
+  // LOAD, for a route with nothing to download: whether there is a GPU to
+  // compute on. Auto-probed — a device request is cheap (§7).
+  const { capabilities, loading: probing, supported } = useWebGPU();
 
   const meta = OPS.find((o) => o.op === op)!;
   const needsB = isBinaryOp(op);
@@ -105,122 +112,127 @@ function TensorArithmeticPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-8">
-      <div>
-        <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold">
-          <Sigma className="size-6" /> Tensor Arithmetic
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Basic matrix and tensor operations, computed on your GPU via raw
-          WebGPU in a Web Worker. Pick an operation, edit the operands — rows on
-          separate lines, values separated by spaces or commas — then Compute.
-        </p>
-      </div>
-
-      {/* Operation selector */}
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-2">
-          {OPS.map((o) => (
-            <Button
-              key={o.op}
-              variant={o.op === op ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setOp(o.op);
-                setParseError(null);
-                reset();
-              }}
-            >
-              <span className="font-mono">{tensorOpSymbol(o.op)}</span>
-              {o.label}
+    <ModelPage
+      icon={Sigma}
+      title="Tensor Arithmetic"
+      description="Basic matrix and tensor operations, computed on your GPU via raw WebGPU in a Web Worker. Pick an operation, edit the operands — rows on separate lines, values separated by spaces or commas — then Compute."
+      labels={{ select: "Operation", load: "Device", run: "Operands" }}
+      select={
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            {OPS.map((o) => (
+              <Button
+                key={o.op}
+                variant={o.op === op ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setOp(o.op);
+                  setParseError(null);
+                  reset();
+                }}
+              >
+                <span className="font-mono">{tensorOpSymbol(o.op)}</span>
+                {o.label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <ParamChip label="op" value={tensorOpSymbol(op)} accent />
+            <ParamChip label="arity" value={needsB ? "binary" : "unary"} />
+            <p className="font-mono text-xs text-muted-foreground">{meta.hint}</p>
+          </div>
+        </div>
+      }
+      load={<DeviceStatus capabilities={capabilities} loading={probing} />}
+      run={
+        <InputPanel
+          ready={supported}
+          error={shownError}
+          disabledHint="This page needs a WebGPU device to compute."
+          controls={
+            <Button onClick={onRun} disabled={running}>
+              {running ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Computing…
+                </>
+              ) : (
+                "Compute"
+              )}
             </Button>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ParamChip label="op" value={tensorOpSymbol(op)} accent />
-          <ParamChip label="arity" value={needsB ? "binary" : "unary"} />
-          <p className="font-mono text-xs text-muted-foreground">{meta.hint}</p>
-        </div>
-      </div>
-
-      {/* Dataflow schematic: A ─(op)─▶ [B | scalar] ─(=)─▶ Result */}
-      <div className="flex flex-col items-stretch gap-4 xl:flex-row xl:items-start">
-        <Stage title="Matrix A" sub={`shape ${shapeA}`} className="flex-1">
-          <MatrixTextarea value={textA} onChange={setTextA} />
-        </Stage>
-
-        {needsB && (
-          <>
-            <Arrow label={tensorOpSymbol(op)} />
-            <Stage title="Matrix B" sub={`shape ${shapeB}`} className="flex-1">
-              <MatrixTextarea value={textB} onChange={setTextB} />
-            </Stage>
-          </>
-        )}
-
-        {needsScalar && (
-          <>
-            <Arrow label="×" />
-            <Stage title="Scalar" sub="s · A" className="flex-1">
-              <div className="grid gap-1.5">
-                <Label htmlFor="scalar">Multiply every element of A by</Label>
-                <input
-                  id="scalar"
-                  value={scalar}
-                  onChange={(e) => setScalar(e.target.value)}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                />
-              </div>
-            </Stage>
-          </>
-        )}
-
-        <Arrow label={resultArrow} />
-
-        <Stage
-          title="Result"
-          sub={
-            result
-              ? `${result.rows}×${result.cols} · ${result.gpuTimeMs.toFixed(2)} ms on GPU`
-              : "compute to run on the GPU"
           }
-          className="flex-1"
         >
-          {result ? (
-            <ResultView result={result} />
-          ) : (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Press{" "}
-              <span className="font-medium text-foreground">Compute</span> to
-              evaluate {resultArrow === "Aᵀ" ? "Aᵀ" : "the operation"} on your
-              GPU.
-            </p>
-          )}
-        </Stage>
-      </div>
+          {/* Dataflow schematic: A ─(op)─▶ [B | scalar] ─(=)─▶ Result */}
+          <div className="flex flex-col items-stretch gap-4 xl:flex-row xl:items-start">
+            <Stage title="Matrix A" sub={`shape ${shapeA}`} className="flex-1">
+              <MatrixTextarea value={textA} onChange={setTextA} />
+            </Stage>
 
-      {/* Transport */}
-      <div className="flex items-center gap-3">
-        <Button onClick={onRun} disabled={running}>
-          {running ? (
-            <>
-              <Loader2 className="size-4 animate-spin" /> Computing…
-            </>
-          ) : (
-            "Compute"
-          )}
-        </Button>
-        {shownError && <p className="text-sm text-destructive">{shownError}</p>}
-      </div>
+            {needsB && (
+              <>
+                <Arrow label={tensorOpSymbol(op)} />
+                <Stage title="Matrix B" sub={`shape ${shapeB}`} className="flex-1">
+                  <MatrixTextarea value={textB} onChange={setTextB} />
+                </Stage>
+              </>
+            )}
 
-      {/* Raw numeric dump (progressive disclosure: the heatmap leads, numbers
-          back it up) */}
-      {result && (
-        <Stage title="Result values" sub="raw row-major output">
-          <MatrixGrid data={result.data} rows={result.rows} cols={result.cols} />
-        </Stage>
-      )}
-    </div>
+            {needsScalar && (
+              <>
+                <Arrow label="×" />
+                <Stage title="Scalar" sub="s · A" className="flex-1">
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="scalar">Multiply every element of A by</Label>
+                    <input
+                      id="scalar"
+                      value={scalar}
+                      onChange={(e) => setScalar(e.target.value)}
+                      className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                    />
+                  </div>
+                </Stage>
+              </>
+            )}
+          </div>
+        </InputPanel>
+      }
+      output={
+        // The schematic's own Result stage is the output surface here — the
+        // visualization standard's grammar (Stage ─Arrow─▶ Stage) outranks the
+        // generic OutputPanel card for a dataflow page, so the band wraps it
+        // rather than replacing it.
+        <div className="space-y-4">
+          <Stage
+            title="Result"
+            sub={
+              result
+                ? `${result.rows}×${result.cols} · ${result.gpuTimeMs.toFixed(2)} ms on GPU`
+                : "compute to run on the GPU"
+            }
+          >
+            {result ? (
+              <ResultView result={result} />
+            ) : (
+              <p
+                data-testid="output-empty"
+                className="py-6 text-center text-sm text-muted-foreground"
+              >
+                Press <span className="font-medium text-foreground">Compute</span>{" "}
+                to evaluate {resultArrow === "Aᵀ" ? "Aᵀ" : "the operation"} on your
+                GPU.
+              </p>
+            )}
+          </Stage>
+
+          {/* Raw numeric dump (progressive disclosure: the heatmap leads, the
+              numbers back it up) */}
+          {result && (
+            <Stage title="Result values" sub="raw row-major output">
+              <MatrixGrid data={result.data} rows={result.rows} cols={result.cols} />
+            </Stage>
+          )}
+        </div>
+      }
+    />
   );
 }
 

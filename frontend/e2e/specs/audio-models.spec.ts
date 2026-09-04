@@ -17,6 +17,10 @@ import { expect, test } from "../fixtures/base";
 //
 // So the assertions here are deliberately end-to-end: the model must actually
 // become ready, and for ASR it must produce the right words.
+//
+// Note the `audio.load()` before every `waitForReady`: since the four-slot
+// migration nothing downloads on navigation, so a spec that wants weights has to
+// press the LOAD slot's button like a user would.
 
 const DOWNLOAD_BUDGET_MS = 10 * 60 * 1000;
 
@@ -33,6 +37,7 @@ test.describe("@slow real model loads", () => {
 
     // Regression guard for bug 1: on a machine with no GPU this is the WASM
     // path, which is exactly what was broken.
+    await audio.load();
     await audio.waitForReady(DOWNLOAD_BUDGET_MS);
     expect(["webgpu", "wasm"]).toContain(await audio.backend());
 
@@ -51,6 +56,7 @@ test.describe("@slow real model loads", () => {
     await mockApi();
     const audio = new AudioPage(page);
     await page.goto("/asr");
+    await audio.load();
     await audio.waitForReady(DOWNLOAD_BUDGET_MS);
 
     await audio.modelButton(/JFK/).click();
@@ -83,6 +89,7 @@ test.describe("@slow real model loads", () => {
     await expect(audio.warmingStatus.or(audio.loadingStatus).first()).toBeVisible({
       timeout: DOWNLOAD_BUDGET_MS,
     });
+    await audio.load();
     await audio.waitForReady(DOWNLOAD_BUDGET_MS);
   });
 
@@ -98,6 +105,7 @@ test.describe("@slow real model loads", () => {
     // Switching models also exercises the one-model-live dispose path.
     for (const model of ["AST (AudioSet)", "wav2vec2 keyword spotting", "CLAP (zero-shot)"]) {
       await audio.modelButton(model).click();
+      await audio.load();
       await audio.waitForReady(DOWNLOAD_BUDGET_MS);
       await expect(audio.error).toHaveCount(0);
     }
@@ -110,6 +118,7 @@ test.describe("@slow real model loads", () => {
     await mockApi();
     const audio = new AudioPage(page);
     await page.goto("/text-to-speech");
+    await audio.load();
     await audio.waitForReady(DOWNLOAD_BUDGET_MS);
 
     await audio.modelButton(/^Speak/).click();
@@ -153,7 +162,7 @@ test.describe("@slow speech enhancement", () => {
     const audio = new AudioPage(page);
     await page.goto("/audio-to-audio");
 
-    await page.getByTestId("load-model").click();
+    await audio.load();
     await audio.waitForReady(DOWNLOAD_BUDGET_MS);
     expect(["webgpu", "wasm"]).toContain(await audio.backend());
 

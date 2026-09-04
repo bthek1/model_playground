@@ -104,6 +104,8 @@ export interface ModelTask<TInput, TOutput, TOpts = void> {
   backend: Backend | null;
   /** Start the download. No-op unless `idle`. */
   load: () => void;
+  /** Re-attempt a failed load, same model. No-op unless `error`. */
+  retry: () => void;
 
   // --- Machine B: run ---
   run: (input: TInput, opts?: TOpts) => Promise<TOutput>;
@@ -121,6 +123,13 @@ The identical worker plumbing — creation, teardown, the pending map, the
 `progress`/`ready`/`result`/`error` switch — lives once in `useModelWorker`. A task hook
 is a thin typed wrapper around it, plus whatever is genuinely task-specific (ASR's
 capture loop, TTS's voice option).
+
+**`useEnhance` is the reference implementation** — it returns this contract verbatim
+and nothing else. The older hooks predate it and still expose a task-named alias for
+`run` (`useTts`'s `synthesize`, `useAsr`'s `transcribe`, `useAudioClassifier`'s
+`classify`); those are being migrated route by route. Do not add a new alias — a
+reviewer who has read one hook should have read them all, and a renamed `run` is
+exactly what breaks that.
 
 ---
 
@@ -210,14 +219,26 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Page | SELECT | LOAD | RUN | OUTPUT |
 |---|---|---|---|---|
 | TTS / ASR / Audio Classification | model catalogue | weight download in worker | text / mic / file | audio, transcript, labels |
+| Audio to Audio | model catalogue | ONNX graph + constants file | mic / file (48 kHz) | before/after waveforms, A-B play, WAV |
 | Tensor Arithmetic | the operation | WGSL pipeline compile (fast, auto) | operand matrices | heatmap + numeric grid |
 | Linear Training | architecture + hyperparams | dataset fetch + kernel compile | train loop | live weights + loss curve |
 | `/tasks/$slug` placeholder | — | — | — | "not available yet" |
 
 Where LOAD is fast and free (a shader compile), it may auto-run — pass `autoLoad`. The
-slot still renders, so the page keeps the same four-band rhythm as its neighbours. The
+slot still renders, so the page keeps the same four-band rhythm as its neighbours; use
+[`DeviceStatus`](../../frontend/src/components/model/DeviceStatus.tsx) there, which answers
+the question those pages actually raise — is there a GPU, or nothing to compute on. The
 placeholder route uses the same shell with empty slots, so an unimplemented task reads
 as *the same kind of page*, not a different app.
+
+**Linear Training is the documented exception.** It keeps its own layout: a full-bleed
+pan/zoom canvas whose background *is* the model, with a floating HUD. Forcing it into
+stacked bands would destroy the thing the visualization standard names as its reference
+implementation, and its "run" is a long-lived loop with start/stop rather than a
+request/response. It still honours the *stages* — the Dataset dialog is LOAD, Tune + Start
+is RUN, the live stats and charts are OUTPUT — and it shares `DeviceStatus` for the
+can-this-run answer. A page may earn this exemption; it may not quietly invent a fifth
+stage or skip OUTPUT.
 
 ---
 
@@ -242,4 +263,16 @@ as *the same kind of page*, not a different app.
 - [`model-visualization.md`](model-visualization.md) — how a model and its internals are drawn
 - [`../explanations/webgpu-inference.md`](../explanations/webgpu-inference.md) — how inference runs
 - [`../guides/adding-a-model.md`](../guides/adding-a-model.md) — kernel + registry entry
-- [`../plans/in-progress/model-page-restructure.md`](../plans/in-progress/model-page-restructure.md) — the migration to this pattern
+- [`../plans/completed/model-page-restructure.md`](../plans/completed/model-page-restructure.md) — the migration to this pattern
+
+## Reference implementations
+
+| Piece | File |
+|---|---|
+| State machines | [`frontend/src/model/useModelWorker.ts`](../../frontend/src/model/useModelWorker.ts) |
+| Contract types | [`frontend/src/model/types.ts`](../../frontend/src/model/types.ts) |
+| Shell + slots | [`frontend/src/components/model/`](../../frontend/src/components/model/) |
+| A weight-downloading page | [`routes/text-to-speech.tsx`](../../frontend/src/routes/text-to-speech.tsx) |
+| A compile-only page | [`routes/tensor.tsx`](../../frontend/src/routes/tensor.tsx) |
+| The empty case | [`routes/tasks.$slug.tsx`](../../frontend/src/routes/tasks.$slug.tsx) |
+| The contract, asserted | [`frontend/e2e/specs/model-page.spec.ts`](../../frontend/e2e/specs/model-page.spec.ts) |

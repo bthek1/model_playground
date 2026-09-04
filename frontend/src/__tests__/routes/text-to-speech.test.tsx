@@ -27,8 +27,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 
 const mockSynthesize = vi.fn<(text: string, opts?: unknown) => Promise<TtsAudio>>();
 const baseState: UseTtsResult = {
-  status: "loading",
-  loading: true,
+  status: "idle",
+  idle: true,
+  loading: false,
   ready: false,
   progress: null,
   backend: null,
@@ -72,12 +73,55 @@ describe("TextToSpeechPage", () => {
 
   it("disables Speak until the model is ready", () => {
     renderPage();
-    expect(screen.getByRole("button", { name: /speak/i })).toBeDisabled();
-    expect(screen.getByText(/loading model/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^speak$/i })).toBeDisabled();
+    expect(screen.getByText(/load a model to synthesise/i)).toBeInTheDocument();
+  });
+
+  it("downloads nothing on arrival — the LOAD slot offers the action instead", () => {
+    renderPage();
+    expect(baseState.load).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /load model/i })).toBeEnabled();
+  });
+
+  it("starts the download only when the user asks", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /load model/i }));
+    expect(baseState.load).toHaveBeenCalledOnce();
+  });
+
+  it("shows download progress in the LOAD slot", () => {
+    mockState = {
+      ...baseState,
+      status: "loading",
+      idle: false,
+      loading: true,
+      progress: { status: "progress", file: "model.onnx", progress: 30 },
+    };
+    renderPage();
+    expect(screen.getByText(/model\.onnx/)).toBeInTheDocument();
+    expect(screen.getByText(/30%/)).toBeInTheDocument();
+  });
+
+  it("renders the four slots, output included, before any result exists", () => {
+    renderPage();
+    expect(screen.getAllByRole("region")).toHaveLength(4);
+    expect(screen.getByTestId("output-empty")).toBeInTheDocument();
+  });
+
+  it("offers a retry when the load failed", () => {
+    mockState = {
+      ...baseState,
+      status: "error",
+      idle: false,
+      error: "download failed",
+    };
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    expect(baseState.retry).toHaveBeenCalledOnce();
   });
 
   it("shows the voice picker for Kokoro and hides it for pipeline models", () => {
-    mockState = { ...baseState, status: "ready", loading: false, ready: true };
+    mockState = { ...baseState, status: "ready", idle: false, ready: true };
     renderPage();
     // Kokoro is the default model → voice picker present.
     expect(screen.getByLabelText(/voice/i)).toBeInTheDocument();
@@ -87,7 +131,7 @@ describe("TextToSpeechPage", () => {
   });
 
   it("synthesises the text with the selected voice and plays it", async () => {
-    mockState = { ...baseState, status: "ready", loading: false, ready: true, backend: "wasm" };
+    mockState = { ...baseState, status: "ready", idle: false, ready: true, backend: "wasm" };
     const audio = new Float32Array([0.1, 0.2]);
     mockSynthesize.mockResolvedValue({ audio, sampleRate: 24000 });
     renderPage();
@@ -106,7 +150,7 @@ describe("TextToSpeechPage", () => {
     mockState = {
       ...baseState,
       status: "ready",
-      loading: false,
+      idle: false,
       ready: true,
       result: { audio: new Float32Array(48000), sampleRate: 24000 }, // 2 s
     };
@@ -117,7 +161,7 @@ describe("TextToSpeechPage", () => {
   });
 
   it("surfaces a load error from the hook", () => {
-    mockState = { ...baseState, status: "error", loading: false, error: "download failed" };
+    mockState = { ...baseState, status: "error", idle: false, error: "download failed" };
     renderPage();
     expect(screen.getByText(/download failed/i)).toBeInTheDocument();
   });

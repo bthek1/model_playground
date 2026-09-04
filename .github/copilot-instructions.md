@@ -303,9 +303,18 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   - The `id` on an error message is the discriminator: `id != null` is a run failure (`status` stays
     `ready`); `id == null` is a load failure (`status → error`).
 - **Every task hook returns the same shape:** `status` / `idle` / `loading` / `ready` / `progress` /
-  `backend` / `load` / `run` / `running` / `result` / `error`, plus whatever is genuinely
-  task-specific. Wrap the shared worker plumbing (`useModelWorker`) — do not re-derive the pending
-  map, the teardown, or the response switch per task.
+  `backend` / `load` / `retry` / `run` / `running` / `result` / `error`, plus whatever is genuinely
+  task-specific. Wrap `model/useModelWorker.ts` — do not re-derive the pending map, the teardown,
+  or the response switch per task.
+- **The shell is `components/model/`:** `ModelPage` (four named slots — a route cannot reorder them
+  or drop OUTPUT) with `ModelPicker` · `ModelStatus` · `InputPanel` · `OutputPanel`, plus
+  `DeviceStatus` for pages whose LOAD is a GPU probe rather than a download (`/tensor`). Band labels
+  stay generic (Model / Load / Input / Output) — naming a band after the task duplicates the field
+  label beneath it and makes the region's accessible name ambiguous.
+- **Reference implementations:** `routes/text-to-speech.tsx` (downloads weights),
+  `routes/tensor.tsx` (compile-only), `routes/tasks.$slug.tsx` (the empty case).
+  `routes/training.tsx` is the one **documented exception** — a full-bleed canvas HUD that keeps its
+  own layout; see model-page-pattern.md §7 before copying it.
 - **`idle` is the default — nothing downloads on mount.** Weights are the user's bandwidth and the
   tab's memory. Show the size estimate and the large-model warning *first*, start the download on an
   explicit action. Compile-only tasks (WGSL pipeline compile) may `autoLoad`.

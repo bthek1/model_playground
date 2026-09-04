@@ -13,6 +13,8 @@ export type TtsStatus = "idle" | "loading" | "ready" | "error";
 
 export interface UseTtsResult {
   status: TtsStatus;
+  /** True before the user has asked for the weights. */
+  idle: boolean;
   loading: boolean;
   ready: boolean;
   progress: PipelineProgress | null;
@@ -57,6 +59,7 @@ export function useTts(
 
   return {
     status: worker.status,
+    idle: worker.idle,
     loading: worker.loading,
     ready: worker.ready,
     progress: worker.progress,

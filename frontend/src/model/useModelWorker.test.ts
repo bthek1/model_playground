@@ -226,10 +226,14 @@ describe("useModelWorker — Machine B (inference)", () => {
     const { result, factory } = await ready();
     const buffer = new Float32Array([1, 2]).buffer;
 
-    act(() => void result.current.run({ audio: 1 }, [buffer]));
+    // Neither request is answered, so both reject on the auto-cleanup unmount.
+    // Swallow that here — an unhandled rejection would surface as a suite error.
+    const settled = (p: Promise<unknown>) => void p.catch(() => {});
+
+    act(() => settled(result.current.run({ audio: 1 }, [buffer])));
     expect(factory.last.posted[1].transfer).toEqual([buffer]);
 
-    act(() => void result.current.run({ text: "hi" }));
+    act(() => settled(result.current.run({ text: "hi" })));
     expect(factory.last.posted[2].transfer).toBeUndefined();
   });
 

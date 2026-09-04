@@ -60,10 +60,18 @@ test.describe("audio routes", () => {
     await expect(page.getByText(/autoregressive/)).toBeVisible();
     expect(hubRequests, "no weights before opt-in").toEqual([]);
 
-    // Opting in is what starts the load.
-    await audio.modelButton(/Download the model and continue/).click();
-    await expect(audio.sizeNote).toBeVisible();
+    // The input surface is present but dead, and the cost is stated, before any
+    // fetch — the gate is the `idle` state now, not an unmounted component.
     await expect(page.getByLabel(/Prompt/)).toBeVisible();
+    await expect(audio.modelButton(/^Generate$/)).toBeDisabled();
+
+    // Pressing Load in the LOAD slot is what starts the download. With the Hub
+    // blocked it fails — which is also the proof it was attempted. Wait for that
+    // rather than asserting on the request list immediately: the worker spawn and
+    // the first fetch are both async.
+    await audio.load();
+    await expect(audio.error).toBeVisible({ timeout: 30_000 });
+    expect(hubRequests.length, "load starts the download").toBeGreaterThan(0);
   });
 
   // /audio-to-audio is the one route with no Transformers.js path — the DSP is
@@ -100,7 +108,7 @@ test.describe("audio routes", () => {
     await expect(audio.modelButton(/Upload audio/)).toBeDisabled();
     await expect(audio.modelButton(/Record/)).toBeDisabled();
 
-    await page.getByTestId("load-model").click();
+    await audio.load();
     // With the Hub blocked the load must fail visibly rather than spin forever.
     await expect(audio.error).toBeVisible({ timeout: 30_000 });
     expect(hubRequests.length).toBeGreaterThan(0);
@@ -119,12 +127,18 @@ test.describe("audio routes", () => {
       await expect(
         page.getByRole("heading", { name: route.heading }),
       ).toBeVisible();
+      // The four bands are always present, OUTPUT included and empty.
+      await expect(audio.slots).toHaveCount(4);
+      await expect(audio.outputPanel).toBeVisible();
+      await expect(audio.emptyOutput).toBeVisible();
       // Both model choices are offered before anything is downloaded.
       await expect(audio.modelButton(route.large)).toBeVisible();
       await expect(audio.modelButton(route.small)).toBeVisible();
       // And the user is told the cost up front.
       await expect(audio.sizeNote).toBeVisible();
       await expect(audio.sizeNote).toContainText(/on WebGPU · .* on WASM/);
+      // Nothing has been fetched: the LOAD slot is still offering the action.
+      await expect(audio.loadButton).toBeVisible();
     });
 
     test(`${route.path} warns before a large download and not a small one`, async ({
@@ -154,10 +168,15 @@ test.describe("audio routes", () => {
       await audio.blockModelDownloads();
       await page.goto(route.path);
 
+      // Nothing loads on arrival any more, so the spec asks for the download.
+      await audio.load();
+
       // With the Hub unreachable the load must fail *visibly*: the page still
       // renders and says something, rather than spinning on "Loading model".
       await expect(audio.error).toBeVisible({ timeout: 30_000 });
       await expect(audio.readyStatus).toHaveCount(0);
+      // And the failure is recoverable without reloading the page.
+      await expect(audio.retryButton).toBeVisible();
       await expect(
         page.getByRole("heading", { name: route.heading }),
       ).toBeVisible();

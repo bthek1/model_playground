@@ -35,6 +35,8 @@ function shiftChunks(chunks: AsrChunk[] | undefined, offset: number): AsrChunk[]
 export interface UseLiveAsrResult {
   /** Model-load status, forwarded from `useAsr`. */
   status: ReturnType<typeof useAsr>["status"];
+  /** True before the user has asked for the weights. */
+  idle: boolean;
   ready: boolean;
   loading: boolean;
   progress: ReturnType<typeof useAsr>["progress"];
@@ -72,6 +74,10 @@ export interface UseLiveAsrResult {
    * would detach the caller's buffer.
    */
   transcribeClip: (audio: Float32Array, args?: AsrRunArgs) => Promise<void>;
+  /** Start the weight download (no-op unless idle). */
+  load: () => void;
+  /** Re-attempt a failed load. */
+  retry: () => void;
 }
 
 /**
@@ -84,8 +90,11 @@ export interface UseLiveAsrResult {
  * visualize, replay, download, or re-transcribe it. Built on {@link useAsr}, so
  * model loading/backends are shared.
  */
-export function useLiveAsr(model: string = DEFAULT_ASR_MODEL): UseLiveAsrResult {
-  const asr = useAsr(model);
+export function useLiveAsr(
+  model: string = DEFAULT_ASR_MODEL,
+  autoLoad = true,
+): UseLiveAsrResult {
+  const asr = useAsr(model, autoLoad);
   const { transcribe, ready } = asr;
 
   const [recording, setRecording] = useState(false);
@@ -197,6 +206,7 @@ export function useLiveAsr(model: string = DEFAULT_ASR_MODEL): UseLiveAsrResult 
 
   return {
     status: asr.status,
+    idle: asr.idle,
     ready: asr.ready,
     loading: asr.loading,
     progress: asr.progress,
@@ -212,5 +222,7 @@ export function useLiveAsr(model: string = DEFAULT_ASR_MODEL): UseLiveAsrResult 
     start,
     stop,
     transcribeClip,
+    load: asr.load,
+    retry: asr.retry,
   };
 }

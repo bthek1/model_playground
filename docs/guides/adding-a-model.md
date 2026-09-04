@@ -123,6 +123,61 @@ The short version: wrap the shared worker plumbing rather than re-deriving it, d
 `idle` so nothing downloads until the user asks, gate every run control on `ready`, always
 render the OUTPUT slot, and put each error in the slot that produced it.
 
+**The hook.** Wrap [`useModelWorker`](../../frontend/src/model/useModelWorker.ts) — it owns
+worker creation and teardown, the id-correlated pending table, the response switch, and both
+state machines. A task hook is a thin typed wrapper plus whatever is genuinely
+task-specific:
+
+```ts
+export function useMyTask(model: string, autoLoad = true) {
+  const worker = useModelWorker<MyResult>({
+    createWorker: createMyWorker,
+    key: model,                       // changing this tears down and resets
+    loadMessage: { model },
+    autoLoad,                         // pass `false` for weight downloads
+    notReadyMessage: "My worker not ready",
+  });
+  const { run } = worker;
+  const doThing = useCallback((input: Input) => run({ input }), [run]);
+  return { ...worker, doThing };
+}
+```
+
+**The page.** Four named slots — the shell will not let you reorder them, drop OUTPUT, or
+grow a fifth stage:
+
+```tsx
+<ModelPage
+  icon={Waves}
+  title="My Task"
+  description="What it does and where it runs."
+  select={<ModelPicker models={MY_MODELS} value={model} onChange={…}
+                       disabled={loading || running} />}
+  load={<ModelStatus status={status} backend={backend} progress={progress}
+                     error={status === "error" ? error : null}
+                     size={sizeEstimate(meta.params, meta.bytes)}
+                     onLoad={load} onRetry={retry} />}
+  run={<InputPanel ready={ready} error={ioError} controls={…}>{fields}</InputPanel>}
+  output={<OutputPanel title="Result" running={running}
+                       error={status === "error" ? null : error}
+                       empty="What the user will get.">{result && …}</OutputPanel>}
+/>
+```
+
+The `status === "error" ? … : …` split on both slots is the §2 discriminator in practice:
+a load failure belongs in LOAD, anything else came from a run and belongs in OUTPUT.
+
+**If your task has no weights** — a WGSL kernel compiles in milliseconds — use
+[`DeviceStatus`](../../frontend/src/components/model/DeviceStatus.tsx) in the LOAD band
+instead and leave `autoLoad` at `true`. The `/tensor` route is the reference. The band still
+renders, so the page keeps the same rhythm as one that downloads 200 MB.
+
+**Band labels stay generic** (Model / Load / Input / Output). `ModelPage` accepts a `labels`
+override, but naming a band after the task duplicates the field label or card title directly
+beneath it — and makes the accessible name ambiguous, since the band is a labelled region.
+Reach for it only when the task has genuinely better words, as `/tensor` does with
+Operation / Device / Operands.
+
 ## 6. Visualize the model
 
 Give the model a view that shows the user its identity, structure, parameters, and

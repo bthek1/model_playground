@@ -29,6 +29,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 const mockSynthesize = vi.fn<(text: string, opts?: unknown) => Promise<TtsAudio>>();
 const baseState: UseTtsResult = {
   status: "ready",
+  idle: false,
   loading: false,
   ready: true,
   progress: null,
@@ -43,10 +44,17 @@ const baseState: UseTtsResult = {
 };
 let mockState: UseTtsResult = { ...baseState };
 
-// The hook is what triggers the 571 MB download, so the spy also proves the
-// gate works: it must not be called until the user opts in.
-const useTts = vi.fn(() => mockState);
-vi.mock("@/hooks/useTts", () => ({ useTts: () => useTts() }));
+// The gate is no longer "don't mount the hook" — the hook is always mounted and
+// simply starts `idle`. The spy therefore records its *arguments*, because
+// `autoLoad === false` is now what guarantees nothing downloads on arrival.
+const useTts = vi.fn((model: string, autoLoad?: boolean) => {
+  void model;
+  void autoLoad;
+  return mockState;
+});
+vi.mock("@/hooks/useTts", () => ({
+  useTts: (model: string, autoLoad?: boolean) => useTts(model, autoLoad),
+}));
 
 const { Route } = await import("@/routes/text-to-audio");
 const Page = Route?.options?.component as React.ComponentType | undefined;
@@ -56,8 +64,9 @@ function renderPage() {
   render(<Page />);
 }
 
-function enable() {
-  fireEvent.click(screen.getByRole("button", { name: /Download the model/i }));
+/** The generator is always mounted now; only its load state changes. */
+function ready(extra: Partial<UseTtsResult> = {}) {
+  mockState = { ...baseState, ...extra };
 }
 
 describe("TextToAudioPage", () => {
@@ -67,32 +76,44 @@ describe("TextToAudioPage", () => {
   });
 
   it("gates the model behind an explicit opt-in", () => {
+    mockState = { ...baseState, status: "idle", idle: true, ready: false };
     renderPage();
 
     expect(
       screen.getByRole("heading", { name: /Text to Audio/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Experimental — and slow/i)).toBeInTheDocument();
-    // Nothing may load before the user accepts the cost.
-    expect(useTts).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole("button", { name: /^Generate/ }),
-    ).not.toBeInTheDocument();
+    // Nothing may download before the user accepts the cost. The hook is mounted
+    // — that is now free — but it must have been told not to auto-load.
+    expect(useTts).toHaveBeenCalledWith(expect.any(String), false);
+    expect(baseState.load).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /^Generate/ })).toBeDisabled();
   });
 
   it("states the download size and the speed caveat before downloading", () => {
+    mockState = { ...baseState, status: "idle", idle: true, ready: false };
     renderPage();
 
-    // The two things that would surprise a user, both up front.
-    expect(screen.getByText(/on WebGPU · .* on WASM/)).toBeInTheDocument();
-    expect(screen.getByText(/autoregressive/i)).toBeInTheDocument();
+    // The two things that would surprise a user, both up front. The size appears
+    // twice — once in the picker line, once in the notice — and for a 571 MB
+    // download that restatement is deliberate.
+    expect(screen.getAllByText(/on WebGPU · .* on WASM/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/autoregressive/i).length).toBeGreaterThan(0);
   });
 
-  it("mounts the generator only after opting in", () => {
+  it("starts the download from the LOAD slot when the user asks", () => {
+    mockState = { ...baseState, status: "idle", idle: true, ready: false };
     renderPage();
-    enable();
 
-    expect(useTts).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /load model/i }));
+    expect(baseState.load).toHaveBeenCalledOnce();
+  });
+
+  it("drops the warning once the model is loaded", () => {
+    ready();
+    renderPage();
+
+    expect(screen.queryByText(/Experimental — and slow/i)).toBeNull();
     expect(screen.getByRole("button", { name: /^Generate/ })).toBeEnabled();
     expect(screen.getByLabelText(/Prompt/i)).toBeInTheDocument();
   });
@@ -101,7 +122,6 @@ describe("TextToAudioPage", () => {
     const audio = { audio: new Float32Array([0.1, 0.2]), sampleRate: 32000 };
     mockSynthesize.mockResolvedValue(audio);
     renderPage();
-    enable();
 
     fireEvent.change(screen.getByLabelText(/Prompt/i), {
       target: { value: "8-bit chiptune" },
@@ -124,7 +144,6 @@ describe("TextToAudioPage", () => {
       sampleRate: 32000,
     });
     renderPage();
-    enable();
 
     fireEvent.change(screen.getByLabelText(/Length/i), {
       target: { value: "10" },
@@ -141,7 +160,6 @@ describe("TextToAudioPage", () => {
   it("disables Generate while a clip is being generated", () => {
     mockState = { ...baseState, running: true };
     renderPage();
-    enable();
 
     expect(screen.getByRole("button", { name: /Generating/i })).toBeDisabled();
   });
@@ -149,7 +167,6 @@ describe("TextToAudioPage", () => {
   it("surfaces a load or generation error", () => {
     mockState = { ...baseState, status: "error", ready: false, error: "boom" };
     renderPage();
-    enable();
 
     expect(screen.getByText("boom")).toBeInTheDocument();
   });
@@ -160,7 +177,6 @@ describe("TextToAudioPage", () => {
       result: { audio: new Float32Array([0.1]), sampleRate: 32000 },
     };
     renderPage();
-    enable();
 
     expect(screen.getByText(/Generated audio/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Play/ })).toBeInTheDocument();

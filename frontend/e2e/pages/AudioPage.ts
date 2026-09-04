@@ -1,21 +1,18 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator } from "@playwright/test";
+
+import { ModelPageObject } from "./ModelPage";
 
 /**
- * Shared page object for the three in-browser audio routes (`/asr`,
- * `/audio-classification`, `/text-to-speech`). They deliberately share a shell:
- * a `ModelPicker` (buttons + the size-before-load note and warning) above a
- * `ModelStatus` line, so one page object serves all three.
+ * Shared page object for the in-browser audio routes (`/asr`,
+ * `/audio-classification`, `/text-to-speech`, `/text-to-audio`,
+ * `/audio-to-audio`). They share the four-slot model page
+ * (docs/standards/model-page-pattern.md): a `ModelPicker` in SELECT, a
+ * `ModelStatus` in LOAD, transport in RUN, an `OutputPanel` in OUTPUT — so one
+ * page object serves all of them.
  */
-export class AudioPage {
-  constructor(private readonly page: Page) {}
-
-  /** Route content only — the sidebar also contains category buttons. */
-  private get main(): Locator {
-    return this.page.locator("main");
-  }
-
+export class AudioPage extends ModelPageObject {
   modelButton(label: string | RegExp): Locator {
-    return this.main.getByRole("button", { name: label });
+    return this.button(label);
   }
 
   /** "…74M params · ≈140 MB on WebGPU · 221 MB on WASM" */
@@ -41,9 +38,22 @@ export class AudioPage {
     return this.main.getByText(/Loading model/);
   }
 
-  /** The route's error banner (load failure, decode failure, …). */
-  get error(): Locator {
-    return this.main.locator(".text-destructive").first();
+  /** The LOAD slot's action, shown while the model is `idle`. */
+  get loadButton(): Locator {
+    return this.main.getByRole("button", { name: /^Load model$/ });
+  }
+
+  /** Shown in place of the load action after a failed load. */
+  get retryButton(): Locator {
+    return this.main.getByRole("button", { name: /^Retry$/ });
+  }
+
+  /**
+   * Load the model from the LOAD slot. Nothing downloads before this — `idle` is
+   * every weight-downloading route's default state.
+   */
+  async load(): Promise<void> {
+    await this.loadButton.click();
   }
 
   /**
