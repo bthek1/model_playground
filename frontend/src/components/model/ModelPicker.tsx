@@ -13,7 +13,7 @@
 // the per-model size behind a `title` tooltip. `row` is the old chip row, for a
 // route that has horizontal room to spare.
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, HardDrive, Trash2 } from "lucide-react";
 
 import { sizeEstimate, type MeasuredBytes } from "@/audio/size";
 import { Button } from "@/components/ui/button";
@@ -36,15 +36,26 @@ export function ModelPicker<T extends PickableModel>({
   onChange,
   disabled = false,
   layout = "list",
+  cached,
+  onEvict,
 }: {
   models: readonly T[];
   value: string;
   onChange: (model: T) => void;
   disabled?: boolean;
   layout?: "list" | "row";
+  /**
+   * Model ids already in the browser cache. Their download is free, which is
+   * the single most useful thing this slot can tell someone about to click a
+   * button that might cost 200 MB.
+   */
+  cached?: ReadonlySet<string>;
+  /** Drop a model's cached weights — reclaims space, and tests a cold load. */
+  onEvict?: (model: T) => void;
 }) {
   const selected = models.find((m) => m.id === value);
   const size = selected ? sizeEstimate(selected.params, selected.bytes) : null;
+  const selectedCached = selected ? (cached?.has(selected.id) ?? false) : false;
 
   return (
     <div className="space-y-2">
@@ -56,6 +67,7 @@ export function ModelPicker<T extends PickableModel>({
         {models.map((m) => {
           const s = sizeEstimate(m.params, m.bytes);
           const isSelected = m.id === value;
+          const isCached = cached?.has(m.id) ?? false;
 
           if (layout === "row") {
             return (
@@ -65,9 +77,10 @@ export function ModelPicker<T extends PickableModel>({
                 size="sm"
                 disabled={disabled}
                 onClick={() => onChange(m)}
-                title={`${m.hint} — ${s.label}`}
+                title={`${m.hint} — ${isCached ? "already downloaded" : s.label}`}
               >
                 {m.label}
+                {isCached && <HardDrive className="size-3.5 opacity-70" />}
               </Button>
             );
           }
@@ -81,7 +94,17 @@ export function ModelPicker<T extends PickableModel>({
               aria-pressed={isSelected}
               className="h-auto w-full flex-col items-start gap-0.5 px-3 py-2 text-left whitespace-normal"
             >
-              <span className="w-full text-sm font-medium">{m.label}</span>
+              <span className="flex w-full items-center gap-1.5 text-sm font-medium">
+                {m.label}
+                {isCached && (
+                  <span
+                    data-testid={`model-cached-${m.id}`}
+                    className="inline-flex items-center gap-1 rounded-sm border border-current/25 px-1 text-[0.65rem] font-normal opacity-80"
+                  >
+                    <HardDrive className="size-3" /> Cached
+                  </span>
+                )}
+              </span>
               <span
                 className={cn(
                   "w-full text-xs leading-snug font-normal",
@@ -103,9 +126,22 @@ export function ModelPicker<T extends PickableModel>({
             {selected.hint} <span className="mx-1 opacity-50">·</span>
             <span className="tabular-nums">{selected.params}M params</span>
             <span className="mx-1 opacity-50">·</span>
-            <span className="tabular-nums">{size.label}</span>
+            <span className="tabular-nums">
+              {selectedCached ? "already downloaded" : size.label}
+            </span>
           </p>
-          {size.large && (
+          {selectedCached && onEvict && (
+            <button
+              type="button"
+              data-testid="model-evict"
+              className="inline-flex items-center gap-1 underline-offset-2 hover:underline disabled:opacity-50"
+              disabled={disabled}
+              onClick={() => onEvict(selected)}
+            >
+              <Trash2 className="size-3" /> Clear cached weights
+            </button>
+          )}
+          {size.large && !selectedCached && (
             <p
               data-testid="model-size-warning"
               className="flex items-start gap-1.5 text-amber-600 dark:text-amber-500"

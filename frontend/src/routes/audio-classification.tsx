@@ -8,7 +8,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, Mic, Tags, Upload } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   CLASSIFIER_MODELS,
@@ -17,7 +17,6 @@ import {
 } from "@/audio/classification";
 import { decodeToMono, recordMic } from "@/audio/io";
 import type { ClassLabel } from "@/audio/pipelineTypes";
-import { sizeEstimate } from "@/audio/size";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -26,6 +25,10 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAudioClassifier } from "@/hooks/useAudioClassifier";
+import {
+  useCacheRefresh,
+  useModelSelection,
+} from "@/model/useModelSelection";
 
 export const Route = createFileRoute("/audio-classification")({
   component: AudioClassificationPage,
@@ -34,12 +37,20 @@ export const Route = createFileRoute("/audio-classification")({
 const RECORD_SECONDS = 5;
 
 function AudioClassificationPage() {
-  const [model, setModel] = useState(DEFAULT_CLASSIFIER_MODEL);
+  const session = useModelSelection({
+    routeKey: "audio-classification",
+    models: CLASSIFIER_MODELS,
+    fallback:
+      CLASSIFIER_MODELS.find((m) => m.id === DEFAULT_CLASSIFIER_MODEL) ??
+      CLASSIFIER_MODELS[0],
+  });
+  const model = session.model.id;
   const {
     status,
     ready,
     loading,
-    progress,
+    loadProgress,
+    loadedInMs,
     backend,
     running,
     error,
@@ -48,7 +59,9 @@ function AudioClassificationPage() {
     classify,
     load,
     retry,
-  } = useAudioClassifier(model, false);
+    cancel,
+  } = useAudioClassifier(model, session.autoLoad);
+  useCacheRefresh(session, ready);
 
   const [labelsText, setLabelsText] = useState(
     DEFAULT_ZERO_SHOT_LABELS.join("\n"),
@@ -56,11 +69,6 @@ function AudioClassificationPage() {
   const [preparing, setPreparing] = useState<null | "file" | "mic">(null);
   const [ioError, setIoError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const meta = useMemo(
-    () => CLASSIFIER_MODELS.find((m) => m.id === model) ?? CLASSIFIER_MODELS[0],
-    [model],
-  );
 
   const busy = running || preparing !== null;
   const labels = labelsText
@@ -105,17 +113,23 @@ function AudioClassificationPage() {
         <ModelPicker
           models={CLASSIFIER_MODELS}
           value={model}
-          onChange={(m) => setModel(m.id)}
+          onChange={session.setModel}
           disabled={loading || busy}
+          cached={session.cached}
+          onEvict={(m) => void session.evict(m.id)}
         />
       }
       load={
         <ModelStatus
           status={status}
           backend={backend}
-          progress={progress}
+          loadProgress={loadProgress}
+          loadedInMs={loadedInMs}
+          cached={session.isCached}
+          restoring={session.restoring}
           error={loadError}
-          onLoad={load}
+          onLoad={session.onLoad(load)}
+          onCancel={session.onCancel(cancel)}
           onRetry={retry}
           disabled={busy}
         />

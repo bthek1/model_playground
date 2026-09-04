@@ -1,36 +1,75 @@
 // The LOAD slot. Renders every state of Machine A — idle, loading, warm-up,
-// ready, error — and owns the two actions that move it: `load` and `retry`
+// ready, error — and owns the actions that move it: `load`, `cancel`, `retry`
 // (docs/standards/model-page-pattern.md §2, §4).
 //
 // This is the only slot allowed a progress bar. Inference progress belongs in
 // OUTPUT; putting both here is what made "is it still loading?" ambiguous.
+//
+// The bar is fed the *aggregate* (`loadProgress`), never a raw per-file event —
+// see `model/progress.ts` for why. Three things a user asks while waiting, all
+// answered on screen: how far along, how much data, and how long so far.
 
-import { CheckCircle2, Download, Loader2, RotateCw } from "lucide-react";
+import {
+  CheckCircle2,
+  Cpu,
+  Download,
+  HardDriveDownload,
+  Loader2,
+  RotateCw,
+  X,
+} from "lucide-react";
 
-import type { SizeEstimate } from "@/audio/size";
+import { formatBytes } from "@/audio/size";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { Button } from "@/components/ui/button";
+import { classifyLoadError } from "@/model/errors";
+import type { LoadProgress } from "@/model/progress";
 import type { ModelStatus as Status } from "@/model/types";
+
+function seconds(ms: number): string {
+  return ms < 1000 ? "" : ms < 60_000
+    ? `${Math.round(ms / 1000)}s`
+    : `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
+/** What is happening, in the user's words. */
+function phaseLabel(phase: LoadProgress["phase"] | undefined): string {
+  if (phase === "warmup") return "Warming up (first inference)…";
+  if (phase === "downloading") return "Downloading weights";
+  return "Contacting the model host…";
+}
 
 export function ModelStatus({
   status,
   backend,
-  progress,
+  loadProgress,
   error,
-  size,
   onLoad,
   onRetry,
+  onCancel,
+  /** True when this model's weights are already in the browser cache. */
+  cached = false,
+  /** How long the completed load took, for the ready chip. */
+  loadedInMs = null,
+  /**
+   * The page is re-loading a model the user had loaded before the refresh.
+   * Only ever set on a cache hit, so it costs no bandwidth — but it is labelled
+   * honestly as a re-load, not as a session that survived.
+   */
+  restoring = false,
   /** Disable the load button while an input is being prepared, etc. */
   disabled = false,
 }: {
   status: Status;
   backend: string | null;
-  progress: { status: string; file?: string; progress?: number } | null;
+  loadProgress: LoadProgress | null;
   error?: string | null;
-  /** Download estimate for the selected model — shown before the user commits. */
-  size?: SizeEstimate | null;
   onLoad?: () => void;
-  onRetry?: () => void;
+  onRetry?: (overrides?: Record<string, unknown>) => void;
+  onCancel?: () => void;
+  cached?: boolean;
+  loadedInMs?: number | null;
+  restoring?: boolean;
   disabled?: boolean;
 }) {
   if (status === "idle") {
@@ -42,30 +81,48 @@ export function ModelStatus({
           disabled={disabled || !onLoad}
           className="xl:w-full"
         >
-          <Download className="size-4" /> Load model
+          {cached ? (
+            <HardDriveDownload className="size-4" />
+          ) : (
+            <Download className="size-4" />
+          )}
+          {cached ? "Load model (cached)" : "Load model"}
         </Button>
+        {/* The download estimate is quoted once, by ModelPicker directly above
+            in the setup rail — the guardrail is satisfied and repeating the
+            number here just made the rail say it twice. */}
         <p className="text-xs leading-snug text-muted-foreground">
-          {size ? (
-            <>
-              <span className="tabular-nums">{size.label}</span>
-              <span className="mx-1 opacity-50">·</span>
-            </>
-          ) : null}
-          Downloaded once, then cached by the browser.
+          {cached
+            ? "Already downloaded — loads from the browser cache."
+            : "Downloaded once, then cached by the browser."}
         </p>
       </div>
     );
   }
 
   if (status === "error") {
+    const info = classifyLoadError(error ?? "The model failed to load.");
     return (
       <ErrorNote
-        message={error ?? "The model failed to load."}
+        message={info.message}
+        hint={info.hint}
+        detail={info.raw === info.message ? undefined : info.raw}
         action={
           onRetry ? (
-            <Button size="sm" variant="outline" onClick={onRetry}>
-              <RotateCw className="size-4" /> Retry
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => onRetry()}>
+                <RotateCw className="size-4" /> Retry
+              </Button>
+              {info.suggestsCpu && backend !== "wasm" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onRetry({ backend: "wasm" })}
+                >
+                  <Cpu className="size-4" /> Retry on CPU
+                </Button>
+              )}
+            </div>
           ) : undefined
         }
       />
@@ -81,42 +138,81 @@ export function ModelStatus({
         <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-500" />
         Model ready · running on{" "}
         <span className="font-medium uppercase">{backend}</span>
+        {loadedInMs != null && loadedInMs >= 1000 && (
+          <span className="tabular-nums opacity-80">
+            · loaded in {seconds(loadedInMs)}
+          </span>
+        )}
       </p>
     );
   }
 
   // --- loading ---------------------------------------------------------------
-  // The engines post a synthetic `warmup` progress after the download, while the
-  // first (throwaway) inference compiles shaders / JITs the WASM module.
-  if (progress?.status === "warmup") {
-    return (
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" />
-        Warming up the model…
-      </p>
-    );
-  }
-
-  const pct =
-    progress && typeof progress.progress === "number"
-      ? Math.round(progress.progress)
-      : null;
+  const p = loadProgress;
+  const pct = p?.percent ?? null;
+  const elapsed = p ? seconds(p.elapsedMs) : "";
 
   return (
-    <div className="space-y-1.5">
+    <div
+      className="space-y-1.5"
+      data-testid="load-progress"
+      data-phase={p?.phase ?? "connecting"}
+    >
       <p className="flex items-start gap-1.5 text-xs leading-snug break-all text-muted-foreground">
         <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" />
         <span>
-          Loading model{progress?.file ? ` · ${progress.file}` : ""}
-          {pct != null ? ` · ${pct}%` : ""}
+          {restoring && p?.phase !== "warmup"
+            ? "Restoring from cache…"
+            : phaseLabel(p?.phase)}
+          {p?.current ? ` · ${p.current}` : ""}
         </span>
       </p>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+
+      <div
+        role="progressbar"
+        aria-label="Model load progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        // Omitted while indeterminate — an assistive technology should say
+        // "busy", not invent a number we don't have.
+        {...(pct != null ? { "aria-valuenow": pct } : {})}
+        className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+      >
         <div
-          className="h-full rounded-full bg-primary transition-[width]"
-          style={{ width: `${pct ?? 8}%` }}
+          className={
+            pct != null
+              ? "h-full rounded-full bg-primary transition-[width]"
+              : "h-full w-1/3 animate-pulse rounded-full bg-primary/60"
+          }
+          style={pct != null ? { width: `${pct}%` } : undefined}
         />
       </div>
+
+      <p className="flex flex-wrap items-center gap-x-2 text-[0.7rem] text-muted-foreground tabular-nums">
+        {pct != null && <span>{pct}%</span>}
+        {p && p.total > 0 && (
+          <span>
+            {formatBytes(p.loaded)} / {formatBytes(p.total)}
+          </span>
+        )}
+        {p && p.files.count > 0 && (
+          <span>
+            {p.files.done} of {p.files.count} files
+          </span>
+        )}
+        {elapsed && <span>{elapsed}</span>}
+        {onCancel && (
+          <Button
+            size="sm"
+            variant="ghost"
+            data-testid="load-cancel"
+            className="ml-auto h-6 px-2 text-[0.7rem]"
+            onClick={onCancel}
+          >
+            <X className="size-3" /> Cancel
+          </Button>
+        )}
+      </p>
     </div>
   );
 }

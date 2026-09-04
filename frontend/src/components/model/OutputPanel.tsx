@@ -6,7 +6,7 @@
 // Four states in one place: empty → running → result, with error alongside.
 
 import { Loader2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { ErrorNote } from "@/components/model/ErrorNote";
 import {
@@ -16,6 +16,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
+/**
+ * Seconds since the current run started, once it has been going long enough to
+ * be worth saying. A first inference can take tens of seconds while shaders
+ * compile, and a spinner with no counter is indistinguishable from a hang.
+ */
+function useRunElapsed(running: boolean): number | null {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!running) {
+      setElapsed(0);
+      return;
+    }
+    const started = Date.now();
+    const id = setInterval(() => setElapsed(Date.now() - started), 500);
+    return () => clearInterval(id);
+  }, [running]);
+  return elapsed >= 2000 ? Math.round(elapsed / 1000) : null;
+}
 
 export function OutputPanel({
   title,
@@ -44,6 +63,7 @@ export function OutputPanel({
   children?: ReactNode;
 }) {
   const hasResult = children != null && children !== false;
+  const elapsed = useRunElapsed(running);
 
   return (
     <Card
@@ -72,6 +92,9 @@ export function OutputPanel({
           >
             <Loader2 className="size-4 animate-spin" />
             {runningLabel}
+            {elapsed != null && (
+              <span className="tabular-nums opacity-70">{elapsed}s</span>
+            )}
           </div>
         )}
 

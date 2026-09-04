@@ -6,12 +6,13 @@
 // Task-specific detail lives in the *payload* generics, never in renamed fields.
 
 import type { Backend, LoadOpts } from "@/audio/backend";
+import type { LoadProgress } from "./progress";
 
 /**
  * Machine A — the model lifecycle, one per worker.
  *
  *   idle ──load()──▶ loading ──ready──▶ ready
- *     ▲                 │ progress ↺
+ *     ▲     ◀──cancel()──┘ progress ↺
  *     │                 │ error (no id)
  *     │                 ▼
  *     └── model change ─ error ──retry()──▶ loading
@@ -79,12 +80,19 @@ export interface ModelTask<TInput, TOutput, TOpts = void> {
   ready: boolean;
   /** Null outside `loading`. */
   progress: ModelProgress | null;
+  /** Aggregate, monotonic load progress. Null outside `loading`. */
+  loadProgress: LoadProgress | null;
+  /** Duration of the load that produced `ready`, in ms. */
+  loadedInMs: number | null;
   /** Resolved execution backend once `ready`. */
   backend: Backend | null;
   /** Start the download. No-op unless `idle`. */
   load: () => void;
-  /** Re-attempt a failed load. No-op unless `error`. */
-  retry: () => void;
+  /** Re-attempt a failed load. No-op unless `error`. `overrides` ride along on
+   *  the `load` message — `{ backend: "wasm" }` is the "retry on CPU" path. */
+  retry: (overrides?: Record<string, unknown>) => void;
+  /** Abandon a load in flight, returning to `idle`. No-op unless `loading`. */
+  cancel: () => void;
 
   // Machine B — inference
   run: (input: TInput, opts?: TOpts) => Promise<TOutput>;

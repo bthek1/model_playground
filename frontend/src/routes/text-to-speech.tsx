@@ -9,10 +9,9 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { AudioLines, Download, Loader2, Play, Volume2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { play, toWavBlob } from "@/audio/io";
-import { sizeEstimate } from "@/audio/size";
 import { DEFAULT_TTS_MODEL, TTS_MODELS } from "@/audio/tts";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -22,6 +21,10 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useTts } from "@/hooks/useTts";
+import {
+  useCacheRefresh,
+  useModelSelection,
+} from "@/model/useModelSelection";
 
 export const Route = createFileRoute("/text-to-speech")({
   component: TextToSpeechPage,
@@ -31,14 +34,21 @@ const DEFAULT_TEXT =
   "Text to speech runs entirely in your browser — no server, no upload.";
 
 function TextToSpeechPage() {
-  const [model, setModel] = useState(DEFAULT_TTS_MODEL);
-  // autoLoad: false — the weights are the user's bandwidth (§1.2). Nothing is
-  // downloaded until they press Load in the LOAD slot.
+  // The weights are the user's bandwidth (§1.2), so nothing downloads until they
+  // press Load — or, after a refresh, only if this model is already cached and
+  // they had loaded it before (model/useModelSelection.ts).
+  const session = useModelSelection({
+    routeKey: "tts",
+    models: TTS_MODELS,
+    fallback: TTS_MODELS.find((m) => m.id === DEFAULT_TTS_MODEL) ?? TTS_MODELS[0],
+  });
+  const model = session.model.id;
   const {
     status,
     ready,
     loading,
-    progress,
+    loadProgress,
+    loadedInMs,
     backend,
     result,
     running,
@@ -46,12 +56,11 @@ function TextToSpeechPage() {
     synthesize,
     load,
     retry,
-  } = useTts(model, false);
+    cancel,
+  } = useTts(model, session.autoLoad);
+  useCacheRefresh(session, ready);
 
-  const meta = useMemo(
-    () => TTS_MODELS.find((m) => m.id === model) ?? TTS_MODELS[0],
-    [model],
-  );
+  const meta = session.model;
   const [voice, setVoice] = useState(meta.voices?.[0]?.id);
   const [text, setText] = useState(DEFAULT_TEXT);
   const playbackRef = useRef<AudioContext | null>(null);
@@ -105,19 +114,25 @@ function TextToSpeechPage() {
           models={TTS_MODELS}
           value={model}
           onChange={(m) => {
-            setModel(m.id);
+            session.setModel(m);
             setVoice(m.voices?.[0]?.id);
           }}
           disabled={loading || running}
+          cached={session.cached}
+          onEvict={(m) => void session.evict(m.id)}
         />
       }
       load={
         <ModelStatus
           status={status}
           backend={backend}
-          progress={progress}
+          loadProgress={loadProgress}
+          loadedInMs={loadedInMs}
+          cached={session.isCached}
+          restoring={session.restoring}
           error={loadError}
-          onLoad={load}
+          onLoad={session.onLoad(load)}
+          onCancel={session.onCancel(cancel)}
           onRetry={retry}
         />
       }

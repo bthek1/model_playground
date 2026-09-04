@@ -49,8 +49,8 @@ one enum.
 ```
    ┌──────┐  load()   ┌─────────┐  ready   ┌───────┐
    │ idle │──────────▶│ loading │─────────▶│ ready │
-   └──────┘           └────┬────┘          └───┬───┘
-      ▲                    │ progress ↺        │
+   └──────┘◀──────────└────┬────┘          └───┬───┘
+      ▲       cancel()     │ progress ↺        │
       │                    │                   │ run()
       │                    │ error (no id)     │   ↺
       │                    ▼                   │
@@ -60,6 +60,14 @@ one enum.
 ```
 
 - `idle` is the **default**. The worker is not created until `load()`.
+- `cancel()` abandons a download in flight and returns to `idle` — a load can take
+  minutes, and a user who changed their mind should not have to reload the page.
+  Cancelling is not failing: no error is shown, and the partial download stays in the
+  browser cache, so resuming later picks up where it left off.
+- `retry(overrides?)` merges `overrides` into the `load` message. That is how the
+  "Retry on CPU" action after a GPU failure pins `{ backend: "wasm" }` — §6 still holds,
+  the backend is resolved once per worker, the user has simply chosen it instead of the
+  probe.
 - `progress` events are a self-loop on `loading` — they never change `status`.
 - Changing the selected model tears the worker down and returns to `idle`.
 - `error` here means **the model could not be loaded**. A failed *inference* does not
@@ -98,14 +106,20 @@ export interface ModelTask<TInput, TOutput, TOpts = void> {
   idle: boolean;
   loading: boolean;
   ready: boolean;
-  /** Weight-download / warm-up progress. Null outside `loading`. */
+  /** The last raw worker progress event. Null outside `loading`. */
   progress: ModelProgress | null;
+  /** Aggregate, monotonic progress across every file. Null outside `loading`. */
+  loadProgress: LoadProgress | null;
+  /** How long the load that produced `ready` took, in ms. */
+  loadedInMs: number | null;
   /** Resolved execution backend once `ready` — "webgpu" | "wasm". */
   backend: Backend | null;
   /** Start the download. No-op unless `idle`. */
   load: () => void;
   /** Re-attempt a failed load, same model. No-op unless `error`. */
-  retry: () => void;
+  retry: (overrides?: Record<string, unknown>) => void;
+  /** Abandon a load in flight, returning to `idle`. No-op unless `loading`. */
+  cancel: () => void;
 
   // --- Machine B: run ---
   run: (input: TInput, opts?: TOpts) => Promise<TOutput>;
@@ -135,34 +149,54 @@ exactly what breaks that.
 
 ## 4. The four slots
 
-The page shell composes them; a route supplies content.
+The page shell composes them; a route supplies content. The stages are split by
+**how often they are used**, not stacked evenly: SELECT and LOAD are done once per
+session and collapse into a compact setup rail, while RUN and OUTPUT — the pair the
+user touches on every iteration — sit side by side, so a result never lands below
+the fold and there is no scroll between the input being edited and the output being
+judged.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  <ModelPageHeader>   icon · title · one-line what/where │
-├─────────────────────────────────────────────────────────┤
-│  1. SELECT   <ModelPicker>                              │
-│              buttons · hint · params · download size    │
-│              · large-model warning                      │
-├─────────────────────────────────────────────────────────┤
-│  2. LOAD     <ModelStatus>                              │
-│              idle    → "Load model (142 MB)" button     │
-│              loading → file · % · progress bar          │
-│              warmup  → "Warming up…"                    │
-│              ready   → "Ready · running on WEBGPU"      │
-│              error   → message + Retry                  │
-├─────────────────────────────────────────────────────────┤
-│  3. RUN      <InputPanel>  (task-specific)              │
-│              the input surface + transport controls;    │
-│              every control disabled unless `ready`      │
-├─────────────────────────────────────────────────────────┤
-│  4. OUTPUT   <OutputPanel>                              │
-│              empty → what a result will look like       │
-│              running → skeleton, never a layout jump    │
-│              result → the output + its actions          │
-│              error → the message, page still usable     │
-└─────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────┐
+│  header      icon · title · one-line what/where                        [aside] │
+├──────────────────────┬────────────────────────────────────────────────────────┤
+│  SETUP RAIL (~20rem) │  WORKBENCH                                             │
+│                      │  ┌──────────────────────┬───────────────────────────┐  │
+│  1. MODEL            │  │ 3. INPUT             │ 4. OUTPUT                 │  │
+│     <ModelPicker>    │  │    <InputPanel>      │    <OutputPanel>          │  │
+│     one row per      │  │                      │                           │  │
+│     model · hint     │  │    the input surface │    empty → what a result  │  │
+│     params · size    │  │                      │      will look like       │  │
+│     · ⚠ large        │  │    ─ transport ─     │    running → skeleton     │  │
+│                      │  │    every control     │    result → output + its  │  │
+│  2. LOAD             │  │    gated on `ready`  │      actions              │  │
+│     <ModelStatus>    │  │                      │    error → the message    │  │
+│     idle → button    │  │  input errors here   │  run errors here          │  │
+│     loading → bar    │  └──────────────────────┴───────────────────────────┘  │
+│     warmup → "…"     │                                                        │
+│     ready → chip     │  Each column scrolls its own overflow; the header and   │
+│     error → retry    │  the rail never scroll away.                           │
+└──────────────────────┴────────────────────────────────────────────────────────┘
 ```
+
+### 4a. Breakpoints
+
+| Width | Arrangement |
+|---|---|
+| `< md` (< 768) | One column, all four bands stacked in pipeline order. The page scrolls as one sheet — no height clamp, no inner scroll containers. |
+| `md … xl` | Setup becomes a **horizontal** strip across the top (MODEL beside LOAD); INPUT and OUTPUT are side by side below it. |
+| `≥ xl` (1280+) | The full arrangement above: rail, then the two workbench columns. |
+
+**DOM order is pipeline order at every breakpoint.** The shell is a CSS grid that
+places children by *area*; it never reorders source. That is what keeps Tab and a
+screen reader walking Model → Load → Input → Output no matter how the bands are
+arranged visually, and it is asserted directly (`ModelPage.test.tsx`).
+
+Two mechanical rules make the columns behave: both workbench columns carry
+`min-h-0 min-w-0` — without them a grid child refuses to shrink, the inner scroll
+never engages and a wide result pushes the whole page sideways — and the height
+clamp only applies from `md` up, so a short phone viewport is never trapped inside
+a scroll container.
 
 **Slot rules**
 
@@ -171,10 +205,16 @@ The page shell composes them; a route supplies content.
 - LOAD is the only slot that may show a progress bar. Inference progress belongs in
   OUTPUT.
 - RUN controls are `disabled={!ready || running}`. There is no "queue it up" affordance.
-- OUTPUT always renders. An empty state that describes the coming result is worth more
-  than a collapsed section, and it stops the page from jumping when the result lands.
+  The transport row is `sticky bottom-0` inside the input column, so a tall input
+  surface can scroll without carrying Run out of reach — sticky, not bottom-pinned:
+  pinning leaves a chasm on every task whose input is short.
+- OUTPUT always renders, and fills its column. An empty state that describes the coming
+  result is worth more than a collapsed section, and it stops the page from jumping
+  when the result lands.
 - Errors render **in the slot that produced them**. A load error goes in LOAD, a decode
   error in RUN, an inference error in OUTPUT.
+- The header's `aside` is for one-line answers that don't deserve a band — a backend
+  chip, a device line. It is not a fifth stage.
 
 ---
 
@@ -188,12 +228,55 @@ The guardrail that motivates `idle`. Before any bytes move, the user sees the es
     Weights are cached after the first download.
 ```
 
+- A model whose weights are **already in the browser cache** says so — a `Cached` badge
+  on its row, "already downloaded" in place of the size, and "Load model (cached)" on the
+  button. Nothing else in this slot answers the question the user is actually asking,
+  which is whether this click costs 200 MB or nothing. The probe is `model/cache.ts`; it
+  reads Cache Storage and resolves to "not cached" on any failure, because the cost of
+  that error direction is one extra click, while the other spends bandwidth unasked.
+- The estimate is quoted **once, by `ModelPicker`** — it sits directly above LOAD in the
+  setup rail, so the guardrail is satisfied where the choice is made. `ModelStatus` does
+  not repeat the number; in a 20rem rail that just said it twice.
 - Estimate from measured `bytes` per backend when available; fall back to params × dtype.
 - The estimate is **backend-dependent** — a WASM q8 encoder with an fp32 decoder is not
   the same download as fp16 on WebGPU. Resolve the backend before quoting a number.
 - Past `LARGE_MODEL_BYTES`, the warning is mandatory.
 
 ---
+
+### 5a. Progress while it loads
+
+The LOAD slot reports the **aggregate**, never a raw per-file event. Transformers.js
+reports progress per file (4–8 of them), so rendering its payload directly makes the bar
+restart at 0 for each one — it visibly runs forwards, snaps back, and then sits at 100%
+through a warm-up that has not started. `model/progress.ts` folds the events into one
+picture, and its rules are the interesting part:
+
+- percent is **by bytes, across all files with a known size**, and **monotonic** — a
+  newly-announced file enlarges the denominator and must not drop the bar;
+- a file with no announced size is excluded rather than guessed at; while no size is
+  known the bar is **indeterminate** (and `aria-valuenow` is omitted, so assistive tech
+  says "busy" instead of announcing a number we do not have);
+- **warm-up is its own phase**, indeterminate, labelled as the first inference — not the
+  tail of the download;
+- **no ETA.** A rate extrapolated from the first seconds of a multi-file download is
+  wrong by a factor of several. Bytes downloaded and elapsed time are facts; show those.
+
+### 5b. Surviving a refresh
+
+A Worker and its GPU/WASM session cannot outlive a page load — nothing persists an
+in-memory model, and no amount of UI should imply otherwise. What persists is:
+
+- **the selection** (`store/models.ts`, `localStorage`), validated against the catalogue
+  on read — a stored id we no longer ship falls back to the default and is dropped;
+- **the intent to load it**, recorded when the user presses Load and cleared on cancel or
+  a model change;
+- **the weights**, in the browser's cache, which is what makes a resume free.
+
+The resume rule, in `model/useModelSelection.ts`: auto-load on mount **only when the
+stored intent and a cache hit agree**. An uncached model stays `idle` and asks, however
+recently it was used. While a resume runs, the slot says "Restoring from cache…" — the
+load is real and is described as one.
 
 ## 6. Backend selection
 
@@ -231,7 +314,9 @@ the question those pages actually raise — is there a GPU, or nothing to comput
 placeholder route uses the same shell with empty slots, so an unimplemented task reads
 as *the same kind of page*, not a different app.
 
-**Linear Training is the documented exception.** It keeps its own layout: a full-bleed
+**Linear Training is the documented exception.** It does not render `ModelPage` at all,
+so it opts out of the setup-rail/workbench arrangement along with everything else. It
+keeps its own layout: a full-bleed
 pan/zoom canvas whose background *is* the model, with a floating HUD. Forcing it into
 stacked bands would destroy the thing the visualization standard names as its reference
 implementation, and its "run" is a long-lived loop with start/stop rather than a
@@ -253,12 +338,26 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `slot-1` … `slot-4` | `ModelPage` | The four bands, in pipeline order. Always exactly four. |
 | `model-size-note` | `ModelPicker` | The selected model's hint, params and per-backend download. |
 | `model-size-warning` | `ModelPicker` | The large-model guardrail. Absent below `LARGE_MODEL_BYTES`. |
-| `model-ready` | `ModelStatus` | The model loaded; carries the resolved backend. |
+| `model-ready` | `ModelStatus` | The model loaded; carries the resolved backend and the load time. |
+| `load-progress` | `ModelStatus` | A load in flight. `data-phase` is `connecting` \| `downloading` \| `warmup`. |
+| `load-cancel` | `ModelStatus` | Abandon the download. Present only while loading. |
+| `model-cached-<id>` | `ModelPicker` | That model's weights are already downloaded. |
+| `model-evict` | `ModelPicker` | Clear the selected model's cached weights. |
 | `device-ready` | `DeviceStatus` | A GPU device was acquired (compile-only routes). |
 | `output-panel` | `OutputPanel` | The OUTPUT card. Present regardless of whether there is a result. |
 | `output-empty` | `OutputPanel` | No result and nothing running — the "what you'll get" state. |
 | `output-running` | `OutputPanel` | A first run is in flight. Absent when a previous result is still shown. |
 | `error-note` | `ErrorNote` | Any error. Also `role="alert"` — prefer the role in assertions. |
+
+The testids are unchanged by the horizontal arrangement — `slot-N` is bound to the
+step number, not to a position in the layout.
+
+**Layout itself is a Playwright assertion, never a Vitest one.** jsdom/happy-dom has no
+geometry, so a route test asserts presence and order only; the arrangement half of §4 is
+checked in `e2e/specs/model-page.spec.ts`, which asserts at 1440×900 that INPUT and
+OUTPUT are horizontally disjoint and vertically aligned, that the OUTPUT panel starts
+above the fold, and that the document never scrolls horizontally — plus, at 375×812,
+that the four bands stack in increasing `y`.
 
 Prefer role and text queries where they work; these exist for the states that have
 no natural accessible name (a band, an empty panel). Note that a band is a labelled
@@ -270,7 +369,10 @@ That ambiguity is one reason §4's band labels stay generic.
 
 - Nothing downloads on mount — assert the hook was called with `autoLoad: false`
   *and* that `load` was not called.
-- `load()` fires from the LOAD slot, and `retry()` from its error state.
+- `load()` fires from the LOAD slot, `retry()` from its error state, `cancel()` from the
+  progress row.
+- The refresh pair: a stored selection is restored; a stored intent **plus** a cache hit
+  resumes the load, and a stored intent **without** one does not.
 - All four slots render, with `output-empty` visible, before any run.
 - Run controls are disabled until `ready`.
 - A load error renders in LOAD, a run error in OUTPUT, and the page stays usable.
@@ -280,8 +382,10 @@ That ambiguity is one reason §4's band labels stay generic.
 - [ ] Model catalogue entry: `id`, `label`, `hint`, `params`, measured `bytes` per backend
 - [ ] Worker built on the shared protocol (`load` / `run` messages, id-correlated)
 - [ ] Hook wraps `useModelWorker`; returns the §3 contract verbatim
-- [ ] Page uses `ModelPage` + the four slots — no bespoke layout
+- [ ] Page uses `ModelPage` + the four slots — no bespoke layout, no grid of its own
+- [ ] The input surface fills its column (`flex-1`) if it is the column's main element
 - [ ] `idle` default: nothing downloads until the user asks
+- [ ] Selection persisted through `useModelSelection`, with the route's own `routeKey`
 - [ ] Size estimate + large-model warning shown before load
 - [ ] Every RUN control gated on `ready`
 - [ ] OUTPUT has an empty state, a running state, and an error state
@@ -297,6 +401,8 @@ That ambiguity is one reason §4's band labels stay generic.
 - [`../explanations/webgpu-inference.md`](../explanations/webgpu-inference.md) — how inference runs
 - [`../guides/adding-a-model.md`](../guides/adding-a-model.md) — kernel + registry entry
 - [`../plans/completed/model-page-restructure.md`](../plans/completed/model-page-restructure.md) — the migration to this pattern
+- [`../plans/completed/model-page-horizontal-layout.md`](../plans/completed/model-page-horizontal-layout.md) — the move from one column to rail + workbench
+- [`../plans/completed/model-load-persistence-and-progress.md`](../plans/completed/model-load-persistence-and-progress.md) — aggregate progress, cancel, and the refresh story
 
 ## Reference implementations
 

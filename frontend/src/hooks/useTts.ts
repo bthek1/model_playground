@@ -7,6 +7,7 @@ import {
   type TtsRunOpts,
 } from "@/audio/tts";
 import { createTtsWorker } from "@/audio/ttsClient";
+import type { LoadProgress } from "@/model/progress";
 import { useModelWorker } from "@/model/useModelWorker";
 
 export type TtsStatus = "idle" | "loading" | "ready" | "error";
@@ -18,6 +19,10 @@ export interface UseTtsResult {
   loading: boolean;
   ready: boolean;
   progress: PipelineProgress | null;
+  /** Aggregate load progress across every file. Null outside `loading`. */
+  loadProgress: LoadProgress | null;
+  /** Duration of the load that produced `ready`, in ms. */
+  loadedInMs: number | null;
   /** The chosen backend once loaded (`"webgpu"` | `"wasm"`). */
   backend: string | null;
   /** Latest synthesised audio (also resolved by `synthesize`). */
@@ -30,6 +35,8 @@ export interface UseTtsResult {
   load: () => void;
   /** Re-attempt a failed load. */
   retry: () => void;
+  /** Abandon a load in flight, returning to `idle`. */
+  cancel: () => void;
 }
 
 /**
@@ -63,6 +70,8 @@ export function useTts(
     loading: worker.loading,
     ready: worker.ready,
     progress: worker.progress,
+    loadProgress: worker.loadProgress,
+    loadedInMs: worker.loadedInMs,
     backend: worker.backend,
     result: worker.result,
     running: worker.running,
@@ -70,5 +79,6 @@ export function useTts(
     synthesize,
     load: worker.load,
     retry: worker.retry,
+    cancel: worker.cancel,
   };
 }

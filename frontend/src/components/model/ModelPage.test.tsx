@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { Volume2 } from "lucide-react";
 import { describe, expect, it } from "vitest";
 
-import { ModelPage } from "./ModelPage";
+import { ModelPage, ModelSlot } from "./ModelPage";
 
 // The shell's whole job is that the four slots are always present, always in
 // order, and always labelled — the guarantee that makes every task page read the
@@ -119,5 +119,32 @@ describe("ModelPage", () => {
   it("omits the aside entirely when none is given", () => {
     const { container } = renderPage();
     expect(container.querySelector("header")?.children).toHaveLength(1);
+  });
+});
+
+describe("ModelSlot", () => {
+  it("renders the same structure dense as it does full", () => {
+    // The rail uses `dense` for spacing only — the step number, the heading and
+    // the region wrapper are the band's identity and must not vary with it.
+    const { rerender } = render(
+      <ModelSlot step={2} label="Load" dense>
+        <div>status</div>
+      </ModelSlot>,
+    );
+    const dense = screen.getByTestId("slot-2");
+    expect(dense).toHaveAttribute("aria-labelledby", "slot-load");
+    expect(screen.getByRole("heading", { name: "Load" })).toBeInTheDocument();
+    expect(dense).toHaveTextContent("2");
+
+    rerender(
+      <ModelSlot step={2} label="Load">
+        <div>status</div>
+      </ModelSlot>,
+    );
+    expect(screen.getByTestId("slot-2")).toHaveAttribute(
+      "aria-labelledby",
+      "slot-load",
+    );
+    expect(screen.getByRole("heading", { name: "Load" })).toBeInTheDocument();
   });
 });

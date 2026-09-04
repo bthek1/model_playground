@@ -33,6 +33,8 @@ const baseState: UseTtsResult = {
   loading: false,
   ready: true,
   progress: null,
+  loadProgress: null,
+  loadedInMs: null,
   backend: "wasm",
   result: null,
   running: false,
@@ -41,6 +43,7 @@ const baseState: UseTtsResult = {
   // Machine A actions — additive in the useModelWorker refactor.
   load: vi.fn(),
   retry: vi.fn(),
+  cancel: vi.fn(),
 };
 let mockState: UseTtsResult = { ...baseState };
 

@@ -7,6 +7,7 @@ import {
   type AsrResult,
   type AsrRunArgs,
 } from "@/audio/types";
+import type { LoadProgress } from "@/model/progress";
 import { useModelWorker } from "@/model/useModelWorker";
 
 export type AsrStatus = "idle" | "loading" | "ready" | "error";
@@ -20,6 +21,10 @@ export interface UseAsrResult {
   ready: boolean;
   /** Latest model download/load progress event, if any. */
   progress: AsrProgress | null;
+  /** Aggregate load progress across every file. Null outside `loading`. */
+  loadProgress: LoadProgress | null;
+  /** Duration of the load that produced `ready`, in ms. */
+  loadedInMs: number | null;
   /** The chosen backend once loaded (`"webgpu"` | `"wasm"`). */
   backend: string | null;
   /** Latest transcription result. */
@@ -32,6 +37,8 @@ export interface UseAsrResult {
   load: () => void;
   /** Re-attempt a failed load. */
   retry: () => void;
+  /** Abandon a load in flight, returning to `idle`. */
+  cancel: () => void;
 }
 
 /**
@@ -66,6 +73,8 @@ export function useAsr(
     loading: worker.loading,
     ready: worker.ready,
     progress: worker.progress,
+    loadProgress: worker.loadProgress,
+    loadedInMs: worker.loadedInMs,
     backend: worker.backend,
     result: worker.result,
     running: worker.running,
@@ -73,5 +82,6 @@ export function useAsr(
     transcribe,
     load: worker.load,
     retry: worker.retry,
+    cancel: worker.cancel,
   };
 }

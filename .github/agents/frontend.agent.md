@@ -149,10 +149,18 @@ const form = useForm<LoginSchema>({ resolver: zodResolver(loginSchema) })
 - `idle` is the default: **nothing downloads until the user asks**. Show the size estimate first.
 - Compose with `ModelPage` and its four named slots — a route cannot reorder them or drop OUTPUT.
   Use `DeviceStatus` in LOAD for pages that probe a GPU instead of downloading weights.
+- **The arrangement is horizontal:** SELECT + LOAD in a ~20rem setup rail, RUN + OUTPUT side by side
+  as the workbench. One column below `md`, setup strip over two work columns at `md…xl`, all three
+  at `xl`. It is a CSS grid placed by **area**, so DOM order stays 1→2→3→4 — moving a band visually
+  never means reordering the source. Work columns carry `min-h-0 min-w-0`; the transport row is
+  `sticky bottom-0`, not `mt-auto`.
+- An input surface that is the column's main element should `flex-1` so it fills the column height.
 - Errors render in the slot that produced them: load error in LOAD, run error in OUTPUT.
 - The slots expose a `data-testid` contract (`slot-1`…`slot-4`, `output-panel`, `output-empty`,
   `model-ready`, `error-note`) shared by Vitest and Playwright — add to §8 of the standard rather
-  than inventing ad-hoc ids.
+  than inventing ad-hoc ids. The ids are bound to the step number, not to a position in the layout.
+- **Layout belongs in Playwright, never Vitest** — jsdom has no geometry. Assert presence and order
+  in a route test; assert columns, folds and overflow in `e2e/specs/model-page.spec.ts`.
 
 **Base UI, not Radix — two gotchas:**
 - **No `asChild` / no `<Slot>`** — compose with a `render` prop: `<Button render={<Link to="/x" />} />`.
@@ -215,5 +223,7 @@ const form = useForm<LoginSchema>({ resolver: zodResolver(loginSchema) })
 - Never add an ML inference framework **inside `src/webgpu/`** — those kernels are raw WGSL.
   (Pretrained models in `src/audio/` do use Transformers.js; keep the two runtimes separate.)
 - Never start a model download on mount — task pages default to `idle` (see the page pattern)
-- Never design a new task-page layout — fill in `ModelPage`'s four slots
+- Never design a new task-page layout — fill in `ModelPage`'s four slots, and never give a route its
+  own page-level grid; the shell owns the arrangement
+- Never assert pixels in a Vitest test — jsdom reports zeroes for every box
 - Never run a GPU dispatch on the main thread for heavy work — use the Web Worker (`src/webgpu/worker.ts`)

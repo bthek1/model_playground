@@ -32,6 +32,8 @@ const baseState: UseTtsResult = {
   loading: false,
   ready: false,
   progress: null,
+  loadProgress: null,
+  loadedInMs: null,
   backend: null,
   result: null,
   running: false,
@@ -40,14 +42,32 @@ const baseState: UseTtsResult = {
   // Machine A actions — additive in the useModelWorker refactor.
   load: vi.fn(),
   retry: vi.fn(),
+  cancel: vi.fn(),
 };
 let mockState: UseTtsResult = { ...baseState };
 
+// What the page asks the worker layer for — the second argument is the resolved
+// auto-load decision, which is the whole refresh story (see useModelSelection).
+const useTtsArgs = vi.fn<(model: string, autoLoad: boolean) => void>();
 vi.mock("@/hooks/useTts", () => ({
-  useTts: () => mockState,
+  useTts: (model: string, autoLoad: boolean) => {
+    useTtsArgs(model, autoLoad);
+    return mockState;
+  },
+}));
+
+// The browser cache probe. Empty unless a test says otherwise.
+let cached = new Set<string>();
+vi.mock("@/model/cache", () => ({
+  cachedModels: () => Promise.resolve(cached),
+  evictModel: vi.fn(() => Promise.resolve()),
 }));
 
 const { Route } = await import("@/routes/text-to-speech");
+const { useModelPrefs } = await import("@/store/models");
+const { TTS_MODELS } = await import("@/audio/tts");
+const KOKORO = TTS_MODELS[0].id;
+const MMS = TTS_MODELS[1].id;
 const Page = Route?.options?.component as React.ComponentType | undefined;
 
 function renderPage() {
@@ -59,6 +79,7 @@ describe("TextToSpeechPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState = { ...baseState };
+    cached = new Set();
   });
 
   it("renders the heading and every model option", () => {
@@ -89,17 +110,82 @@ describe("TextToSpeechPage", () => {
     expect(baseState.load).toHaveBeenCalledOnce();
   });
 
-  it("shows download progress in the LOAD slot", () => {
+  it("shows aggregate download progress in the LOAD slot", () => {
     mockState = {
       ...baseState,
       status: "loading",
       idle: false,
       loading: true,
-      progress: { status: "progress", file: "model.onnx", progress: 30 },
+      loadProgress: {
+        phase: "downloading",
+        percent: 30,
+        loaded: 30 * 1024 * 1024,
+        total: 100 * 1024 * 1024,
+        files: { done: 1, count: 4 },
+        current: "model.onnx",
+        elapsedMs: 5000,
+      },
     };
     renderPage();
     expect(screen.getByText(/model\.onnx/)).toBeInTheDocument();
-    expect(screen.getByText(/30%/)).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "30",
+    );
+    expect(screen.getByText("30 MB / 100 MB")).toBeInTheDocument();
+  });
+
+  it("lets the user abandon a download in flight", () => {
+    mockState = { ...baseState, status: "loading", idle: false, loading: true };
+    renderPage();
+    fireEvent.click(screen.getByTestId("load-cancel"));
+    expect(baseState.cancel).toHaveBeenCalledOnce();
+  });
+
+  describe("surviving a page refresh", () => {
+    it("restores the model the user had selected", () => {
+      useModelPrefs.setState({ selected: { tts: MMS } });
+      renderPage();
+      // The picker starts where the user left it, not on the default.
+      expect(screen.getByRole("button", { name: /mms english/i })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
+
+    it("resumes a model that is already in the browser cache", async () => {
+      useModelPrefs.setState({ autoResume: { tts: true } });
+      cached = new Set([KOKORO]);
+      renderPage();
+
+      // Nothing is auto-loaded until the probe answers…
+      expect(useTtsArgs).toHaveBeenLastCalledWith(KOKORO, false);
+      // …and then it resumes, because the bytes are already on this machine.
+      await waitFor(() =>
+        expect(useTtsArgs).toHaveBeenLastCalledWith(KOKORO, true),
+      );
+      expect(screen.getByTestId("model-size-note")).toHaveTextContent(
+        /already downloaded/i,
+      );
+    });
+
+    it("does NOT re-download a model that is not cached, however recently used", async () => {
+      useModelPrefs.setState({ autoResume: { tts: true } });
+      renderPage();
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /load model/i })).toBeEnabled(),
+      );
+      // The guardrail: consent to a *download* is never inferred.
+      expect(useTtsArgs).not.toHaveBeenCalledWith(KOKORO, true);
+      expect(baseState.load).not.toHaveBeenCalled();
+    });
+
+    it("remembers that the user asked to load, for next time", () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("button", { name: /load model/i }));
+      expect(useModelPrefs.getState().autoResume.tts).toBe(true);
+    });
   });
 
   it("renders the four slots, output included, before any result exists", () => {
@@ -116,7 +202,7 @@ describe("TextToSpeechPage", () => {
       error: "download failed",
     };
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^retry$/i }));
     expect(baseState.retry).toHaveBeenCalledOnce();
   });
 

@@ -30,6 +30,8 @@ const baseState: UseAudioClassifierResult = {
   loading: false,
   ready: false,
   progress: null,
+  loadProgress: null,
+  loadedInMs: null,
   backend: null,
   running: false,
   error: null,
@@ -40,6 +42,7 @@ const baseState: UseAudioClassifierResult = {
   // Machine A actions — additive in the useModelWorker refactor.
   load: vi.fn(),
   retry: vi.fn(),
+  cancel: vi.fn(),
 };
 let mockState: UseAudioClassifierResult = { ...baseState };
 

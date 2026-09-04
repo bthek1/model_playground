@@ -10,11 +10,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, Mic, Square, Upload } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { decodeToMono } from "@/audio/io";
 import { type AudioSample } from "@/audio/samples";
-import { sizeEstimate } from "@/audio/size";
 import { ASR_MODELS, DEFAULT_ASR_MODEL } from "@/audio/types";
 import { formatTimestamp } from "@/audio/waveform";
 import { AudioTake, SampleClips } from "@/components/audio/AsrTransport";
@@ -25,18 +24,28 @@ import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { useLiveAsr } from "@/hooks/useLiveAsr";
+import {
+  useCacheRefresh,
+  useModelSelection,
+} from "@/model/useModelSelection";
 
 export const Route = createFileRoute("/asr")({
   component: AsrPage,
 });
 
 function AsrPage() {
-  const [model, setModel] = useState(DEFAULT_ASR_MODEL);
+  // Selection and the resume decision survive a refresh; the weights themselves
+  // are re-loaded from the browser cache (model/useModelSelection.ts).
+  const session = useModelSelection({
+    routeKey: "asr",
+    models: ASR_MODELS,
+    fallback: ASR_MODELS.find((m) => m.id === DEFAULT_ASR_MODEL) ?? ASR_MODELS[0],
+  });
+  const model = session.model.id;
   const {
     status,
     ready,
     loading,
-    progress,
     backend,
     recording,
     running,
@@ -49,20 +58,19 @@ function AsrPage() {
     start,
     stop,
     transcribeClip,
+    loadProgress,
+    loadedInMs,
     load,
     retry,
-  } = useLiveAsr(model, false);
+    cancel,
+  } = useLiveAsr(model, session.autoLoad);
+  useCacheRefresh(session, ready);
 
   const [decoding, setDecoding] = useState(false);
   const [loadingSample, setLoadingSample] = useState<string | null>(null);
   const [sample, setSample] = useState<AudioSample | null>(null);
   const [ioError, setIoError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const meta = useMemo(
-    () => ASR_MODELS.find((m) => m.id === model) ?? ASR_MODELS[0],
-    [model],
-  );
 
   const busy = recording || decoding || loadingSample != null;
   const loadError = status === "error" ? error : null;
@@ -124,17 +132,23 @@ function AsrPage() {
         <ModelPicker
           models={ASR_MODELS}
           value={model}
-          onChange={(m) => setModel(m.id)}
+          onChange={session.setModel}
           disabled={busy || loading}
+          cached={session.cached}
+          onEvict={(m) => void session.evict(m.id)}
         />
       }
       load={
         <ModelStatus
           status={status}
           backend={backend}
-          progress={progress}
+          loadProgress={loadProgress}
+          loadedInMs={loadedInMs}
+          cached={session.isCached}
+          restoring={session.restoring}
           error={loadError}
-          onLoad={load}
+          onLoad={session.onLoad(load)}
+          onCancel={session.onCancel(cancel)}
           onRetry={retry}
           disabled={busy}
         />

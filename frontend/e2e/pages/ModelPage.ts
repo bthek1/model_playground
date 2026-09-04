@@ -45,6 +45,21 @@ export class ModelPageObject {
     return this.main.getByRole("alert").first();
   }
 
+  /** The LOAD slot's progress block, present only while loading. */
+  get loadProgress(): Locator {
+    return this.main.getByTestId("load-progress");
+  }
+
+  /** Cancel, offered beside the bar while a download is in flight. */
+  get cancelLoad(): Locator {
+    return this.main.getByTestId("load-cancel");
+  }
+
+  /** The "already downloaded" badge on a model row. */
+  cachedBadge(modelId: string): Locator {
+    return this.main.getByTestId(`model-cached-${modelId}`);
+  }
+
   /** A button inside the route content, never the sidebar. */
   button(name: string | RegExp): Locator {
     return this.main.getByRole("button", { name });

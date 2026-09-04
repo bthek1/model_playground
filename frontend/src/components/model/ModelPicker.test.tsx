@@ -136,4 +136,61 @@ describe("ModelPicker", () => {
     await userEvent.click(screen.getByRole("button", { name: /big model/i }));
     expect(onChange).not.toHaveBeenCalled();
   });
+  describe("cached weights", () => {
+    it("badges the models already downloaded, and only those", () => {
+      render(
+        <ModelPicker
+          models={MODELS}
+          value="small"
+          onChange={() => {}}
+          cached={new Set(["large"])}
+        />,
+      );
+      expect(screen.getByTestId("model-cached-large")).toBeInTheDocument();
+      expect(screen.queryByTestId("model-cached-small")).toBeNull();
+    });
+
+    it("says the selected model costs nothing to load again", () => {
+      render(
+        <ModelPicker
+          models={MODELS}
+          value="large"
+          onChange={() => {}}
+          cached={new Set(["large"])}
+        />,
+      );
+      expect(screen.getByTestId("model-size-note")).toHaveTextContent(
+        /already downloaded/i,
+      );
+      // The large-model warning is about a download that is no longer going to
+      // happen — repeating it here would just be noise.
+      expect(screen.queryByTestId("model-size-warning")).toBeNull();
+    });
+
+    it("offers eviction only for a cached model, and only when handled", async () => {
+      const onEvict = vi.fn();
+      const { rerender } = render(
+        <ModelPicker
+          models={MODELS}
+          value="large"
+          onChange={() => {}}
+          cached={new Set(["large"])}
+          onEvict={onEvict}
+        />,
+      );
+      await userEvent.click(screen.getByTestId("model-evict"));
+      expect(onEvict).toHaveBeenCalledWith(MODELS[1]);
+
+      rerender(
+        <ModelPicker
+          models={MODELS}
+          value="small"
+          onChange={() => {}}
+          cached={new Set(["large"])}
+          onEvict={onEvict}
+        />,
+      );
+      expect(screen.queryByTestId("model-evict")).toBeNull();
+    });
+  });
 });

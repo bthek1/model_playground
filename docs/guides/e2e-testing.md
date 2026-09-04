@@ -119,7 +119,7 @@ frontend/
       LoginPage.ts
     specs/                 # the tests
       global.setup.ts      # logs in once, saves storage state for @backend specs
-      model-page.spec.ts   # the four-slot contract, across every task route
+      model-page.spec.ts   # the four-slot contract + the arrangement (§4a geometry)
       audio.spec.ts        # audio routes with downloads blocked — fast, default run
       audio-models.spec.ts # @slow: real weights, real ONNX sessions
       webgpu/              # the GPU-only project
@@ -139,6 +139,15 @@ operands and result-grid readback.
 
 Everything is scoped to `<main>`. The sidebar carries task-category buttons whose
 names collide with route buttons — "Computer Vision" matches a `/^Compute/` locator.
+
+**Layout lives here, and only here.** Vitest runs in happy-dom, which has no layout
+engine — every `getBoundingClientRect()` is zeroes — so the *arrangement* half of the
+page pattern (§4a: setup rail, workbench columns, breakpoints) can only be asserted in
+a real browser. `model-page.spec.ts` owns it: INPUT and OUTPUT horizontally disjoint and
+vertically aligned at 1440×900, the OUTPUT panel above the fold, the setup strip above
+the work columns at 1000×800, four bands stacking in increasing `y` at 375×812, no
+horizontal document overflow at either width, and no chasm between a short input and its
+transport row. A route test asserts presence and order; it must never assert pixels.
 
 **Two rules the migration to that pattern added:**
 

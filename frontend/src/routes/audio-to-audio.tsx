@@ -14,7 +14,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { AudioWaveform, Download, Loader2, Mic, Play, Upload } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   DEFAULT_ENHANCE_MODEL,
@@ -22,7 +22,6 @@ import {
   SAMPLE_RATE,
 } from "@/audio/enhance/types";
 import { decodeToMono, play, recordMic, toWavBlob } from "@/audio/io";
-import { sizeEstimate } from "@/audio/size";
 import { Waveform } from "@/components/audio/Waveform";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -31,6 +30,10 @@ import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { useEnhance } from "@/hooks/useEnhance";
+import {
+  useCacheRefresh,
+  useModelSelection,
+} from "@/model/useModelSelection";
 
 export const Route = createFileRoute("/audio-to-audio")({
   component: AudioToAudioPage,
@@ -39,25 +42,35 @@ export const Route = createFileRoute("/audio-to-audio")({
 const RECORD_SECONDS = 6;
 
 function AudioToAudioPage() {
-  const [model, setModel] = useState(DEFAULT_ENHANCE_MODEL);
+  // DeepFilterNet3 fetches its graph through ONNX Runtime, which uses the HTTP
+  // cache rather than the Cache Storage bucket the probe reads — so this route
+  // keeps the persisted *selection* but never reports a model as cached, and
+  // therefore never auto-resumes. That is the conservative failure direction:
+  // it asks one extra time rather than spending bandwidth unasked.
+  const session = useModelSelection({
+    routeKey: "audio-to-audio",
+    models: ENHANCE_MODELS,
+    fallback:
+      ENHANCE_MODELS.find((m) => m.id === DEFAULT_ENHANCE_MODEL) ??
+      ENHANCE_MODELS[0],
+  });
+  const model = session.model.id;
   const {
     status,
     loading,
     ready,
-    progress,
+    loadProgress,
+    loadedInMs,
     backend,
     running,
     result,
     error,
     load,
     retry,
+    cancel,
     run,
-  } = useEnhance(model);
-
-  const meta = useMemo(
-    () => ENHANCE_MODELS.find((m) => m.id === model) ?? ENHANCE_MODELS[0],
-    [model],
-  );
+  } = useEnhance(model, session.autoLoad);
+  useCacheRefresh(session, ready);
 
   const [input, setInput] = useState<Float32Array | null>(null);
   const [preparing, setPreparing] = useState<null | "file" | "mic">(null);
@@ -133,17 +146,23 @@ function AudioToAudioPage() {
         <ModelPicker
           models={ENHANCE_MODELS}
           value={model}
-          onChange={(m) => setModel(m.id)}
+          onChange={session.setModel}
           disabled={busy || loading}
+          cached={session.cached}
+          onEvict={(m) => void session.evict(m.id)}
         />
       }
       load={
         <ModelStatus
           status={status}
           backend={backend}
-          progress={progress}
+          loadProgress={loadProgress}
+          loadedInMs={loadedInMs}
+          cached={session.isCached}
+          restoring={session.restoring}
           error={loadError}
-          onLoad={load}
+          onLoad={session.onLoad(load)}
+          onCancel={session.onCancel(cancel)}
           onRetry={retry}
           disabled={busy}
         />

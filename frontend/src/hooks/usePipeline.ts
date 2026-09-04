@@ -2,6 +2,7 @@ import { useCallback } from "react";
 
 import { createPipelineWorker } from "@/audio/pipelineClient";
 import type { PipelineProgress, PipelineTask } from "@/audio/pipelineTypes";
+import type { LoadProgress } from "@/model/progress";
 import { useModelWorker } from "@/model/useModelWorker";
 
 export type PipelineStatus = "idle" | "loading" | "ready" | "error";
@@ -13,6 +14,10 @@ export interface UsePipelineResult {
   loading: boolean;
   ready: boolean;
   progress: PipelineProgress | null;
+  /** Aggregate load progress across every file. Null outside `loading`. */
+  loadProgress: LoadProgress | null;
+  /** Duration of the load that produced `ready`, in ms. */
+  loadedInMs: number | null;
   /** The chosen backend once loaded (`"webgpu"` | `"wasm"`). */
   backend: string | null;
   running: boolean;
@@ -27,6 +32,8 @@ export interface UsePipelineResult {
   load: () => void;
   /** Re-attempt a failed load. */
   retry: () => void;
+  /** Abandon a load in flight, returning to `idle`. */
+  cancel: () => void;
 }
 
 /**
@@ -62,11 +69,14 @@ export function usePipeline(
     loading: worker.loading,
     ready: worker.ready,
     progress: worker.progress,
+    loadProgress: worker.loadProgress,
+    loadedInMs: worker.loadedInMs,
     backend: worker.backend,
     running: worker.running,
     error: worker.error,
     run,
     load: worker.load,
     retry: worker.retry,
+    cancel: worker.cancel,
   };
 }

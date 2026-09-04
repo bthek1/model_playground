@@ -7,6 +7,7 @@ import {
   type AsrRunArgs,
 } from "@/audio/types";
 import { useAsr } from "@/hooks/useAsr";
+import type { LoadProgress } from "@/model/progress";
 
 const TARGET_RATE = 16000;
 /** Re-transcribe at most the last N seconds — Whisper's native chunk size. */
@@ -40,6 +41,10 @@ export interface UseLiveAsrResult {
   ready: boolean;
   loading: boolean;
   progress: ReturnType<typeof useAsr>["progress"];
+  /** Aggregate load progress across every file. Null outside `loading`. */
+  loadProgress: LoadProgress | null;
+  /** Duration of the load that produced `ready`, in ms. */
+  loadedInMs: number | null;
   backend: string | null;
   /** True while the mic is live and transcription is updating. */
   recording: boolean;
@@ -78,6 +83,8 @@ export interface UseLiveAsrResult {
   load: () => void;
   /** Re-attempt a failed load. */
   retry: () => void;
+  /** Abandon a load in flight, returning to `idle`. */
+  cancel: () => void;
 }
 
 /**
@@ -210,6 +217,8 @@ export function useLiveAsr(
     ready: asr.ready,
     loading: asr.loading,
     progress: asr.progress,
+    loadProgress: asr.loadProgress,
+    loadedInMs: asr.loadedInMs,
     backend: asr.backend,
     recording,
     running: asr.running,
@@ -224,5 +233,6 @@ export function useLiveAsr(
     transcribeClip,
     load: asr.load,
     retry: asr.retry,
+    cancel: asr.cancel,
   };
 }

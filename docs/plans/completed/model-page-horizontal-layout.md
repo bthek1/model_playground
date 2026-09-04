@@ -1,7 +1,8 @@
 # Model Page Horizontal Layout
 
-**Status:** Draft
+**Status:** Complete
 **Created:** 2026-09-04
+**Completed:** 2026-09-04
 **Scope:** `frontend/src/components/model/` (shell + four slots), every task route,
 `docs/standards/model-page-pattern.md`, route tests + E2E.
 
@@ -154,7 +155,7 @@ Each route only supplies slot content, so most need nothing. Audit and fix:
 | A grid child won't shrink, so the output column pushes the page wide | `min-h-0` / `min-w-0` on both work columns; caught by an E2E assertion that the body has no horizontal scroll. |
 | Tests key off band *position* rather than testid | `slot-N` is bound to the step number, not to source position; grid placement never reorders the DOM. |
 | Audio-to-Audio's dual waveforms are width-hungry | Stack them vertically in the output column and let the column scroll; verify with the `@slow` enhancement spec still passing visually. |
-| The rail makes SELECT feel permanent while it must disable mid-flight | The `disabled` gate on `ModelPicker` is unchanged; the rail dims as a whole while `loading`/`running`. |
+| The rail makes SELECT feel permanent while it must disable mid-flight | The `disabled` gate on `ModelPicker` is unchanged. Dimming the rail as a whole was dropped: it would have dimmed LOAD's progress bar, the one thing the user is watching at that moment. |
 
 ---
 
@@ -207,3 +208,58 @@ that is a signal the layout change leaked into behaviour.
 - [ ] New layout assertions in `model-page.spec.ts` pass at both viewports
 - [ ] §4 of `model-page-pattern.md` rewritten; copilot instructions mirrored
 - [ ] Status moved to `Complete` and this file `git mv`d to `docs/plans/completed/`
+
+---
+
+## 7. What changed against the plan
+
+Three things the plan did not anticipate, all found while building:
+
+- **`ModelStatus` lost its `size` prop entirely.** With the picker directly above it in
+  the rail, both quoted the same download and the rail said the number twice. The
+  size-before-load guardrail is unweakened — it is now stated once, in SELECT, where the
+  choice is actually made. Removing the prop also made `meta` dead in three routes.
+- **The transport row is sticky, not bottom-pinned.** `mt-auto` put Run at the foot of
+  the input column, which reads well for a full-height textarea and leaves a chasm on
+  ASR, whose input is three sample-clip buttons. `sticky bottom-0` gives the same
+  reachability guarantee with none of the gap.
+- **The setup rail hugs its content (`xl:self-start xl:max-h-full`)** instead of
+  stretching. A full-height bordered panel holding two short bands was a large grey
+  rectangle of nothing.
+
+Also: `/tensor`'s operand schematic lost its `xl:flex-row`. A ~600px input column has no
+room to run Matrix A beside Matrix B; it stacks at every width now, arrow included.
+
+**Verification as run:** `just fe-test` 571 passed / 78 files, with **no route test
+edited** — the criterion this plan set for "layout only". `tsc --noEmit` clean, `eslint`
+clean (5 pre-existing `react-refresh` warnings in unrelated files). `just fe-e2e` 68
+passed / 5 skipped, including seven new arrangement specs. Visually checked at
+1440×900, 1000×800 and 375×812 across `/text-to-speech`, `/asr` and `/tensor`.
+
+**Where each assertion landed.** Structure is Vitest, geometry is Playwright — happy-dom
+reports zeroes for every box, so a layout assertion there would pass on any layout at all:
+
+| Decision | Asserted in |
+|---|---|
+| Four bands, DOM order 1→2→3→4 under grid-area placement | `ModelPage.test.tsx` |
+| Rail holds slots 1–2; slots 3–4 in separate columns | `ModelPage.test.tsx` |
+| Header `aside` renders, and stays out of the four slots | `ModelPage.test.tsx` |
+| `dense` changes spacing only — step, heading, region unchanged | `ModelPage.test.tsx` (`ModelSlot`) |
+| Picker `list` rows carry the hint; `row` chips keep it in `title` | `ModelPicker.test.tsx` |
+| Size guardrail identical in both layouts; disabled in both | `ModelPicker.test.tsx` |
+| LOAD no longer repeats the download estimate | `ModelStatus.test.tsx` |
+| Transport follows the fields, carries the error, no `mt-auto` | `InputPanel.test.tsx` |
+| INPUT/OUTPUT side by side, vertically aligned @1440×900 | `model-page.spec.ts` |
+| Result above the fold @1440×900 | `model-page.spec.ts` |
+| Setup strip above two work columns @1000×800 | `model-page.spec.ts` |
+| Four bands stack in increasing `y` @375×812 | `model-page.spec.ts` |
+| No horizontal document overflow, desktop and phone | `model-page.spec.ts` |
+| No chasm between a short input and its transport | `model-page.spec.ts` |
+| OUTPUT fills its column; the rail hugs its content | `model-page.spec.ts` |
+
+The chasm spec was checked against the behaviour it guards: reinstating `mt-auto`
+produces a 456px gap against a 120px threshold, and the spec fails.
+
+**Docs updated:** `model-page-pattern.md` (§4 rewritten, §4a breakpoints added, §5, §7,
+§8, §9), `.github/copilot-instructions.md`, `CLAUDE.md`, `.github/agents/frontend.agent.md`,
+`docs/guides/e2e-testing.md`.

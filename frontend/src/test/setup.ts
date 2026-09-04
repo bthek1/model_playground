@@ -1,6 +1,8 @@
 import "@testing-library/jest-dom"
 import { afterAll, afterEach, beforeAll } from "vitest"
 
+import { useModelPrefs } from "@/store/models"
+
 import { server } from "./server"
 
 // Node 25 exposes a stub global `localStorage` ({}) that shadows the one
@@ -35,6 +37,15 @@ for (const name of ["localStorage", "sessionStorage"] as const) {
     writable: true,
   })
 }
+
+// Model-page preferences (selected model, resume intent) persist to
+// localStorage, so without this a test that switches models leaks that choice
+// into every later test in the file — the page would start on a model the test
+// never chose.
+afterEach(() => {
+  localStorage.clear()
+  useModelPrefs.setState({ selected: {}, autoResume: {} })
+})
 
 // Start the MSW mock server for the whole suite. Tests that mock `@/api/client`
 // directly are unaffected because unhandled requests are bypassed.

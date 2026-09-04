@@ -46,6 +46,10 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useTts } from "@/hooks/useTts";
+import {
+  useCacheRefresh,
+  useModelSelection,
+} from "@/model/useModelSelection";
 
 export const Route = createFileRoute("/text-to-audio")({
   component: TextToAudioPage,
@@ -94,12 +98,22 @@ function ExperimentalNotice({ sizeLabel }: { sizeLabel: string }) {
 }
 
 function TextToAudioPage() {
-  const [model, setModel] = useState(DEFAULT_MUSIC_MODEL);
+  const session = useModelSelection({
+    routeKey: "text-to-audio",
+    models: MUSIC_MODELS,
+    fallback:
+      MUSIC_MODELS.find((m) => m.id === DEFAULT_MUSIC_MODEL) ?? MUSIC_MODELS[0],
+  });
+  const model = session.model.id;
+  // Even here, `autoLoad` can only ever become true on a cache hit: this route's
+  // gate is about spending 571 MB and minutes of compute, and a resume spends
+  // neither — the weights are already on disk and the warning was read once.
   const {
     status,
     ready,
     loading,
-    progress,
+    loadProgress,
+    loadedInMs,
     backend,
     result,
     running,
@@ -107,12 +121,11 @@ function TextToAudioPage() {
     synthesize,
     load,
     retry,
-  } = useTts(model, false);
+    cancel,
+  } = useTts(model, session.autoLoad);
+  useCacheRefresh(session, ready);
 
-  const meta = useMemo(
-    () => MUSIC_MODELS.find((m) => m.id === model) ?? MUSIC_MODELS[0],
-    [model],
-  );
+  const meta = session.model;
   const size = useMemo(
     () => sizeEstimate(meta.params, meta.bytes),
     [meta],
@@ -167,21 +180,27 @@ function TextToAudioPage() {
         <ModelPicker
           models={MUSIC_MODELS}
           value={model}
-          onChange={(m) => setModel(m.id)}
+          onChange={session.setModel}
           disabled={loading || running}
+          cached={session.cached}
+          onEvict={(m) => void session.evict(m.id)}
         />
       }
       load={
         <div className="space-y-3">
-          {status === "idle" && (
+          {status === "idle" && !session.isCached && (
             <ExperimentalNotice sizeLabel={size.label.replace("≈", "")} />
           )}
           <ModelStatus
             status={status}
             backend={backend}
-            progress={progress}
+            loadProgress={loadProgress}
+            loadedInMs={loadedInMs}
+            cached={session.isCached}
+            restoring={session.restoring}
             error={loadError}
-            onLoad={load}
+            onLoad={session.onLoad(load)}
+            onCancel={session.onCancel(cancel)}
             onRetry={retry}
           />
         </div>

@@ -8,6 +8,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  initialProgress,
+  reduceProgress,
+  summarize,
+  type LoadProgress,
+  type ProgressState,
+} from "./progress";
 import type { ModelProgress, ModelResponse, ModelStatus } from "./types";
 
 export interface UseModelWorkerOptions {
@@ -35,13 +42,25 @@ export interface UseModelWorkerResult<TResult> {
   idle: boolean;
   loading: boolean;
   ready: boolean;
+  /** The raw worker event — the last one seen, unaggregated. */
   progress: ModelProgress | null;
+  /** Aggregate download/warm-up progress across every file. */
+  loadProgress: LoadProgress | null;
+  /** How long the load that produced `ready` took, in ms. Null until ready. */
+  loadedInMs: number | null;
   backend: string | null;
   running: boolean;
   result: TResult | null;
   error: string | null;
   load: () => void;
-  retry: () => void;
+  /**
+   * Re-attempt a failed load. `overrides` are merged into the `load` message —
+   * that is how "Retry on CPU" pins a backend without the page reaching into
+   * the worker protocol.
+   */
+  retry: (overrides?: Record<string, unknown>) => void;
+  /** Abandon a load in flight and return to `idle`. No-op unless loading. */
+  cancel: () => void;
   /**
    * Post a `run` message and resolve with its correlated result. `payload` is
    * spread into the message, so a caller supplies only its task fields
@@ -73,6 +92,14 @@ export function useModelWorker<TResult>({
     autoLoad ? "loading" : "idle",
   );
   const [progress, setProgress] = useState<ModelProgress | null>(null);
+  const [progressState, setProgressState] =
+    useState<ProgressState>(initialProgress);
+  const [loadedInMs, setLoadedInMs] = useState<number | null>(null);
+  // Re-rendered once a second while loading, purely so the elapsed counter in
+  // the LOAD slot moves. Progress events alone can be minutes apart on a slow
+  // link, which is exactly when the user most needs to see something ticking.
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const startedAt = useRef<number | null>(null);
   const [backend, setBackend] = useState<string | null>(null);
   const [result, setResult] = useState<TResult | null>(null);
   // A count, not a boolean: with two overlapping requests a boolean reports idle
@@ -88,7 +115,7 @@ export function useModelWorker<TResult>({
   statusRef.current = status;
 
   /** Spawn a worker, wire the response switch, and post `load`. */
-  const start = useCallback(() => {
+  const start = useCallback((overrides?: Record<string, unknown>) => {
     const { createWorker: spawn, loadMessage: message } = optionsRef.current;
     const worker = spawn();
     workerRef.current = worker;
@@ -99,10 +126,14 @@ export function useModelWorker<TResult>({
       switch (data.type) {
         case "progress":
           setProgress(data.progress);
+          setProgressState((prev) => reduceProgress(prev, data.progress));
           break;
         case "ready":
           setStatus("ready");
           setBackend(data.backend);
+          setLoadedInMs(
+            startedAt.current == null ? null : Date.now() - startedAt.current,
+          );
           break;
         case "result":
           setResult(data.result);
@@ -127,14 +158,21 @@ export function useModelWorker<TResult>({
 
     setStatus("loading");
     setProgress(null);
+    setProgressState(initialProgress);
+    setLoadedInMs(null);
+    setElapsedMs(0);
+    startedAt.current = Date.now();
     setError(null);
-    worker.postMessage({ type: "load", ...message });
+    worker.postMessage({ type: "load", ...message, ...overrides });
   }, []);
 
   useEffect(() => {
     setBackend(null);
     setError(null);
     setProgress(null);
+    setProgressState(initialProgress);
+    setLoadedInMs(null);
+    setElapsedMs(0);
     setStatus(autoLoad ? "loading" : "idle");
     if (autoLoad) start();
 
@@ -154,13 +192,48 @@ export function useModelWorker<TResult>({
     start();
   }, [start]);
 
-  /** Re-attempt a failed load without changing the selected model. */
-  const retry = useCallback(() => {
-    if (statusRef.current !== "error") return;
+  /**
+   * Re-attempt a failed load without changing the selected model. `overrides`
+   * ride along on the `load` message — e.g. `{ backend: "wasm" }` after a GPU
+   * failure. §6 still holds: the backend is resolved once per worker, the user
+   * has just chosen it instead of the probe.
+   */
+  const retry = useCallback(
+    (overrides?: Record<string, unknown>) => {
+      if (statusRef.current !== "error") return;
+      workerRef.current?.terminate();
+      workerRef.current = null;
+      start(overrides);
+    },
+    [start],
+  );
+
+  /**
+   * Abandon a download in flight. Machine A gains one transition,
+   * `loading --cancel()--> idle`; the partial download stays in the browser
+   * cache, so re-loading later picks up where this left off.
+   */
+  const cancel = useCallback(() => {
+    if (statusRef.current !== "loading") return;
     workerRef.current?.terminate();
     workerRef.current = null;
-    start();
-  }, [start]);
+    pending.current.forEach(({ reject }) => reject(new Error("Load cancelled")));
+    pending.current.clear();
+    setInflight(0);
+    startedAt.current = null;
+    setProgress(null);
+    setProgressState(initialProgress);
+    setError(null);
+    setStatus("idle");
+  }, []);
+
+  // The elapsed-time ticker. Only runs while a load is actually in flight.
+  useEffect(() => {
+    if (status !== "loading") return;
+    const started = startedAt.current ?? Date.now();
+    const id = setInterval(() => setElapsedMs(Date.now() - started), 1000);
+    return () => clearInterval(id);
+  }, [status]);
 
   const run = useCallback(
     (
@@ -191,12 +264,16 @@ export function useModelWorker<TResult>({
     loading: status === "loading",
     ready: status === "ready",
     progress,
+    loadProgress:
+      status === "loading" ? summarize(progressState, elapsedMs) : null,
+    loadedInMs,
     backend,
     running: inflight > 0,
     result,
     error,
     load,
     retry,
+    cancel,
     run,
   };
 }

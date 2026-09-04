@@ -10,11 +10,21 @@ import { cn } from "@/lib/utils";
 
 export function ErrorNote({
   message,
+  hint,
+  detail,
   action,
   className,
 }: {
   /** Nothing renders when null — callers can pass an optional error straight in. */
   message: string | null | undefined;
+  /** What to try next, when that isn't obvious from the message. */
+  hint?: ReactNode;
+  /**
+   * The raw underlying error, folded away. A classified message is friendlier
+   * but useless in a bug report, so the original is always one click away —
+   * never swallowed (see `model/errors.ts`).
+   */
+  detail?: string;
   /** Optional recovery affordance, e.g. a Retry button. */
   action?: ReactNode;
   className?: string;
@@ -31,7 +41,16 @@ export function ErrorNote({
       )}
     >
       <AlertTriangle className="size-4 shrink-0" />
-      <span className="min-w-0 flex-1 break-words">{message}</span>
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="break-words">{message}</p>
+        {hint && <p className="text-xs opacity-80">{hint}</p>}
+        {detail && (
+          <details className="text-xs opacity-80">
+            <summary className="cursor-pointer select-none">Details</summary>
+            <p className="mt-1 font-mono text-[0.7rem] break-all">{detail}</p>
+          </details>
+        )}
+      </div>
       {action}
     </div>
   );

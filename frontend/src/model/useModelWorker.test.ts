@@ -156,6 +156,76 @@ describe("useModelWorker — Machine A (model lifecycle)", () => {
     expect(result.current.status).toBe("loading");
     expect(result.current.backend).toBeNull();
   });
+  it("retry() can pin a backend, for the CPU fallback after a GPU failure", async () => {
+    const { result, factory } = setup();
+    act(() => factory.last.emit({ type: "error", error: "device lost" }));
+    await waitFor(() => expect(result.current.status).toBe("error"));
+
+    act(() => result.current.retry({ backend: "wasm" }));
+
+    expect(factory.last.posted[0].message).toEqual({
+      type: "load",
+      model: "model-a",
+      backend: "wasm",
+    });
+  });
+
+  it("cancel() abandons a load in flight and returns to idle", () => {
+    const { result, factory } = setup();
+    expect(result.current.status).toBe("loading");
+
+    act(() => result.current.cancel());
+
+    expect(result.current.status).toBe("idle");
+    expect(factory.spawned[0].terminated).toBe(true);
+    // Cancelling is not failing: nothing to apologise for in the LOAD slot.
+    expect(result.current.error).toBeNull();
+    expect(result.current.loadProgress).toBeNull();
+
+    // And the user can start over.
+    act(() => result.current.load());
+    expect(factory.spawned).toHaveLength(2);
+  });
+
+  it("cancel() is a no-op outside loading", async () => {
+    const { result, factory } = setup();
+    act(() => factory.last.emit({ type: "ready", model: "m", backend: "wasm" }));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.cancel());
+    expect(result.current.status).toBe("ready");
+    expect(factory.spawned[0].terminated).toBe(false);
+  });
+
+  it("aggregates progress across files rather than echoing the last event", async () => {
+    const { result, factory } = setup();
+
+    act(() => {
+      factory.last.emit({
+        type: "progress",
+        progress: { status: "progress", file: "a.onnx", loaded: 50, total: 100 },
+      });
+      factory.last.emit({
+        type: "progress",
+        progress: { status: "progress", file: "b.onnx", loaded: 0, total: 100 },
+      });
+    });
+
+    await waitFor(() => expect(result.current.loadProgress).not.toBeNull());
+    const p = result.current.loadProgress!;
+    expect(p.loaded).toBe(50);
+    expect(p.files.count).toBe(2);
+    expect(p.phase).toBe("downloading");
+  });
+
+  it("times the load and drops the progress once ready", async () => {
+    const { result, factory } = setup();
+    act(() => factory.last.emit({ type: "ready", model: "m", backend: "wasm" }));
+
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.loadProgress).toBeNull();
+    expect(result.current.loadedInMs).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe("useModelWorker — Machine B (inference)", () => {

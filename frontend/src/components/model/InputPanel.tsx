@@ -4,7 +4,7 @@
 // place for input-side errors (a failed decode, a denied mic) that is *not* the
 // output panel (docs/standards/model-page-pattern.md §4).
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 import { ErrorNote } from "@/components/model/ErrorNote";
 
@@ -26,15 +26,28 @@ export function InputPanel({
   /** Drives the hint under the controls. */
   ready: boolean;
 }) {
+  const hintId = useId();
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       {children}
-      {/* Pinned to the bottom of the input column: a long input surface (a
-          transcript, a big textarea) must never push Run out of reach. */}
-      <div className="mt-auto space-y-2 md:sticky md:bottom-0 md:bg-background md:pt-2">
-        <div className="flex flex-wrap items-center gap-2">{controls}</div>
+      {/* Sticky, not bottom-pinned: the transport sits directly under the input
+          it drives, and only detaches to the bottom edge once a tall input
+          surface scrolls it out of reach. Pinning it with `mt-auto` instead
+          left a chasm on every task whose input is short. */}
+      <div className="space-y-2 md:sticky md:bottom-0 md:bg-background md:pb-1 md:pt-2">
+        {/* The hint is *described by* the controls, not merely printed under
+            them: a greyed-out button with no reason attached is a dead end for
+            anyone driving the page by keyboard and screen reader. */}
+        <div
+          className="flex flex-wrap items-center gap-2"
+          aria-describedby={ready ? undefined : hintId}
+        >
+          {controls}
+        </div>
         {!ready && (
-          <p className="text-xs text-muted-foreground">{disabledHint}</p>
+          <p id={hintId} className="text-xs text-muted-foreground">
+            {disabledHint}
+          </p>
         )}
         <ErrorNote message={error} />
       </div>

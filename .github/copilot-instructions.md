@@ -249,8 +249,9 @@ export const Route = createFileRoute('/users/$userId')({
 - Every task page is SELECT → LOAD → RUN → OUTPUT, specified in
   `docs/standards/model-page-pattern.md`. Shared worker plumbing is **`src/model/useModelWorker.ts`**
   (creation/teardown keyed on a `key` string, id-correlated pending table, the response switch).
-- Two orthogonal state machines. **A**: `idle → loading → ready | error`, with `retry()` from `error`
-  and a model change returning to `idle`; `progress` never moves `status`. **B**: per request,
+- Two orthogonal state machines. **A**: `idle → loading → ready | error`, with `retry(overrides?)`
+  from `error`, `cancel()` from `loading` back to `idle`, and a model change returning to `idle`;
+  `progress` never moves `status`. **B**: per request,
   id-correlated — `running` is an **inflight count, not a boolean** (a boolean reports idle as soon as
   the first of two overlapping requests returns). An error with an `id` is a run failure and leaves
   `status === "ready"`; an id-less error is a load failure.
@@ -298,24 +299,36 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 
 - **Two state machines, kept orthogonal — never collapse them into one enum.**
   - *Load* (`status`, one per worker): `idle → loading → ready | error`. `progress` events are a
-    self-loop on `loading`. `retry()` goes `error → loading`; changing the selected model tears the
-    worker down and returns to `idle`.
+    self-loop on `loading`. `retry(overrides?)` goes `error → loading` (the overrides are merged into
+    the `load` message — that is how "Retry on CPU" pins `{ backend: "wasm" }`); `cancel()` goes
+    `loading → idle` with no error shown; changing the selected model tears the worker down and
+    returns to `idle`.
   - *Run* (per request): id-correlated promises in a pending map. `running` is derived from an
     **in-flight count**, not a boolean — a boolean is wrong the moment two requests overlap.
   - The `id` on an error message is the discriminator: `id != null` is a run failure (`status` stays
     `ready`); `id == null` is a load failure (`status → error`).
 - **Every task hook returns the same shape:** `status` / `idle` / `loading` / `ready` / `progress` /
-  `backend` / `load` / `retry` / `run` / `running` / `result` / `error`, plus whatever is genuinely
-  task-specific. Wrap `model/useModelWorker.ts` — do not re-derive the pending map, the teardown,
+  `loadProgress` / `loadedInMs` / `backend` / `load` / `retry` / `cancel` / `run` / `running` /
+  `result` / `error`, plus whatever is genuinely task-specific. Wrap `model/useModelWorker.ts` — do not re-derive the pending map, the teardown,
   or the response switch per task.
 - **The shell is `components/model/`:** `ModelPage` (four named slots — a route cannot reorder them
   or drop OUTPUT) with `ModelPicker` · `ModelStatus` · `InputPanel` · `OutputPanel`, plus
   `DeviceStatus` for pages whose LOAD is a GPU probe rather than a download (`/tensor`). Band labels
   stay generic (Model / Load / Input / Output) — naming a band after the task duplicates the field
   label beneath it and makes the region's accessible name ambiguous.
+- **The arrangement is horizontal, not a single column** (model-page-pattern.md §4/§4a): SELECT +
+  LOAD collapse into a ~20rem **setup rail**, and RUN + OUTPUT sit side by side as the **workbench**,
+  so the result never lands below the fold. One column below `md`, a horizontal setup strip over
+  side-by-side work columns at `md…xl`, all three columns at `xl`. Placement is by CSS-grid *area*,
+  so **DOM order stays 1→2→3→4 at every breakpoint** — never reorder the source to move a band.
+  Both work columns need `min-h-0 min-w-0` or the inner scroll won't engage and the page goes wide.
+  The download estimate is quoted once, by `ModelPicker`; `ModelStatus` does not repeat it. Layout
+  itself is asserted in Playwright — jsdom has no geometry, so route tests check presence and order
+  only.
 - **Testing one:** the slots expose a `data-testid` contract shared by Vitest and Playwright —
-  `slot-1`…`slot-4`, `model-size-note`, `model-size-warning`, `model-ready`, `device-ready`,
-  `output-panel`, `output-empty`, `output-running`, `error-note`. Add to that table
+  `slot-1`…`slot-4`, `model-size-note`, `model-size-warning`, `model-ready`, `load-progress`,
+  `load-cancel`, `model-cached-<id>`, `model-evict`, `device-ready`, `output-panel`, `output-empty`,
+  `output-running`, `error-note`. Add to that table
   (model-page-pattern.md §8), never invent an ad-hoc id. Each task page test covers: nothing
   downloads on mount, `load`/`retry` fire from the LOAD slot, four slots render with an empty
   OUTPUT, run controls gated on `ready`, and each error in its own slot. Playwright page objects
@@ -327,6 +340,17 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - **`idle` is the default — nothing downloads on mount.** Weights are the user's bandwidth and the
   tab's memory. Show the size estimate and the large-model warning *first*, start the download on an
   explicit action. Compile-only tasks (WGSL pipeline compile) may `autoLoad`.
+- **A refresh restores the decisions, not the session.** A Worker cannot outlive a page load, so
+  `store/models.ts` persists the selected model and the intent to load it, and
+  `model/useModelSelection.ts` auto-loads on mount **only when that intent meets a cache hit**
+  (`model/cache.ts` probes Cache Storage). An uncached model still stays `idle` and asks; a resume is
+  labelled "Restoring from cache…", never dressed up as a session that survived. Use the hook's
+  `autoLoad` for the task hook, and never widen the rule — a false cache hit spends bandwidth the
+  user did not agree to.
+- **The progress bar reports the aggregate** (`model/progress.ts`): monotonic percent by bytes over
+  all files, indeterminate until a size is known (and then `aria-valuenow` is omitted), warm-up as
+  its own phase, and no ETA. Never render a raw per-file `progress_callback` payload — it restarts at
+  zero for each of a model's 4–8 files.
 - **Slot rules:** SELECT disabled while `loading`/`running`; LOAD is the only slot with a progress
   bar; RUN controls are `disabled={!ready || running}`; OUTPUT always renders (empty / running /
   result / error) so the page never jumps when a result lands.

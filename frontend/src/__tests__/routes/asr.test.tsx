@@ -43,6 +43,8 @@ const baseState: UseLiveAsrResult = {
   loading: false,
   ready: false,
   progress: null,
+  loadProgress: null,
+  loadedInMs: null,
   backend: null,
   recording: false,
   running: false,
@@ -57,6 +59,7 @@ const baseState: UseLiveAsrResult = {
   transcribeClip: mockTranscribeClip,
   load: mockLoad,
   retry: mockRetry,
+  cancel: vi.fn(),
 };
 let mockState: UseLiveAsrResult = { ...baseState };
 
@@ -108,7 +111,7 @@ describe("AsrPage", () => {
   it("offers a retry when the load failed", () => {
     mockState = { ...baseState, status: "error", idle: false, error: "boom" };
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^retry$/i }));
     expect(mockRetry).toHaveBeenCalledOnce();
   });
 
