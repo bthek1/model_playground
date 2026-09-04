@@ -11,7 +11,6 @@ import type {
   MatmulResult,
   TensorOpJob,
   TensorOpResult,
-  WebGPUCapabilities,
 } from "./types";
 
 interface WorkerResponse<T> {
@@ -47,11 +46,6 @@ function call<T>(
   });
 }
 
-export function detectWebGPUInWorker(
-  worker: Worker,
-): Promise<WebGPUCapabilities> {
-  return call<WebGPUCapabilities>(worker, { type: "detect" });
-}
 
 export function runMatmulInWorker(
   worker: Worker,

@@ -27,13 +27,17 @@ export function InputPanel({
   ready: boolean;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       {children}
-      <div className="flex flex-wrap items-center gap-2">{controls}</div>
-      {!ready && (
-        <p className="text-xs text-muted-foreground">{disabledHint}</p>
-      )}
-      <ErrorNote message={error} />
+      {/* Pinned to the bottom of the input column: a long input surface (a
+          transcript, a big textarea) must never push Run out of reach. */}
+      <div className="mt-auto space-y-2 md:sticky md:bottom-0 md:bg-background md:pt-2">
+        <div className="flex flex-wrap items-center gap-2">{controls}</div>
+        {!ready && (
+          <p className="text-xs text-muted-foreground">{disabledHint}</p>
+        )}
+        <ErrorNote message={error} />
+      </div>
     </div>
   );
 }

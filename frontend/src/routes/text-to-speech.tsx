@@ -117,7 +117,6 @@ function TextToSpeechPage() {
           backend={backend}
           progress={progress}
           error={loadError}
-          size={sizeEstimate(meta.params)}
           onLoad={load}
           onRetry={retry}
         />
@@ -158,14 +157,14 @@ function TextToSpeechPage() {
             </div>
           )}
 
-          <div className="space-y-1.5">
+          <div className="flex min-h-0 flex-1 flex-col space-y-1.5">
             <Label htmlFor="tts-text">Text</Label>
             <textarea
               id="tts-text"
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={4}
-              className="w-full max-w-2xl rounded-md border bg-background px-3 py-2 text-sm"
+              className="min-h-24 w-full flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm"
               placeholder="Type something to say…"
             />
           </div>

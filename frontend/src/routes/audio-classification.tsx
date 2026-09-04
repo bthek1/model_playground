@@ -115,7 +115,6 @@ function AudioClassificationPage() {
           backend={backend}
           progress={progress}
           error={loadError}
-          size={sizeEstimate(meta.params)}
           onLoad={load}
           onRetry={retry}
           disabled={busy}
@@ -169,7 +168,7 @@ function AudioClassificationPage() {
           }
         >
           {isZeroShot && (
-            <div className="space-y-1.5">
+            <div className="flex min-h-0 flex-1 flex-col space-y-1.5">
               <Label htmlFor="labels">
                 Labels to score against (one per line)
               </Label>
@@ -178,7 +177,7 @@ function AudioClassificationPage() {
                 value={labelsText}
                 onChange={(e) => setLabelsText(e.target.value)}
                 rows={5}
-                className="w-full max-w-lg rounded-md border bg-background px-3 py-2 text-sm"
+                className="min-h-28 w-full flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm"
                 placeholder="a dog barking&#10;rain falling&#10;a car engine"
               />
             </div>

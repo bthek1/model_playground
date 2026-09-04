@@ -165,7 +165,9 @@ distributions) and aggregate views over `InferenceRun` metrics.
   [`components/charts/EChart.tsx`](../../frontend/src/components/charts/EChart.tsx) via
   `lazy(() => import("@/components/charts/EChart"))` — the `echarts` bundle is heavy and must
   stay code-split out of the initial chunk.
-- **Recharts** inline for small, composable SVG charts (a sparkline, a single bar/line in a card).
+- Small, composable marks (a sparkline, a single bar in a card) are hand-written **inline SVG** —
+  a second charting library is not worth its weight for a 40px sparkline. Recharts used to be
+  listed here as that option and was never imported once; it has been removed.
 - Feed chart series from the **theme tokens** (`var(--chart-1)`…) so charts recolor with the
   theme; don't hard-code series colors. ECharts can't read CSS vars directly, so resolve them at
   runtime with `getCSSVar()` ([`lib/theme.ts`](../../frontend/src/lib/theme.ts)) keyed on the
@@ -230,7 +232,7 @@ visualization should:
 - [ ] Render **Structure** as a stage/arrow schematic driven by real `config` shapes — no GPU required.
 - [ ] Render **Parameters** (if applicable) as canvas heatmap tiles with a diverging legend and `±maxAbs`.
 - [ ] Render **Runtime** (if interactive) from worker results, streamed, off the main thread.
-- [ ] Render **Performance** with the lazy `EChart` wrapper / inline Recharts, series colored from `--chart-*`.
+- [ ] Render **Performance** with the lazy `EChart` wrapper (or inline SVG for a sparkline), series colored from `--chart-*`.
 - [ ] Reuse the `Stage` / `Arrow` / `ParamChip` / heatmap / `Legend` primitives — don't fork them.
 - [ ] Pass **both themes** and **every WebGPU status** (structure still shows with no device).
 - [ ] Give canvases `aria-label`s and pair every color with a label/number.

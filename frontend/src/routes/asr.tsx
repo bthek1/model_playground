@@ -134,7 +134,6 @@ function AsrPage() {
           backend={backend}
           progress={progress}
           error={loadError}
-          size={sizeEstimate(meta.params, meta.bytes)}
           onLoad={load}
           onRetry={retry}
           disabled={busy}

@@ -161,8 +161,11 @@ function TensorArithmeticPage() {
             </Button>
           }
         >
-          {/* Dataflow schematic: A ─(op)─▶ [B | scalar] ─(=)─▶ Result */}
-          <div className="flex flex-col items-stretch gap-4 xl:flex-row xl:items-start">
+          {/* Dataflow schematic: A ─(op)─▶ [B | scalar] ─(=)─▶ Result.
+              Always stacked: the operands share the input column with the
+              output beside them now, so there is no room to run A and B
+              side by side without squeezing both matrices. */}
+          <div className="flex flex-col items-stretch gap-4">
             <Stage title="Matrix A" sub={`shape ${shapeA}`} className="flex-1">
               <MatrixTextarea value={textA} onChange={setTextA} />
             </Stage>

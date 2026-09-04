@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Vite writes a timestamped copy of the config next to it while loading ESM
+# config; one was committed by accident.
+vite.config.ts.timestamp-*
+
+# Vitest coverage output
+coverage/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

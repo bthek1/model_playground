@@ -35,11 +35,16 @@ export function ModelStatus({
 }) {
   if (status === "idle") {
     return (
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Button size="sm" onClick={onLoad} disabled={disabled || !onLoad}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 xl:block xl:space-y-2">
+        <Button
+          size="sm"
+          onClick={onLoad}
+          disabled={disabled || !onLoad}
+          className="xl:w-full"
+        >
           <Download className="size-4" /> Load model
         </Button>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs leading-snug text-muted-foreground">
           {size ? (
             <>
               <span className="tabular-nums">{size.label}</span>
@@ -71,9 +76,9 @@ export function ModelStatus({
     return (
       <p
         data-testid="model-ready"
-        className="flex items-center gap-1.5 text-xs text-muted-foreground"
+        className="inline-flex flex-wrap items-center gap-x-1.5 rounded-md border border-emerald-600/30 bg-emerald-600/10 px-2.5 py-1 text-xs text-muted-foreground"
       >
-        <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-500" />
+        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-500" />
         Model ready · running on{" "}
         <span className="font-medium uppercase">{backend}</span>
       </p>
@@ -99,12 +104,14 @@ export function ModelStatus({
 
   return (
     <div className="space-y-1.5">
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" />
-        Loading model{progress?.file ? ` · ${progress.file}` : ""}
-        {pct != null ? ` · ${pct}%` : ""}
+      <p className="flex items-start gap-1.5 text-xs leading-snug break-all text-muted-foreground">
+        <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" />
+        <span>
+          Loading model{progress?.file ? ` · ${progress.file}` : ""}
+          {pct != null ? ` · ${pct}%` : ""}
+        </span>
       </p>
-      <div className="h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-muted">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div
           className="h-full rounded-full bg-primary transition-[width]"
           style={{ width: `${pct ?? 8}%` }}

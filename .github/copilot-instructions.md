@@ -103,7 +103,7 @@ AUTH_USER_MODEL = "accounts.CustomUser"
 
 ## Frontend (`frontend/`)
 
-**Stack:** React 19, TypeScript ~6.0, Vite 8 (dev server on `:5180`), TanStack Router, TanStack Query v5, Axios, Tailwind CSS v4, shadcn/ui (`base-nova` style on `@base-ui/react`), React Hook Form, Zod, Zustand (+ Immer), Vitest + MSW, date-fns, ECharts + Recharts, react-markdown. ESLint 10.
+**Stack:** React 19, TypeScript ~6.0, Vite 8 (dev server on `:5180`), TanStack Router, TanStack Query v5, Axios, Tailwind CSS v4, shadcn/ui (`base-nova` style on `@base-ui/react`), React Hook Form, Zod, Zustand (+ Immer), Vitest + MSW, date-fns, ECharts, react-markdown. ESLint 10.
 
 **Conventions:**
 - Functional components only — no class components
@@ -209,7 +209,7 @@ export const Route = createFileRoute('/users/$userId')({
 
 **Testing — Vitest + React Testing Library + MSW:**
 - Run with `just fe-test` or `cd frontend && npm test`
-- Test environment: `happy-dom` (configured in `vite.config.ts`; `jsdom` is also installed as a fallback)
+- Test environment: `happy-dom` (configured in `vite.config.ts`) — the only DOM environment; `jsdom` was installed alongside it for a while, unused, and has been removed
 - Setup file: `src/test/setup.ts` — imports `@testing-library/jest-dom`, starts the MSW server, and installs an in-memory `localStorage`/`sessionStorage` polyfill (Node ≥25 ships a stub `localStorage` that shadows the DOM env's)
 - HTTP-level mocking via MSW: default handlers in `src/test/handlers.ts`, shared server in `src/test/server.ts`. Override per-test with `server.use(...)`. Unhandled requests are bypassed, so module-level Axios mocks still work.
 - Co-locate tests with the component/hook they test: `Button.test.tsx` next to `Button.tsx`
@@ -232,7 +232,9 @@ export const Route = createFileRoute('/users/$userId')({
 
 **Utilities:**
 - Date formatting: `date-fns` — always import via `src/lib/date.ts` wrappers, never call `date-fns` directly in components
-- Charts: **ECharts** via the lazy-loaded `src/components/charts/EChart.tsx` wrapper (`echarts` is heavy — keep it code-split with `lazy(() => import(...))`), or **Recharts** for lightweight composable SVG charts
+- Charts: **ECharts**, always via the lazy-loaded `src/components/charts/EChart.tsx` wrapper
+  (`echarts` is heavy — keep it code-split with `lazy(() => import(...))`). One charting library,
+  not two: Recharts was a listed alternative that nothing ever imported, and was removed
 - Markdown / LLM output: render with the `src/components/Markdown.tsx` component (`react-markdown` + `remark-gfm`)
 - **Visualizing a model or its internal structure** follows the UI standard in
   `docs/standards/model-visualization.md` — a shared grammar of left-to-right stage/arrow
@@ -355,7 +357,7 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   `onnx-community/*` repos that don't exist (401 → "Unauthorized access to file"). `just fe-e2e-models`
   checks all of them in seconds.
 - Every catalogue entry carries `params` (millions) driving the **size-before-load guardrail**
-  (`audio/size.ts` + `components/audio/ModelPicker.tsx`): the picker quotes the download for both
+  (`audio/size.ts` + `components/model/ModelPicker.tsx`): the picker quotes the download for both
   backends and warns past `LARGE_MODEL_BYTES`. Add measured `bytes` when the params estimate would
   mislead (ASR's fp32 decoder makes WASM ~3x the estimate).
 - **ASR timestamps are take-relative.** The live loop re-transcribes only the tail 30 s, so the
@@ -460,7 +462,7 @@ Key commands:
 │   │   ├── api/               # Axios client, endpoint functions, queryKeys
 │   │   ├── components/
 │   │   │   ├── ui/            # shadcn/ui copy-paste components
-│   │   │   └── charts/        # EChart wrapper (lazy-loaded); Recharts used inline
+│   │   │   └── charts/        # EChart wrapper (lazy-loaded)
 │   │   ├── webgpu/            # Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
 │   │   ├── hooks/             # Custom hooks (business logic)
 │   │   ├── lib/               # Shared utilities: cn(), date wrappers

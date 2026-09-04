@@ -46,8 +46,11 @@ export function OutputPanel({
   const hasResult = children != null && children !== false;
 
   return (
-    <Card data-testid="output-panel">
-      <CardHeader>
+    <Card
+      data-testid="output-panel"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+    >
+      <CardHeader className="shrink-0">
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           {title}
           {meta && (
@@ -59,7 +62,7 @@ export function OutputPanel({
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
         <ErrorNote message={error} />
 
         {running && !hasResult && (
@@ -76,14 +79,18 @@ export function OutputPanel({
           <>
             {children}
             {actions && (
-              <div className="flex flex-wrap gap-2">{actions}</div>
+              <div className="mt-auto flex shrink-0 flex-wrap gap-2 pt-2">
+                {actions}
+              </div>
             )}
           </>
         ) : (
           !running && (
+            // The column is tall now, so the "what you'll get" state gets the
+            // middle of it rather than clinging to the top edge.
             <p
               data-testid="output-empty"
-              className="text-sm text-muted-foreground"
+              className="flex flex-1 items-center justify-center text-center text-sm text-balance text-muted-foreground"
             >
               {empty}
             </p>

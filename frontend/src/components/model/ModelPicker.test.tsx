@@ -19,8 +19,8 @@ const MODELS: PickableModel[] = [
 describe("ModelPicker", () => {
   it("offers every model and marks the selected one", () => {
     render(<ModelPicker models={MODELS} value="small" onChange={() => {}} />);
-    expect(screen.getByRole("button", { name: "Tiny model" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Big model" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /tiny model/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /big model/i })).toBeInTheDocument();
   });
 
   it("hands the caller the whole model, not just its id", async () => {
@@ -29,7 +29,7 @@ describe("ModelPicker", () => {
     const onChange = vi.fn();
     render(<ModelPicker models={MODELS} value="small" onChange={onChange} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Big model" }));
+    await userEvent.click(screen.getByRole("button", { name: /big model/i }));
     expect(onChange).toHaveBeenCalledWith(MODELS[1]);
   });
 
@@ -78,15 +78,62 @@ describe("ModelPicker", () => {
       <ModelPicker models={MODELS} value="small" onChange={onChange} disabled />,
     );
     for (const label of ["Tiny model", "Big model"]) {
-      expect(screen.getByRole("button", { name: label })).toBeDisabled();
+      expect(screen.getByRole("button", { name: new RegExp(label, "i") })).toBeDisabled();
     }
-    await userEvent.click(screen.getByRole("button", { name: "Big model" }));
+    await userEvent.click(screen.getByRole("button", { name: /big model/i }));
     expect(onChange).not.toHaveBeenCalled();
   });
 
   it("renders without a size note when the value matches no model", () => {
     render(<ModelPicker models={MODELS} value="gone" onChange={() => {}} />);
     expect(screen.queryByTestId("model-size-note")).toBeNull();
+    expect(screen.getByRole("button", { name: /tiny model/i })).toBeInTheDocument();
+  });
+  it("shows each model's hint on its own row in the rail's list layout", () => {
+    // At ~20rem the old chip row hid the hint behind a `title` tooltip. The
+    // rail has vertical room instead, so every row carries label + hint.
+    render(<ModelPicker models={MODELS} value="small" onChange={() => {}} />);
+    const row = screen.getByRole("button", { name: /tiny model/i });
+    expect(row).toHaveTextContent("Fast and rough.");
+    expect(row).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: /big model/i }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("still offers the compact chip row where a route has the width", () => {
+    render(
+      <ModelPicker models={MODELS} value="small" onChange={() => {}} layout="row" />,
+    );
+    // Exact names: the chip carries the label alone, hint goes to the tooltip.
     expect(screen.getByRole("button", { name: "Tiny model" })).toBeInTheDocument();
+    const big = screen.getByRole("button", { name: "Big model" });
+    expect(big).not.toHaveTextContent("Slow and good.");
+    expect(big.getAttribute("title")).toMatch(/^Slow and good\. — /);
+  });
+
+  it("keeps the size guardrail identical in both layouts", () => {
+    const { rerender } = render(
+      <ModelPicker models={MODELS} value="large" onChange={() => {}} />,
+    );
+    const listNote = screen.getByTestId("model-size-note").textContent;
+    expect(screen.getByTestId("model-size-warning")).toBeInTheDocument();
+
+    rerender(
+      <ModelPicker models={MODELS} value="large" onChange={() => {}} layout="row" />,
+    );
+    expect(screen.getByTestId("model-size-note")).toHaveTextContent(
+      listNote!.replace(/\s+/g, " ").trim(),
+    );
+    expect(screen.getByTestId("model-size-warning")).toBeInTheDocument();
+  });
+
+  it("disables the list rows too, not just the chips", async () => {
+    const onChange = vi.fn();
+    render(
+      <ModelPicker models={MODELS} value="small" onChange={onChange} disabled />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /big model/i }));
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

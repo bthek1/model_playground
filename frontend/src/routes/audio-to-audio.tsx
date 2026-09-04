@@ -143,7 +143,6 @@ function AudioToAudioPage() {
           backend={backend}
           progress={progress}
           error={loadError}
-          size={sizeEstimate(meta.params, meta.bytes)}
           onLoad={load}
           onRetry={retry}
           disabled={busy}
@@ -213,7 +212,7 @@ function AudioToAudioPage() {
           running={running}
           runningLabel="Enhancing…"
           error={runError}
-          empty="Record or upload a noisy clip — the original and the denoised version appear here, side by side."
+          empty="Record or upload a noisy clip — the original and the denoised version appear here, one above the other."
         >
           {input && (
             <div className="space-y-5">

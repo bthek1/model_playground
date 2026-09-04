@@ -31,6 +31,22 @@ export default tseslint.config(
     },
   },
   {
+    // File-based routes must export `Route` next to their component — that is
+    // TanStack Router's contract, so the rule can never be satisfied here and
+    // 24 permanent warnings only hide the ones worth reading. Same for the
+    // generated shadcn/ui files, which pair a component with its `cva` variants
+    // and must not be hand-edited, and for the app entry point, which mounts
+    // rather than exports.
+    files: [
+      'src/routes/**/*.tsx',
+      'src/components/ui/**/*.tsx',
+      'src/main.tsx',
+    ],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
     // Playwright end-to-end tests. These are Node scripts driving a browser,
     // not React code: the fixture callback is named `use`, which the
     // rules-of-hooks rule mistakes for React's `use` hook.

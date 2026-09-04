@@ -109,7 +109,7 @@ frontend/
 │   │   ├── runtime.ts       runMatmul() reference kernel + benchmark
 │   │   ├── worker.ts        Web Worker that owns the device, runs jobs
 │   │   ├── workerClient.ts  Main-thread promise API over the worker
-│   │   └── shaders/         WGSL compute shaders (matmul.wgsl, relu.wgsl)
+│   │   └── shaders/         WGSL compute shaders (matmul, elementwise, scale, transpose)
 │   ├── hooks/             Custom hooks encapsulating business logic
 │   │   ├── useAuth.ts     Auth state, login, logout
 │   │   ├── useWebGPU.ts   WebGPU capability probe (for the UI)

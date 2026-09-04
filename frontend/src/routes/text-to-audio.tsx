@@ -207,14 +207,14 @@ function TextToAudioPage() {
             </Button>
           }
         >
-          <div className="space-y-1.5">
+          <div className="flex min-h-0 flex-1 flex-col space-y-1.5">
             <Label htmlFor="prompt">Prompt</Label>
             <textarea
               id="prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={3}
-              className="w-full max-w-2xl rounded-md border bg-background px-3 py-2 text-sm"
+              className="min-h-20 w-full flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm"
               placeholder="e.g. an upbeat 8-bit chiptune loop"
             />
           </div>

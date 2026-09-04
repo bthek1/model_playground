@@ -35,7 +35,3 @@ export async function getGPUDevice(): Promise<GPUDevice> {
   return devicePromise;
 }
 
-/** Drop the cached device (e.g. from tests or an explicit teardown). */
-export function resetGPUDevice(): void {
-  devicePromise = null;
-}

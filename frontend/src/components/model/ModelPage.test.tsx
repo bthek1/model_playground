@@ -74,4 +74,50 @@ describe("ModelPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Runs in your browser.")).toBeInTheDocument();
   });
+  // The layout is a grid placed by *area*, which is exactly the mechanism that
+  // could silently reorder the pipeline. This is the assertion that stops it:
+  // source order is pipeline order at every breakpoint, so Tab and a screen
+  // reader always walk Model → Load → Input → Output.
+  it("keeps DOM order equal to pipeline order regardless of grid placement", () => {
+    renderPage();
+    const headings = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((h) => h.textContent);
+    expect(headings).toEqual(["Model", "Load", "Input", "Output"]);
+  });
+
+  it("groups SELECT and LOAD into one setup surface, apart from the workbench", () => {
+    // Setup is done once a session; input and output are touched every run.
+    // The split is what lets the result sit beside the input instead of below it.
+    renderPage();
+    const rail = screen.getByTestId("slot-1").parentElement!;
+    expect(rail).toContainElement(screen.getByTestId("slot-2"));
+    expect(rail).not.toContainElement(screen.getByTestId("slot-3"));
+    expect(rail).not.toContainElement(screen.getByTestId("slot-4"));
+  });
+
+  it("puts the INPUT and OUTPUT bands in separate workbench columns", () => {
+    renderPage();
+    expect(screen.getByTestId("slot-3").parentElement).not.toBe(
+      screen.getByTestId("slot-4").parentElement,
+    );
+  });
+
+  it("renders an aside in the header when the task has a one-line status", () => {
+    // DeviceStatus-style answers don't deserve a band, but they do deserve
+    // somewhere that isn't buried in the rail.
+    renderPage({ aside: <span>WEBGPU</span> });
+    expect(screen.getByText("WEBGPU")).toBeInTheDocument();
+    // ...and it stays out of the four slots.
+    for (const slot of ["slot-1", "slot-2", "slot-3", "slot-4"]) {
+      expect(screen.getByTestId(slot)).not.toContainElement(
+        screen.getByText("WEBGPU"),
+      );
+    }
+  });
+
+  it("omits the aside entirely when none is given", () => {
+    const { container } = renderPage();
+    expect(container.querySelector("header")?.children).toHaveLength(1);
+  });
 });

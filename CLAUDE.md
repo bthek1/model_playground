@@ -127,7 +127,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - The sidebar is **taxonomy-driven**: categories/tasks live in `components/layout/taskTaxonomy.ts` (data), rendered by `components/layout/Sidebar.tsx`. To add a task, add a data entry — map it to a real route via `REAL_ROUTES` (e.g. the Theory tools Linear Model Training → `/training` and Tensor Arithmetic → `/tensor`), else it falls through to the generic `routes/tasks.$slug.tsx` placeholder. Per-category expand state is in `store/ui.ts`.
 - Forms use React Hook Form + Zod schemas (`src/schemas/`, one file per domain).
 - Styling is Tailwind v4 (CSS-first, no config file) + shadcn/ui in the **`base-nova`** style, built on **`@base-ui/react`** primitives (NOT Radix). Add components with `npx shadcn@latest add <component>`.
-- Charts: ECharts via the lazy `src/components/charts/EChart.tsx` wrapper, or Recharts inline. Render Markdown/LLM output with `src/components/Markdown.tsx` (`react-markdown` + `remark-gfm`).
+- Charts: ECharts, always via the lazy `src/components/charts/EChart.tsx` wrapper (`echarts` is heavy — keep it code-split). Render Markdown/LLM output with `src/components/Markdown.tsx` (`react-markdown` + `remark-gfm`).
 - **Every task page is the same pipeline: Select → Load → Run → Output** — pick a model, load its weights, run it on an input, show the result. This is the standard in [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md); read it before adding a task route. Two state machines, kept orthogonal: **load** (`idle → loading → ready | error`, with `progress` as a self-loop and `retry()` out of `error`) and **run** (id-correlated requests, `running` derived from an in-flight *count*, never a boolean). The plumbing lives once in `model/useModelWorker.ts`; task hooks (`useTts`, `useAsr`, `usePipeline`, `useAudioClassifier`, `useEnhance`) are thin wrappers returning the same contract — `status`/`idle`/`loading`/`ready`/`progress`/`backend`/`load`/`retry`/`run`/`running`/`result`/`error`. The shell is `components/model/` (`ModelPage` + `ModelPicker`/`ModelStatus`/`InputPanel`/`OutputPanel`, plus `DeviceStatus` for pages that probe a GPU instead of downloading weights). Never re-derive the pending map, the teardown, or a bespoke page shape. Nothing downloads until the user asks: `idle` is the default and the size estimate + large-model warning are shown first. Errors render in the slot that produced them.
 - **Every task page is the same four-stage pipeline** — SELECT → LOAD → RUN → OUTPUT — specified in
   [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md). The shared worker
@@ -194,7 +194,7 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
   model's own timestamps restart at 0 on a longer take; `useLiveAsr`'s `shiftChunks()` offsets them
   by the window start before the route renders `m:ss`. Don't render `chunks` straight from the worker.
 - **Size-before-load guardrail:** every catalogue entry carries `params` (millions); `audio/size.ts` +
-  `components/audio/ModelPicker.tsx` quote the download for both backends and warn past
+  `components/model/ModelPicker.tsx` quote the download for both backends and warn past
   `LARGE_MODEL_BYTES`. Supply measured `bytes` when the params estimate would mislead — ASR's fp32
   decoder makes the WASM download ~3x the estimate.
 - **Heavy/experimental models are gated, not auto-loaded.** `/text-to-audio` (MusicGen, 571 MB q8 /

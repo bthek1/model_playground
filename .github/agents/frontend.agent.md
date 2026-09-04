@@ -20,31 +20,41 @@ tools:
 You are an expert React + TypeScript frontend developer working in the `frontend/` directory of this monorepo.
 
 ## Stack
-- React 18, TypeScript (strict), Vite
+- React 19, TypeScript ~6.0 (strict), Vite 8 (dev server on `:5180`, HTTPS)
 - TanStack Router (file-based routing), TanStack Query v5
 - Axios (HTTP client with JWT interceptor)
-- Tailwind CSS v4, shadcn/ui
+- Tailwind CSS v4, shadcn/ui in the **`base-nova`** style on **`@base-ui/react`** (NOT Radix)
 - React Hook Form + Zod (form validation)
 - Zustand + immer (global/UI state)
-- Vitest + React Testing Library (testing)
-- date-fns, Plotly.js
+- Vitest + React Testing Library + MSW (unit/component), Playwright (end-to-end)
+- date-fns, ECharts, react-markdown
+- Two client-side inference runtimes: raw WebGPU (`src/webgpu/`) and
+  Transformers.js / ONNX Runtime Web for pretrained models (`src/audio/`)
 
 ## Project Layout
 ```
-frontend/src/
-├── api/            # Axios client, endpoint functions, queryKeys
-├── components/
-│   ├── ui/         # shadcn/ui copy-paste components (never modify directly)
-│   └── charts/     # EChart wrapper (lazy-loaded); Recharts used inline
-├── webgpu/         # Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
-├── hooks/          # Custom hooks with business logic
-├── lib/            # cn(), date wrappers
-├── routes/         # TanStack Router file-based routes
-├── schemas/        # Zod validation schemas (one file per domain)
-├── store/          # Zustand stores (one file per concern)
-├── test/           # Vitest setup file
-├── types/          # Shared TypeScript types from API contracts
-└── main.tsx
+frontend/
+├── e2e/            # Playwright: fixtures/, pages/ (page objects), specs/
+└── src/
+    ├── api/        # Axios client, endpoint functions, queryKeys
+    ├── audio/      # Pretrained models: engines, workers, catalogues (Transformers.js)
+    ├── components/
+    │   ├── model/  # The four-slot task page: ModelPage, ModelPicker, ModelStatus,
+    │   │           #   InputPanel, OutputPanel, DeviceStatus, ErrorNote
+    │   ├── ui/     # shadcn/ui copy-paste components (never modify directly)
+    │   ├── viz/    # schematic.tsx, heatmap.tsx — the model-visualization primitives
+    │   └── charts/ # EChart wrapper (lazy-loaded)
+    ├── model/      # useModelWorker + the shared task-hook contract (types.ts)
+    ├── webgpu/     # Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
+    ├── hooks/      # Custom hooks with business logic
+    ├── lib/        # cn(), date wrappers, matrix/mnist helpers
+    ├── routes/     # TanStack Router file-based routes
+    ├── schemas/    # Zod validation schemas (one file per domain)
+    ├── store/      # Zustand stores (one file per concern)
+    ├── test/       # Vitest setup, MSW handlers, shared fixtures
+    ├── __tests__/  # Route-level tests
+    ├── types/      # Shared TypeScript types from API contracts
+    └── main.tsx
 ```
 
 ## Key Conventions
@@ -123,11 +133,39 @@ const form = useForm<LoginSchema>({ resolver: zodResolver(loginSchema) })
 
 **Utilities:**
 - Date formatting: `date-fns` — always via `src/lib/date.ts` wrappers, never call `date-fns` directly in components
-- Charts: `plotly.js-dist-min` — always via `src/components/charts/PlotlyChart.tsx`, always lazy-loaded
+- Charts: **ECharts** — always via `src/components/charts/EChart.tsx`, always lazy-loaded
+  (`lazy(() => import("@/components/charts/EChart"))`); the bundle is ~1 MB and must stay
+  code-split. Series colors come from `--chart-*` theme tokens via `getCSSVar()`.
+
+**Task pages — Select → Load → Run → Output:**
+- Every route that runs a model is the same four-stage pipeline. Read
+  [`docs/standards/model-page-pattern.md`](../../docs/standards/model-page-pattern.md) before
+  adding or editing one.
+- Two orthogonal state machines: *load* (`idle → loading → ready | error`, `retry()` out of
+  `error`) and *run* (id-correlated requests; `running` from an in-flight **count**, never a
+  boolean). The plumbing lives once in `src/model/useModelWorker.ts` — wrap it, never re-derive it.
+- Every task hook returns the same contract: `status`/`idle`/`loading`/`ready`/`progress`/
+  `backend`/`load`/`retry`/`run`/`running`/`result`/`error`.
+- `idle` is the default: **nothing downloads until the user asks**. Show the size estimate first.
+- Compose with `ModelPage` and its four named slots — a route cannot reorder them or drop OUTPUT.
+  Use `DeviceStatus` in LOAD for pages that probe a GPU instead of downloading weights.
+- Errors render in the slot that produced them: load error in LOAD, run error in OUTPUT.
+- The slots expose a `data-testid` contract (`slot-1`…`slot-4`, `output-panel`, `output-empty`,
+  `model-ready`, `error-note`) shared by Vitest and Playwright — add to §8 of the standard rather
+  than inventing ad-hoc ids.
+
+**Base UI, not Radix — two gotchas:**
+- **No `asChild` / no `<Slot>`** — compose with a `render` prop: `<Button render={<Link to="/x" />} />`.
+  `FormControl` must wrap exactly one React element.
+- **No `forwardRef`** — `ref` is a plain prop (React 19). The `ui/` wrappers spread `{...props}`
+  straight onto the primitive; re-introducing `forwardRef` breaks RHF's `{...field}` binding.
 
 **WebGPU inference (`src/webgpu/`) — raw WebGPU, no ML framework:**
 - Models are WGSL compute shaders in `src/webgpu/shaders/`, imported as strings via Vite `?raw`
-  (`import shader from "./shaders/x.wgsl?raw"`). Do **not** add Transformers.js / ONNX Runtime / WebLLM.
+  (`import shader from "./shaders/x.wgsl?raw"`).
+- **The no-ML-framework rule scopes to `src/webgpu/` only.** Running *pretrained* checkpoints
+  (the audio tasks) uses Transformers.js / ONNX Runtime Web and lives in `src/audio/`. The two
+  runtimes never mix — do not import one from the other.
 - GPU types come from `@webgpu/types` (in `tsconfig.app.json` `types`).
 - Pipeline (ref: `runtime.ts::runMatmul`): `getGPUDevice()` → `createComputePipeline(wgsl)` →
   storage/uniform buffers (`buffers.ts`) → `dispatchWorkgroups` → `readBackFloat32`.
@@ -138,13 +176,24 @@ const form = useForm<LoginSchema>({ resolver: zodResolver(loginSchema) })
 **Env Vars:**
 - Prefix with `VITE_`. Access via `import.meta.env.VITE_*`
 
-## Testing — Vitest + React Testing Library
-- Run: `just fe-test` or `cd frontend && npm test`
-- Test environment: `jsdom` (configured in `vite.config.ts`)
-- Setup file: `src/test/setup.ts` (imports `@testing-library/jest-dom`)
-- Co-locate tests with the component/hook they test
-- Mock Axios at the module level — never make real HTTP calls in tests
+## Testing — two tiers
+
+**Vitest + React Testing Library + MSW** (`just fe-test`)
+- Test environment: **`happy-dom`** (configured in `vite.config.ts`)
+- Setup file: `src/test/setup.ts` — imports `@testing-library/jest-dom` and polyfills
+  `localStorage`, because Node ≥25 ships a stub that shadows the DOM env's
+- HTTP is stubbed at the network layer with MSW (`src/test/server.ts`, `handlers.ts`);
+  shared response bodies live in `src/test/fixtures/` and the Playwright mock imports the
+  same file, so the two suites can't drift
+- Co-locate tests with the component/hook they test; route tests go in `src/__tests__/routes/`
 - Zod schemas are tested as pure unit tests (no DOM)
+
+**Playwright** (`just fe-e2e`) — `frontend/e2e/`
+- Covers what happy-dom can't: routing and the app shell, real-browser auth, and WebGPU
+- Import `test`/`expect` from `e2e/fixtures/base`, never `@playwright/test`
+- Never `page.route("**/api/**")` — it also matches `/src/api/*` module URLs and the app
+  never boots
+- See [`docs/guides/e2e-testing.md`](../../docs/guides/e2e-testing.md)
 
 ## Commands
 - Dev server: `just fe-dev`
@@ -163,5 +212,8 @@ const form = useForm<LoginSchema>({ resolver: zodResolver(loginSchema) })
 - Never call `date-fns` directly in components — use `src/lib/date.ts` wrappers
 - Never modify generated shadcn/ui files directly
 - Never make real HTTP calls in tests — mock Axios
-- Never add an ML inference framework (Transformers.js / ONNX Runtime / WebLLM) — kernels are raw WGSL
+- Never add an ML inference framework **inside `src/webgpu/`** — those kernels are raw WGSL.
+  (Pretrained models in `src/audio/` do use Transformers.js; keep the two runtimes separate.)
+- Never start a model download on mount — task pages default to `idle` (see the page pattern)
+- Never design a new task-page layout — fill in `ModelPage`'s four slots
 - Never run a GPU dispatch on the main thread for heavy work — use the Web Worker (`src/webgpu/worker.ts`)

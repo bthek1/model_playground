@@ -51,14 +51,14 @@ Key conventions:
 ## Frontend Overview
 
 - **Language / runtime:** TypeScript, Node 20, bundled with Vite
-- **Framework:** React 18
+- **Framework:** React 19
 - **Routing:** TanStack Router (file-based, under `src/routes/`)
 - **Server state:** TanStack Query v5 (`useQuery`, `useMutation`)
 - **HTTP client:** Axios with a JWT interceptor (`src/api/client.ts`)
 - **Styling:** Tailwind CSS v4 + shadcn/ui (`src/components/ui/`)
 - **Forms:** React Hook Form + Zod (`src/schemas/`)
 - **Global state:** Zustand with immer (`src/store/`)
-- **Testing:** Vitest + React Testing Library (`just fe-test`)
+- **Testing:** Vitest + React Testing Library + MSW (`just fe-test`); Playwright end-to-end (`just fe-e2e`)
 - **Query keys:** Centralised in `src/api/queryKeys.ts`
 
 Key conventions:
