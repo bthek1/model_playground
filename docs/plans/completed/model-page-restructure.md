@@ -32,7 +32,7 @@ has grown to 389 lines because of it.
 Three defects fall out of the duplication:
 
 1. **Eager loading.** Each hook's effect posts `{type:"load"}` on mount. The
-   [`ModelPicker`](../../../frontend/src/components/audio/ModelPicker.tsx) size warning —
+   [`ModelPicker`](../../../frontend/src/components/model/ModelPicker.tsx) size warning —
    "Large model — expect a slow first load" — is therefore shown *after* the download has
    already started. The guardrail does not guard anything.
 2. **`running` is a boolean over an N-entry map.** With two overlapping requests, the
@@ -222,6 +222,22 @@ but the default is the right choice.
   working Retry; switch models mid-load → clean teardown, no orphaned worker
 - Verify on both backends: normal Chrome (WebGPU) and with WebGPU disabled (WASM fallback)
 
+**Coverage added after the phases closed** (2026-09-04). The migration left three layers
+thin, each found by auditing new files against their tests rather than by a failure:
+
+| Gap | Why it mattered | Added |
+|---|---|---|
+| `DeviceStatus`, `ErrorNote` | New shared primitives with no direct test | `DeviceStatus.test.tsx` (7), `ErrorNote.test.tsx` (5) |
+| `ModelPicker` | Never had a test, and it carries the size-before-load guardrail | `ModelPicker.test.tsx` (7), including the `LARGE_MODEL_BYTES` threshold either side |
+| `AsrTransport` | The playback state machine moved out of a tested route into an untested component | `AsrTransport.test.tsx` (14) — play → pause → resume → stop, natural end, take replacement |
+| `autoLoad` passthrough | Every route passes `false`; no wrapper hook asserted it | 3 tests each in `useTts` / `useAsr` / `usePipeline`, with a **spawn counter** so "no worker" is distinguishable from "a leftover worker" |
+| `useAudioClassifier`, `useLiveAsr` | Their mocks discarded the delegate's arguments, hiding the task selection and the `autoLoad` forward | Arg-capturing mocks + 8 tests across the two |
+| `playground.tsx` | Rewritten in Phase 5, never tested | `playground.test.tsx` (4) |
+
+Result: 504 → **559** unit tests; `components/model/` at 100% statement coverage. The
+`data-testid` contract these depend on is now documented as
+[§8 of the standard](../../standards/model-page-pattern.md).
+
 **Phase 5-6 additions not in the original boxes:**
 
 - `components/model/DeviceStatus.tsx` — the LOAD band for pages that probe a device instead
@@ -239,7 +255,7 @@ but the default is the right choice.
 | Routes with a bespoke page shape | 7 | 1 (training, by decision) |
 | `asr.tsx` | 389 lines | 261 lines |
 | Downloads starting on navigation | all 5 audio routes | none |
-| Unit tests | 493 | 504 |
+| Unit tests | 493 | 559 |
 | E2E specs | 49 | 61 |
 
 Defects 1-3 from the Background are fixed and each has a regression test:

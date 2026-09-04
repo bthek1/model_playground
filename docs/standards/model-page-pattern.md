@@ -242,7 +242,40 @@ stage or skip OUTPUT.
 
 ---
 
-## 8. Checklist — adding a task page
+## 8. Test hooks
+
+The slots expose a small, stable set of `data-testid`s. They are a **contract**:
+Vitest route tests and Playwright specs both key off them, so renaming one breaks
+tests in two suites at once. Add to this table rather than inventing an ad-hoc id.
+
+| Test id | Where | Means |
+|---|---|---|
+| `slot-1` … `slot-4` | `ModelPage` | The four bands, in pipeline order. Always exactly four. |
+| `model-size-note` | `ModelPicker` | The selected model's hint, params and per-backend download. |
+| `model-size-warning` | `ModelPicker` | The large-model guardrail. Absent below `LARGE_MODEL_BYTES`. |
+| `model-ready` | `ModelStatus` | The model loaded; carries the resolved backend. |
+| `device-ready` | `DeviceStatus` | A GPU device was acquired (compile-only routes). |
+| `output-panel` | `OutputPanel` | The OUTPUT card. Present regardless of whether there is a result. |
+| `output-empty` | `OutputPanel` | No result and nothing running — the "what you'll get" state. |
+| `output-running` | `OutputPanel` | A first run is in flight. Absent when a previous result is still shown. |
+| `error-note` | `ErrorNote` | Any error. Also `role="alert"` — prefer the role in assertions. |
+
+Prefer role and text queries where they work; these exist for the states that have
+no natural accessible name (a band, an empty panel). Note that a band is a labelled
+`region`, so its heading text participates in accessible-name lookups —
+`getByLabelText(/text/i)` will match both a band named "Text" and a field inside it.
+That ambiguity is one reason §4's band labels stay generic.
+
+**What every task page's tests should cover**, beyond the task's own behaviour:
+
+- Nothing downloads on mount — assert the hook was called with `autoLoad: false`
+  *and* that `load` was not called.
+- `load()` fires from the LOAD slot, and `retry()` from its error state.
+- All four slots render, with `output-empty` visible, before any run.
+- Run controls are disabled until `ready`.
+- A load error renders in LOAD, a run error in OUTPUT, and the page stays usable.
+
+## 9. Checklist — adding a task page
 
 - [ ] Model catalogue entry: `id`, `label`, `hint`, `params`, measured `bytes` per backend
 - [ ] Worker built on the shared protocol (`load` / `run` messages, id-correlated)
@@ -253,7 +286,7 @@ stage or skip OUTPUT.
 - [ ] Every RUN control gated on `ready`
 - [ ] OUTPUT has an empty state, a running state, and an error state
 - [ ] Errors land in the slot that produced them
-- [ ] Unit tests for the hook's state machine; a route test for the four slots
+- [ ] Unit tests for the hook's state machine; a route test covering §8's list
 - [ ] Sidebar taxonomy entry mapped in `REAL_ROUTES`
 
 ---

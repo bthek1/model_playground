@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AsrResponse } from "@/audio/types";
 
@@ -23,8 +23,13 @@ class FakeWorker {
 
 let lastWorker: FakeWorker;
 
+// Counted, not just captured: proving that `autoLoad: false` spawns *nothing*
+// needs to distinguish "no worker" from "a worker left over from a prior test".
+let spawned = 0;
+
 vi.mock("@/audio/asrClient", () => ({
   createAsrWorker: () => {
+    spawned += 1;
     lastWorker = new FakeWorker();
     return lastWorker as unknown as Worker;
   },
@@ -33,7 +38,44 @@ vi.mock("@/audio/asrClient", () => ({
 const { useAsr } = await import("./useAsr");
 
 describe("useAsr", () => {
+  beforeEach(() => {
+    spawned = 0;
+  });
   afterEach(() => vi.clearAllMocks());
+
+  // The deferred-load contract (model-page-pattern.md §2). Every task route
+  // passes `false`, so this passthrough is what stops a page from spending the
+  // user's bandwidth just because they navigated to it.
+  it("spawns no worker at all when autoLoad is false", () => {
+    const { result } = renderHook(() => useAsr("m", false));
+    expect(result.current.status).toBe("idle");
+    expect(result.current.idle).toBe(true);
+    expect(result.current.loading).toBe(false);
+    expect(spawned).toBe(0);
+  });
+
+  it("load() starts the ASR worker once, and again is a no-op", () => {
+    const { result } = renderHook(() => useAsr("m", false));
+
+    act(() => result.current.load());
+    expect(spawned).toBe(1);
+    expect(result.current.status).toBe("loading");
+
+    // Double-clicking Load must not open a second worker on the same model.
+    act(() => result.current.load());
+    expect(spawned).toBe(1);
+  });
+
+  it("retry() reloads after a failed load", async () => {
+    const { result } = renderHook(() => useAsr("m", false));
+    act(() => result.current.load());
+    act(() => lastWorker.emit({ type: "error", error: "boom" }));
+    await waitFor(() => expect(result.current.status).toBe("error"));
+
+    act(() => result.current.retry());
+    expect(spawned).toBe(2);
+    expect(result.current.status).toBe("loading");
+  });
 
   it("posts a load message on mount and starts loading", () => {
     const { result } = renderHook(() => useAsr("onnx-community/whisper-base"));

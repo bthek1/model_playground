@@ -17,9 +17,22 @@ const pipeState = {
   running: false,
   error: null as string | null,
   run,
+  load: vi.fn(),
+  retry: vi.fn(),
 };
-const usePipeline = vi.fn(() => pipeState);
-vi.mock("@/hooks/usePipeline", () => ({ usePipeline: () => usePipeline() }));
+// Records its arguments: the classifier's job includes choosing the pipeline
+// task from the catalogue and forwarding `autoLoad`, so dropping the args here
+// would hide both.
+const usePipeline = vi.fn((task: string, model: string, autoLoad?: boolean) => {
+  void task;
+  void model;
+  void autoLoad;
+  return pipeState;
+});
+vi.mock("@/hooks/usePipeline", () => ({
+  usePipeline: (task: string, model: string, autoLoad?: boolean) =>
+    usePipeline(task, model, autoLoad),
+}));
 
 const { useAudioClassifier } = await import("./useAudioClassifier");
 
@@ -29,6 +42,51 @@ const ZERO_SHOT_MODEL = CLASSIFIER_MODELS.find(
 
 describe("useAudioClassifier", () => {
   afterEach(() => vi.clearAllMocks());
+
+  it("selects the pipeline task from the catalogue entry", () => {
+    renderHook(() => useAudioClassifier(DEFAULT_CLASSIFIER_MODEL));
+    expect(usePipeline).toHaveBeenCalledWith(
+      "audio-classification",
+      DEFAULT_CLASSIFIER_MODEL,
+      true,
+    );
+
+    vi.clearAllMocks();
+    renderHook(() => useAudioClassifier(ZERO_SHOT_MODEL));
+    expect(usePipeline).toHaveBeenCalledWith(
+      "zero-shot-audio-classification",
+      ZERO_SHOT_MODEL,
+      true,
+    );
+  });
+
+  it("forwards autoLoad so the route can defer the download", () => {
+    renderHook(() => useAudioClassifier(DEFAULT_CLASSIFIER_MODEL, false));
+    expect(usePipeline).toHaveBeenCalledWith(
+      expect.any(String),
+      DEFAULT_CLASSIFIER_MODEL,
+      false,
+    );
+  });
+
+  it("re-exposes the load actions so the LOAD slot can drive them", () => {
+    const { result } = renderHook(() =>
+      useAudioClassifier(DEFAULT_CLASSIFIER_MODEL, false),
+    );
+    result.current.load();
+    result.current.retry();
+    expect(pipeState.load).toHaveBeenCalledOnce();
+    expect(pipeState.retry).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to the first catalogue entry for an unknown model id", () => {
+    renderHook(() => useAudioClassifier("not-a-model"));
+    expect(usePipeline).toHaveBeenCalledWith(
+      CLASSIFIER_MODELS[0].task,
+      CLASSIFIER_MODELS[0].id,
+      true,
+    );
+  });
 
   it("passes { top_k } for a fixed-label model and stores the result", async () => {
     run.mockResolvedValue([{ label: "Speech", score: 0.9 }]);

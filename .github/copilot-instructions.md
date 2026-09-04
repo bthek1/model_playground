@@ -311,6 +311,13 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   `DeviceStatus` for pages whose LOAD is a GPU probe rather than a download (`/tensor`). Band labels
   stay generic (Model / Load / Input / Output) — naming a band after the task duplicates the field
   label beneath it and makes the region's accessible name ambiguous.
+- **Testing one:** the slots expose a `data-testid` contract shared by Vitest and Playwright —
+  `slot-1`…`slot-4`, `model-size-note`, `model-size-warning`, `model-ready`, `device-ready`,
+  `output-panel`, `output-empty`, `output-running`, `error-note`. Add to that table
+  (model-page-pattern.md §8), never invent an ad-hoc id. Each task page test covers: nothing
+  downloads on mount, `load`/`retry` fire from the LOAD slot, four slots render with an empty
+  OUTPUT, run controls gated on `ready`, and each error in its own slot. Playwright page objects
+  mirror this — `ModelPageObject` is the base, `AudioPage`/`TensorPage` extend it.
 - **Reference implementations:** `routes/text-to-speech.tsx` (downloads weights),
   `routes/tensor.tsx` (compile-only), `routes/tasks.$slug.tsx` (the empty case).
   `routes/training.tsx` is the one **documented exception** — a full-bleed canvas HUD that keeps its

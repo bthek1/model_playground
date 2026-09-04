@@ -12,11 +12,23 @@ const asrState = {
   progress: null,
   backend: "wasm" as string | null,
   result: null,
+  idle: false,
   running: false,
   error: null as string | null,
   transcribe,
+  load: vi.fn(),
+  retry: vi.fn(),
 };
-vi.mock("@/hooks/useAsr", () => ({ useAsr: () => asrState }));
+// Records its arguments: `useLiveAsr` owns the capture loop but delegates the
+// whole model half, including the deferred-load flag the ASR route depends on.
+const useAsr = vi.fn((model: string, autoLoad?: boolean) => {
+  void model;
+  void autoLoad;
+  return asrState;
+});
+vi.mock("@/hooks/useAsr", () => ({
+  useAsr: (model: string, autoLoad?: boolean) => useAsr(model, autoLoad),
+}));
 
 // --- Fakes for the Web Audio / MediaRecorder globals. -------------------------
 class FakeAudioBuffer {
@@ -91,6 +103,46 @@ describe("useLiveAsr", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  // The model half is delegated wholesale — the capture loop is this hook's own
+  // work, the load lifecycle is not. These pin the seam.
+  it("forwards the model and autoLoad to useAsr", async () => {
+    const { useLiveAsr } = await import("./useLiveAsr");
+
+    renderHook(() => useLiveAsr("onnx-community/whisper-base", false));
+    expect(useAsr).toHaveBeenCalledWith("onnx-community/whisper-base", false);
+  });
+
+  it("auto-loads by default, as the non-route callers expect", async () => {
+    const { useLiveAsr } = await import("./useLiveAsr");
+
+    renderHook(() => useLiveAsr("onnx-community/whisper-base"));
+    expect(useAsr).toHaveBeenCalledWith("onnx-community/whisper-base", true);
+  });
+
+  it("re-exposes status, idle and the load actions for the LOAD slot", async () => {
+    const { useLiveAsr } = await import("./useLiveAsr");
+    const { result } = renderHook(() => useLiveAsr());
+
+    expect(result.current.status).toBe("ready");
+    expect(result.current.idle).toBe(false);
+
+    result.current.load();
+    result.current.retry();
+    expect(asrState.load).toHaveBeenCalledOnce();
+    expect(asrState.retry).toHaveBeenCalledOnce();
+  });
+
+  it("merges its own capture error over the model's", async () => {
+    const { useLiveAsr } = await import("./useLiveAsr");
+    asrState.error = "model failed";
+    try {
+      const { result } = renderHook(() => useLiveAsr());
+      expect(result.current.error).toBe("model failed");
+    } finally {
+      asrState.error = null;
+    }
   });
 
   it("starts capture, transcribes each chunk, and updates the transcript live", async () => {

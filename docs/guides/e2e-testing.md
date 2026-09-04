@@ -111,15 +111,44 @@ frontend/
       base.ts              # the extended `test` — import from here, not @playwright/test
       mockApi.ts           # network-level Django stub
       webgpu.ts            # GPU probe + a way to hide navigator.gpu
-    pages/                 # page objects: AppShell, LoginPage, TensorPage, AudioPage
+    pages/                 # page objects
+      ModelPage.ts         # the four-slot base — AudioPage and TensorPage extend it
+      AudioPage.ts         # + model picker, load/retry, backend readout
+      TensorPage.ts        # + matrix operands, result grid readback
+      AppShell.ts          # sidebar, navbar, theme
+      LoginPage.ts
     specs/                 # the tests
       global.setup.ts      # logs in once, saves storage state for @backend specs
+      model-page.spec.ts   # the four-slot contract, across every task route
       audio.spec.ts        # audio routes with downloads blocked — fast, default run
       audio-models.spec.ts # @slow: real weights, real ONNX sessions
       webgpu/              # the GPU-only project
     utils/
       enhance.ts           # in-page enhancement run + SDR measurement
 ```
+
+### Page objects mirror the page pattern
+
+Every task route renders the same four slots
+([`model-page-pattern.md`](../standards/model-page-pattern.md)), so
+`ModelPageObject` holds what is true of all of them — `slots`, `slot(n)`,
+`outputPanel`, `emptyOutput`, `runningOutput`, `error`, `button(name)` — and the
+modality-specific objects extend it rather than repeating it. `AudioPage` adds the
+picker, `load()`/`retryButton` and the backend readout; `TensorPage` adds matrix
+operands and result-grid readback.
+
+Everything is scoped to `<main>`. The sidebar carries task-category buttons whose
+names collide with route buttons — "Computer Vision" matches a `/^Compute/` locator.
+
+**Two rules the migration to that pattern added:**
+
+1. **Nothing downloads on navigation.** Weight-loading routes start `idle`, so a spec
+   that wants a model must press Load like a user: `await audio.load()`. A spec that
+   only asserts the shell should *not* — and `model-page.spec.ts` asserts exactly
+   that, with the Hub blocked and every request recorded.
+2. **Assert on a UI signal, not on the request list.** After `load()`, the worker
+   spawn and the first fetch are both async. Wait for the visible consequence — the
+   error, or the ready line — then assert on what was requested.
 
 **Every spec imports `test` and `expect` from `../fixtures/base`**, never from
 `@playwright/test` directly. That gives one seam for adding fixtures later

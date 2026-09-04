@@ -150,4 +150,4 @@ to catch a broken kernel or driver. This same number is what you'd `POST` to
 
 - API for the catalog / run metadata: [`../standards/api-contracts.md`](../standards/api-contracts.md)
 - System architecture: [`architecture.md`](architecture.md)
-- Roadmap: [`../plans/in-progress/webgpu-model-playground.md`](../plans/in-progress/webgpu-model-playground.md)
+- Roadmap: [`../plans/completed/webgpu-model-playground.md`](../plans/completed/webgpu-model-playground.md)
