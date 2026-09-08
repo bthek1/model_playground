@@ -132,13 +132,23 @@ frontend/
 Every task route renders the same four slots
 ([`model-page-pattern.md`](../standards/model-page-pattern.md)), so
 `ModelPageObject` holds what is true of all of them — `slots`, `slot(n)`,
-`outputPanel`, `emptyOutput`, `runningOutput`, `error`, `button(name)` — and the
+`outputPanel`, `emptyOutput`, `runningOutput`, `error`, `button(name)`,
+`loadProgress`, `cancelLoad`, `cachedBadge(id)` — and the
 modality-specific objects extend it rather than repeating it. `AudioPage` adds the
 picker, `load()`/`retryButton` and the backend readout; `TensorPage` adds matrix
 operands and result-grid readback.
 
 Everything is scoped to `<main>`. The sidebar carries task-category buttons whose
 names collide with route buttons — "Computer Vision" matches a `/^Compute/` locator.
+
+**So does anything the browser itself owns.** Cache Storage and `localStorage` are real
+here and stubbed in Vitest, which is why the refresh story
+([`model-page-pattern.md` §5b](../standards/model-page-pattern.md)) is asserted in
+`model-page.spec.ts`: a reload keeps the selected model and downloads nothing; a seeded
+`transformers-cache` entry plus a stored intent resumes the load and says "Restoring from
+cache…"; the same intent *without* the cache entry does not; and cancelling a stalled
+download returns the page to `idle`. Route the Hub to a handler that never responds when a
+spec needs a load to stay in flight — aborting races it straight to an error state.
 
 **Layout lives here, and only here.** Vitest runs in happy-dom, which has no layout
 engine — every `getBoundingClientRect()` is zeroes — so the *arrangement* half of the

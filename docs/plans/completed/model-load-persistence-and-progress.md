@@ -229,6 +229,13 @@ New testids for §8's contract: `load-progress`, `load-cancel`, `model-cached`,
 
 ## Testing
 
+*What follows is the plan's testing section, as written; the suite that shipped matches it,
+with `store/models.test.ts` added (persistence, per-route isolation, and a storage backend
+that throws) and the route-level refresh cases covering **two** routes — `/text-to-speech`
+and `/asr` — so the wiring is proven more than once. `test/setup.ts` also resets the
+persisted prefs between tests: without it, a test that switches models leaks that choice
+into every later test in the file.*
+
 **Unit (Vitest) — `just fe-test`**
 
 - `progress.test.ts`: multi-file aggregation; percent never decreases when a new file

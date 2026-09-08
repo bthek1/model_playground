@@ -12,4 +12,6 @@
 - [ ] model to use camera - object detection
 - [ ] model to do keypoint detection
 
-
+                
+- [ ] deploy using pulumi
+- [ ] setup LSTM stack

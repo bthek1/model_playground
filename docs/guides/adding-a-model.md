@@ -121,7 +121,9 @@ with a checklist for exactly this step.
 
 The short version: wrap the shared worker plumbing rather than re-deriving it, default to
 `idle` so nothing downloads until the user asks, gate every run control on `ready`, always
-render the OUTPUT slot, and put each error in the slot that produced it.
+render the OUTPUT slot, and put each error in the slot that produced it. Selection and the
+resume-after-refresh decision come from `useModelSelection` — don't hold the model in a
+route-local `useState`, or the user's choice dies on every reload.
 
 **The hook.** Wrap [`useModelWorker`](../../frontend/src/model/useModelWorker.ts) — it owns
 worker creation and teardown, the id-correlated pending table, the response switch, and both
@@ -143,6 +145,25 @@ export function useMyTask(model: string, autoLoad = true) {
 }
 ```
 
+**The selection.** One hook owns which model is picked, whether its weights are already
+downloaded, and whether a load should resume after a refresh
+([`model-page-pattern.md` §5b](../standards/model-page-pattern.md)):
+
+```ts
+const session = useModelSelection({
+  routeKey: "my-task",              // stable per route; keys the stored preference
+  models: MY_MODELS,
+  fallback: MY_MODELS[0],
+});
+const { status, ready, loadProgress, loadedInMs, load, retry, cancel, … } =
+  useMyTask(session.model.id, session.autoLoad);
+useCacheRefresh(session, ready);    // re-probe the cache once the download lands
+```
+
+`session.autoLoad` is `false` until the cache probe answers, and only ever becomes `true`
+for a model that is **already cached and was previously loaded by this user** — so the
+"nothing downloads on mount" guarantee is unchanged.
+
 **The page.** Four named slots — the shell will not let you reorder them, drop OUTPUT, or
 grow a fifth stage:
 
@@ -151,18 +172,27 @@ grow a fifth stage:
   icon={Waves}
   title="My Task"
   description="What it does and where it runs."
-  select={<ModelPicker models={MY_MODELS} value={model} onChange={…}
-                       disabled={loading || running} />}
-  load={<ModelStatus status={status} backend={backend} progress={progress}
+  select={<ModelPicker models={MY_MODELS} value={session.model.id}
+                       onChange={session.setModel} disabled={loading || running}
+                       cached={session.cached}
+                       onEvict={(m) => void session.evict(m.id)} />}
+  load={<ModelStatus status={status} backend={backend}
+                     loadProgress={loadProgress} loadedInMs={loadedInMs}
+                     cached={session.isCached} restoring={session.restoring}
                      error={status === "error" ? error : null}
-                     size={sizeEstimate(meta.params, meta.bytes)}
-                     onLoad={load} onRetry={retry} />}
+                     onLoad={session.onLoad(load)}
+                     onCancel={session.onCancel(cancel)}
+                     onRetry={retry} />}
   run={<InputPanel ready={ready} error={ioError} controls={…}>{fields}</InputPanel>}
   output={<OutputPanel title="Result" running={running}
                        error={status === "error" ? null : error}
                        empty="What the user will get.">{result && …}</OutputPanel>}
 />
 ```
+
+`ModelStatus` takes `loadProgress` — the aggregate from `model/progress.ts` — never the
+raw `progress` event. Wrapping `load`/`cancel` in `session.onLoad`/`session.onCancel` is
+what records (and clears) the consent that a later refresh reads back.
 
 The `status === "error" ? … : …` split on both slots is the §2 discriminator in practice:
 a load failure belongs in LOAD, anything else came from a run and belongs in OUTPUT.

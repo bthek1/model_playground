@@ -153,6 +153,8 @@ frontend/
 
 **Zustand for global UI state.** Lightweight slices in `src/store/` (one file per concern) hold UI flags that don't belong in TanStack Query (e.g. sidebar open/close, logout-in-progress). The `immer` middleware is used for all mutations. Server-fetched data stays in TanStack Query — never in Zustand.
 
+One slice persists: `store/models.ts` writes the selected model and the intent to load it to `localStorage`, which is what lets a task page come back where the user left it after a refresh (see [`../standards/model-page-pattern.md`](../standards/model-page-pattern.md) §5b). It goes through a `safeStorage` adapter that resolves `globalThis.localStorage` per call and swallows the private-mode throw — a preference is a convenience, never a reason for the page to fail.
+
 **Vitest + React Testing Library for tests.** Tests run in a `happy-dom` environment configured in `vite.config.ts`. Test files are co-located with the source file they test (e.g. `useAuth.test.tsx` next to `useAuth.ts`).
 
 **A three-layer test pyramid.** pytest covers the backend; Vitest + React Testing

@@ -63,11 +63,27 @@ const baseState: UseLiveAsrResult = {
 };
 let mockState: UseLiveAsrResult = { ...baseState };
 
+// The second argument is the resolved auto-load decision — the refresh story.
+const useLiveAsrArgs = vi.fn<(model: string, autoLoad: boolean) => void>();
 vi.mock("@/hooks/useLiveAsr", () => ({
-  useLiveAsr: () => mockState,
+  useLiveAsr: (model: string, autoLoad: boolean) => {
+    useLiveAsrArgs(model, autoLoad);
+    return mockState;
+  },
+}));
+
+// The browser cache probe. Empty unless a test seeds it.
+let cached = new Set<string>();
+vi.mock("@/model/cache", () => ({
+  cachedModels: () => Promise.resolve(cached),
+  evictModel: vi.fn(() => Promise.resolve()),
 }));
 
 const { Route } = await import("@/routes/asr");
+const { useModelPrefs } = await import("@/store/models");
+const { ASR_MODELS } = await import("@/audio/types");
+const WHISPER = ASR_MODELS[0].id;
+const MOONSHINE = ASR_MODELS[1].id;
 const AsrPage = Route?.options?.component as React.ComponentType | undefined;
 
 function renderPage() {
@@ -79,6 +95,7 @@ describe("AsrPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState = { ...baseState };
+    cached = new Set();
   });
 
   afterEach(() => {
@@ -106,6 +123,47 @@ describe("AsrPage", () => {
     expect(mockLoad).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));
     expect(mockLoad).toHaveBeenCalledOnce();
+  });
+
+  it("lets the user abandon a download in flight", () => {
+    mockState = { ...baseState, status: "loading", idle: false, loading: true };
+    renderPage();
+    fireEvent.click(screen.getByTestId("load-cancel"));
+    expect(baseState.cancel).toHaveBeenCalledOnce();
+  });
+
+  describe("after a page refresh", () => {
+    it("comes back on the model the user had selected", () => {
+      useModelPrefs.setState({ selected: { asr: MOONSHINE } });
+      renderPage();
+      expect(
+        screen.getByRole("button", { name: /moonshine tiny/i }),
+      ).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("resumes only a model whose weights are already downloaded", async () => {
+      useModelPrefs.setState({ autoResume: { asr: true } });
+      cached = new Set([WHISPER]);
+      renderPage();
+
+      expect(useLiveAsrArgs).toHaveBeenLastCalledWith(WHISPER, false);
+      await waitFor(() =>
+        expect(useLiveAsrArgs).toHaveBeenLastCalledWith(WHISPER, true),
+      );
+    });
+
+    it("still asks before re-downloading an uncached model", async () => {
+      useModelPrefs.setState({ autoResume: { asr: true } });
+      renderPage();
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: /load model/i }),
+        ).toBeEnabled(),
+      );
+      expect(useLiveAsrArgs).not.toHaveBeenCalledWith(WHISPER, true);
+      expect(mockLoad).not.toHaveBeenCalled();
+    });
   });
 
   it("offers a retry when the load failed", () => {

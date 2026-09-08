@@ -46,6 +46,7 @@ docker compose exec backend python manage.py migrate
 
 | Doc | Description |
 |-----|-------------|
+| [docs/explanations/project-overview.md](docs/explanations/project-overview.md) | **Start here** — one-page orientation to the whole project |
 | [docs/explanations/webgpu-inference.md](docs/explanations/webgpu-inference.md) | How in-browser inference works (raw WebGPU pipeline) |
 | [docs/guides/adding-a-model.md](docs/guides/adding-a-model.md) | Add a model: WGSL kernel + registry entry |
 | [docs/guides/local-setup.md](docs/guides/local-setup.md) | Full local dev setup (Docker + without Docker) |

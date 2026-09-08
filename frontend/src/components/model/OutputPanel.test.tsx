@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OutputPanel } from "./OutputPanel";
 
@@ -59,5 +59,33 @@ describe("OutputPanel", () => {
     );
     expect(screen.getByRole("alert")).toHaveTextContent("Inference failed");
     expect(screen.getByText("waveform")).toBeInTheDocument();
+  });
+});
+
+describe("OutputPanel — a long run", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("starts counting once a run is slow enough to look like a hang", () => {
+    vi.useFakeTimers();
+    render(<OutputPanel {...base} running />);
+
+    // A spinner alone cannot be told apart from a hang; a first inference can
+    // take tens of seconds while shaders compile.
+    expect(screen.getByTestId("output-running")).not.toHaveTextContent(/\ds/);
+
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.getByTestId("output-running")).toHaveTextContent("3s");
+  });
+
+  it("resets the counter when the run ends", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<OutputPanel {...base} running />);
+    act(() => vi.advanceTimersByTime(4000));
+
+    rerender(<OutputPanel {...base} running={false} />);
+    act(() => vi.advanceTimersByTime(4000));
+    rerender(<OutputPanel {...base} running />);
+
+    expect(screen.getByTestId("output-running")).not.toHaveTextContent(/\ds/);
   });
 });

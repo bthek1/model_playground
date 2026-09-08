@@ -78,4 +78,28 @@ describe("InputPanel", () => {
     );
     expect(container.firstElementChild?.className).toMatch(/\bflex-1\b/);
   });
+
+  it("attaches that reason to the controls, not just to the page", () => {
+    render(
+      <InputPanel
+        ready={false}
+        disabledHint="Load a model to synthesise speech."
+        controls={<button type="button" disabled>Speak</button>}
+      />,
+    );
+    // A greyed-out button with the reason floating nearby is a dead end for
+    // anyone driving the page by screen reader.
+    const hint = screen.getByText(/load a model to synthesise/i);
+    const controls = screen.getByRole("button", { name: "Speak" }).parentElement;
+    expect(controls).toHaveAttribute("aria-describedby", hint.id);
+  });
+
+  it("drops the description once the controls actually work", () => {
+    render(
+      <InputPanel ready controls={<button type="button">Speak</button>} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Speak" }).parentElement,
+    ).not.toHaveAttribute("aria-describedby");
+  });
 });
