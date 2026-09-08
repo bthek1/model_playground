@@ -523,7 +523,7 @@ Key commands:
 ├── docs/
 │   ├── standards/             # Coding standards, style guides, conventions, API contracts
 │   ├── guides/                # How-to guides, onboarding, local setup, deployment
-│   ├── plans/                 # Feature plans, ADRs, roadmaps (phased, with testing)
+│   ├── roadmaps/              # Per-category roadmaps, once the category has shipped code
 │   └── explanations/          # Concept explanations, design rationale, background context
 ├── justfile                   # Task runner (use `just --list`)
 ├── docker-compose.yml
@@ -610,7 +610,12 @@ folder; do not recreate one.
   markdown intact. The scratch file is temporary; **never commit it**.
 - Reference the issue from the work: `Closes #<n>` in the commit message or PR body.
 - Roadmap/research issues (label `roadmap`) are **not plans** — they are the per-category research a
-  plan gets written from, and they stay open.
+  plan gets written from, and they stay open **while the category is still unbuilt**.
+- **A roadmap graduates to a file once its first route ships.** At that point it stops being
+  research and starts documenting shipped code, which has to be reviewable in the same pull
+  request as the code it describes — impossible in an issue body. Move it to
+  `docs/roadmaps/<category>.md`, convert the `blob/main` URLs to relative links, and close the
+  issue with a comment pointing at the file. `docs/roadmaps/audio.md` is the worked example.
 
 **Issue title:** `Plan: <Feature Name>`
 

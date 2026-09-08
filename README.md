@@ -55,8 +55,13 @@ docker compose exec backend python manage.py migrate
 | [docs/explanations/auth-flow.md](docs/explanations/auth-flow.md) | JWT auth flow end to end |
 | [docs/guides/celery_setup.md](docs/guides/celery_setup.md) | Celery + Redis async task setup |
 | [docs/guides/adding-a-task-page.md](docs/guides/adding-a-task-page.md) | Turn a sidebar task into a working browser route, end to end |
+| [docs/standards/model-page-pattern.md](docs/standards/model-page-pattern.md) | The four-slot contract every task page implements: Select → Load → Run → Output |
+| [docs/standards/model-visualization.md](docs/standards/model-visualization.md) | How a model and its internals are drawn (schematics, heatmaps, param chips) |
+| [docs/guides/e2e-testing.md](docs/guides/e2e-testing.md) | Playwright end-to-end tests, including the `@slow` real-weights specs |
+| [docs/roadmaps/audio.md](docs/roadmaps/audio.md) | **The Audio category, task by task** — six shipped routes, and the shared plumbing the other categories build on |
+| [docs/model-task-categories.md](docs/model-task-categories.md) | The Hugging Face task taxonomy, as the vocabulary for `ModelCard` categories |
 | [GitHub issues → `plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) | Phased feature plans and ADRs — open is active, closed is the record |
-| [GitHub issues → `roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) | Per-category research: which tasks can run in a browser tab, on which checkpoint |
+| [GitHub issues → `roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) | Per-category research for the categories not yet built. A roadmap graduates to `docs/roadmaps/` once its first route ships — Audio already has |
 
 **AI assistants:** [CLAUDE.md](CLAUDE.md) (Claude Code) and [.github/copilot-instructions.md](.github/copilot-instructions.md) (GitHub Copilot) describe the project conventions for AI tooling. Keep both in sync when conventions change.
 
@@ -76,15 +81,25 @@ docker compose exec backend python manage.py migrate
 ├── frontend/         React SPA
 │   └── src/
 │       ├── api/      Axios client, query keys, API functions
-│       ├── components/ui/  shadcn/ui components
 │       ├── webgpu/   Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
-│       ├── hooks/    Custom hooks (auth, useWebGPU, useGpuBenchmark, useModels)
+│       ├── audio/    Pretrained audio models (Transformers.js; enhance/ and vad/ on bare ONNX)
+│       ├── model/    Shared task-page plumbing (worker lifecycle, progress, cache)
+│       ├── components/
+│       │   ├── ui/       shadcn/ui components
+│       │   ├── model/    The four-slot page shell (ModelPage, ModelPicker, …)
+│       │   ├── viz/      Schematic + heatmap primitives
+│       │   └── charts/   Lazy ECharts wrapper
+│       ├── hooks/    Custom hooks (auth, useWebGPU, useAsr/useTts/useVad, useModels)
 │       ├── lib/      cn() helper, date-fns wrappers
 │       ├── routes/   TanStack Router file-based routes (incl. /playground)
 │       ├── schemas/  Zod validation schemas
 │       ├── store/    Zustand global state slices
 │       └── types/    TypeScript types from API contracts
 ├── docs/             Project knowledge base
+│   ├── standards/    API contracts, page pattern, visualization
+│   ├── guides/       How-to guides (setup, adding a model, adding a task page, E2E)
+│   ├── roadmaps/     Per-category roadmaps for categories with shipped routes
+│   └── explanations/ Architecture, WebGPU inference, auth flow
 └── docker-compose.yml
 ```
 

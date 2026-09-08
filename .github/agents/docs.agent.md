@@ -26,8 +26,10 @@ docs/
 └── explanations/   # Concept explanations, design rationale, background context
 ```
 
-Feature plans, ADRs and roadmaps are **GitHub issues**, not files — there is no `docs/plans/`
-folder and you must not create one.
+Feature plans and ADRs are **GitHub issues**, not files — there is no `docs/plans/` folder and
+you must not create one. **Roadmaps start as issues and become files**: once a category has
+shipped routes its roadmap moves to `docs/roadmaps/<category>.md`, so that a page describing
+shipped code is reviewed in the same pull request as the code.
 
 **Current files:**
 - `docs/standards/api-contracts.md` — API endpoint definitions and request/response shapes
@@ -36,8 +38,13 @@ folder and you must not create one.
 - `docs/guides/celery_setup.md` — Celery + Redis async task setup
 - `docs/guides/adding-a-model.md` — Add a model: WGSL kernel, Transformers.js (§8), bare ONNX (§9)
 - `docs/guides/adding-a-task-page.md` — Turn a sidebar task into a working browser route
+- `docs/guides/e2e-testing.md` — Playwright end-to-end tests, incl. the `@slow` real-weights specs
+- `docs/standards/model-page-pattern.md` — The Select → Load → Run → Output contract every task page implements
+- `docs/standards/model-visualization.md` — How a model and its internals are drawn
+- `docs/model-task-categories.md` — The HF task taxonomy, as the `ModelCard` category vocabulary
 - `docs/explanations/architecture.md` — Overall system architecture
 - `docs/explanations/auth-flow.md` — JWT authentication flow
+- `docs/roadmaps/audio.md` — The Audio category, task by task: what runs in a tab and on which checkpoint
 
 The repo also has AI-assistant guidance at the root: `CLAUDE.md` (Claude Code) and
 `.github/copilot-instructions.md` (Copilot). When docs conventions change, keep both in sync.

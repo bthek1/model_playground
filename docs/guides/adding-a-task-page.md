@@ -361,7 +361,7 @@ by route. **Do not add a new alias** — a reviewer who has read one hook should
 have read them all, and a renamed `run` is exactly what breaks that.
 
 If you find yourself adding state to a task hook, the state almost certainly
-belongs in `useModelWorker` where the other five tasks can share it.
+belongs in `useModelWorker` where the other six tasks can share it.
 
 ---
 

@@ -7,7 +7,8 @@ shaders. To add one see [`../guides/adding-a-model.md`](../guides/adding-a-model
 
 > **Scope.** That "no framework" rule is about *this* module. Running pretrained
 > checkpoints is a separate concern living in `src/audio/`, on Transformers.js —
-> or, for speech enhancement, on `onnxruntime-web` directly. Those also target
+> or, for speech enhancement (`audio/enhance/`) and voice activity detection
+> (`audio/vad/`), on `onnxruntime-web` directly. Those also target
 > WebGPU (falling back to WASM), but through ONNX Runtime's providers rather than
 > the pipeline below. See
 > [`architecture.md`](architecture.md#frontend) and
@@ -150,4 +151,5 @@ to catch a broken kernel or driver. This same number is what you'd `POST` to
 
 - API for the catalog / run metadata: [`../standards/api-contracts.md`](../standards/api-contracts.md)
 - System architecture: [`architecture.md`](architecture.md)
-- Roadmap: the [`roadmap`-labelled issues](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap)
+- The other in-browser runtime, task by task: [`../roadmaps/audio.md`](../roadmaps/audio.md)
+- Roadmaps for categories not yet built: the [`roadmap`-labelled issues](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap)
