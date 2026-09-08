@@ -78,6 +78,10 @@ export class AudioPage extends ModelPageObject {
   /** The backend the model actually loaded on, from the ready line. */
   async backend(): Promise<string> {
     const text = await this.readyStatus.innerText();
-    return (text.match(/running on (\w+)/i)?.[1] ?? "").toLowerCase();
+    // `\s+`, not a literal space: the ready line is an `inline-flex` row and the
+    // backend sits in its own span, so Chromium's `innerText` puts a newline
+    // between "running on" and the name. A single-space pattern silently
+    // returns "" and every backend assertion becomes vacuous.
+    return (text.match(/running on\s+(\w+)/i)?.[1] ?? "").toLowerCase();
   }
 }

@@ -24,6 +24,7 @@ const TASK_ROUTES = [
   { path: "/text-to-speech", heading: "Text to Speech", downloads: true },
   { path: "/text-to-audio", heading: "Text to Audio", downloads: true },
   { path: "/audio-to-audio", heading: "Audio to Audio", downloads: true },
+  { path: "/vad", heading: "Voice Activity Detection", downloads: true },
   // Compile-only: no weights, so LOAD auto-runs as a device probe (§7).
   { path: "/tensor", heading: "Tensor Arithmetic", downloads: false },
   // A task with nothing behind it renders the same page with empty slots, so an

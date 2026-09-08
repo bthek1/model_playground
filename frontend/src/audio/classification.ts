@@ -1,7 +1,7 @@
 // Audio-classification model catalogue. Two flavours, both ONNX-exported and run
 // through the generic pipeline worker: fixed-label tagging (AST, wav2vec2-KS) via
 // `audio-classification`, and open-set scoring against free-text prompts (CLAP)
-// via `zero-shot-audio-classification`. See docs/plans/completed/audio-models-in-browser.md.
+// via `zero-shot-audio-classification`. See docs/guides/adding-a-model.md §8.
 //
 // NOTE: these are the `Xenova/*` repos, not `onnx-community/*`. The latter don't
 // exist for AST or wav2vec2-KS — the Hub returns 401 and the load fails with

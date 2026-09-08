@@ -46,15 +46,17 @@ describe("taskCategories", () => {
     const textToSpeech = all.find((t) => t.slug === "text-to-speech")!;
     const textToAudio = all.find((t) => t.slug === "text-to-audio")!;
     const audioToAudio = all.find((t) => t.slug === "audio-to-audio")!;
-    // Voice Activity Detection has no in-browser path yet.
     const vad = all.find((t) => t.slug === "voice-activity-detection")!;
 
     expect(textGen.to).toBe("/playground");
     expect(textToSpeech.to).toBe("/text-to-speech");
     expect(textToAudio.to).toBe("/text-to-audio");
     expect(audioToAudio.to).toBe("/audio-to-audio");
-    // Unmapped tasks fall through to the generic placeholder route.
-    expect(vad.to).toBe("/tasks/voice-activity-detection");
+    expect(vad.to).toBe("/vad");
+
+    // Unmapped tasks still fall through to the generic placeholder route.
+    const discreteMaths = all.find((t) => t.slug === "discrete-maths")!;
+    expect(discreteMaths.to).toBe("/tasks/discrete-maths");
   });
 
   it("maps the real Theory tools to their implemented routes", () => {

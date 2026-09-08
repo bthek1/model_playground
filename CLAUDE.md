@@ -50,7 +50,9 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **End-to-end tests (Playwright)** | [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md) |
 | **A model with no Transformers.js task (bare ONNX)** | [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §9 |
 | Celery / async tasks | [`docs/guides/celery_setup.md`](docs/guides/celery_setup.md) |
-| Feature plans (phased) | [`docs/plans/in-progress/`](docs/plans/in-progress/) (active), [`docs/plans/completed/`](docs/plans/completed/) (done) |
+| **Adding a task page (end-to-end procedure)** | [`docs/guides/adding-a-task-page.md`](docs/guides/adding-a-task-page.md) |
+| Feature plans (phased) | **GitHub issues**, label [`plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) — open = active, closed = done |
+| Category roadmaps (what can run in a tab) | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) |
 
 ---
 
@@ -77,6 +79,7 @@ just fe-test        # vitest (unit/component)
 just fe-e2e         # playwright end-to-end (mocked API, no backend needed)
 just fe-e2e-slow    # @slow specs: real model downloads + real ONNX sessions (minutes)
 just fe-e2e-enhance # @slow speech-enhancement specs (DeepFilterNet3, WASM + WebGPU)
+just fe-e2e-vad     # @slow voice-activity-detection specs (Silero VAD, seconds)
 just fe-e2e-models  # check every audio model id resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -98,15 +101,18 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 
 - **Docs travel with code.** A code change that affects behaviour, endpoints, or setup must
   update the relevant file under `docs/`. Add new endpoints to `docs/standards/api-contracts.md`.
-- **Plans are phased.** Any feature touching more than one file gets a plan first — phased, with a
-  Testing section. New plans go in **`docs/plans/in-progress/`**. Update the plan's `Status`
-  (`Draft → In Progress → Complete`) as work progresses; when it reaches `Complete`, **move the file
-  to `docs/plans/completed/`** (`git mv`). Completed plans are kept as a record, not deleted.
+- **Plans are GitHub issues, not files.** Any feature touching more than one file gets a plan
+  first — phased, with a Testing section — opened as an issue with `gh issue create --label plan`
+  (the plan is the issue body; see the template in the Copilot instructions). **Never add a plan
+  markdown file to the repo.** Tick the phase checkboxes as work progresses, and **close the issue
+  when the work lands** (`gh issue close <n> --comment "..."`) — the closed issue is the record.
+  Reference the issue number in the commit message (`Closes #12`).
 - **Never commit `.env` files.** `.env.example` is the source of truth for required vars.
 - **Backend ↔ frontend communicate only via the API contract** — never mix their concerns.
 - **Ask before destructive or remote actions.** Do not `git commit`, `git push`, `git reset --hard`,
-  `docker compose down -v`, delete migrations, or modify shared `.env` files without explicit
-  confirmation. See the full list in the Copilot instructions.
+  `docker compose down -v`, delete migrations, modify shared `.env` files, or create/edit/close
+  GitHub issues (`gh issue …`) without explicit confirmation. See the full list in the Copilot
+  instructions.
 
 ### Backend essentials
 
@@ -128,7 +134,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - Forms use React Hook Form + Zod schemas (`src/schemas/`, one file per domain).
 - Styling is Tailwind v4 (CSS-first, no config file) + shadcn/ui in the **`base-nova`** style, built on **`@base-ui/react`** primitives (NOT Radix). Add components with `npx shadcn@latest add <component>`.
 - Charts: ECharts, always via the lazy `src/components/charts/EChart.tsx` wrapper (`echarts` is heavy — keep it code-split). Render Markdown/LLM output with `src/components/Markdown.tsx` (`react-markdown` + `remark-gfm`).
-- **Every task page is the same pipeline: Select → Load → Run → Output** — pick a model, load its weights, run it on an input, show the result. This is the standard in [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md); read it before adding a task route. Two state machines, kept orthogonal: **load** (`idle → loading → ready | error`, with `progress` as a self-loop, `retry(overrides?)` out of `error` and `cancel()` back to `idle`) and **run** (id-correlated requests, `running` derived from an in-flight *count*, never a boolean). The plumbing lives once in `model/useModelWorker.ts`; task hooks (`useTts`, `useAsr`, `usePipeline`, `useAudioClassifier`, `useEnhance`) are thin wrappers returning the same contract — `status`/`idle`/`loading`/`ready`/`progress`/`loadProgress`/`loadedInMs`/`backend`/`load`/`retry`/`cancel`/`run`/`running`/`result`/`error`. The shell is `components/model/` (`ModelPage` + `ModelPicker`/`ModelStatus`/`InputPanel`/`OutputPanel`, plus `DeviceStatus` for pages that probe a GPU instead of downloading weights). Never re-derive the pending map, the teardown, or a bespoke page shape. Nothing downloads until the user asks: `idle` is the default and the size estimate + large-model warning are shown first — quoted **once**, by `ModelPicker`; `ModelStatus` must not repeat the number. Errors render in the slot that produced them.
+- **Every task page is the same pipeline: Select → Load → Run → Output** — pick a model, load its weights, run it on an input, show the result. This is the standard in [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md); read it before adding a task route. Two state machines, kept orthogonal: **load** (`idle → loading → ready | error`, with `progress` as a self-loop, `retry(overrides?)` out of `error` and `cancel()` back to `idle`) and **run** (id-correlated requests, `running` derived from an in-flight *count*, never a boolean). The plumbing lives once in `model/useModelWorker.ts`; task hooks (`useTts`, `useAsr`, `usePipeline`, `useAudioClassifier`, `useEnhance`, `useVad`) are thin wrappers returning the same contract — `status`/`idle`/`loading`/`ready`/`progress`/`loadProgress`/`loadedInMs`/`backend`/`load`/`retry`/`cancel`/`run`/`running`/`result`/`error`. The shell is `components/model/` (`ModelPage` + `ModelPicker`/`ModelStatus`/`InputPanel`/`OutputPanel`, plus `DeviceStatus` for pages that probe a GPU instead of downloading weights). Never re-derive the pending map, the teardown, or a bespoke page shape. Nothing downloads until the user asks: `idle` is the default and the size estimate + large-model warning are shown first — quoted **once**, by `ModelPicker`; `ModelStatus` must not repeat the number. Errors render in the slot that produced them.
 - **A model page survives a refresh by restoring decisions, not sessions.** A Worker cannot outlive a page load. `store/models.ts` persists the selected model and the intent to load it; `model/useModelSelection.ts` resumes on mount **only when that intent meets a cache hit** (`model/cache.ts` probes Transformers.js's `transformers-cache` bucket and answers "not cached" on any failure — the safe direction is one extra click, never bandwidth spent unasked). An uncached model still asks, and a resume is labelled "Restoring from cache…". The LOAD slot's bar reports the **aggregate** from `model/progress.ts` — monotonic percent by bytes, indeterminate until a size is known, warm-up as its own phase, no ETA — never a raw per-file `progress_callback` event, which restarts at zero for each of a model's 4–8 files.
 - **Every task page is the same four-stage pipeline** — SELECT → LOAD → RUN → OUTPUT — specified in
   [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md). The shared worker
@@ -160,7 +166,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   (in `tsconfig.app.json` `types`). This rule scopes to the hand-written runtime — running *pretrained*
   models in the UI (audio ASR/TTS/classification, etc.) may use **Transformers.js / ONNX Runtime Web**,
   which run the same HF checkpoints on WebGPU or WASM. See
-  [`docs/plans/completed/audio-models-in-browser.md`](docs/plans/completed/audio-models-in-browser.md).
+  [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §8.
 - The pipeline: `getGPUDevice()` (memoised, device-lost aware) → `createComputePipeline(wgsl)` →
   storage/uniform buffers (`buffers.ts`) → `dispatchWorkgroups` → `readBackFloat32`. `runtime.ts` is
   the reference (`runMatmul`).
@@ -178,8 +184,8 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 ### In-browser pretrained models (`src/audio/`)
 
 The carve-out from the raw-WebGPU rule: pretrained HF checkpoints (audio ASR/TTS/classification) run
-through **Transformers.js** (`@huggingface/transformers`, plus `kokoro-js` for TTS), and one task —
-speech enhancement — runs on **`onnxruntime-web` directly**. Keep both out of `src/webgpu/` — the
+through **Transformers.js** (`@huggingface/transformers`, plus `kokoro-js` for TTS), and two tasks —
+speech enhancement and voice activity detection — run on **`onnxruntime-web` directly**. Keep both out of `src/webgpu/` — the
 runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §8
 (Transformers.js) and §9 (a bare ONNX graph) for the full recipes.
 
@@ -187,7 +193,7 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
   `pipeline.worker.ts` (the task string travels in the `load` message). ASR keeps its own worker (it
   drives the real-time capture loop). `tts.worker.ts` owns the whole **text→audio** modality — Kokoro,
   MMS/SpeechT5 *and* MusicGen — because they all fit one `TtsSynthesizer` interface; a fourth worker
-  would have bought nothing. Each engine (`asrEngine`/`pipelineEngine`/`ttsEngine`) is a pure,
+  would have bought nothing. Each engine (`asrEngine`/`pipelineEngine`/`ttsEngine`/`enhanceEngine`/`vadEngine`) is a pure,
   unit-testable message handler; the `*.worker.ts` file is a thin wrapper around it.
 - **Every engine owes three behaviours:** *one model live at a time* (null the reference **first**,
   then dispose via `disposeQuietly` — a failed teardown must not leave a stale model live);
@@ -228,9 +234,22 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
     captured fixture rather than against our own expectations. `SPEC_SCALE = 2*hop/fft²` is
     load-bearing: the unit-norm feature divides by `sqrt(state)` and is *not* level-invariant, so
     dropping it makes the network mask clean speech away as noise.
-- **Unit tests mock the network and ORT, so they cannot catch a broken model.** Both bugs above
-  shipped past a green suite. The `@slow` E2E specs (`e2e/specs/audio-models.spec.ts`) are the guard;
-  `just fe-e2e-enhance` additionally measures a real SDR improvement for the enhancement route.
+- **Voice Activity Detection (`src/audio/vad/`) is the other bare-ONNX route, and the only recurrent
+  one.** Silero v5 scores one 32 ms frame at a time and hands back a state tensor for the next call.
+  Three rules:
+  - **The window is 576 samples, not 512** — 64 samples of preceding context are prepended to each
+    frame (upstream's `OnnxWrapper.__call__` does the same). Input dims are dynamic, so a bare 512
+    runs fine and returns scores that never fire: speech reads 0.05 instead of 0.9.
+  - **State and context reset per clip**, never per session, or the previous take leaks into the next.
+  - **It is pinned to WASM on purpose, not as a fallback.** 0.30 ms per frame on CPU (~100x real time)
+    leaves nothing for a GPU to win, and its LSTM/`If` ops aren't covered by ORT's WebGPU provider.
+    The threshold→segment step (`segments.ts`) is pure and runs on the main thread, so dragging the
+    threshold re-derives segments without re-running the model.
+- **Unit tests mock the network and ORT, so they cannot catch a broken model.** Both DeepFilterNet
+  bugs above shipped past a green suite, and a 512-sample VAD window would too. The `@slow` E2E specs
+  (`e2e/specs/audio-models.spec.ts`) are the guard; `just fe-e2e-enhance` additionally measures a real
+  SDR improvement for the enhancement route, and the VAD spec asserts a real speech fraction on a
+  known clip.
 
 **Two Base UI gotchas (carried over from the Radix → Base UI migration):**
 

@@ -236,7 +236,8 @@ model already exists as ONNX on the Hub, so there is no WGSL to write. These liv
 in their own domain folder (`frontend/src/audio/` for the audio tasks) and are
 explicitly carved out of the raw-WebGPU-only rule, which scopes to `src/webgpu/`.
 Reference implementations: the ASR, audio-classification, and text-to-speech
-routes ([`../plans/completed/audio-models-in-browser.md`](../plans/completed/audio-models-in-browser.md)).
+routes (see the [Audio roadmap issue](https://github.com/bthek1/model_playground/issues/1)
+for the checkpoint tables behind them).
 
 The shape is always the same four pieces:
 
@@ -315,9 +316,9 @@ models a few times watching that memory doesn't grow.
 
 Some models have no Transformers.js task at all: they publish a bare ONNX graph
 that takes hand-built feature tensors and returns hand-interpreted outputs.
-`/audio-to-audio` (DeepFilterNet3) is the reference example — see
-[`docs/plans/completed/audio-to-audio-deepfilternet.md`](../plans/completed/audio-to-audio-deepfilternet.md)
-and `src/audio/enhance/`.
+Two routes do this today: `/audio-to-audio` (DeepFilterNet3, `src/audio/enhance/`)
+is the reference example, and `/vad` (Silero VAD, `src/audio/vad/`) is the
+smaller one to read first — ~200 lines against enhance's ~600.
 
 The route, worker, hook and page pattern are **unchanged** — reuse
 `useModelWorker`, the engine's three duties, `ModelPicker`, `ModelStatus`. Only
@@ -368,7 +369,35 @@ than emit noise. Note the model card describes the forward matrix as `[481,32]`
 and the inverse as `[32,481]` — they are stored in *different* orders, and
 reading either as the other still yields a plausible-looking matrix.
 
-**d. Add a `@slow` E2E that measures the output.** "A waveform appeared" cannot
-distinguish good audio from metallic. `e2e/utils/enhance.ts` runs the real graph
-in the page on a synthetic noisy clip and asserts the scale-invariant SDR
-improves by ≥6 dB; `e2e/specs/webgpu/enhance.spec.ts` repeats it on the GPU.
+**d. A recurrent graph owns two extra invariants.** Silero VAD scores one 32 ms
+frame at a time and returns a state tensor to feed into the next call, which adds
+two ways to be silently wrong (`src/audio/vad/vad.ts`):
+
+- **The window is not the frame.** Silero v5 expects 64 samples of preceding
+  context prepended to each 512-sample frame — 576 in, not 512. The graph's input
+  dimensions are dynamic, so a bare 512 runs happily and returns numbers that
+  never cross any threshold. Measured on the same clip: with the context, silence
+  reads 0.005 and speech 0.83–0.99; without it, speech reads 0.05.
+- **State is per clip, not per session.** `state` starts at zeros and the context
+  at silence for every take. Carrying either across takes leaks the previous
+  clip's tail into the next one's first frames.
+
+Read the contract off the graph rather than off the model card — the card for
+`onnx-community/silero-vad` is four lines of YAML, and §3.6 of the Audio roadmap
+described v4's separate `h`/`c` inputs, which v5 merged into one `state`.
+
+**e. Pick the execution provider deliberately.** `["webgpu", "wasm"]` is the
+default provider list, not a law. Silero is pinned to **WASM**: a 576-sample
+window costs 0.30 ms on CPU (about 100x real time), so a per-frame GPU dispatch
+and readback would cost more than the work, and its LSTM/`If` ops are not covered
+by ORT's WebGPU provider anyway. Say which you chose and why in the session
+module, and have the `@slow` spec assert it — otherwise a later "optimisation"
+quietly loosens it.
+
+**f. Add a `@slow` E2E that measures the output.** "A waveform appeared" cannot
+distinguish good audio from metallic, and "the page rendered" cannot distinguish
+a working detector from one whose every score is 0.04. `e2e/utils/enhance.ts`
+runs the real graph on a synthetic noisy clip and asserts the scale-invariant SDR
+improves by ≥6 dB; `e2e/specs/webgpu/enhance.spec.ts` repeats it on the GPU. The
+VAD spec asserts a real speech *fraction* on a known clip for the same reason —
+it is the only test in the suite that would have caught a 512-sample window.

@@ -1,6 +1,6 @@
 ---
 name: Docs
-description: Documentation agent for this monorepo. Use for writing, updating, and reviewing docs in the docs/ directory — including API contracts, architecture explanations, how-to guides, feature plans, and ADRs.
+description: Documentation agent for this monorepo. Use for writing, updating, and reviewing docs in the docs/ directory — including API contracts, architecture explanations, and how-to guides. Feature plans and ADRs are GitHub issues, not files.
 tools:
   - read_file
   - replace_string_in_file
@@ -23,21 +23,19 @@ Your job is to keep documentation accurate, complete, and useful for the next de
 docs/
 ├── standards/      # Coding standards, style guides, naming conventions, API contracts
 ├── guides/         # Step-by-step how-to guides, onboarding, local setup, deployment
-├── plans/          # Feature plans, ADRs, roadmaps (phased, with testing sections)
 └── explanations/   # Concept explanations, design rationale, background context
 ```
+
+Feature plans, ADRs and roadmaps are **GitHub issues**, not files — there is no `docs/plans/`
+folder and you must not create one.
 
 **Current files:**
 - `docs/standards/api-contracts.md` — API endpoint definitions and request/response shapes
 - `docs/guides/local-setup.md` — Local development environment setup
 - `docs/guides/onboarding.md` — Onboarding guide for new developers
 - `docs/guides/celery_setup.md` — Celery + Redis async task setup
-- `docs/plans/accounts-email-as-username.md` — Plan: custom user with email as username
-- `docs/plans/frontend-upgrade.md` — Plan: frontend stack upgrade
-- `docs/plans/frontend-ui-foundation.md` — Plan: frontend UI foundation
-- `docs/plans/backend-celery.md` — Plan: Celery backend integration
-- `docs/plans/celery-full-implementation.md` — Plan: full Celery implementation
-- `docs/plans/claude-code-setup.md` — Plan: Claude Code / AI assistant setup
+- `docs/guides/adding-a-model.md` — Add a model: WGSL kernel, Transformers.js (§8), bare ONNX (§9)
+- `docs/guides/adding-a-task-page.md` — Turn a sidebar task into a working browser route
 - `docs/explanations/architecture.md` — Overall system architecture
 - `docs/explanations/auth-flow.md` — JWT authentication flow
 
@@ -49,9 +47,9 @@ The repo also has AI-assistant guidance at the root: `CLAUDE.md` (Claude Code) a
 **When to update docs:**
 - A new backend endpoint is added or changed → update `docs/standards/api-contracts.md`
 - A new Django app or frontend module is added → add an explanation or guide in `docs/`
-- An architectural or design decision is made → record an ADR in `docs/plans/`
+- An architectural or design decision is made → record an ADR in a GitHub issue labelled `plan`
 - Local setup steps change → update `docs/guides/local-setup.md`
-- A feature plan is started, progressed, or completed → update the plan's status field
+- A feature plan is started, progressed, or completed → update its GitHub issue (tick phase checkboxes; close it when the work lands)
 
 **Syncing with code:**
 - Docs are a source of truth — they must stay in sync with the codebase
@@ -60,16 +58,10 @@ The repo also has AI-assistant guidance at the root: `CLAUDE.md` (Claude Code) a
 
 ## Required Plan Structure
 
-Every non-trivial feature plan in `docs/plans/` must follow this template:
+Every non-trivial feature plan is a GitHub issue titled `Plan: <Feature Name>`, labelled `plan`,
+whose body follows this template (`gh issue create --label plan --body-file <scratch file>`):
 
 ```markdown
-# Plan: <Feature Name>
-
-**Status:** Draft | In Progress | Complete
-**Date:** YYYY-MM-DD
-
----
-
 ## Goal
 One paragraph describing what this plan achieves and why.
 
@@ -97,9 +89,10 @@ Any known risks, open questions, or decisions deferred.
 **Plan rules:**
 - Plans are always phased — break work into discrete, independently deliverable phases
 - Every plan must have a **Testing** section covering unit, integration, and manual steps
-- Do not start implementation without a plan for features touching more than one file
-- Update plan status (`Draft → In Progress → Complete`) as work progresses
-- Completed plans are kept (not deleted) as a record of decisions made
+- Do not start implementation without a plan issue for features touching more than one file
+- Keep the phase checkboxes current as work progresses — the issue is the status
+- Close the issue when the work lands; closed issues are the record and are never deleted
+- Roadmap/research issues (label `roadmap`) are not plans and stay open
 
 ## API Contract Format
 
@@ -139,5 +132,6 @@ Entries in `docs/standards/api-contracts.md` must document:
 ## Don'ts
 - Never commit `.env` files — `.env.example` is the source of truth for required vars
 - Never document internal implementation details that belong in code comments
-- Never leave plan status as `Draft` after implementation has started
-- Never delete completed plan files — they are a historical record
+- Never write a plan as a markdown file — plans are GitHub issues
+- Never leave a plan issue's checkboxes stale after implementation has started
+- Never delete a completed plan issue — close it; the closed issue is the historical record

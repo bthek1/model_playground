@@ -194,11 +194,13 @@ its own dependencies, and lives in `src/audio/`:
 |---|---|---|
 | Hand-written WGSL | `src/webgpu/` | tensor arithmetic, linear/MNIST training, benchmarks |
 | Transformers.js (`@huggingface/transformers`, `kokoro-js`) | `src/audio/` | ASR, audio classification, TTS, text-to-audio |
-| `onnxruntime-web` **directly** | `src/audio/enhance/` | speech enhancement (DeepFilterNet3) |
+| `onnxruntime-web` **directly** | `src/audio/enhance/`, `src/audio/vad/` | speech enhancement (DeepFilterNet3), voice activity detection (Silero VAD) |
 
-The third row exists because DeepFilterNet3 has no Transformers.js task: the repo
-publishes a bare graph, so the STFT, ERB filterbank, feature normalisation, deep
-filtering and overlap-add around it are ours. The two audio runtimes share one ORT
+The third row exists because neither model has a Transformers.js task: both repos
+publish a bare graph, so everything around it is ours. For DeepFilterNet3 that is
+the STFT, ERB filterbank, feature normalisation, deep filtering and overlap-add;
+for Silero it is the recurrent frame loop (a 576-sample window per 32 ms frame,
+with the state tensor carried between calls). The two audio runtimes share one ORT
 build — see `docs/guides/adding-a-model.md` §9. The runtimes never mix inside a
 single module.
 

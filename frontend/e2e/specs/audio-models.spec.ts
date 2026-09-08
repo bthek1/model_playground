@@ -186,6 +186,92 @@ test.describe("@slow speech enhancement", () => {
   });
 });
 
+// VAD is the one audio task whose correctness a mocked test genuinely cannot
+// reach. The frame loop feeds the model a 576-sample window (64 samples of
+// context + a 512-sample frame); feeding a bare 512 runs perfectly happily and
+// returns numbers that simply never cross any threshold. A unit test with a fake
+// session cannot tell the two apart — only real weights can.
+test.describe("@slow voice activity detection", () => {
+  test.describe.configure({ mode: "serial", timeout: DOWNLOAD_BUDGET_MS });
+
+  test("/vad finds the speech in the JFK clip", async ({
+    page,
+    mockApi,
+    request,
+  }) => {
+    await mockApi();
+    const audio = new AudioPage(page);
+    await page.goto("/vad");
+
+    await audio.load();
+    await audio.waitForReady(DOWNLOAD_BUDGET_MS);
+    // Silero runs on WASM by design — see src/audio/vad/session.ts. A page
+    // reporting WebGPU here means the provider list was loosened.
+    expect(await audio.backend()).toBe("wasm");
+
+    const clip = await request.get(
+      "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav",
+    );
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "jfk.wav",
+      mimeType: "audio/wav",
+      buffer: await clip.body(),
+    });
+
+    // The clip is 11 s of continuous speech with a short lead-in, so a working
+    // detector finds a few seconds of speech in a handful of segments. A frame
+    // loop without the context window scores every frame near zero and this
+    // summary reads "0 segments · 0.0s speech".
+    const summary = page.getByText(/segments? · [\d.]+s speech/);
+    await expect(summary).toBeVisible({ timeout: DOWNLOAD_BUDGET_MS });
+
+    const text = (await summary.textContent()) ?? "";
+    const [, segments, speech, total] =
+      /(\d+) segments? · ([\d.]+)s speech of ([\d.]+)s/.exec(text) ?? [];
+    expect(Number(segments)).toBeGreaterThan(0);
+    expect(Number(speech)).toBeGreaterThan(Number(total) * 0.5);
+    await expect(audio.error).toHaveCount(0);
+  });
+
+  test("the energy baseline runs with no download at all", async ({
+    page,
+    mockApi,
+    request,
+  }) => {
+    await mockApi();
+    const audio = new AudioPage(page);
+    await page.goto("/vad");
+
+    // Nothing from the Hub may be fetched for this detector — it has no weights.
+    let hubRequests = 0;
+    await page.route(
+      (url) => url.hostname.endsWith("huggingface.co"),
+      (route) => {
+        hubRequests++;
+        return route.continue();
+      },
+    );
+
+    await audio.modelButton(/Energy VAD/).click();
+    await audio.load();
+    await audio.waitForReady(30_000);
+
+    const clip = await request.get(
+      "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav",
+    );
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "jfk.wav",
+      mimeType: "audio/wav",
+      buffer: await clip.body(),
+    });
+
+    await expect(page.getByText(/segments? · [\d.]+s speech/)).toBeVisible({
+      timeout: 60_000,
+    });
+    expect(hubRequests).toBe(0);
+  });
+});
+
 test.describe("@slow model catalogue", () => {
   test("every catalogue model id resolves on the Hugging Face Hub", async ({
     request,
@@ -197,6 +283,7 @@ test.describe("@slow model catalogue", () => {
     const { TTS_MODELS } = await import("../../src/audio/tts");
     const { MUSIC_MODELS } = await import("../../src/audio/textToAudio");
     const { ENHANCE_MODELS } = await import("../../src/audio/enhance/types");
+    const { VAD_MODELS } = await import("../../src/audio/vad/types");
 
     const ids = [
       ...ASR_MODELS,
@@ -204,6 +291,9 @@ test.describe("@slow model catalogue", () => {
       ...TTS_MODELS,
       ...MUSIC_MODELS,
       ...ENHANCE_MODELS,
+      // The energy baseline has no repo to resolve — it is a detector, not a
+      // checkpoint, so it is filtered out rather than asked about.
+      ...VAD_MODELS.filter((m) => m.repo),
     ].map((m) => m.id);
     expect(ids.length).toBeGreaterThan(0);
 

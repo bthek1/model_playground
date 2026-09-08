@@ -3,10 +3,10 @@
 > Taking one task out of the sidebar taxonomy and turning it into a working
 > **Model Playground** route that runs the model in the browser, on the user's
 > own GPU or CPU. This file is the procedure; the
-> `*_Models_in_React_WebGPU_and_CPU.md` files beside it are the per-category
-> model lookup tables it sends you to.
+> [category roadmap issues](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap)
+> are the per-category model lookup tables it sends you to.
 
-Every task in [`taskTaxonomy.ts`](../../../frontend/src/components/layout/taskTaxonomy.ts)
+Every task in [`taskTaxonomy.ts`](../../frontend/src/components/layout/taskTaxonomy.ts)
 answers "I have this input and want that output, what should I use". Most of
 them currently render the `/tasks/$slug` placeholder. Turning one into a real
 page is mechanical enough to write down, which is what this file does.
@@ -51,13 +51,13 @@ reason" is a finished piece of work.** It stops the next person spending three
 days rediscovering it.
 
 The one exception is the raw WebGPU path
-([`frontend/src/webgpu/`](../../../frontend/src/webgpu/)). A task with no ONNX
+([`frontend/src/webgpu/`](../../frontend/src/webgpu/)). A task with no ONNX
 export can still become a page if the maths is small enough to write as WGSL by
 hand, which is how `/training` and `/tensor` exist. Tabular models, graph
 convolutions and RL policies all fall in that bucket. See the
-[`Tabular`](Tabular_Models_in_React_WebGPU_and_CPU.md),
-[`Other`](Graph_Models_in_React_WebGPU_and_CPU.md) and
-[`Reinforcement_Learning`](Reinforcement_Learning_in_React_WebGPU_and_CPU.md)
+[`Tabular`](https://github.com/bthek1/model_playground/issues/7),
+[`Other`](https://github.com/bthek1/model_playground/issues/3) and
+[`Reinforcement_Learning`](https://github.com/bthek1/model_playground/issues/6)
 guides. **Keep the two runtimes apart**: `src/webgpu/` is hand-written WGSL with
 no ML framework in it, and Transformers.js / ONNX Runtime Web live under
 `src/audio/` and its future siblings. They never mix in one directory.
@@ -92,8 +92,8 @@ chart. A set of boxes is a canvas overlay on the input image. A depth map is a
 colourised canvas. A caption is a paragraph. Sketch this before writing any
 worker code, because a page whose OUTPUT slot is an afterthought reads as
 unfinished no matter how good the inference is. The drawing primitives in
-[`components/viz/`](../../../frontend/src/components/viz/) and the standard in
-[`../../standards/model-visualization.md`](../../standards/model-visualization.md)
+[`components/viz/`](../../frontend/src/components/viz/) and the standard in
+[`../standards/model-visualization.md`](../standards/model-visualization.md)
 are where to start, not a fresh canvas helper.
 
 ---
@@ -124,7 +124,7 @@ just fe-e2e-models   # seconds, no downloads, fails loudly on a dead id
 ```
 
 It is the `@slow model catalogue` block in
-[`e2e/specs/audio-models.spec.ts`](../../../frontend/e2e/specs/audio-models.spec.ts),
+[`e2e/specs/audio-models.spec.ts`](../../frontend/e2e/specs/audio-models.spec.ts),
 which imports the catalogue modules directly and HEADs every `id` against the Hub
 API. **Add your new catalogue module to that import list in the same commit as
 the page.** A catalogue nobody imports there is a catalogue nobody is checking —
@@ -133,7 +133,7 @@ which is how two `onnx-community/*` repos that return 401 reached the app.
 ### Choosing the precision
 
 Two backends, two answers, and `torch.float16` maps onto the first one. The
-defaults are in [`audio/backend.ts`](../../../frontend/src/audio/backend.ts);
+defaults are in [`audio/backend.ts`](../../frontend/src/audio/backend.ts);
 `loadOpts(backend)` already returns the first and third rows:
 
 | Backend | `dtype` | Notes |
@@ -144,7 +144,7 @@ defaults are in [`audio/backend.ts`](../../../frontend/src/audio/backend.ts);
 
 Quote the **download size in the chosen dtype**, not the parameter count, in the
 model card. A user waiting on 300 MB does not care how many parameters that is.
-`sizeEstimate()` in [`audio/size.ts`](../../../frontend/src/audio/size.ts) does
+`sizeEstimate()` in [`audio/size.ts`](../../frontend/src/audio/size.ts) does
 the arithmetic and quotes both backends, because the picker runs before a backend
 is resolved.
 
@@ -159,12 +159,18 @@ that is the same bug, not yours.
 ## 3. Pick the worker: one per modality, never one per task
 
 The rule that keeps the frontend from sprouting a worker per route. Today there
-are five: [`audio/asr.worker.ts`](../../../frontend/src/audio/asr.worker.ts),
-[`audio/pipeline.worker.ts`](../../../frontend/src/audio/pipeline.worker.ts),
-[`audio/tts.worker.ts`](../../../frontend/src/audio/tts.worker.ts),
-[`audio/enhance/enhance.worker.ts`](../../../frontend/src/audio/enhance/enhance.worker.ts)
-and the raw-WGSL [`webgpu/worker.ts`](../../../frontend/src/webgpu/worker.ts). A
-*sixth* is only justified when a modality genuinely needs different machinery.
+are six: [`audio/asr.worker.ts`](../../frontend/src/audio/asr.worker.ts),
+[`audio/pipeline.worker.ts`](../../frontend/src/audio/pipeline.worker.ts),
+[`audio/tts.worker.ts`](../../frontend/src/audio/tts.worker.ts),
+[`audio/enhance/enhance.worker.ts`](../../frontend/src/audio/enhance/enhance.worker.ts),
+[`audio/vad/vad.worker.ts`](../../frontend/src/audio/vad/vad.worker.ts) and the
+raw-WGSL [`webgpu/worker.ts`](../../frontend/src/webgpu/worker.ts). A *seventh*
+is only justified when a modality genuinely needs different machinery.
+
+The two bare-ONNX workers are the reason the rule says "modality", not "runtime":
+enhancement and VAD both drive `onnxruntime-web` directly, but their machinery
+shares nothing — one runs a whole clip through hand-written DSP, the other loops
+frame-by-frame carrying recurrent state.
 
 Decide with this test: **does the new task load through the same runtime, with
 the same input decode path, as an existing worker?** If yes, the task string
@@ -175,11 +181,11 @@ travels in the `load` message and no new file is created.
 | A generic Transformers.js pipeline over the same modality as an existing worker | that worker | no — extend its task union (`audio/pipelineTypes.ts` is the model) |
 | A generic pipeline over a *new* modality (text, images) | a new `src/<modality>/pipeline.worker.ts` | yes, once per modality |
 | Anything that owns a capture loop (mic, camera) | its own modality worker | yes, capture loops are stateful |
-| Anything on bare `onnxruntime-web` with hand-written pre/post | its own worker | yes, `audio/enhance/` is the precedent |
+| Anything on bare `onnxruntime-web` with hand-written pre/post | its own worker | yes — `audio/enhance/` is the precedent, `audio/vad/` the smaller one |
 | Hand-written WGSL, no ML framework | `webgpu/worker.ts` | no, add a shader and a pipeline |
 
 The reason is not tidiness. Every worker duplicates the load/progress/cancel
-protocol, and every duplicate is a place for it to drift. Five protocols are
+protocol, and every duplicate is a place for it to drift. Six protocols are
 maintainable; fifteen are not.
 
 ---
@@ -191,7 +197,7 @@ imports nothing from `self`, because that module is the only part a unit test
 can reach.
 
 The precedent to copy is
-[`audio/pipelineEngine.ts`](../../../frontend/src/audio/pipelineEngine.ts): it
+[`audio/pipelineEngine.ts`](../../frontend/src/audio/pipelineEngine.ts): it
 exports a `createPipelineHandler(post, factory)` that closes over the live model
 and returns the async message handler, so a unit test drives it with a fake
 factory and no download at all. Mirror that shape.
@@ -278,7 +284,7 @@ ctx.onmessage = (e) => void handle(e.data);
 ```
 
 **The message envelope is not yours to invent.** It is
-[`ModelRequest`/`ModelResponse` in `model/types.ts`](../../../frontend/src/model/types.ts),
+[`ModelRequest`/`ModelResponse` in `model/types.ts`](../../frontend/src/model/types.ts),
 and only the load/run *payloads* are task-specific:
 
 ```ts
@@ -334,7 +340,7 @@ export function useDepth(model: string, autoLoad = false) {
 ```
 
 `createWorker` lives in its own tiny module (`visionClient.ts`, mirroring
-[`audio/pipelineClient.ts`](../../../frontend/src/audio/pipelineClient.ts))
+[`audio/pipelineClient.ts`](../../frontend/src/audio/pipelineClient.ts))
 purely so the hook's tests can mock worker creation — `import.meta.url` and
 `new Worker` do not resolve under happy-dom.
 
@@ -347,8 +353,8 @@ way and every test can assert the same things:
   **count**, never a boolean. A boolean lies the moment two requests overlap,
   and it lies in the direction of a stuck spinner.
 
-The hook returns the [§3 contract](../../standards/model-page-pattern.md#3-the-hook-contract)
-**verbatim**. [`useEnhance`](../../../frontend/src/hooks/useEnhance.ts) is the
+The hook returns the [§3 contract](../standards/model-page-pattern.md#3-the-hook-contract)
+**verbatim**. [`useEnhance`](../../frontend/src/hooks/useEnhance.ts) is the
 reference implementation; the older audio hooks still expose a task-named alias
 for `run` (`transcribe`, `synthesize`, `classify`) and are being migrated route
 by route. **Do not add a new alias** — a reviewer who has read one hook should
@@ -417,9 +423,9 @@ Three rules fall out of the pattern, and all three are asserted by tests:
    estimate and the large-model warning are shown first, and quoted exactly
    once, by `ModelPicker` — `ModelStatus` must not repeat the number.
 2. **A refresh restores decisions, not sessions.** A Worker cannot outlive a
-   page load. [`store/models.ts`](../../../frontend/src/store/models.ts) persists
+   page load. [`store/models.ts`](../../frontend/src/store/models.ts) persists
    the selected model and the *intent* to load it;
-   [`model/useModelSelection.ts`](../../../frontend/src/model/useModelSelection.ts)
+   [`model/useModelSelection.ts`](../../frontend/src/model/useModelSelection.ts)
    resumes on mount only when that intent meets a cache hit from `model/cache.ts`.
    When the cache probe is uncertain it answers "not cached", because the safe
    direction is one extra click, never bandwidth spent unasked.
@@ -439,7 +445,7 @@ Three registrations, and all three are easy to forget.
 
 **The frontend catalogue** is the one the page actually reads. One module per
 task, beside the worker, shaped like
-[`audio/classification.ts`](../../../frontend/src/audio/classification.ts):
+[`audio/classification.ts`](../../frontend/src/audio/classification.ts):
 
 ```ts
 export interface DepthModel {
@@ -459,7 +465,7 @@ three times the estimate, and a size guardrail that under-quotes is worse than
 none.
 
 **The frontend taxonomy.** The sidebar is data. Categories and tasks live in
-[`components/layout/taskTaxonomy.ts`](../../../frontend/src/components/layout/taskTaxonomy.ts)
+[`components/layout/taskTaxonomy.ts`](../../frontend/src/components/layout/taskTaxonomy.ts)
 and are mapped to real routes through `REAL_ROUTES`. An unmapped task falls
 through to the generic `/tasks/$slug` placeholder, which is how the full Hugging
 Face taxonomy is displayed without every task existing. Adding a page means
@@ -468,7 +474,7 @@ adding one `REAL_ROUTES` entry keyed by the slugified task label.
 **The backend registry**, optionally. One `ModelCard` per checkpoint the page
 offers — but note that `task` is a **fixed choice set**
 (`llm` · `vision` · `embedding` · `audio` · `custom`, see
-[`backend/apps/registry/models.py`](../../../backend/apps/registry/models.py)),
+[`backend/apps/registry/models.py`](../../backend/apps/registry/models.py)),
 *not* the Transformers.js task string. The precise task belongs in `config`:
 
 ```jsonc
@@ -488,7 +494,7 @@ offers — but note that `task` is a **fixed choice set**
 ```
 
 Adding an endpoint or changing a payload shape means updating
-[`../../standards/api-contracts.md`](../../standards/api-contracts.md) in the
+[`../standards/api-contracts.md`](../standards/api-contracts.md) in the
 same commit.
 
 The backend is a registry, not an inference server. It never sees the weights
@@ -508,7 +514,7 @@ Every task page asserts the identical list. Copy it from the nearest existing
 spec rather than writing it fresh.
 
 **Vitest, mocked network and mocked ONNX Runtime** (`src/__tests__/routes/`,
-with [`asr.test.tsx`](../../../frontend/src/__tests__/routes/asr.test.tsx) as the
+with [`asr.test.tsx`](../../frontend/src/__tests__/routes/asr.test.tsx) as the
 model):
 
 - nothing downloads on mount: `autoLoad: false` **and** `load` was not called
@@ -543,7 +549,7 @@ Three traps worth knowing before you hit them:
 
 - **Layout is never a Vitest assertion.** happy-dom has no geometry.
   Arrangement is asserted only in
-  [`e2e/specs/model-page.spec.ts`](../../../frontend/e2e/specs/model-page.spec.ts).
+  [`e2e/specs/model-page.spec.ts`](../../frontend/e2e/specs/model-page.spec.ts).
   Import `test`/`expect` from `e2e/fixtures/base`, never from `@playwright/test`.
 - **Never route-match every `/api/` URL** in Playwright with a bare
   double-wildcard pattern. It also matches the `/src/api/*` module URLs and the
@@ -557,20 +563,20 @@ Three traps worth knowing before you hit them:
 
 Docs travel with code. A new page touches these, and none of them is optional:
 
-1. the category guide beside this one, so its status table stops saying "not
-   built" and starts pointing at the route;
-2. [`../../standards/model-page-pattern.md`](../../standards/model-page-pattern.md),
+1. the [category roadmap issue](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap)
+   for the task, so its status table stops saying "not built" and starts
+   pointing at the route;
+2. [`../standards/model-page-pattern.md`](../standards/model-page-pattern.md),
    if the page needed a genuinely new slot behaviour or a new testid;
-3. [`../../standards/api-contracts.md`](../../standards/api-contracts.md), if
+3. [`../standards/api-contracts.md`](../standards/api-contracts.md), if
    you touched an endpoint;
-4. [`README.md`](README.md) in this folder, whose category status table is where
+4. the [roadmap tracking issue](https://github.com/bthek1/model_playground/issues/8), whose category status table is where
    a newcomer looks first — move the task out of the "left" column.
 
 Anything touching more than one file also gets a **plan first**, phased, with a
-Testing section, in [`../in-progress/`](../in-progress/). Update its `Status` as
-you go (`Draft → In Progress → Complete`) and `git mv` it to
-[`../completed/`](../completed/) when it lands. Completed plans are kept as a
-record, not deleted. The files in *this* folder are not plans — they are the
+Testing section, opened as a **GitHub issue** (`gh issue create`). Tick the
+issue's phase checkboxes as you go and **close the issue** when the work lands —
+the closed issue is the record. The roadmap issues are not plans; they are the
 research a plan gets written from.
 
 ---
@@ -584,7 +590,7 @@ Most model research is published as PyTorch. This is the translation table.
 | `pipeline("task", id, torch_dtype=torch.float16, device_map="auto")` | `pipeline("task", id, { device: "webgpu", dtype: "fp16" })` |
 | `AutoProcessor.from_pretrained(id)` | `AutoProcessor.from_pretrained(id)`, same JSON, same constants |
 | `Image.open(path)` | `RawImage.fromURL(url)` or `RawImage.fromCanvas(canvas)` |
-| `librosa.load(path, sr=16000)` | `decodeToMono(buf)` in [`audio/io.ts`](../../../frontend/src/audio/io.ts) |
+| `librosa.load(path, sr=16000)` | `decodeToMono(buf)` in [`audio/io.ts`](../../frontend/src/audio/io.ts) |
 | `cv2.VideoCapture(0)` | `navigator.mediaDevices.getUserMedia({ video: true })` into a `<video>` |
 | a local `hf_cache` directory | Cache Storage, automatic, survives reloads, works offline; probed by `model/cache.ts` |
 | `del model; free_memory()` | `await model.dispose()` after nulling the reference |
@@ -617,22 +623,24 @@ structurally: the run controls simply do not work until the load machine says
 [ ] REAL_ROUTES entry added; placeholder retired
 [ ] ModelCard rows created if used; task is a ModelTask choice, not a pipeline
 [ ] Vitest contract asserted; @slow spec added for the real download
-[ ] Category guide status table updated; plan moved to docs/plans/completed/
+[ ] Category roadmap issue status table updated; plan issue closed
 ```
 
 ---
 
 ## Reference
 
-- Category guides, listing the verified browser checkpoint for every task:
-  [`Audio`](Audio_Models_in_React_WebGPU_and_CPU.md) — the one with shipped
+- Category roadmap issues, listing the verified browser checkpoint for every
+  task (all labelled
+  [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap)):
+  [`Audio`](https://github.com/bthek1/model_playground/issues/1) — the one with shipped
   routes, and the reference for the shared plumbing,
-  [`Computer_Vision`](Computer_Vision_Models_in_React_WebGPU_and_CPU.md),
-  [`Natural_Language_Processing`](NLP_Models_in_React_WebGPU_and_CPU.md),
-  [`Multimodal`](Multimodal_Models_in_React_WebGPU_and_CPU.md),
-  [`Tabular`](Tabular_Models_in_React_WebGPU_and_CPU.md),
-  [`Reinforcement_Learning`](Reinforcement_Learning_in_React_WebGPU_and_CPU.md),
-  [`Other`](Graph_Models_in_React_WebGPU_and_CPU.md).
+  [`Computer_Vision`](https://github.com/bthek1/model_playground/issues/2),
+  [`Natural_Language_Processing`](https://github.com/bthek1/model_playground/issues/5),
+  [`Multimodal`](https://github.com/bthek1/model_playground/issues/4),
+  [`Tabular`](https://github.com/bthek1/model_playground/issues/7),
+  [`Reinforcement_Learning`](https://github.com/bthek1/model_playground/issues/6),
+  [`Other`](https://github.com/bthek1/model_playground/issues/3).
 - **Transformers.js** (`@huggingface/transformers`): pipelines, WebGPU and WASM
   backends, `AutoProcessor`, `RawImage`.
 - **onnxruntime-web**: direct ONNX inference for models with no pipeline;
@@ -641,8 +649,8 @@ structurally: the run controls simply do not work until the load machine says
   most published checkpoints. Neither mirrors everything, and neither is
   authoritative — verify.
 - **In-repo standards**:
-  [`model-page-pattern.md`](../../standards/model-page-pattern.md) (the page
-  contract), [`model-visualization.md`](../../standards/model-visualization.md)
-  (how a model is drawn), [`../../guides/adding-a-model.md`](../../guides/adding-a-model.md)
+  [`model-page-pattern.md`](../standards/model-page-pattern.md) (the page
+  contract), [`model-visualization.md`](../standards/model-visualization.md)
+  (how a model is drawn), [`adding-a-model.md`](adding-a-model.md)
   (§8 Transformers.js, §9 a bare ONNX graph),
-  [`../../guides/e2e-testing.md`](../../guides/e2e-testing.md).
+  [`e2e-testing.md`](e2e-testing.md).

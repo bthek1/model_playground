@@ -4,7 +4,7 @@
 // pipeline** (MMS-VITS, SpeechT5). TTS gets its own worker (`tts.worker.ts`)
 // rather than the generic pipeline worker because the modality differs
 // (text in → audio out) and kokoro-js is a separate heavy dependency that would
-// bloat the classification worker bundle. See docs/plans/completed/audio-models-in-browser.md.
+// bloat the classification worker bundle. See docs/guides/adding-a-model.md §8.
 
 import type { ModelRequest, ModelResponse } from "@/model/types";
 

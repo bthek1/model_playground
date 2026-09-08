@@ -73,6 +73,7 @@ from Hugging Face (80–220 MB per model) and open a real ONNX Runtime session:
 just fe-e2e-slow      # sets E2E_SLOW=1 — ~2.5 min, needs network
 just fe-e2e-models    # the cheap half: every model id must resolve (~3 s)
 just fe-e2e-enhance   # speech enhancement on both backends (~20 s + download)
+just fe-e2e-vad       # voice activity detection (~10 s, 2 MB download)
 ```
 
 **These are not optional nice-to-haves.** Two audio bugs shipped past a fully

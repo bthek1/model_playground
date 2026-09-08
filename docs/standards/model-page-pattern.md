@@ -303,6 +303,7 @@ Not every page downloads weights, and that's fine — the stages still hold:
 |---|---|---|---|---|
 | TTS / ASR / Audio Classification | model catalogue | weight download in worker | text / mic / file | audio, transcript, labels |
 | Audio to Audio | model catalogue | ONNX graph + constants file | mic / file (48 kHz) | before/after waveforms, A-B play, WAV |
+| Voice Activity Detection | model catalogue, one entry with **no weights** | ONNX graph, or nothing at all for the energy baseline | mic / file / sample clip | probability timeline + a threshold the user drags |
 | Tensor Arithmetic | the operation | WGSL pipeline compile (fast, auto) | operand matrices | heatmap + numeric grid |
 | Linear Training | architecture + hyperparams | dataset fetch + kernel compile | train loop | live weights + loss curve |
 | `/tasks/$slug` placeholder | — | — | — | "not available yet" |
@@ -313,6 +314,22 @@ slot still renders, so the page keeps the same four-band rhythm as its neighbour
 the question those pages actually raise — is there a GPU, or nothing to compute on. The
 placeholder route uses the same shell with empty slots, so an unimplemented task reads
 as *the same kind of page*, not a different app.
+
+**A result the user can re-read without re-running belongs on the main thread.** `/vad` returns
+per-frame speech probabilities and lets the user drag a threshold; the segments that threshold
+implies are derived by a pure function
+([`audio/vad/segments.ts`](../../frontend/src/audio/vad/segments.ts)) over the result already in
+hand. Nothing is re-posted to the worker. The rule generalises: when OUTPUT has a knob, ask
+whether the knob changes the *model's* answer or only the *reading* of it. A knob that only
+re-reads must never re-run — otherwise the control lags the pointer, `running` flickers, and the
+page charges the user's battery for a display preference. A knob that genuinely changes the
+input (a prompt, a length, a voice) belongs in RUN, not OUTPUT.
+
+**A catalogue entry may cost nothing.** `/vad` offers an energy-based baseline alongside Silero:
+`bytes: { webgpu: 0, wasm: 0 }`, no repo, no download. It still passes through SELECT → LOAD →
+RUN like any model, so LOAD resolves immediately and the page works before anything is fetched.
+Where a task has a credible no-model baseline, shipping it beside the model is worth more than a
+paragraph of documentation about when the model is overkill.
 
 **Linear Training is the documented exception.** It does not render `ModelPage` at all,
 so it opts out of the setup-rail/workbench arrangement along with everything else. It
@@ -400,9 +417,7 @@ That ambiguity is one reason §4's band labels stay generic.
 - [`model-visualization.md`](model-visualization.md) — how a model and its internals are drawn
 - [`../explanations/webgpu-inference.md`](../explanations/webgpu-inference.md) — how inference runs
 - [`../guides/adding-a-model.md`](../guides/adding-a-model.md) — kernel + registry entry
-- [`../plans/completed/model-page-restructure.md`](../plans/completed/model-page-restructure.md) — the migration to this pattern
-- [`../plans/completed/model-page-horizontal-layout.md`](../plans/completed/model-page-horizontal-layout.md) — the move from one column to rail + workbench
-- [`../plans/completed/model-load-persistence-and-progress.md`](../plans/completed/model-load-persistence-and-progress.md) — aggregate progress, cancel, and the refresh story
+- [closed plan issues](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+is%3Aclosed+label%3Aplan) — how this pattern was arrived at: the restructure, the move from one column to rail + workbench, and aggregate progress / cancel / refresh
 
 ## Reference implementations
 
@@ -413,5 +428,6 @@ That ambiguity is one reason §4's band labels stay generic.
 | Shell + slots | [`frontend/src/components/model/`](../../frontend/src/components/model/) |
 | A weight-downloading page | [`routes/text-to-speech.tsx`](../../frontend/src/routes/text-to-speech.tsx) |
 | A compile-only page | [`routes/tensor.tsx`](../../frontend/src/routes/tensor.tsx) |
+| A page whose OUTPUT has a knob | [`routes/vad.tsx`](../../frontend/src/routes/vad.tsx) — the threshold re-derives, never re-runs |
 | The empty case | [`routes/tasks.$slug.tsx`](../../frontend/src/routes/tasks.$slug.tsx) |
 | The contract, asserted | [`frontend/e2e/specs/model-page.spec.ts`](../../frontend/e2e/specs/model-page.spec.ts) |

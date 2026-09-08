@@ -158,6 +158,10 @@ fe-e2e-slow:
 fe-e2e-enhance:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --project=webgpu --workers=1 --grep "speech enhancement"
 
+# Run the @slow voice-activity-detection specs (Silero VAD, ~2 MB, seconds)
+fe-e2e-vad:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "voice activity detection"
+
 # Check every audio model id still resolves on the Hugging Face Hub (seconds)
 fe-e2e-models:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "resolves on the Hugging Face"

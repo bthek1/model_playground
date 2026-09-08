@@ -10,7 +10,7 @@
 //   * There is no Transformers.js pipeline behind it. The DSP is ours
 //     (src/audio/enhance/), validated against the reference implementation.
 //
-// See docs/plans/completed/audio-to-audio-deepfilternet.md.
+// See docs/guides/adding-a-model.md §9 (a bare ONNX graph).
 
 import { createFileRoute } from "@tanstack/react-router";
 import { AudioWaveform, Download, Loader2, Mic, Play, Upload } from "lucide-react";

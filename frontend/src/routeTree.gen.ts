@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VadRouteImport } from './routes/vad'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
 import { Route as TextToAudioRouteImport } from './routes/text-to-audio'
@@ -23,6 +24,11 @@ import { Route as AsrRouteImport } from './routes/asr'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TasksSlugRouteImport } from './routes/tasks.$slug'
 
+const VadRoute = VadRouteImport.update({
+  id: '/vad',
+  path: '/vad',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TrainingRoute = TrainingRouteImport.update({
   id: '/training',
   path: '/training',
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
+  '/vad': typeof VadRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesByTo {
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
+  '/vad': typeof VadRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesById {
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
+  '/vad': typeof VadRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRouteTypes {
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/text-to-audio'
     | '/text-to-speech'
     | '/training'
+    | '/vad'
     | '/tasks/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -165,6 +175,7 @@ export interface FileRouteTypes {
     | '/text-to-audio'
     | '/text-to-speech'
     | '/training'
+    | '/vad'
     | '/tasks/$slug'
   id:
     | '__root__'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/text-to-audio'
     | '/text-to-speech'
     | '/training'
+    | '/vad'
     | '/tasks/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -196,11 +208,19 @@ export interface RootRouteChildren {
   TextToAudioRoute: typeof TextToAudioRoute
   TextToSpeechRoute: typeof TextToSpeechRoute
   TrainingRoute: typeof TrainingRoute
+  VadRoute: typeof VadRoute
   TasksSlugRoute: typeof TasksSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/vad': {
+      id: '/vad'
+      path: '/vad'
+      fullPath: '/vad'
+      preLoaderRoute: typeof VadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/training': {
       id: '/training'
       path: '/training'
@@ -308,6 +328,7 @@ const rootRouteChildren: RootRouteChildren = {
   TextToAudioRoute: TextToAudioRoute,
   TextToSpeechRoute: TextToSpeechRoute,
   TrainingRoute: TrainingRoute,
+  VadRoute: VadRoute,
   TasksSlugRoute: TasksSlugRoute,
 }
 export const routeTree = rootRouteImport

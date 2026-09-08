@@ -46,16 +46,17 @@ docker compose exec backend python manage.py migrate
 
 | Doc | Description |
 |-----|-------------|
-| [docs/explanations/project-overview.md](docs/explanations/project-overview.md) | **Start here** — one-page orientation to the whole project |
+| [docs/explanations/architecture.md](docs/explanations/architecture.md) | **Start here** — monorepo structure, the two client-side runtimes, design decisions |
 | [docs/explanations/webgpu-inference.md](docs/explanations/webgpu-inference.md) | How in-browser inference works (raw WebGPU pipeline) |
 | [docs/guides/adding-a-model.md](docs/guides/adding-a-model.md) | Add a model: WGSL kernel + registry entry |
 | [docs/guides/local-setup.md](docs/guides/local-setup.md) | Full local dev setup (Docker + without Docker) |
 | [docs/guides/onboarding.md](docs/guides/onboarding.md) | New developer orientation |
 | [docs/standards/api-contracts.md](docs/standards/api-contracts.md) | All API endpoints, request/response shapes |
-| [docs/explanations/architecture.md](docs/explanations/architecture.md) | Monorepo structure and design decisions |
 | [docs/explanations/auth-flow.md](docs/explanations/auth-flow.md) | JWT auth flow end to end |
 | [docs/guides/celery_setup.md](docs/guides/celery_setup.md) | Celery + Redis async task setup |
-| [docs/plans/](docs/plans/) | Phased feature plans and ADRs — [`in-progress/`](docs/plans/in-progress/) (active) and [`completed/`](docs/plans/completed/) (kept as a record) |
+| [docs/guides/adding-a-task-page.md](docs/guides/adding-a-task-page.md) | Turn a sidebar task into a working browser route, end to end |
+| [GitHub issues → `plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) | Phased feature plans and ADRs — open is active, closed is the record |
+| [GitHub issues → `roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) | Per-category research: which tasks can run in a browser tab, on which checkpoint |
 
 **AI assistants:** [CLAUDE.md](CLAUDE.md) (Claude Code) and [.github/copilot-instructions.md](.github/copilot-instructions.md) (GitHub Copilot) describe the project conventions for AI tooling. Keep both in sync when conventions change.
 

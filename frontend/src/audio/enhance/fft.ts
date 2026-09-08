@@ -1,6 +1,6 @@
 // Fourier transforms for the speech-enhancement DSP. The browser ships no FFT
 // primitive, and DeepFilterNet3 needs a **960-point** real transform per frame
-// (docs/plans/in-progress/audio-to-audio-deepfilternet.md).
+// (see docs/guides/adding-a-model.md §9).
 //
 // 960 = 2^6 x 15 is not a power of two, and the model's 481 bins are exactly
 // 960/2 + 1 — so zero-padding to 1024 is not an option: it changes the bin

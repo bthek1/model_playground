@@ -111,6 +111,27 @@ See `viz/heatmap.tsx::DivergingLegend`.
 A single metric with label + value (+ optional delta). Value in `tabular-nums` mono so digits
 don't jitter as they update. Used for latency, throughput, param counts, accuracy.
 
+### Time-aligned track
+A full-width `<canvas>` drawn from a `Float32Array` against a **time** x-axis, for signals the
+user reads left-to-right: the waveform of a clip, a live mic tap, a per-frame model score. These
+live in [`components/audio/`](../../frontend/src/components/audio/) rather than `viz/` because
+they are audio-domain, but they share one grammar and it is the grammar that matters:
+
+- **Paint in the canvas's own resolved `color`** (`getComputedStyle(canvas).color`), never a
+  hard-coded fill, so a Tailwind text class themes them in both schemes. Same rule as the
+  heatmap's alpha-encoded magnitude, reached a different way.
+- **Stacked tracks must share one x-axis.** `/vad` draws `Waveform` and `VadTimeline` in a
+  single `space-y-1` column at the same width, with the same number of samples behind them, so
+  a peak and its speech score line up vertically. A track whose axis silently differs from the
+  one above it is worse than no track.
+- **Redraw on resize** (`ResizeObserver`) and degrade when the 2-D context is missing — every
+  one of these renders under happy-dom in the unit tests, where `getContext` returns null.
+- **Give it `role="img"` and an `aria-label` that states the data**, not the picture:
+  "Speech probability for 343 frames, threshold 0.50". It is also what the route tests query by.
+
+`Waveform` / `LiveWaveform` (`audio/Waveform.tsx`) and `VadTimeline` (`audio/VadTimeline.tsx`)
+are the implementations. A new time-series track composes these, or joins them here.
+
 ---
 
 ## 4. Color system

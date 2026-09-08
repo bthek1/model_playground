@@ -255,7 +255,7 @@ export const Route = createFileRoute('/users/$userId')({
   id-correlated — `running` is an **inflight count, not a boolean** (a boolean reports idle as soon as
   the first of two overlapping requests returns). An error with an `id` is a run failure and leaves
   `status === "ready"`; an id-less error is a load failure.
-- Task hooks (`useAsr`, `useTts`, `usePipeline`) are **thin typed wrappers** over it — don't
+- Task hooks (`useAsr`, `useTts`, `usePipeline`, `useEnhance`, `useVad`) are **thin typed wrappers** over it — don't
   reimplement worker plumbing in a new hook.
 - Worker messages share one envelope: `ModelRequest<TLoad, TRun>` / `ModelResponse<TResult>` in
   `src/model/types.ts`. Only the payload is task-specific; never rename the envelope fields.
@@ -266,7 +266,7 @@ export const Route = createFileRoute('/users/$userId')({
   ONNX Runtime, or WebLLM *to this runtime* — its kernels are hand-written for control and a minimal
   bundle. That constraint is scoped to `src/webgpu/`: running **pretrained** models in the UI (audio
   ASR/TTS/classification, etc.) may use Transformers.js / ONNX Runtime Web on WebGPU or WASM. See
-  `docs/plans/completed/audio-models-in-browser.md`.
+  `docs/guides/adding-a-model.md` §8.
 - GPU types come from `@webgpu/types` (registered in `tsconfig.app.json` `types`).
 - Pipeline (see `runtime.ts::runMatmul` for the reference): `getGPUDevice()` (memoised, re-acquires
   after device-lost) → `createComputePipeline(device, wgsl)` → storage/uniform buffers (`buffers.ts`)
@@ -391,7 +391,7 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   speed cost and downloads nothing until the user opts in; an E2E spec asserts zero Hub requests
   before the click. MusicGen also needs `MusicgenForConditionalGeneration` directly — the
   `text-to-audio` *pipeline* throws "Missing the following inputs: input_ids" on 4.2.0.
-- **Audio-to-Audio (`src/audio/enhance/`) is the one task with no Transformers.js path.** The
+- **Audio-to-Audio (`src/audio/enhance/`) is one of two tasks with no Transformers.js path.** The
   DeepFilterNet3 export is the neural graph only (normalised ERB/spectral features in, mask + complex
   filter coefficients out), so it runs on **`onnxruntime-web` directly** and the STFT, ERB filterbank,
   feature normalisation, deep filtering and overlap-add are all ours. Four rules:
@@ -410,10 +410,25 @@ show the output*. The modality changes; the pipeline does not. Full contract in
     (`SPEC_SCALE = 2*hop/fft²`) is load-bearing: the unit-norm feature divides by `sqrt(state)` and is
     not level-invariant, so dropping it makes the network mask clean speech away. `just fe-e2e-enhance`
     measures a real SDR improvement end to end.
+- **Voice Activity Detection (`src/audio/vad/`) is the other bare-ONNX task, and the only recurrent
+  one.** Silero v5 scores one 32 ms frame at a time and returns a state tensor for the next call.
+  Three rules:
+  - **The window is 576 samples, not 512** — 64 samples of preceding context are prepended to each
+    512-sample frame, as upstream's `OnnxWrapper.__call__` does. The graph's input dims are dynamic,
+    so a bare 512 runs happily and returns scores that never cross a threshold (0.05 on speech that
+    should read 0.9). This is the failure a mocked test cannot see.
+  - **`state` and the context reset per clip**, not per session, or the previous take bleeds into the
+    first frames of the next.
+  - **Pinned to WASM deliberately.** 0.30 ms per frame on CPU is ~100x real time, a per-frame GPU
+    dispatch would cost more than the work, and its LSTM/`If` ops aren't covered by ORT's WebGPU
+    provider. The `@slow` spec asserts the backend so a later change can't loosen it silently.
+  - Threshold → segments (`segments.ts`) is pure and runs on the main thread: dragging the threshold
+    re-derives segments from the same scores, never re-running the model.
 - **Unit tests mock the network and ORT, so they cannot catch a broken model.** The `@slow` E2E
   specs (`e2e/specs/audio-models.spec.ts`) are the guard.
 - Adding a task: catalogue entry → worker (reuse the generic one) → hook → route → `REAL_ROUTES`.
-  See `docs/guides/adding-a-model.md` §8 (Transformers.js) or §9 (a bare ONNX graph, like DFN3).
+  See `docs/guides/adding-a-model.md` §8 (Transformers.js) or §9 (a bare ONNX graph — DFN3 is the
+  reference, `src/audio/vad/` the smaller one to read first).
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
@@ -425,7 +440,7 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - Test UI: `just fe-test-ui`
 - End-to-end: `just fe-e2e` (browsers: `just fe-e2e-install`; UI: `just fe-e2e-ui`)
 - Real model loads: `just fe-e2e-slow` (minutes, needs network); ids only: `just fe-e2e-models`;
-  speech enhancement only: `just fe-e2e-enhance`
+  speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`
 - Install deps: `just fe-install`
 
 ---
@@ -450,6 +465,7 @@ Key commands:
 | `just fe-test-ui` | Run frontend tests with Vitest UI |
 | `just fe-e2e` | Run Playwright end-to-end tests (mocked API) |
 | `just fe-e2e-full` | Run E2E tests against the real Django API |
+| `just fe-e2e-vad` | Run the @slow voice-activity-detection specs (seconds) |
 | `just fe-e2e-install` | Download the Playwright browsers (once) |
 | `just fe-e2e-slow` | `@slow` specs: real model downloads + real ONNX sessions |
 | `just fe-e2e-models` | Check every audio model id resolves on the HF Hub (seconds) |
@@ -561,43 +577,45 @@ The `docs/` folder is the single source of truth for project knowledge. It is ke
   model-page interaction standard (`model-page-pattern.md`) and the model-visualization UI
   standard (`model-visualization.md`)
 - `docs/guides/` — Step-by-step how-to guides, onboarding, local setup, deployment
-- `docs/plans/` — Feature plans, ADRs, roadmaps, spike notes. Active plans live in
-  `docs/plans/in-progress/`; finished ones are moved to `docs/plans/completed/`
 - `docs/explanations/` — Concept explanations, design rationale, background context
+
+Feature plans, ADRs, roadmaps and spike notes are **not files in `docs/`** — they are GitHub
+issues. See *Planning Rules* below.
 
 **Rules:**
 - When a feature, API endpoint, or architectural pattern is added or changed, update the relevant doc in `docs/` as part of the same change
 - New backend apps or frontend modules should have a corresponding explanation or guide in `docs/`
 - API contract changes (new endpoints, modified request/response shapes) must be reflected in `docs/standards/`
-- Architecture or design decisions must be recorded as an ADR under `docs/plans/` (in `in-progress/`
-  while active, moved to `completed/` when finalised)
+- Architecture or design decisions must be recorded as an ADR in a GitHub issue labelled `plan`
+  (open while active, closed when finalised)
 - Docs are written for the next developer — assume no prior context
 
 ---
 
-## Planning Rules (`docs/plans/`)
+## Planning Rules (GitHub issues)
 
-Every non-trivial feature or change must have a plan file before implementation begins.
+Every non-trivial feature or change must have a plan **before** implementation begins, and the
+plan lives in a **GitHub issue** — never in a markdown file in the repo. There is no `docs/plans/`
+folder; do not recreate one.
 
-**Folder layout:** Plans live in one of two subfolders by status:
-- `docs/plans/in-progress/` — new and active plans (`Draft` / `In Progress`)
-- `docs/plans/completed/` — plans that have reached `Complete`
+**Lifecycle:**
 
-Create every new plan in `docs/plans/in-progress/`. When a plan reaches `Complete`, move it with
-`git mv docs/plans/in-progress/<name>.md docs/plans/completed/<name>.md`. Completed plans are kept
-(not deleted) as a record of decisions made.
+| Stage | What it means | Command |
+|---|---|---|
+| Open, `plan` label | Draft or in progress | `gh issue create --label plan --title "Plan: <Feature>" --body-file <file>` |
+| Phase checkboxes ticked | Progress is visible on the issue itself | `gh issue edit <n> --body-file <file>` |
+| Closed | Complete — the closed issue is the permanent record | `gh issue close <n> --comment "<what landed>"` |
 
-**File naming:** `docs/plans/in-progress/<feature-name>.md`
+- Write the plan body to a scratch file first, then pass it with `--body-file` — it keeps long
+  markdown intact. The scratch file is temporary; **never commit it**.
+- Reference the issue from the work: `Closes #<n>` in the commit message or PR body.
+- Roadmap/research issues (label `roadmap`) are **not plans** — they are the per-category research a
+  plan gets written from, and they stay open.
 
-**Required plan structure:**
+**Issue title:** `Plan: <Feature Name>`
+
+**Required plan body:**
 ```markdown
-# Plan: <Feature Name>
-
-**Status:** Draft | In Progress | Complete
-**Date:** YYYY-MM-DD
-
----
-
 ## Goal
 One paragraph describing what this plan achieves and why.
 
@@ -625,10 +643,11 @@ Any known risks, open questions, or decisions deferred.
 **Rules:**
 - Plans are always phased — break work into discrete, independently deliverable phases
 - Every plan must include a **Testing** section covering unit tests, integration tests, and manual steps
-- Do not start implementation without a plan for any feature that touches more than one file
-- Update plan status (`Draft → In Progress → Complete`) as work progresses
-- When a plan reaches `Complete`, `git mv` it from `docs/plans/in-progress/` to `docs/plans/completed/`
-- Completed plans are kept (not deleted) as a record of decisions made
+- Do not start implementation without a plan issue for any feature that touches more than one file
+- Keep the phase checkboxes current as work progresses — the issue is the status
+- **Close the issue when the work lands.** Closed issues are the record; never delete them
+- Creating, editing, or closing an issue is a **remote action** — ask before running `gh issue …`
+  on the user's behalf unless they asked for it
 
 ---
 
@@ -652,6 +671,11 @@ These actions must **never** be performed without explicit user confirmation:
 - `git reset --hard` — destructive, cannot be undone
 - `git rebase` / `git merge` on shared branches
 - `git branch -D` — do not delete branches
+
+**GitHub (remote) — never run autonomously:**
+- `gh issue create` / `gh issue edit` / `gh issue close` — plans live here, but creating or closing
+  one on the user's behalf needs confirmation
+- `gh pr create` / `gh pr merge`
 
 **File system:**
 - `rm -rf` on any non-temporary directory
