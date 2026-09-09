@@ -172,15 +172,49 @@ describe("useVisionPipeline", () => {
   });
 
   it("tears the worker down when the selected model changes", async () => {
-    const { rerender } = renderHook(
+    const { result, rerender } = renderHook(
       ({ model }: { model: string }) =>
         useVisionPipeline("image-classification", model, false),
       { initialProps: { model: "a" } },
     );
-    act(() => {});
+
+    act(() => result.current.load());
+    act(() =>
+      lastWorker.emit({ type: "ready", model: "a", backend: "wasm" }),
+    );
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    const first = lastWorker;
+
+    // A run still in flight when the user switches models.
+    const pending = result.current.run(image());
     rerender({ model: "b" });
-    // No worker was ever started (autoLoad false), so nothing to terminate —
-    // what matters is the key change resets the machine to idle.
-    expect(spawned).toBe(0);
+
+    // The old worker is gone, its pending request rejected rather than left
+    // hanging, and the new model starts from `idle` — it does not inherit the
+    // previous model's `ready`.
+    expect(first.terminated).toBe(true);
+    await expect(pending).rejects.toThrow(/terminated/i);
+    await waitFor(() => expect(result.current.status).toBe("idle"));
+    expect(spawned).toBe(1); // nothing downloads for model "b" unasked
+  });
+
+  it("keeps two tasks on the same model in separate workers", () => {
+    // The worker is keyed on `task:model`, not the model alone — a page that
+    // switched task while keeping the checkpoint would otherwise talk to a
+    // pipeline loaded for the wrong one.
+    const { rerender } = renderHook(
+      ({ task }: { task: "image-classification" | "image-feature-extraction" }) =>
+        useVisionPipeline(task, "Xenova/clip-vit-base-patch32", true),
+      {
+        initialProps: {
+          task: "image-classification" as
+            | "image-classification"
+            | "image-feature-extraction",
+        },
+      },
+    );
+    expect(spawned).toBe(1);
+    rerender({ task: "image-feature-extraction" });
+    expect(spawned).toBe(2);
   });
 });

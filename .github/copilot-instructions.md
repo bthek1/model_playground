@@ -7,7 +7,7 @@
 **Model Playground** — a web app for running ML models (LLMs, computer vision, custom networks)
 **directly in the browser on the user's GPU/CPU**. Two client-side inference paths coexist: a
 **raw-WebGPU runtime** (`src/webgpu/`, hand-written WGSL compute shaders) for custom kernels, and
-**Transformers.js / ONNX Runtime Web** for running pretrained models (e.g. audio tasks) in the UI.
+**Transformers.js / ONNX Runtime Web** for running pretrained models (the audio and vision tasks) in the UI.
 It is a monorepo containing a decoupled web application:
 - `backend/` — Django REST Framework API (Python) with PostgreSQL and Celery. Acts as a **model
   registry** (catalog metadata + inference-run records); it does **not** run inference.
@@ -429,7 +429,10 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   - Threshold → segments (`segments.ts`) is pure and runs on the main thread: dragging the threshold
     re-derives segments from the same scores, never re-running the model.
 - **Unit tests mock the network and ORT, so they cannot catch a broken model.** The `@slow` E2E
-  specs (`e2e/specs/audio-models.spec.ts`, `e2e/specs/vision-models.spec.ts`) are the guard.
+  specs (`e2e/specs/audio-models.spec.ts`, `e2e/specs/vision-models.spec.ts`) are the guard, and
+  they must assert a **known answer to a known input** — "a result appeared" passes while a
+  quantized model calls a tiger a snake. `e2e/specs/model-ids.spec.ts` is the seconds-long half.
+  Shared page-object verbs live on `ModelPageObject`; a modality subclass adds only its own.
 - Adding a task: catalogue entry → worker (reuse the generic one) → hook → route → `REAL_ROUTES`.
   See `docs/guides/adding-a-model.md` §8 (Transformers.js) or §9 (a bare ONNX graph — DFN3 is the
   reference, `src/audio/vad/` the smaller one to read first).

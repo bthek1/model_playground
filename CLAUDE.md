@@ -14,7 +14,7 @@ update both.
 networks) **directly in the browser on the user's GPU/CPU**. Two client-side inference
 paths coexist: (1) a **raw-WebGPU runtime** (`src/webgpu/`, hand-written WGSL compute
 shaders) for custom kernels and teaching demos, and (2) **Transformers.js / ONNX Runtime
-Web** for running *pretrained* models (e.g. the audio tasks) in the UI. It is a decoupled
+Web** for running *pretrained* models (the audio and vision tasks) in the UI. It is a decoupled
 monorepo:
 
 - **`backend/`** — Django REST Framework API (Python 3.13, PostgreSQL, Celery). Acts as a
@@ -160,14 +160,15 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - **Visualizing models & their structure** follows [`docs/standards/model-visualization.md`](docs/standards/model-visualization.md) — a shared grammar of stage/arrow schematics, canvas weight/activation heatmaps (diverging red=+/blue=−, alpha=magnitude), param chips, theme-token colors, and lazy charts. The primitives live in `components/viz/` (`schematic.tsx`: Stage/Arrow/ParamChip · `heatmap.tsx`: HeatmapTile/DivergingLegend); the Training route (`components/training/`) and Tensor route (`routes/tensor.tsx`) are the reference callers. Reuse those primitives; don't invent parallel ones.
 - Tests: Vitest + Testing Library + MSW (`src/test/server.ts`, `handlers.ts`). `src/test/setup.ts` also polyfills `localStorage` because Node ≥25 ships a stub that shadows the DOM env's.
 - **End-to-end tests are Playwright** (`e2e/`), covering what happy-dom can't: routing/app shell, real-browser auth, and WebGPU. Default run is fully mocked (no backend); `@backend`-tagged specs need `just be-seed-e2e`, and
-  `@slow`-tagged specs (real Hugging Face downloads + real ONNX sessions) need `just fe-e2e-slow`. Import `test`/`expect` from `e2e/fixtures/base`, not `@playwright/test`. Two traps: never `page.route("**/api/**")` (it also matches `/src/api/*` module URLs and stops the app booting), and keep the `test.include`/`test.exclude` block in `vite.config.ts` pinned to `src/` or Vitest swallows the E2E specs. See [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md).
+  `@slow`-tagged specs (real Hugging Face downloads + real ONNX sessions) need `just fe-e2e-slow` (or the per-route `fe-e2e-enhance` / `fe-e2e-vad` / `fe-e2e-vision`; `fe-e2e-models` is the seconds-long id + dtype check in `model-ids.spec.ts`, across every modality). Import `test`/`expect` from `e2e/fixtures/base`, not `@playwright/test`. Shared page-object verbs (`load`, `waitForReady`, `backend`, `sizeNote`, `blockModelDownloads`) live on `ModelPageObject`, not on a modality subclass. Two traps: never `page.route("**/api/**")` (it also matches `/src/api/*` module URLs and stops the app booting), and keep the `test.include`/`test.exclude` block in `vite.config.ts` pinned to `src/` or Vitest swallows the E2E specs. **A `@slow` spec asserts a known label on a known input** — "a result appeared" would have passed while a quantized model called a tiger a snake. See [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md).
 
 ### WebGPU essentials (`src/webgpu/`)
 
 - **Raw WebGPU only — no ML framework** *in `src/webgpu/`*. Custom-kernel models are WGSL compute
   shaders in `webgpu/shaders/` (imported as strings via Vite `?raw`). Types come from `@webgpu/types`
   (in `tsconfig.app.json` `types`). This rule scopes to the hand-written runtime — running *pretrained*
-  models in the UI (audio ASR/TTS/classification, etc.) may use **Transformers.js / ONNX Runtime Web**,
+  models in the UI (audio ASR/TTS/classification, vision classification, etc.) may use
+  **Transformers.js / ONNX Runtime Web**,
   which run the same HF checkpoints on WebGPU or WASM. See
   [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §8.
 - The pipeline: `getGPUDevice()` (memoised, device-lost aware) → `createComputePipeline(wgsl)` →

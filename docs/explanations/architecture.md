@@ -110,6 +110,15 @@ frontend/
 │   │   ├── worker.ts        Web Worker that owns the device, runs jobs
 │   │   ├── workerClient.ts  Main-thread promise API over the worker
 │   │   └── shaders/         WGSL compute shaders (matmul, elementwise, scale, transpose)
+│   ├── audio/             Pretrained audio models (Transformers.js; enhance/ + vad/ bare ONNX)
+│   ├── vision/            Pretrained vision models
+│   │   ├── image.ts         Decode / capture / downscale + the worker image payload
+│   │   ├── draw.ts          Canvas overlays: boxes, sequential heatmap, class masks
+│   │   ├── engine.ts        Pure message handler (one model live, warm-up, dispose)
+│   │   ├── vision.worker.ts Thin worker wrapper + the Transformers.js factory
+│   │   └── classification.ts, samples.ts, types.ts, client.ts
+│   ├── model/             Shared across modalities: backend probe, size guardrail,
+│   │                        worker lifecycle, aggregate progress, weight cache
 │   ├── hooks/             Custom hooks encapsulating business logic
 │   │   ├── useAuth.ts     Auth state, login, logout
 │   │   ├── useWebGPU.ts   WebGPU capability probe (for the UI)
@@ -188,12 +197,14 @@ responsive. See `docs/explanations/webgpu-inference.md` for the full pipeline an
 
 **Two client-side runtimes, kept apart.** The rule above scopes to the
 hand-written runtime. Running *pretrained* checkpoints is a separate concern with
-its own dependencies, and lives in `src/audio/`:
+its own dependencies, and lives in the per-modality folders `src/audio/` and
+`src/vision/`:
 
 | Runtime | Where | Used by |
 |---|---|---|
 | Hand-written WGSL | `src/webgpu/` | tensor arithmetic, linear/MNIST training, benchmarks |
 | Transformers.js (`@huggingface/transformers`, `kokoro-js`) | `src/audio/` | ASR, audio classification, TTS, text-to-audio |
+| Transformers.js | `src/vision/` | image classification (and the rest of the vision category as it lands) |
 | `onnxruntime-web` **directly** | `src/audio/enhance/`, `src/audio/vad/` | speech enhancement (DeepFilterNet3), voice activity detection (Silero VAD) |
 
 The third row exists because neither model has a Transformers.js task: both repos

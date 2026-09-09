@@ -427,7 +427,9 @@ That ambiguity is one reason §4's band labels stay generic.
 | Contract types | [`frontend/src/model/types.ts`](../../frontend/src/model/types.ts) |
 | Shell + slots | [`frontend/src/components/model/`](../../frontend/src/components/model/) |
 | A weight-downloading page | [`routes/text-to-speech.tsx`](../../frontend/src/routes/text-to-speech.tsx) |
+| The smallest complete page | [`routes/image-classification.tsx`](../../frontend/src/routes/image-classification.tsx) — an image in, a ranked list out; read this one first |
 | A compile-only page | [`routes/tensor.tsx`](../../frontend/src/routes/tensor.tsx) |
 | A page whose OUTPUT has a knob | [`routes/vad.tsx`](../../frontend/src/routes/vad.tsx) — the threshold re-derives, never re-runs |
+| A page whose input costs nothing | [`routes/image-classification.tsx`](../../frontend/src/routes/image-classification.tsx) — picking a picture works before a model exists, and classifies the moment one does |
 | The empty case | [`routes/tasks.$slug.tsx`](../../frontend/src/routes/tasks.$slug.tsx) |
 | The contract, asserted | [`frontend/e2e/specs/model-page.spec.ts`](../../frontend/e2e/specs/model-page.spec.ts) |

@@ -134,6 +134,28 @@ are the implementations. A new time-series track composes these, or joins them h
 
 ---
 
+### Overlays on a source image (vision)
+
+Boxes, class masks and single-channel maps drawn *over* a photo live in
+[`vision/draw.ts`](../../frontend/src/vision/draw.ts), for the same reason the
+audio timeline components live in `components/audio/`: they are domain-specific,
+but they share this grammar. Three rules carry over, and one is new:
+
+- **A sequential map is not a diverging one.** Depth has no meaningful zero, so
+  `drawHeatmap` uses a ramp that is monotonic in lightness rather than the
+  red/blue `paintDiverging` above. Signed tensors still use `viz/heatmap.tsx`.
+- **Normalise per map before painting.** Relative depth arrives on an arbitrary
+  scale; without rescaling to the values present the canvas is uniformly black or
+  uniformly white, and the page reads as broken rather than wrong.
+- **A label's colour is deterministic** (`colorForLabel`), so a class keeps its
+  colour between frames of a live feed. A class that changes colour every frame is
+  worse than no colour at all.
+- **Composite masks through a scratch canvas**, then `drawImage`. `putImageData`
+  *replaces* pixels including alpha, so writing an overlay straight onto the
+  target erases the picture underneath instead of tinting it.
+
+---
+
 ## 4. Color system
 
 Model Playground uses **OKLCH** theme tokens defined in

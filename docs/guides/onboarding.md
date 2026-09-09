@@ -60,12 +60,14 @@ Key conventions:
 - **Global state:** Zustand with immer (`src/store/`)
 - **Testing:** Vitest + React Testing Library + MSW (`just fe-test`); Playwright end-to-end (`just fe-e2e`)
 - **Query keys:** Centralised in `src/api/queryKeys.ts`
-- **In-browser inference:** `src/webgpu/` (hand-written WGSL) and `src/audio/`
-  (pretrained checkpoints on Transformers.js / ONNX Runtime Web). Every task page follows
-  the Select → Load → Run → Output contract in
+- **In-browser inference:** `src/webgpu/` (hand-written WGSL) and the per-modality folders
+  `src/audio/` and `src/vision/` (pretrained checkpoints on Transformers.js / ONNX Runtime
+  Web). Every task page follows the Select → Load → Run → Output contract in
   [`../standards/model-page-pattern.md`](../standards/model-page-pattern.md); the shared
-  plumbing is `src/model/`. See [`../roadmaps/audio.md`](../roadmaps/audio.md) for the
-  category that is fully built.
+  plumbing — backend probe, size guardrail, worker lifecycle — is `src/model/`, and a new
+  modality imports it rather than copying it. See [`../roadmaps/audio.md`](../roadmaps/audio.md)
+  for the category that is fully built and [`../roadmaps/vision.md`](../roadmaps/vision.md)
+  for the one being built now.
 
 Key conventions:
 - Functional components only — no class components

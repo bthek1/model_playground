@@ -29,6 +29,7 @@ just fe-e2e-ui        # interactive Playwright UI (best for writing tests)
 just fe-e2e-headed    # watch a real browser drive the app
 just fe-e2e-webgpu    # only the GPU specs
 just fe-e2e-slow      # real model downloads + real ONNX sessions (minutes)
+just fe-e2e-vision    # the vision @slow specs only (seconds)
 just fe-e2e-models    # just the model-id check against the HF Hub (seconds)
 just fe-e2e-report    # open the HTML report from the last run
 ```
@@ -71,23 +72,38 @@ from Hugging Face (80–220 MB per model) and open a real ONNX Runtime session:
 
 ```bash
 just fe-e2e-slow      # sets E2E_SLOW=1 — ~2.5 min, needs network
-just fe-e2e-models    # the cheap half: every model id must resolve (~3 s)
+just fe-e2e-models    # the cheap half: every model id must resolve (~5 s)
 just fe-e2e-enhance   # speech enhancement on both backends (~20 s + download)
 just fe-e2e-vad       # voice activity detection (~10 s, 2 MB download)
+just fe-e2e-vision    # image classification, real weights (~20 s, 4 MB download)
 ```
 
-**These are not optional nice-to-haves.** Two audio bugs shipped past a fully
-green unit suite because both lived in exactly what the unit tests mock away:
+**These are not optional nice-to-haves.** Three bugs shipped past a fully green
+unit suite because all of them lived in exactly what the unit tests mock away:
 
 - every ASR model failed to open a session on the WASM fallback (a quantized
   decoder hit an ONNX Runtime bug), so the *universal* fallback could not load
-  a model at all; and
+  a model at all;
 - two classification models pointed at Hugging Face repos that don't exist, so
-  the Hub answered 401.
+  the Hub answered 401; and
+- an image classifier's quantized export **ran perfectly and was wrong** —
+  `onnx-community/mobilenetv4_conv_small` at q8 labels a photo of a tiger
+  "sidewinder, horned rattlesnake" at 44%, where the same weights at fp32 say
+  "tiger 62%".
 
-A mocked test cannot see either. `audio-models.spec.ts` asserts that each model
-actually reaches "Model ready", and that Whisper transcribes the JFK sample to
-the right *words* — a model that loads but decodes garbage is still broken.
+A mocked test cannot see any of them, and the third is the one that shapes how
+these specs are written. **Assert a known label on a known image, never "a
+result appeared".** `audio-models.spec.ts` asserts Whisper transcribes the JFK
+sample to the right *words*; `vision-models.spec.ts` asserts the tiger sample
+comes back as a tiger. A count of rows would have passed while the model called
+it a snake.
+
+`model-ids.spec.ts` is the cheap half of the group and covers every modality: it
+imports the catalogue modules directly, HEADs every id against the Hub API, and
+— for vision — checks that each entry publishes the **dtype its backend asks
+for**, since a repo with only an fp32 `model.onnx` resolves fine on the API and
+then 404s at load. Add a new catalogue module to its import list in the same
+commit as the page.
 
 `/audio-to-audio` raises the bar again, because its pre/post-processing is ours
 rather than Transformers.js's, and wrong DSP produces plausible audio instead of
@@ -113,8 +129,9 @@ frontend/
       mockApi.ts           # network-level Django stub
       webgpu.ts            # GPU probe + a way to hide navigator.gpu
     pages/                 # page objects
-      ModelPage.ts         # the four-slot base — AudioPage and TensorPage extend it
-      AudioPage.ts         # + model picker, load/retry, backend readout
+      ModelPage.ts         # the four-slot base: slots, load/retry, ready line,
+                           #   backend readout, blockModelDownloads, size note
+      AudioPage.ts         # + the audio-only status strings
       TensorPage.ts        # + matrix operands, result grid readback
       AppShell.ts          # sidebar, navbar, theme
       LoginPage.ts
@@ -123,6 +140,9 @@ frontend/
       model-page.spec.ts   # the four-slot contract + the arrangement (§4a geometry)
       audio.spec.ts        # audio routes with downloads blocked — fast, default run
       audio-models.spec.ts # @slow: real weights, real ONNX sessions
+      vision.spec.ts       # /image-classification, weights blocked — default run
+      vision-models.spec.ts# @slow: a real MobileNetV4 load + classification
+      model-ids.spec.ts    # @slow, seconds: every catalogue id + vision dtypes
       webgpu/              # the GPU-only project
     utils/
       enhance.ts           # in-page enhancement run + SDR measurement
@@ -134,10 +154,16 @@ Every task route renders the same four slots
 ([`model-page-pattern.md`](../standards/model-page-pattern.md)), so
 `ModelPageObject` holds what is true of all of them — `slots`, `slot(n)`,
 `outputPanel`, `emptyOutput`, `runningOutput`, `error`, `button(name)`,
-`loadProgress`, `cancelLoad`, `cachedBadge(id)` — and the
-modality-specific objects extend it rather than repeating it. `AudioPage` adds the
-picker, `load()`/`retryButton` and the backend readout; `TensorPage` adds matrix
-operands and result-grid readback.
+`loadProgress`, `cancelLoad`, `cachedBadge(id)`, plus the LOAD-slot verbs every
+weight-downloading route shares: `load()`, `loadButton`, `retryButton`,
+`waitForReady()`, `backend()`, `sizeNote` and `blockModelDownloads()`. The
+modality-specific objects extend it rather than repeating it: `AudioPage` adds
+only the audio status strings, `TensorPage` adds matrix operands and result-grid
+readback, and the vision specs use the base directly.
+
+Those verbs lived on `AudioPage` until the vision routes needed them, and moving
+them up was the same call as moving the backend probe into `src/model/`: nothing
+about "press Load, wait for ready, read the backend" was ever audio-specific.
 
 Everything is scoped to `<main>`. The sidebar carries task-category buttons whose
 names collide with route buttons — "Computer Vision" matches a `/^Compute/` locator.

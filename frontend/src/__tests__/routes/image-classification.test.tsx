@@ -164,6 +164,45 @@ describe("ImageClassificationPage", () => {
     await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:preview"));
   });
 
+  it("accepts a dropped image", async () => {
+    mockState = ready();
+    renderPage();
+
+    const file = new File(["x"], "dropped.png", { type: "image/png" });
+    const dropzone = screen.getByText(/drop an image here/i).parentElement!;
+    fireEvent.drop(dropzone, { dataTransfer: { files: [file] } });
+
+    await waitFor(() => expect(fromFile).toHaveBeenCalledWith(file));
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+  });
+
+  it("re-runs the image already picked when the user asks again", async () => {
+    // Switching model and pressing Classify again must not require re-picking
+    // the picture — the RawImage is kept, and `run` copies rather than consumes
+    // its pixels precisely so this works twice.
+    mockState = ready();
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: /^classify$/i }));
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(2));
+    expect(fromUrl).toHaveBeenCalledTimes(1); // the image was not re-fetched
+  });
+
+  it("surfaces a failed decode in the RUN slot, not the output", async () => {
+    mockState = ready();
+    fromUrl.mockRejectedValueOnce(new Error("Unsupported image type"));
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+
+    const note = await screen.findByText(/unsupported image type/i);
+    expect(screen.getByTestId("slot-3")).toContainElement(note);
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
   it("renders the top five with their scores", () => {
     mockState = ready({
       backend: "webgpu",

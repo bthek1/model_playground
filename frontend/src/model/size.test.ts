@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CLASSIFIER_MODELS } from "@/audio/classification";
+import { IMAGE_CLASSIFIER_MODELS } from "@/vision/classification";
 import {
   LARGE_MODEL_BYTES,
   estimateBytes,
@@ -57,7 +58,14 @@ describe("sizeEstimate", () => {
 });
 
 describe("model catalogues", () => {
-  const all = [...ASR_MODELS, ...CLASSIFIER_MODELS, ...TTS_MODELS];
+  // Every modality, because the guardrail is shared: this module moved out of
+  // `audio/` precisely so a second one would not grow its own copy.
+  const all = [
+    ...ASR_MODELS,
+    ...CLASSIFIER_MODELS,
+    ...TTS_MODELS,
+    ...IMAGE_CLASSIFIER_MODELS,
+  ];
 
   it("give every model a positive parameter count so the guardrail applies", () => {
     for (const m of all) {
@@ -65,7 +73,7 @@ describe("model catalogues", () => {
     }
   });
 
-  it("keeps every shipped audio model inside a browser-sized budget", () => {
+  it("keeps every shipped model inside a browser-sized budget", () => {
     // A tab is not a workstation — nothing here should be a multi-GB download.
     for (const m of all) {
       const s = sizeEstimate(m.params, "bytes" in m ? m.bytes : undefined);
