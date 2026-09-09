@@ -162,9 +162,14 @@ fe-e2e-enhance:
 fe-e2e-vad:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "voice activity detection"
 
-# Check every audio model id still resolves on the Hugging Face Hub (seconds)
+# Run the @slow vision specs: a real MobileNetV4 load + classification (seconds)
+fe-e2e-vision:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 vision-models.spec.ts
+
+# Check every model id (audio + vision) still resolves on the Hugging Face Hub,
+# and that each vision entry publishes the dtypes both backends ask for (seconds)
 fe-e2e-models:
-    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "resolves on the Hugging Face"
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium model-ids.spec.ts
 
 # Run E2E tests in the interactive Playwright UI
 fe-e2e-ui:

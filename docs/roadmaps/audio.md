@@ -56,11 +56,14 @@ Two execution backends:
   the fallback that must never be allowed to break.
 
 The probe and the precision table live in
-[`frontend/src/audio/backend.ts`](../../frontend/src/audio/backend.ts) — do not
-re-derive them per task:
+[`frontend/src/model/backend.ts`](../../frontend/src/model/backend.ts) — do not
+re-derive them per task. (They were `audio/backend.ts` until Computer Vision
+arrived; nothing in them was ever audio-specific, so they moved to `model/`
+rather than being copied. The size guardrail moved with them, to
+[`model/size.ts`](../../frontend/src/model/size.ts).)
 
 ```ts
-import { pickBackend, loadOpts, asrLoadOpts } from "@/audio/backend";
+import { pickBackend, loadOpts, asrLoadOpts } from "@/model/backend";
 
 const backend = await pickBackend();  // "webgpu" | "wasm", never throws
 const opts = loadOpts(backend);       // { device: "webgpu", dtype: "fp16" } | { device: "wasm", dtype: "q8" }
@@ -155,7 +158,7 @@ WebGPU support, run faster than real time on a laptop GPU, and stream.
 
 The WASM download is roughly 3x the params estimate because of the fp32 decoder
 (§1), so both entries carry **measured `bytes` per backend** rather than letting
-`audio/size.ts` estimate. Do the same for any model whose estimate would mislead.
+`model/size.ts` estimate. Do the same for any model whose estimate would mislead.
 
 **Live transcription re-transcribes only the tail 30 s**, so the model's own
 timestamps restart at 0 on a longer take. `useLiveAsr`'s `shiftChunks()` offsets them
@@ -347,7 +350,7 @@ A tab is a tighter budget than a 12 GB card and far less forgiving.
   `torch.cuda.empty_cache()`; disposing is the entire mechanism.
 - **Quantize for CPU.** `q8` cuts the download and RAM 2–4x on WASM; `fp16` on
   WebGPU. The exception is ASR's fp32 decoder (§1).
-- **Size before you load.** `audio/size.ts` quotes both backends and warns past
+- **Size before you load.** `model/size.ts` quotes both backends and warns past
   `LARGE_MODEL_BYTES` (200 MB). Supply measured `bytes` whenever the params estimate
   would mislead. The estimate is quoted **once**, by `ModelPicker`.
 - **Feature-detect and degrade.** Always `pickBackend()`; never assume WebGPU. A GPU

@@ -210,7 +210,7 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
 - **ASR timestamps are take-relative.** The live loop re-transcribes only the tail 30 s, so the
   model's own timestamps restart at 0 on a longer take; `useLiveAsr`'s `shiftChunks()` offsets them
   by the window start before the route renders `m:ss`. Don't render `chunks` straight from the worker.
-- **Size-before-load guardrail:** every catalogue entry carries `params` (millions); `audio/size.ts` +
+- **Size-before-load guardrail:** every catalogue entry carries `params` (millions); `model/size.ts` +
   `components/model/ModelPicker.tsx` quote the download for both backends and warn past
   `LARGE_MODEL_BYTES`. Supply measured `bytes` when the params estimate would mislead — ASR's fp32
   decoder makes the WASM download ~3x the estimate.

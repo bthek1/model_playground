@@ -39,6 +39,12 @@ export interface ModelProgress {
   total?: number;
 }
 
+/** One `{ label, score }` prediction. Every classifier in the app returns these. */
+export interface ClassLabel {
+  label: string;
+  score: number;
+}
+
 // --- Worker protocol ---------------------------------------------------------
 //
 // Every model worker speaks this. `TLoad` and `TRun` carry the task-specific

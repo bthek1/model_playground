@@ -72,6 +72,19 @@ describe("taskCategories", () => {
     expect(tensor.to).toBe("/tensor");
   });
 
+  it("maps the implemented Computer Vision tasks to their real routes", () => {
+    const vision = taskCategories.find((c) => c.label === "Computer Vision")!;
+    const classification = vision.tasks.find(
+      (t) => t.slug === "image-classification",
+    )!;
+    const detection = vision.tasks.find((t) => t.slug === "object-detection")!;
+
+    expect(classification.to).toBe("/image-classification");
+    // The rest of the category is still research — they keep the placeholder
+    // until their own route ships (see the sub-issues of #2).
+    expect(detection.to).toBe("/tasks/object-detection");
+  });
+
   it("maps the implemented Audio tasks to their real routes", () => {
     const audio = taskCategories.find((c) => c.label === "Audio")!;
     const asr = audio.tasks.find(
@@ -102,6 +115,7 @@ describe("categoryForPath", () => {
     expect(categoryForPath("/training")).toBe("Theory");
     expect(categoryForPath("/audio-classification")).toBe("Audio");
     expect(categoryForPath("/asr")).toBe("Audio");
+    expect(categoryForPath("/image-classification")).toBe("Computer Vision");
   });
 
   it("returns undefined for an unknown path", () => {

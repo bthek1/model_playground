@@ -16,11 +16,12 @@ export type PipelineTask =
 /** Load/warm-up progress. Alias of the shared `ModelProgress`. */
 export type PipelineProgress = ModelProgress;
 
-/** One `{ label, score }` prediction (audio-classification + zero-shot). */
-export interface ClassLabel {
-  label: string;
-  score: number;
-}
+/**
+ * One `{ label, score }` prediction (audio-classification + zero-shot).
+ * Re-exported from `model/types` — the shape is modality-agnostic, and vision's
+ * classifier returns the identical thing.
+ */
+export type { ClassLabel } from "@/model/types";
 
 // --- Worker message protocol -------------------------------------------------
 //

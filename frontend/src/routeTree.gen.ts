@@ -17,6 +17,7 @@ import { Route as TensorRouteImport } from './routes/tensor'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ImageClassificationRouteImport } from './routes/image-classification'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
 import { Route as AudioClassificationRouteImport } from './routes/audio-classification'
@@ -64,6 +65,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImageClassificationRoute = ImageClassificationRouteImport.update({
+  id: '/image-classification',
+  path: '/image-classification',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/audio-classification': typeof AudioClassificationRoute
   '/audio-to-audio': typeof AudioToAudioRoute
   '/home': typeof HomeRoute
+  '/image-classification': typeof ImageClassificationRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/audio-classification': typeof AudioClassificationRoute
   '/audio-to-audio': typeof AudioToAudioRoute
   '/home': typeof HomeRoute
+  '/image-classification': typeof ImageClassificationRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/audio-classification': typeof AudioClassificationRoute
   '/audio-to-audio': typeof AudioToAudioRoute
   '/home': typeof HomeRoute
+  '/image-classification': typeof ImageClassificationRoute
   '/login': typeof LoginRoute
   '/playground': typeof PlaygroundRoute
   '/signup': typeof SignupRoute
@@ -152,6 +161,7 @@ export interface FileRouteTypes {
     | '/audio-classification'
     | '/audio-to-audio'
     | '/home'
+    | '/image-classification'
     | '/login'
     | '/playground'
     | '/signup'
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/audio-classification'
     | '/audio-to-audio'
     | '/home'
+    | '/image-classification'
     | '/login'
     | '/playground'
     | '/signup'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/audio-classification'
     | '/audio-to-audio'
     | '/home'
+    | '/image-classification'
     | '/login'
     | '/playground'
     | '/signup'
@@ -201,6 +213,7 @@ export interface RootRouteChildren {
   AudioClassificationRoute: typeof AudioClassificationRoute
   AudioToAudioRoute: typeof AudioToAudioRoute
   HomeRoute: typeof HomeRoute
+  ImageClassificationRoute: typeof ImageClassificationRoute
   LoginRoute: typeof LoginRoute
   PlaygroundRoute: typeof PlaygroundRoute
   SignupRoute: typeof SignupRoute
@@ -270,6 +283,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/image-classification': {
+      id: '/image-classification'
+      path: '/image-classification'
+      fullPath: '/image-classification'
+      preLoaderRoute: typeof ImageClassificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/home': {
       id: '/home'
       path: '/home'
@@ -321,6 +341,7 @@ const rootRouteChildren: RootRouteChildren = {
   AudioClassificationRoute: AudioClassificationRoute,
   AudioToAudioRoute: AudioToAudioRoute,
   HomeRoute: HomeRoute,
+  ImageClassificationRoute: ImageClassificationRoute,
   LoginRoute: LoginRoute,
   PlaygroundRoute: PlaygroundRoute,
   SignupRoute: SignupRoute,

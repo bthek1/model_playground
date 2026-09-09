@@ -381,7 +381,7 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   `onnx-community/*` repos that don't exist (401 → "Unauthorized access to file"). `just fe-e2e-models`
   checks all of them in seconds.
 - Every catalogue entry carries `params` (millions) driving the **size-before-load guardrail**
-  (`audio/size.ts` + `components/model/ModelPicker.tsx`): the picker quotes the download for both
+  (`model/size.ts` + `components/model/ModelPicker.tsx`): the picker quotes the download for both
   backends and warns past `LARGE_MODEL_BYTES`. Add measured `bytes` when the params estimate would
   mislead (ASR's fp32 decoder makes WASM ~3x the estimate).
 - **ASR timestamps are take-relative.** The live loop re-transcribes only the tail 30 s, so the

@@ -37,7 +37,7 @@ does not become a page. Three questions, in order:
 2. **Is it under roughly 1 GB in the quantization you will ship?** A tab is a
    far tighter budget than the 12 GB card this research was done on. Anything
    past about 2B parameters at `q4` is a slow first load and a real risk of
-   killing the tab. `LARGE_MODEL_BYTES` in `audio/size.ts` is 200 MB — past that
+   killing the tab. `LARGE_MODEL_BYTES` in `model/size.ts` is 200 MB — past that
    the warning is mandatory, not optional.
 3. **Is it discriminative, or at worst a small generator?** Classification,
    detection, segmentation, embedding, ASR and small TTS all run well. Latent
@@ -126,14 +126,15 @@ just fe-e2e-models   # seconds, no downloads, fails loudly on a dead id
 It is the `@slow model catalogue` block in
 [`e2e/specs/audio-models.spec.ts`](../../frontend/e2e/specs/audio-models.spec.ts),
 which imports the catalogue modules directly and HEADs every `id` against the Hub
-API. **Add your new catalogue module to that import list in the same commit as
-the page.** A catalogue nobody imports there is a catalogue nobody is checking —
-which is how two `onnx-community/*` repos that return 401 reached the app.
+API — it lives in `e2e/specs/model-ids.spec.ts`, across every modality. **Add your
+new catalogue module to that import list in the same commit as the page.** A
+catalogue nobody imports there is a catalogue nobody is checking — which is how
+two `onnx-community/*` repos that return 401 reached the app.
 
 ### Choosing the precision
 
 Two backends, two answers, and `torch.float16` maps onto the first one. The
-defaults are in [`audio/backend.ts`](../../frontend/src/audio/backend.ts);
+defaults are in [`model/backend.ts`](../../frontend/src/model/backend.ts);
 `loadOpts(backend)` already returns the first and third rows:
 
 | Backend | `dtype` | Notes |
@@ -142,9 +143,22 @@ defaults are in [`audio/backend.ts`](../../frontend/src/audio/backend.ts);
 | WebGPU, large generative models | `q4f16` | 4-bit weights, fp16 compute. The only way a 0.6B LLM is pleasant in a tab |
 | WASM (CPU) | `q8` | 2 to 4 times smaller download and RAM. `q4` when even that is too big |
 
+**A quantized export can be wrong rather than merely worse, and it will not tell
+you.** `onnx-community/mobilenetv4_conv_small`'s q8 build loads, runs, and labels
+a photo of a tiger "sidewinder, horned rattlesnake" at 44%; the same weights at
+fp32 say "tiger 62%". Depthwise-separable convolutions are the classic casualty
+of per-tensor int8 quantization, so the whole MobileNet family is suspect. Two
+consequences for a new catalogue entry:
+
+* A vision entry can pin the precision per backend (`VisionModel.dtypes`, e.g.
+  `{ wasm: "fp32" }`) — the same escape hatch `asrLoadOpts()` is for ASR. Quote
+  the **measured** `bytes` when you do, because the params estimate now lies.
+* Only a real inference catches this. Assert a *known label on a known image* in
+  the `@slow` spec, never just "five rows appeared".
+
 Quote the **download size in the chosen dtype**, not the parameter count, in the
 model card. A user waiting on 300 MB does not care how many parameters that is.
-`sizeEstimate()` in [`audio/size.ts`](../../frontend/src/audio/size.ts) does
+`sizeEstimate()` in [`model/size.ts`](../../frontend/src/model/size.ts) does
 the arithmetic and quotes both backends, because the picker runs before a backend
 is resolved.
 
@@ -204,7 +218,7 @@ factory and no download at all. Mirror that shape.
 
 ```ts
 // src/vision/visionEngine.ts
-import { loadOpts, pickBackend } from "@/audio/backend";   // the probe is shared
+import { loadOpts, pickBackend } from "@/model/backend";   // the probe is shared
 
 export function createVisionHandler(post: Post, factory: PipelineFactory) {
   let model: CallablePipeline | null = null;
@@ -452,7 +466,7 @@ export interface DepthModel {
   id: string;      // the Hub id, verified — this is what `just fe-e2e-models` checks
   label: string;   // what the picker shows
   hint: string;    // one line: what makes this model different from its neighbour
-  params: number;  // millions. Drives the size estimate in `audio/size.ts`
+  params: number;  // millions. Drives the size estimate in `model/size.ts`
   bytes?: MeasuredBytes;  // per-backend override, when the estimate would mislead
 }
 export const DEPTH_MODELS: DepthModel[] = [ /* … */ ];

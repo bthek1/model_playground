@@ -271,37 +271,3 @@ test.describe("@slow voice activity detection", () => {
     expect(hubRequests).toBe(0);
   });
 });
-
-test.describe("@slow model catalogue", () => {
-  test("every catalogue model id resolves on the Hugging Face Hub", async ({
-    request,
-  }) => {
-    // The cheap half of the @slow group: five HEAD-ish API calls, no weights.
-    // This is the check that would have caught the 401 repos in seconds.
-    const { ASR_MODELS } = await import("../../src/audio/types");
-    const { CLASSIFIER_MODELS } = await import("../../src/audio/classification");
-    const { TTS_MODELS } = await import("../../src/audio/tts");
-    const { MUSIC_MODELS } = await import("../../src/audio/textToAudio");
-    const { ENHANCE_MODELS } = await import("../../src/audio/enhance/types");
-    const { VAD_MODELS } = await import("../../src/audio/vad/types");
-
-    const ids = [
-      ...ASR_MODELS,
-      ...CLASSIFIER_MODELS,
-      ...TTS_MODELS,
-      ...MUSIC_MODELS,
-      ...ENHANCE_MODELS,
-      // The energy baseline has no repo to resolve — it is a detector, not a
-      // checkpoint, so it is filtered out rather than asked about.
-      ...VAD_MODELS.filter((m) => m.repo),
-    ].map((m) => m.id);
-    expect(ids.length).toBeGreaterThan(0);
-
-    const bad: string[] = [];
-    for (const id of ids) {
-      const res = await request.get(`https://huggingface.co/api/models/${id}`);
-      if (!res.ok()) bad.push(`${id} → ${res.status()}`);
-    }
-    expect(bad, "model ids that do not resolve on the Hub").toEqual([]);
-  });
-});

@@ -1,0 +1,219 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { UseImageClassifierResult } from "@/hooks/useImageClassifier";
+
+// The image helpers reach for RawImage / canvas, neither of which exists under
+// happy-dom. The route only ever passes what they return straight to `run`.
+const fakeImage = { width: 4, height: 4, channels: 3 } as never;
+const fromFile = vi.fn().mockResolvedValue(fakeImage);
+const fromUrl = vi.fn().mockResolvedValue(fakeImage);
+vi.mock("@/vision/image", () => ({
+  fromFile: (...args: unknown[]) => fromFile(...args),
+  fromUrl: (...args: unknown[]) => fromUrl(...args),
+}));
+
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    createFileRoute: vi
+      .fn()
+      .mockImplementation(
+        (path: string) => (opts: Record<string, unknown>) => ({
+          path,
+          options: opts,
+        }),
+      ),
+  };
+});
+
+const mockRun = vi.fn().mockResolvedValue([]);
+const baseState: UseImageClassifierResult = {
+  status: "idle",
+  idle: true,
+  loading: false,
+  ready: false,
+  progress: null,
+  loadProgress: null,
+  loadedInMs: null,
+  backend: null,
+  running: false,
+  error: null,
+  result: null,
+  run: mockRun,
+  load: vi.fn(),
+  retry: vi.fn(),
+  cancel: vi.fn(),
+};
+let mockState: UseImageClassifierResult = { ...baseState };
+const useImageClassifier = vi.fn(() => mockState);
+
+vi.mock("@/hooks/useImageClassifier", () => ({
+  useImageClassifier: (...args: unknown[]) => useImageClassifier(...(args as [])),
+}));
+
+const { Route } = await import("@/routes/image-classification");
+const Page = Route?.options?.component as React.ComponentType | undefined;
+
+function renderPage() {
+  if (!Page) throw new Error("Image classification route component not found");
+  render(<Page />);
+}
+
+const ready = (extra: Partial<UseImageClassifierResult> = {}) => ({
+  ...baseState,
+  status: "ready" as const,
+  idle: false,
+  ready: true,
+  ...extra,
+});
+
+describe("ImageClassificationPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockState = { ...baseState };
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  it("renders the heading and every model option", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", { name: /image classification/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /vit-base/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /resnet-50/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /mobilenetv4/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("downloads nothing on arrival, and loads only on request", () => {
+    renderPage();
+    // Both halves matter: the hook is asked not to auto-load, *and* nothing has
+    // called load() behind the user's back.
+    expect(useImageClassifier).toHaveBeenCalledWith(
+      "Xenova/vit-base-patch16-224",
+      false,
+    );
+    expect(baseState.load).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /load model/i }));
+    expect(baseState.load).toHaveBeenCalledOnce();
+  });
+
+  it("renders the four slots with an empty OUTPUT before any run", () => {
+    renderPage();
+    expect(screen.getAllByRole("region")).toHaveLength(4);
+    expect(screen.getByTestId("slot-1")).toBeInTheDocument();
+    expect(screen.getByTestId("slot-4")).toBeInTheDocument();
+    expect(screen.getByTestId("output-empty")).toBeInTheDocument();
+  });
+
+  it("keeps the run control disabled until a model is ready", () => {
+    renderPage();
+    expect(screen.getByRole("button", { name: /^classify$/i })).toBeDisabled();
+    expect(screen.getByText(/load a model to classify an image/i)).toBeInTheDocument();
+  });
+
+  it("keeps the run control disabled while ready but with no image picked", () => {
+    mockState = ready();
+    renderPage();
+    expect(screen.getByRole("button", { name: /^classify$/i })).toBeDisabled();
+  });
+
+  it("classifies a sample image as soon as one is picked", async () => {
+    mockState = ready();
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+    expect(fromUrl).toHaveBeenCalledWith(
+      expect.stringContaining("tiger.jpg"),
+    );
+    expect(mockRun).toHaveBeenCalledWith(fakeImage);
+  });
+
+  it("shows a picked image without running anything when no model is loaded", async () => {
+    renderPage(); // idle
+    fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+
+    await waitFor(() =>
+      expect(screen.getByAltText(/selected input: tiger/i)).toBeInTheDocument(),
+    );
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it("classifies an uploaded file and revokes the preview it replaces", async () => {
+    mockState = ready();
+    renderPage();
+
+    const input = screen.getByLabelText(/upload an image/i);
+    const file = new File(["x"], "cat.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+    expect(fromFile).toHaveBeenCalledWith(file);
+    expect(URL.createObjectURL).toHaveBeenCalledWith(file);
+
+    // A second pick frees the first preview: an object URL that outlives its
+    // <img> pins the decoded bitmap for the tab's lifetime.
+    fireEvent.click(screen.getByRole("button", { name: /^cats$/i }));
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:preview"));
+  });
+
+  it("renders the top five with their scores", () => {
+    mockState = ready({
+      backend: "webgpu",
+      result: [
+        { label: "tabby", score: 0.51 },
+        { label: "tiger cat", score: 0.29 },
+        { label: "Egyptian cat", score: 0.11 },
+        { label: "lynx", score: 0.05 },
+        { label: "carton", score: 0.01 },
+      ],
+    });
+    renderPage();
+
+    expect(screen.getByText("tabby")).toBeInTheDocument();
+    expect(screen.getByText("51%")).toBeInTheDocument();
+    expect(screen.getByText("carton")).toBeInTheDocument();
+    expect(screen.getByText(/top-2 margin 0.22/)).toBeInTheDocument();
+  });
+
+  it("calls out a near-tie at the top rather than presenting a confident answer", () => {
+    mockState = ready({
+      result: [
+        { label: "tabby", score: 0.31 },
+        { label: "tiger cat", score: 0.29 },
+      ],
+    });
+    renderPage();
+    expect(screen.getByText(/not confident/i)).toBeInTheDocument();
+  });
+
+  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
+    mockState = {
+      ...baseState,
+      status: "error",
+      idle: false,
+      error: "404 model not found",
+    };
+    renderPage();
+
+    const note = screen.getByText(/404 model not found/i);
+    expect(screen.getByTestId("slot-2")).toContainElement(note);
+    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
+  });
+
+  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
+    mockState = ready({ error: "Unsupported image format" });
+    renderPage();
+
+    const note = screen.getByText(/unsupported image format/i);
+    expect(screen.getByTestId("slot-4")).toContainElement(note);
+    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
+  });
+});
