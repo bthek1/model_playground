@@ -4,8 +4,8 @@
 
 import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
 
-import type { Backend } from "../backend";
-import type { MeasuredBytes } from "../size";
+import type { Backend } from "@/model/backend";
+import type { MeasuredBytes } from "@/model/size";
 import { SAMPLE_RATE } from "./deepFilterNet";
 
 export { SAMPLE_RATE };

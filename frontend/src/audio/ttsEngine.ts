@@ -3,7 +3,7 @@
 // Worker). Same shape as `pipelineEngine.ts`, but text in → audio out, and the
 // result's sample buffer is transferred back to the main thread (zero-copy).
 
-import { loadOpts, pickBackend, type DtypeSpec } from "./backend";
+import { loadOpts, pickBackend, type DtypeSpec } from "@/model/backend";
 import type { PipelineProgress } from "./pipelineTypes";
 import type { TtsAudio, TtsRequest, TtsResponse, TtsRunOpts } from "./tts";
 

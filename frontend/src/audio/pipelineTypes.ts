@@ -6,7 +6,7 @@
 
 import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
 
-import type { LoadOpts } from "./backend";
+import type { LoadOpts } from "@/model/backend";
 
 /** Transformers.js pipeline task strings this generic worker supports. */
 export type PipelineTask =

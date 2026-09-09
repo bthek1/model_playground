@@ -1,4 +1,5 @@
-// Size-before-load guardrail for in-browser models. Weights are downloaded to
+// Size-before-load guardrail for in-browser models, in every modality — an audio
+// clip and a photo cost the same bandwidth per megabyte. Weights are downloaded to
 // the user's machine and held in GPU/CPU memory for the tab's lifetime, so the
 // UI tells them what a model costs *before* the download starts — a browser tab
 // has a much tighter budget than the notebooks' 12 GB box.

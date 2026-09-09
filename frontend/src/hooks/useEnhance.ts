@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import type { Backend } from "@/audio/backend";
+import type { Backend } from "@/model/backend";
 import { createEnhanceWorker } from "@/audio/enhance/enhanceClient";
 import {
   DEFAULT_ENHANCE_MODEL,

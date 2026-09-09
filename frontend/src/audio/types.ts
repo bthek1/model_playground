@@ -4,8 +4,8 @@
 
 import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
 
-import type { LoadOpts } from "./backend";
-import type { MeasuredBytes } from "./size";
+import type { LoadOpts } from "@/model/backend";
+import type { MeasuredBytes } from "@/model/size";
 
 /** A selectable ASR model. Both are ONNX-exported with WebGPU + WASM support. */
 export interface AsrModel {

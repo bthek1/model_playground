@@ -16,7 +16,7 @@
 
 import * as ort from "onnxruntime-web/webgpu";
 
-import type { Backend } from "../backend";
+import type { Backend } from "@/model/backend";
 import { AUX_BYTES, ERB_BANDS, parseAux, type DeepFilterAux } from "./aux";
 import { DF_ORDER, type DeepFilterInference, type DeepFilterOutputs } from "./deepFilterNet";
 import { DF_BINS } from "./features";

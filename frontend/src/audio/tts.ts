@@ -8,7 +8,7 @@
 
 import type { ModelRequest, ModelResponse } from "@/model/types";
 
-import type { LoadOpts } from "./backend";
+import type { LoadOpts } from "@/model/backend";
 
 export interface TtsVoice {
   id: string;

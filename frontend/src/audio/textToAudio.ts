@@ -10,7 +10,7 @@
 // It reuses the **TTS worker**, not a new one: the modality is the same
 // (text in → audio out) and `TtsSynthesizer` already describes it exactly.
 
-import type { MeasuredBytes } from "./size";
+import type { MeasuredBytes } from "@/model/size";
 
 export interface MusicModel {
   id: string;

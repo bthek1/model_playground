@@ -5,8 +5,8 @@
 
 import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
 
-import type { Backend } from "../backend";
-import type { MeasuredBytes } from "../size";
+import type { Backend } from "@/model/backend";
+import type { MeasuredBytes } from "@/model/size";
 import { FRAME_SAMPLES } from "./vad";
 
 /** 16 kHz mono, the default for `decodeToMono` — this is not the 48 kHz route. */

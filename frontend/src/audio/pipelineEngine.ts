@@ -5,7 +5,7 @@
 // `audio-classification` (`pipe(audio, { top_k })`) and
 // `zero-shot-audio-classification` (`pipe(audio, labels, opts)`).
 
-import { loadOpts, pickBackend, type DtypeSpec } from "./backend";
+import { loadOpts, pickBackend, type DtypeSpec } from "@/model/backend";
 import type {
   PipelineProgress,
   PipelineRequest,

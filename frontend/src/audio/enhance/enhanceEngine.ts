@@ -12,7 +12,7 @@
 import type { DeepFilterSession } from "./session";
 import { enhanceAudio, SAMPLE_RATE } from "./deepFilterNet";
 import type { EnhanceRequest, EnhanceResponse, EnhanceProgress } from "./types";
-import type { Backend } from "../backend";
+import type { Backend } from "@/model/backend";
 
 /** Opens a session for a repo. The real one wraps `loadDeepFilterNet`. */
 export type SessionFactory = (

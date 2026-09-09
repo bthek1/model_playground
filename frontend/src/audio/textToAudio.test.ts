@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { sizeEstimate } from "./size";
+import { sizeEstimate } from "@/model/size";
 import {
   DEFAULT_MUSIC_MODEL,
   DEFAULT_SECONDS,

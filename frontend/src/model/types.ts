@@ -5,7 +5,7 @@
 // The point is that a reviewer who has read one task hook has read all of them.
 // Task-specific detail lives in the *payload* generics, never in renamed fields.
 
-import type { Backend, LoadOpts } from "@/audio/backend";
+import type { Backend, LoadOpts } from "./backend";
 import type { LoadProgress } from "./progress";
 
 /**

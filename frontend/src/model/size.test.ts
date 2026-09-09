@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { CLASSIFIER_MODELS } from "./classification";
+import { CLASSIFIER_MODELS } from "@/audio/classification";
 import {
   LARGE_MODEL_BYTES,
   estimateBytes,
   formatBytes,
   sizeEstimate,
 } from "./size";
-import { TTS_MODELS } from "./tts";
-import { ASR_MODELS } from "./types";
+import { TTS_MODELS } from "@/audio/tts";
+import { ASR_MODELS } from "@/audio/types";
 
 describe("estimateBytes", () => {
   it("uses 2 bytes per parameter for fp16 and 1 for q8", () => {

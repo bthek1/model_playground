@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { LARGE_MODEL_BYTES } from "@/audio/size";
+import { LARGE_MODEL_BYTES } from "@/model/size";
 
 import { ModelPicker, type PickableModel } from "./ModelPicker";
 

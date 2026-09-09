@@ -23,7 +23,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { play, toWavBlob } from "@/audio/io";
-import { sizeEstimate } from "@/audio/size";
+import { sizeEstimate } from "@/model/size";
 import {
   DEFAULT_MUSIC_MODEL,
   DEFAULT_SECONDS,

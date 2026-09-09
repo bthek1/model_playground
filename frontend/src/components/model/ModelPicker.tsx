@@ -15,7 +15,7 @@
 
 import { AlertTriangle, HardDrive, Trash2 } from "lucide-react";
 
-import { sizeEstimate, type MeasuredBytes } from "@/audio/size";
+import { sizeEstimate, type MeasuredBytes } from "@/model/size";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 

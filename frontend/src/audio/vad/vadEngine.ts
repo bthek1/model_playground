@@ -7,7 +7,7 @@
 //      pay the ORT graph-init cost, and never fail the load if it throws;
 //   3. never block the main thread — this file only runs inside a Worker.
 
-import type { Backend } from "../backend";
+import type { Backend } from "@/model/backend";
 import { FRAME_SAMPLES, SAMPLE_RATE } from "./types";
 import type { VadProgress, VadRequest, VadResponse } from "./types";
 import type { VadSession } from "./session";

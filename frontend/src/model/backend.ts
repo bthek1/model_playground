@@ -1,7 +1,12 @@
 // Execution-backend selection for in-browser pretrained models (Transformers.js /
-// ONNX Runtime Web). This is the audio domain's counterpart to the raw-WebGPU
-// runtime's capability probe (`webgpu/capabilities.ts`): WebGPU when a usable GPU
-// adapter is present, otherwise the universal WASM (CPU) fallback.
+// ONNX Runtime Web), for every modality: WebGPU when a usable GPU adapter is
+// present, otherwise the universal WASM (CPU) fallback. The pretrained-model
+// counterpart to the raw-WGSL runtime's capability probe
+// (`webgpu/capabilities.ts`).
+//
+// It lived in `audio/` until vision arrived, which is the whole reason it moved:
+// `pickBackend()` and `loadOpts()` never knew anything about audio, and a second
+// copy under `vision/` would have been two probes to keep in step.
 //
 // NOTE: this is separate from `webgpu/device.ts` on purpose — that file owns the
 // hand-written WGSL runtime; this one only picks a Transformers.js `device`.

@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import type { Backend } from "@/audio/backend";
+import type { Backend } from "@/model/backend";
 import { createVadWorker } from "@/audio/vad/vadClient";
 import { DEFAULT_VAD_MODEL, type VadResult } from "@/audio/vad/types";
 import { useModelWorker } from "@/model/useModelWorker";

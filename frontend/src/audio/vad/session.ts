@@ -23,7 +23,7 @@
 
 import * as ort from "onnxruntime-web/webgpu";
 
-import type { Backend } from "../backend";
+import type { Backend } from "@/model/backend";
 import { energyProbabilities } from "./energyVad";
 import { ENERGY_VAD_MODEL, FRAME_SAMPLES, SAMPLE_RATE } from "./types";
 import { frameProbabilities, STATE_SIZE, type FrameInfer } from "./vad";

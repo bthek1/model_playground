@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 
-import { formatBytes } from "@/audio/size";
+import { formatBytes } from "@/model/size";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { Button } from "@/components/ui/button";
 import { classifyLoadError } from "@/model/errors";

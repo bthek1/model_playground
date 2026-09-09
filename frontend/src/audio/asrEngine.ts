@@ -2,7 +2,7 @@
 // can be unit-tested with a fake pipeline factory (no model download, no real
 // Worker). The worker file is a thin wrapper that wires this to `self`.
 
-import { asrLoadOpts, pickBackend, type DtypeSpec } from "./backend";
+import { asrLoadOpts, pickBackend, type DtypeSpec } from "@/model/backend";
 import type {
   AsrProgress,
   AsrRequest,
