@@ -233,11 +233,20 @@ at the end of that document.
 
 Running a *pretrained* checkpoint is a different job from writing a kernel: the
 model already exists as ONNX on the Hub, so there is no WGSL to write. These live
-in their own domain folder (`frontend/src/audio/` for the audio tasks) and are
-explicitly carved out of the raw-WebGPU-only rule, which scopes to `src/webgpu/`.
-Reference implementations: the ASR, audio-classification, and text-to-speech
-routes (see the [Audio roadmap issue](https://github.com/bthek1/model_playground/issues/1)
-for the checkpoint tables behind them).
+in their own domain folder — `frontend/src/audio/` for the audio tasks,
+`frontend/src/vision/` for the vision ones — and are explicitly carved out of the
+raw-WebGPU-only rule, which scopes to `src/webgpu/`. Reference implementations:
+the ASR, audio-classification and text-to-speech routes
+([`docs/roadmaps/audio.md`](../roadmaps/audio.md)) and `/image-classification`
+([`docs/roadmaps/vision.md`](../roadmaps/vision.md)).
+
+The two modalities are deliberately the same shape: a generic worker per
+modality, a pure engine, a thin task hook. What differs is only the payload —
+`Float32Array` samples one side, a flattened image the other, because a
+`RawImage` is a class instance and does not survive `postMessage` (see
+`vision/image.ts` → *Worker transport*). The **backend probe and the size
+guardrail are shared by both** and live in `src/model/` (`backend.ts`,
+`size.ts`); a third modality imports them rather than copying them.
 
 The shape is always the same four pieces:
 
@@ -285,7 +294,7 @@ backend is WASM-only.
 (`components/layout/taskTaxonomy.ts`), or it falls through to the
 `/tasks/$slug` placeholder.
 
-### Two traps this cost us
+### Three traps these cost us
 
 - **Verify the repo id against the Hub before shipping it.** Two catalogue entries
   pointed at `onnx-community/*` repos that don't exist; the Hub answers **401** and
@@ -300,6 +309,15 @@ backend is WASM-only.
   fallback, suspect the quantized weights before your own code, and check whether
   a per-module dtype (`{ encoder_model: "q8", decoder_model_merged: "fp32" }`)
   clears it.
+- **A model that runs is not a model that is right.** `onnx-community/mobilenetv4_conv_small`
+  at q8 loads, runs at full speed, and labels a photo of a tiger "sidewinder,
+  horned rattlesnake" at 44%; the same weights at fp32 say "tiger 62%".
+  Depthwise-separable convolutions are the classic casualty of per-tensor int8
+  quantization, so treat the whole MobileNet family as suspect. Nothing in the
+  load path reports this — the only thing that catches it is asserting a **known
+  label on a known image** in the `@slow` E2E spec. A vision catalogue entry pins
+  the precision per backend with `dtypes: { wasm: "fp32" }`, and then owes
+  measured `bytes`, because the params estimate is now off by 4x.
 
 ### Verify
 

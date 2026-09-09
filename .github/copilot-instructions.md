@@ -359,7 +359,7 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - Backend selection (`webgpu` → `wasm`) resolves once in the worker before `ready` and is fixed for
   that worker's life. No silent re-negotiation — it would make the timings the user reads meaningless.
 
-**In-browser pretrained models (`src/audio/`) — Transformers.js / ONNX Runtime Web:**
+**In-browser pretrained models (`src/audio/`, `src/vision/`) — Transformers.js / ONNX Runtime Web:**
 - This is the carve-out from the raw-WebGPU rule above. Pretrained HF checkpoints (audio ASR / TTS /
   classification) run here via `@huggingface/transformers` (plus `kokoro-js` for TTS). Keep it out of
   `src/webgpu/` — the two runtimes never mix.
@@ -377,9 +377,13 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   quantized Whisper/Moonshine decoders cannot open a session on the ONNX Runtime bundled with
   `@huggingface/transformers` 4.2.0 (`qdq_actions.cc:137 … Missing required scale`). Do not "simplify"
   this back to a uniform q8 — it breaks the universal fallback. Re-test when ORT updates.
+- **The backend probe and the size guardrail are shared and live in `src/model/`** (`backend.ts`,
+  `size.ts`). They started under `audio/` and *moved* when vision arrived — never write a second copy.
 - **Verify a model id against the Hub before shipping it.** Two catalogue entries once pointed at
   `onnx-community/*` repos that don't exist (401 → "Unauthorized access to file"). `just fe-e2e-models`
-  checks all of them in seconds.
+  (`e2e/specs/model-ids.spec.ts`, audio + vision) checks all of them in seconds — and checks that each
+  vision entry publishes the dtype its backend asks for, since a repo with only an fp32 `model.onnx`
+  resolves fine on the API and 404s at load.
 - Every catalogue entry carries `params` (millions) driving the **size-before-load guardrail**
   (`model/size.ts` + `components/model/ModelPicker.tsx`): the picker quotes the download for both
   backends and warns past `LARGE_MODEL_BYTES`. Add measured `bytes` when the params estimate would
@@ -425,10 +429,33 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   - Threshold → segments (`segments.ts`) is pure and runs on the main thread: dragging the threshold
     re-derives segments from the same scores, never re-running the model.
 - **Unit tests mock the network and ORT, so they cannot catch a broken model.** The `@slow` E2E
-  specs (`e2e/specs/audio-models.spec.ts`) are the guard.
+  specs (`e2e/specs/audio-models.spec.ts`, `e2e/specs/vision-models.spec.ts`) are the guard.
 - Adding a task: catalogue entry → worker (reuse the generic one) → hook → route → `REAL_ROUTES`.
   See `docs/guides/adding-a-model.md` §8 (Transformers.js) or §9 (a bare ONNX graph — DFN3 is the
   reference, `src/audio/vad/` the smaller one to read first).
+
+**In-browser vision (`src/vision/`) — the second modality on the same path:**
+
+- Same shape as `src/audio/`: one generic worker for every discriminative task (`vision.worker.ts`,
+  task carried in the `load` message), a pure `engine.ts` owing the same three behaviours, thin task
+  hooks over `useVisionPipeline`. Shipped: `/image-classification`. The rest of the category is
+  research with a phased plan — `docs/roadmaps/vision.md`.
+- **A `RawImage` does not survive `postMessage`** (class instance → methodless clone → the pipeline
+  rejects it). Send `toPayload(image)` and rebuild with `fromPayload` in the worker. `toPayload`
+  copies by default, because transferring the buffer blanks the preview the page is still showing;
+  `{ copy: false }` is for a spent webcam frame.
+- **Never resize or normalise for the model** — `AutoProcessor` reads the model's own
+  `preprocessor_config.json`, and that file *is* the input contract. `downscale()` caps the *source*
+  resolution (1280x720 costs ~4x 640x480) and is not preprocessing.
+- **A quantized export can be wrong rather than merely worse.**
+  `onnx-community/mobilenetv4_conv_small` at q8 calls a tiger "sidewinder, horned rattlesnake" (44%);
+  at fp32 it says "tiger" (62%) — depthwise-separable convs are the classic int8 casualty. Pin
+  precision per backend with `VisionModel.dtypes` (`{ wasm: "fp32" }`) and supply measured `bytes`.
+  Assert a known label on a known image in the `@slow` spec (`just fe-e2e-vision`).
+- **Never queue frames.** `useLiveFrames` grabs the next frame only when the previous result is back;
+  `useCamera` owns teardown (a leaked `MediaStream` leaves the webcam light on).
+- **Normalise a single-channel map before painting it** (`drawHeatmap`) — relative depth has no fixed
+  scale, and without it the canvas is uniformly black or white.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
@@ -440,7 +467,8 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - Test UI: `just fe-test-ui`
 - End-to-end: `just fe-e2e` (browsers: `just fe-e2e-install`; UI: `just fe-e2e-ui`)
 - Real model loads: `just fe-e2e-slow` (minutes, needs network); ids only: `just fe-e2e-models`;
-  speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`
+  speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`;
+  vision only: `just fe-e2e-vision`
 - Install deps: `just fe-install`
 
 ---
@@ -468,7 +496,8 @@ Key commands:
 | `just fe-e2e-vad` | Run the @slow voice-activity-detection specs (seconds) |
 | `just fe-e2e-install` | Download the Playwright browsers (once) |
 | `just fe-e2e-slow` | `@slow` specs: real model downloads + real ONNX sessions |
-| `just fe-e2e-models` | Check every audio model id resolves on the HF Hub (seconds) |
+| `just fe-e2e-vision` | Run the @slow vision specs: a real MobileNetV4 load + classification (seconds) |
+| `just fe-e2e-models` | Check every model id (audio + vision) resolves on the HF Hub (seconds) |
 | `just be-seed-e2e` | Create/reset the E2E test user (dev only) |
 | `just be-startapp name` | Scaffold a new Django app |
 
@@ -504,6 +533,9 @@ Key commands:
 │   │   │   ├── ui/            # shadcn/ui copy-paste components
 │   │   │   └── charts/        # EChart wrapper (lazy-loaded)
 │   │   ├── webgpu/            # Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
+│   │   ├── audio/             # Pretrained audio models (Transformers.js; enhance/ + vad/ on bare ONNX)
+│   │   ├── vision/            # Pretrained vision models (image I/O, canvas overlays, one worker)
+│   │   ├── model/             # Shared task-page plumbing (backend probe, size, worker lifecycle)
 │   │   ├── hooks/             # Custom hooks (business logic)
 │   │   ├── lib/               # Shared utilities: cn(), date wrappers
 │   │   ├── routes/            # TanStack Router file-based routes

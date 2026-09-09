@@ -52,7 +52,8 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | Celery / async tasks | [`docs/guides/celery_setup.md`](docs/guides/celery_setup.md) |
 | **Adding a task page (end-to-end procedure)** | [`docs/guides/adding-a-task-page.md`](docs/guides/adding-a-task-page.md) |
 | Feature plans (phased) | **GitHub issues**, label [`plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) — open = active, closed = done |
-| **Audio category roadmap** (the built one) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
+| **Audio category roadmap** (complete, 6 of 6) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
+| **Computer Vision roadmap** (1 of 19, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -81,7 +82,8 @@ just fe-e2e         # playwright end-to-end (mocked API, no backend needed)
 just fe-e2e-slow    # @slow specs: real model downloads + real ONNX sessions (minutes)
 just fe-e2e-enhance # @slow speech-enhancement specs (DeepFilterNet3, WASM + WebGPU)
 just fe-e2e-vad     # @slow voice-activity-detection specs (Silero VAD, seconds)
-just fe-e2e-models  # check every audio model id resolves on the HF Hub (seconds)
+just fe-e2e-vision  # @slow vision specs: a real MobileNetV4 load + classification (seconds)
+just fe-e2e-models  # check every model id (audio + vision) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
 just fe-lint        # eslint
@@ -182,7 +184,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - To add a model: write the kernel + register a `ModelCard`. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md).
 
 
-### In-browser pretrained models (`src/audio/`)
+### In-browser pretrained models (`src/audio/`, `src/vision/`)
 
 The carve-out from the raw-WebGPU rule: pretrained HF checkpoints (audio ASR/TTS/classification) run
 through **Transformers.js** (`@huggingface/transformers`, plus `kokoro-js` for TTS), and two tasks —
@@ -210,6 +212,9 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
 - **ASR timestamps are take-relative.** The live loop re-transcribes only the tail 30 s, so the
   model's own timestamps restart at 0 on a longer take; `useLiveAsr`'s `shiftChunks()` offsets them
   by the window start before the route renders `m:ss`. Don't render `chunks` straight from the worker.
+- **The backend probe and size guardrail are shared, and live in `src/model/`** (`backend.ts`,
+  `size.ts`) — they started under `audio/`, and moved rather than being copied when vision arrived.
+  Never write a second probe.
 - **Size-before-load guardrail:** every catalogue entry carries `params` (millions); `model/size.ts` +
   `components/model/ModelPicker.tsx` quote the download for both backends and warn past
   `LARGE_MODEL_BYTES`. Supply measured `bytes` when the params estimate would mislead — ASR's fp32
@@ -251,6 +256,37 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
   (`e2e/specs/audio-models.spec.ts`) are the guard; `just fe-e2e-enhance` additionally measures a real
   SDR improvement for the enhancement route, and the VAD spec asserts a real speech fraction on a
   known clip.
+
+### In-browser vision (`src/vision/`)
+
+The second modality on the Transformers.js path, and the same shape as `src/audio/`:
+one generic worker for every discriminative task (`vision.worker.ts` — the task travels in the
+`load` message), a pure `engine.ts` that owes the same three behaviours, and thin task hooks over
+`useVisionPipeline`. Shipped: `/image-classification`. Everything else in the category is research
+with a phased plan — see [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md).
+
+- **A `RawImage` does not survive `postMessage`.** It is a class instance, so the clone arrives with
+  no methods and the pipeline rejects it. Send `toPayload(image)` (pixels + `{width,height,channels}`)
+  and rebuild with `fromPayload` in the worker. `toPayload` **copies by default** — the page is
+  usually still displaying what it just sent, and transferring the buffer blanks the preview. Pass
+  `{ copy: false }` only for a spent webcam frame.
+- **Never resize or normalise for the model.** `AutoProcessor` reads the model's own
+  `preprocessor_config.json`; that file *is* the input contract. `downscale()` caps the *source*
+  resolution (resolution is the throttle — 1280x720 costs ~4x 640x480) and is not preprocessing.
+- **A quantized export can be wrong rather than merely worse.** `onnx-community/mobilenetv4_conv_small`
+  at q8 labels a tiger "sidewinder, horned rattlesnake" (44%); at fp32 it says "tiger" (62%).
+  Depthwise-separable convs are the classic int8 casualty. A catalogue entry pins precision per
+  backend with `dtypes` (e.g. `{ wasm: "fp32" }`) and then owes **measured** `bytes`. Only a real
+  inference catches this: assert a known label on a known image in the `@slow` spec
+  (`just fe-e2e-vision`), never "five rows appeared".
+- **Check the files, not just the repo.** `just fe-e2e-models` verifies every catalogue id resolves
+  *and* that each vision entry publishes the dtype its backend asks for — a repo with only an fp32
+  `model.onnx` resolves fine on the API and 404s at load.
+- **Never queue frames.** `useLiveFrames` grabs the next frame only once the previous result is back;
+  a rAF loop that posts every frame drifts seconds behind. `useCamera` owns camera teardown — a
+  leaked `MediaStream` leaves the webcam light on.
+- **Normalise a single-channel map before painting it** (`drawHeatmap`): relative depth is on an
+  arbitrary scale, and without it the canvas is uniformly black or white.
 
 **Two Base UI gotchas (carried over from the Radix → Base UI migration):**
 
