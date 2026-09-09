@@ -441,12 +441,22 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 
 - Same shape as `src/audio/`: one generic worker for every discriminative task (`vision.worker.ts`,
   task carried in the `load` message), a pure `engine.ts` owing the same three behaviours, thin task
-  hooks over `useVisionPipeline`. Shipped: `/image-classification`. The rest of the category is
-  research with a phased plan — `docs/roadmaps/vision.md`.
+  hooks over `useVisionPipeline`. Shipped: `/image-classification`, `/depth`, `/object-detection`,
+  `/segmentation`, `/zero-shot-image-classification`. The rest of the category is research with a
+  phased plan — `docs/roadmaps/vision.md`.
+- **The shared page pieces already exist — reuse them, do not re-copy.** `useImagePick` (file / drop
+  / sample, and the one-object-URL-at-a-time rule), `useCameraFrames` (open → grab → `downscale` →
+  one frame in flight), `components/vision/ImageSourcePanel` (the RUN slot's input surface) and
+  `OverlayCanvas` (a canvas at source resolution, painted by a callback). `ImageSourcePanel` renders
+  the *input* only: an overlay is a result, and results live in OUTPUT.
 - **A `RawImage` does not survive `postMessage`** (class instance → methodless clone → the pipeline
   rejects it). Send `toPayload(image)` and rebuild with `fromPayload` in the worker. `toPayload`
   copies by default, because transferring the buffer blanks the preview the page is still showing;
   `{ copy: false }` is for a spent webcam frame.
+- **Nor does a `Tensor`, and that one throws**: its `data`/`dims` are prototype getters over an
+  internal ORT tensor, so structured clone refuses it (`#<_Tensor> could not be cloned`). Every
+  result passes through `toCloneable` (`vision/serialize.ts`) before the engine posts it. Depth
+  estimation is the task that hits it, and only a *real* load surfaces it.
 - **Never resize or normalise for the model** — `AutoProcessor` reads the model's own
   `preprocessor_config.json`, and that file *is* the input contract. `downscale()` caps the *source*
   resolution (1280x720 costs ~4x 640x480) and is not preprocessing.
@@ -458,7 +468,23 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - **Never queue frames.** `useLiveFrames` grabs the next frame only when the previous result is back;
   `useCamera` owns teardown (a leaked `MediaStream` leaves the webcam light on).
 - **Normalise a single-channel map before painting it** (`drawHeatmap`) — relative depth has no fixed
-  scale, and without it the canvas is uniformly black or white.
+  scale, and without it the canvas is uniformly black or white. Say in the UI that the depths are
+  *relative*, not metres; the direction of the ramp is read from the catalogue entry, because Depth
+  Anything emits inverse depth (big = near) and Depth Pro emits metres (big = far).
+- **`percentage: false` on detection**, pinned in `useObjectDetector`. The default returns 0-1
+  fractions and `drawBoxes` wants pixels; backwards, every box lands in the top-left corner. Boxes
+  then need `scaleDetections` to map from the downscaled inference frame back onto the source.
+- **`/zero-shot-image-classification` owns an engine instead of using a pipeline** (`src/vision/zeroshot/`):
+  the CLIP/SigLIP towers are driven separately so label embeddings are encoded once and reused, which
+  the pipeline cannot do. Splitting them means owning normalise/scale/softmax in `zeroshot/scoring.ts`
+  — `exp(logit_scale)` and `logit_bias` are read from each checkpoint's weights, and a wrong value
+  fails **silently** (scores stay in [0,1], ranking unchanged). Pinned by `just fe-e2e-zeroshot`,
+  which compares against the full graph.
+- **The zero-shot pipeline templates your prompts again.** Its default `hypothesis_template` is
+  `"This is a photo of {}"`; pass `hypothesis_template: "{}"` when you template your own, and keep
+  catalogue labels as bare nouns.
+- **A threshold, an opacity or a class toggle re-derives; it never re-runs.** The model is asked once
+  and the controls filter what it returned — the same pure-derivation trick `/vad` uses.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
@@ -471,7 +497,7 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - End-to-end: `just fe-e2e` (browsers: `just fe-e2e-install`; UI: `just fe-e2e-ui`)
 - Real model loads: `just fe-e2e-slow` (minutes, needs network); ids only: `just fe-e2e-models`;
   speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`;
-  vision only: `just fe-e2e-vision`
+  vision only: `just fe-e2e-vision`; zero-shot scoring parity: `just fe-e2e-zeroshot`
 - Install deps: `just fe-install`
 
 ---

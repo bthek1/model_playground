@@ -74,15 +74,20 @@ describe("taskCategories", () => {
 
   it("maps the implemented Computer Vision tasks to their real routes", () => {
     const vision = taskCategories.find((c) => c.label === "Computer Vision")!;
-    const classification = vision.tasks.find(
-      (t) => t.slug === "image-classification",
-    )!;
-    const detection = vision.tasks.find((t) => t.slug === "object-detection")!;
+    const at = (slug: string) => vision.tasks.find((t) => t.slug === slug)!.to;
 
-    expect(classification.to).toBe("/image-classification");
+    expect(at("image-classification")).toBe("/image-classification");
+    expect(at("depth-estimation")).toBe("/depth");
+    expect(at("object-detection")).toBe("/object-detection");
+    expect(at("image-segmentation")).toBe("/segmentation");
+    expect(at("zero-shot-image-classification")).toBe(
+      "/zero-shot-image-classification",
+    );
+
     // The rest of the category is still research — they keep the placeholder
     // until their own route ships (see the sub-issues of #2).
-    expect(detection.to).toBe("/tasks/object-detection");
+    expect(at("mask-generation")).toBe("/tasks/mask-generation");
+    expect(at("keypoint-detection")).toBe("/tasks/keypoint-detection");
   });
 
   it("maps the implemented Audio tasks to their real routes", () => {
@@ -116,6 +121,9 @@ describe("categoryForPath", () => {
     expect(categoryForPath("/audio-classification")).toBe("Audio");
     expect(categoryForPath("/asr")).toBe("Audio");
     expect(categoryForPath("/image-classification")).toBe("Computer Vision");
+    expect(categoryForPath("/depth")).toBe("Computer Vision");
+    expect(categoryForPath("/object-detection")).toBe("Computer Vision");
+    expect(categoryForPath("/segmentation")).toBe("Computer Vision");
   });
 
   it("returns undefined for an unknown path", () => {

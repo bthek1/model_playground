@@ -162,9 +162,19 @@ fe-e2e-enhance:
 fe-e2e-vad:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "voice activity detection"
 
-# Run the @slow vision specs: a real MobileNetV4 load + classification (seconds)
+# Run the @slow vision specs: real loads of MobileNetV4, Depth Anything V2,
+# D-FINE nano, SegFormer-B0 and CLIP, each asserting a known answer on a known
+# input. CLIP is ~150 MB, so budget minutes on a cold cache rather than seconds.
 fe-e2e-vision:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 vision-models.spec.ts
+
+# Run the @slow zero-shot parity spec: the split-tower path (which caches the
+# label embeddings) scored against the full CLIP graph on the same image. The
+# only check that can catch a wrong `logit_scale` — see vision/zeroshot/scoring.ts
+# Runs at fp32 on purpose (~1.2 GB, minutes on a cold cache): at q8 the two paths
+# are separately quantized exports and the comparison measures the quantizer.
+fe-e2e-zeroshot:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 zero-shot-parity.spec.ts
 
 # Check every model id (audio + vision) still resolves on the Hugging Face Hub,
 # and that each vision entry publishes the dtypes both backends ask for (seconds)

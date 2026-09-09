@@ -9,22 +9,32 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ZeroShotImageClassificationRouteImport } from './routes/zero-shot-image-classification'
 import { Route as VadRouteImport } from './routes/vad'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
 import { Route as TextToAudioRouteImport } from './routes/text-to-audio'
 import { Route as TensorRouteImport } from './routes/tensor'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SegmentationRouteImport } from './routes/segmentation'
 import { Route as PlaygroundRouteImport } from './routes/playground'
+import { Route as ObjectDetectionRouteImport } from './routes/object-detection'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImageClassificationRouteImport } from './routes/image-classification'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as DepthRouteImport } from './routes/depth'
 import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
 import { Route as AudioClassificationRouteImport } from './routes/audio-classification'
 import { Route as AsrRouteImport } from './routes/asr'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TasksSlugRouteImport } from './routes/tasks.$slug'
 
+const ZeroShotImageClassificationRoute =
+  ZeroShotImageClassificationRouteImport.update({
+    id: '/zero-shot-image-classification',
+    path: '/zero-shot-image-classification',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const VadRoute = VadRouteImport.update({
   id: '/vad',
   path: '/vad',
@@ -55,9 +65,19 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SegmentationRoute = SegmentationRouteImport.update({
+  id: '/segmentation',
+  path: '/segmentation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlaygroundRoute = PlaygroundRouteImport.update({
   id: '/playground',
   path: '/playground',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ObjectDetectionRoute = ObjectDetectionRouteImport.update({
+  id: '/object-detection',
+  path: '/object-detection',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -73,6 +93,11 @@ const ImageClassificationRoute = ImageClassificationRouteImport.update({
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DepthRoute = DepthRouteImport.update({
+  id: '/depth',
+  path: '/depth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AudioToAudioRoute = AudioToAudioRouteImport.update({
@@ -106,16 +131,20 @@ export interface FileRoutesByFullPath {
   '/asr': typeof AsrRoute
   '/audio-classification': typeof AudioClassificationRoute
   '/audio-to-audio': typeof AudioToAudioRoute
+  '/depth': typeof DepthRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/login': typeof LoginRoute
+  '/object-detection': typeof ObjectDetectionRoute
   '/playground': typeof PlaygroundRoute
+  '/segmentation': typeof SegmentationRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
   '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
+  '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesByTo {
@@ -123,16 +152,20 @@ export interface FileRoutesByTo {
   '/asr': typeof AsrRoute
   '/audio-classification': typeof AudioClassificationRoute
   '/audio-to-audio': typeof AudioToAudioRoute
+  '/depth': typeof DepthRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/login': typeof LoginRoute
+  '/object-detection': typeof ObjectDetectionRoute
   '/playground': typeof PlaygroundRoute
+  '/segmentation': typeof SegmentationRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
   '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
+  '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesById {
@@ -141,16 +174,20 @@ export interface FileRoutesById {
   '/asr': typeof AsrRoute
   '/audio-classification': typeof AudioClassificationRoute
   '/audio-to-audio': typeof AudioToAudioRoute
+  '/depth': typeof DepthRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/login': typeof LoginRoute
+  '/object-detection': typeof ObjectDetectionRoute
   '/playground': typeof PlaygroundRoute
+  '/segmentation': typeof SegmentationRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
   '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
+  '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRouteTypes {
@@ -160,16 +197,20 @@ export interface FileRouteTypes {
     | '/asr'
     | '/audio-classification'
     | '/audio-to-audio'
+    | '/depth'
     | '/home'
     | '/image-classification'
     | '/login'
+    | '/object-detection'
     | '/playground'
+    | '/segmentation'
     | '/signup'
     | '/tensor'
     | '/text-to-audio'
     | '/text-to-speech'
     | '/training'
     | '/vad'
+    | '/zero-shot-image-classification'
     | '/tasks/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -177,16 +218,20 @@ export interface FileRouteTypes {
     | '/asr'
     | '/audio-classification'
     | '/audio-to-audio'
+    | '/depth'
     | '/home'
     | '/image-classification'
     | '/login'
+    | '/object-detection'
     | '/playground'
+    | '/segmentation'
     | '/signup'
     | '/tensor'
     | '/text-to-audio'
     | '/text-to-speech'
     | '/training'
     | '/vad'
+    | '/zero-shot-image-classification'
     | '/tasks/$slug'
   id:
     | '__root__'
@@ -194,16 +239,20 @@ export interface FileRouteTypes {
     | '/asr'
     | '/audio-classification'
     | '/audio-to-audio'
+    | '/depth'
     | '/home'
     | '/image-classification'
     | '/login'
+    | '/object-detection'
     | '/playground'
+    | '/segmentation'
     | '/signup'
     | '/tensor'
     | '/text-to-audio'
     | '/text-to-speech'
     | '/training'
     | '/vad'
+    | '/zero-shot-image-classification'
     | '/tasks/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -212,21 +261,32 @@ export interface RootRouteChildren {
   AsrRoute: typeof AsrRoute
   AudioClassificationRoute: typeof AudioClassificationRoute
   AudioToAudioRoute: typeof AudioToAudioRoute
+  DepthRoute: typeof DepthRoute
   HomeRoute: typeof HomeRoute
   ImageClassificationRoute: typeof ImageClassificationRoute
   LoginRoute: typeof LoginRoute
+  ObjectDetectionRoute: typeof ObjectDetectionRoute
   PlaygroundRoute: typeof PlaygroundRoute
+  SegmentationRoute: typeof SegmentationRoute
   SignupRoute: typeof SignupRoute
   TensorRoute: typeof TensorRoute
   TextToAudioRoute: typeof TextToAudioRoute
   TextToSpeechRoute: typeof TextToSpeechRoute
   TrainingRoute: typeof TrainingRoute
   VadRoute: typeof VadRoute
+  ZeroShotImageClassificationRoute: typeof ZeroShotImageClassificationRoute
   TasksSlugRoute: typeof TasksSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/zero-shot-image-classification': {
+      id: '/zero-shot-image-classification'
+      path: '/zero-shot-image-classification'
+      fullPath: '/zero-shot-image-classification'
+      preLoaderRoute: typeof ZeroShotImageClassificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/vad': {
       id: '/vad'
       path: '/vad'
@@ -269,11 +329,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/segmentation': {
+      id: '/segmentation'
+      path: '/segmentation'
+      fullPath: '/segmentation'
+      preLoaderRoute: typeof SegmentationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/playground': {
       id: '/playground'
       path: '/playground'
       fullPath: '/playground'
       preLoaderRoute: typeof PlaygroundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/object-detection': {
+      id: '/object-detection'
+      path: '/object-detection'
+      fullPath: '/object-detection'
+      preLoaderRoute: typeof ObjectDetectionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -295,6 +369,13 @@ declare module '@tanstack/react-router' {
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof HomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/depth': {
+      id: '/depth'
+      path: '/depth'
+      fullPath: '/depth'
+      preLoaderRoute: typeof DepthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/audio-to-audio': {
@@ -340,16 +421,20 @@ const rootRouteChildren: RootRouteChildren = {
   AsrRoute: AsrRoute,
   AudioClassificationRoute: AudioClassificationRoute,
   AudioToAudioRoute: AudioToAudioRoute,
+  DepthRoute: DepthRoute,
   HomeRoute: HomeRoute,
   ImageClassificationRoute: ImageClassificationRoute,
   LoginRoute: LoginRoute,
+  ObjectDetectionRoute: ObjectDetectionRoute,
   PlaygroundRoute: PlaygroundRoute,
+  SegmentationRoute: SegmentationRoute,
   SignupRoute: SignupRoute,
   TensorRoute: TensorRoute,
   TextToAudioRoute: TextToAudioRoute,
   TextToSpeechRoute: TextToSpeechRoute,
   TrainingRoute: TrainingRoute,
   VadRoute: VadRoute,
+  ZeroShotImageClassificationRoute: ZeroShotImageClassificationRoute,
   TasksSlugRoute: TasksSlugRoute,
 }
 export const routeTree = rootRouteImport

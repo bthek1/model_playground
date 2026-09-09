@@ -5,8 +5,12 @@ import {
   drawBoxes,
   drawHeatmap,
   drawMasks,
+  drawPixels,
   rangeOf,
+  scaleDetections,
   OVERLAY_COLORS,
+  RAMP_CSS,
+  RAMP_STOPS,
 } from "./draw";
 
 /** A 2-D context stand-in: happy-dom has no canvas rasteriser. */
@@ -176,5 +180,78 @@ describe("drawMasks", () => {
     const { ctx } = fakeCtx();
     drawMasks(ctx, [], { width: 2, height: 2 });
     expect(ctx.drawImage).not.toHaveBeenCalled();
+  });
+});
+
+describe("drawPixels", () => {
+  it("expands RGB source pixels to opaque RGBA", () => {
+    const { ctx, put } = fakeCtx(2, 1);
+    drawPixels(ctx, {
+      data: [255, 0, 0, 0, 0, 255],
+      width: 2,
+      height: 1,
+      channels: 3,
+    });
+    expect(Array.from(put.mock.calls[0][0].data)).toEqual([
+      255, 0, 0, 255, 0, 0, 255, 255,
+    ]);
+  });
+
+  it("paints a single-channel source as grey, not as a red channel", () => {
+    // A depth or mask buffer read as RGB would come out tinted and shifted by
+    // two pixels per row — this is the case that catches that.
+    const { ctx, put } = fakeCtx(2, 1);
+    drawPixels(ctx, { data: [10, 200], width: 2, height: 1, channels: 1 });
+    expect(Array.from(put.mock.calls[0][0].data)).toEqual([
+      10, 10, 10, 255, 200, 200, 200, 255,
+    ]);
+  });
+
+  it("keeps an existing alpha channel", () => {
+    const { ctx, put } = fakeCtx(1, 1);
+    drawPixels(ctx, { data: [1, 2, 3, 4], width: 1, height: 1, channels: 4 });
+    expect(Array.from(put.mock.calls[0][0].data)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("stops at the pixels it was given rather than reading past the buffer", () => {
+    const { ctx, put } = fakeCtx(4, 1);
+    drawPixels(ctx, { data: [9, 9, 9], width: 4, height: 1, channels: 3 });
+    // One pixel written, the rest left transparent — never NaN.
+    expect(Array.from(put.mock.calls[0][0].data.slice(0, 4))).toEqual([9, 9, 9, 255]);
+    expect(Array.from(put.mock.calls[0][0].data.slice(4))).toEqual(
+      new Array(12).fill(0),
+    );
+  });
+});
+
+describe("scaleDetections", () => {
+  const det = {
+    label: "cat",
+    score: 0.9,
+    box: { xmin: 10, ymin: 20, xmax: 30, ymax: 40 },
+  };
+
+  it("maps boxes from the inference frame back onto the source", () => {
+    const [out] = scaleDetections([det], 2);
+    expect(out.box).toEqual({ xmin: 20, ymin: 40, xmax: 60, ymax: 80 });
+    expect(out.label).toBe("cat");
+    expect(out.score).toBe(0.9);
+  });
+
+  it("is a copy, not a mutation, at scale 1", () => {
+    const out = scaleDetections([det], 1);
+    expect(out[0]).toEqual(det);
+    expect(out).not.toBe(det);
+    expect(det.box.xmin).toBe(10);
+  });
+});
+
+describe("RAMP_CSS", () => {
+  it("is built from the same stops the pixels are", () => {
+    // A legend written by hand drifts from the ramp and then lies about the
+    // picture beside it.
+    for (const [, [r, g, b]] of RAMP_STOPS) {
+      expect(RAMP_CSS).toContain(`rgb(${r} ${g} ${b})`);
+    }
   });
 });

@@ -365,6 +365,12 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `output-empty` | `OutputPanel` | No result and nothing running — the "what you'll get" state. |
 | `output-running` | `OutputPanel` | A first run is in flight. Absent when a previous result is still shown. |
 | `error-note` | `ErrorNote` | Any error. Also `role="alert"` — prefer the role in assertions. |
+| `live-fps` | `ImageSourcePanel` | Measured end-to-end frame rate. Present only while the camera runs. |
+| `heavy-model-notice` | `/depth` | The opt-in a gigabyte-scale model gets on top of the size line. |
+| `class-space` | `/segmentation` | What the selected model can possibly say, stated before the run. |
+| `depth-map` · `detection-canvas` · `segmentation-canvas` | vision routes | The rendered overlay, once a result exists. |
+| `encode-cost` | `/zero-shot-image-classification` | Per-tower timing, showing when the label embeddings were reused. |
+| `template-verdict` | `/zero-shot-image-classification` | The top label under each prompt template. |
 
 The testids are unchanged by the horizontal arrangement — `slot-N` is bound to the
 step number, not to a position in the layout.

@@ -55,6 +55,10 @@ const REAL_ROUTES: Record<string, string> = {
   "audio-to-audio": "/audio-to-audio",
   "voice-activity-detection": "/vad",
   "image-classification": "/image-classification",
+  "depth-estimation": "/depth",
+  "object-detection": "/object-detection",
+  "image-segmentation": "/segmentation",
+  "zero-shot-image-classification": "/zero-shot-image-classification",
 };
 
 function task(label: string): TaskItem {

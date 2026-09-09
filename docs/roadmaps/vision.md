@@ -5,8 +5,12 @@
 > which checkpoint to use, and which tasks stay on a server. No Python server in
 > the inference path.
 
-**One of nineteen is built.** [`/image-classification`](../../frontend/src/routes/image-classification.tsx)
-ships (§3.2); the other eighteen tasks in the sidebar still render the
+**Five of nineteen are built.** [`/image-classification`](../../frontend/src/routes/image-classification.tsx)
+(§3.2), [`/depth`](../../frontend/src/routes/depth.tsx) (§3.1),
+[`/object-detection`](../../frontend/src/routes/object-detection.tsx) (§3.3),
+[`/segmentation`](../../frontend/src/routes/segmentation.tsx) (§3.4) and
+[`/zero-shot-image-classification`](../../frontend/src/routes/zero-shot-image-classification.tsx)
+(§3.5) ship; the other fourteen tasks in the sidebar still render the
 `/tasks/$slug` placeholder. This file is therefore two things at once: a
 description of the shipped `src/vision/` module (§1–§2), and the research the
 next page gets written from (§3) — the verified checkpoint per task, the shape of
@@ -71,19 +75,25 @@ the way a careless notebook cell OOMs a 12 GB container.
 ## 2. The shipped module (`src/vision/`)
 
 The vision counterpart of `src/audio/`, and what every vision route imports. It
-exists as of `/image-classification`; a second page adds a catalogue, a hook and
-a route, and nothing here.
+was established by `/image-classification`; the four Wave 1 routes added a
+catalogue, a hook and a route each, plus the three shared pieces at the bottom of
+the table — the parts all five pages turned out to need identically. A sixth page
+should add a catalogue, a hook and a route, and nothing else.
 
 | File | What it is |
 |---|---|
 | [`image.ts`](../../frontend/src/vision/image.ts) | Decoding and capture: `fromFile` / `fromUrl` / `fromVideo` / `openCamera`, `downscale`, and the worker transport (`toPayload` / `fromPayload`) |
-| [`draw.ts`](../../frontend/src/vision/draw.ts) | Canvas overlays: `drawBoxes`, `drawHeatmap`, `drawMasks`, `colorForLabel` |
+| [`draw.ts`](../../frontend/src/vision/draw.ts) | Canvas overlays: `drawBoxes`, `drawHeatmap`, `drawMasks`, `drawPixels`, `scaleDetections`, `colorForLabel`, `RAMP_CSS` |
 | [`types.ts`](../../frontend/src/vision/types.ts) | `VisionTask`, the `VisionModel` catalogue shape, the worker envelope |
 | [`engine.ts`](../../frontend/src/vision/engine.ts) | The pure message handler — one model live, warm-up before `ready`, unit-tested with a fake factory |
+| [`serialize.ts`](../../frontend/src/vision/serialize.ts) | `toCloneable` — flattens a result so `postMessage` will take it |
 | [`vision.worker.ts`](../../frontend/src/vision/vision.worker.ts) | Thin wrapper: wires the engine to `self` and supplies the real Transformers.js factory |
 | [`samples.ts`](../../frontend/src/vision/samples.ts) | Bundled demo images, so a route works before the user picks a file |
 | [`useVisionPipeline`](../../frontend/src/hooks/useVisionPipeline.ts) | The hook every task hook wraps |
 | [`useLiveFrames`](../../frontend/src/hooks/useLiveFrames.ts) | The camera frame pump, plus `useCamera` |
+| [`useCameraFrames`](../../frontend/src/hooks/useCameraFrames.ts) | The three of them wired together: open → grab → `downscale` → hand over one frame at a time |
+| [`useImagePick`](../../frontend/src/hooks/useImagePick.ts) | File / drop / sample decoding, and the object-URL lifecycle |
+| [`components/vision/`](../../frontend/src/components/vision/) | `ImageSourcePanel` (the RUN slot's input surface) and `OverlayCanvas` (a canvas at source resolution, painted by a callback) |
 
 **One worker for every discriminative vision task.** The pipeline `task` travels
 in the `load` message, exactly as `audio/pipeline.worker.ts` does — classification,
@@ -91,7 +101,7 @@ detection, segmentation, depth, zero-shot and features all share it. A task that
 is not a plain `pipeline()` call (SAM's encode-once/decode-many, for one) gets its
 own engine instead, the way `audio/enhance/` and `audio/vad/` do.
 
-### Four things this module already settled
+### Five things this module already settled
 
 **A `RawImage` does not survive `postMessage`.** It is a class instance; the
 structured clone arrives as a plain object with no methods and the pipeline
@@ -100,6 +110,24 @@ rejects it. `toPayload` sends the pixels plus `{width, height, channels}` and
 the page is usually still displaying the image it just sent, and transferring the
 buffer detaches it into a blank preview. Pass `{ copy: false }` only for a webcam
 frame the main thread has finished with.
+
+**A `Tensor` does not survive `postMessage` either — and it fails louder.** A
+Transformers.js `Tensor` exposes `data` and `dims` as **prototype getters** over
+an internal ONNX Runtime tensor, and structured clone copies own properties and
+refuses the rest, so posting one throws outright:
+
+```
+Failed to execute 'postMessage' on 'DedicatedWorkerGlobalScope':
+#<_Tensor> could not be cloned.
+```
+
+Depth estimation is the task that hits it (`{ predicted_depth: Tensor, … }`), and
+`toCloneable` in [`serialize.ts`](../../frontend/src/vision/serialize.ts) flattens
+every result before the engine posts it — duck-typed, so `engine.ts` still needs
+no runtime import. Note where this bug could and could not be seen: the unit
+suite mocks the worker away, and a mocked E2E run never loads a model, so **only
+a real load surfaced it.** That is what the `@slow` specs are for, and it is the
+same lesson as the quantized MobileNetV4 calling a tiger a rattlesnake.
 
 **Do not resize or normalise for the model.** Every pipeline calls
 `AutoProcessor`, which reads `preprocessor_config.json` from the model's own repo
@@ -125,26 +153,66 @@ result is back. A naive `requestAnimationFrame` loop that posts every frame buil
 an unbounded backlog, the overlay drifts seconds behind the picture, and the page
 looks like the model is slow when it is the queue. `useCamera` owns the teardown
 for the same reason there is one owner: a leaked `MediaStream` leaves the webcam
-light on after the user has navigated away.
+light on after the user has navigated away. Routes do not assemble these
+themselves — `useCameraFrames` is the wiring, and it also drops the first frames,
+before the stream has dimensions, which otherwise yield a 0x0 canvas and one
+pipeline error per frame.
+
+### And one the four Wave 1 routes settled
+
+**The input surface and the object-URL lifecycle are shared, not copied.** Five
+routes need the same file / drop / sample picker, and the same rule underneath
+it: exactly one object URL alive at a time, and none after unmount — a preview
+URL that outlives its `<img>` pins the decoded bitmap for the tab's lifetime.
+`useImagePick` owns that, `ImageSourcePanel` renders it, and
+`/image-classification` was migrated onto both rather than left as a fifth copy.
+
+`ImageSourcePanel` renders the *input* only. The overlay — boxes, a depth map,
+class masks — is a **result**, and results live in OUTPUT
+([model-page-pattern.md](../standards/model-page-pattern.md) §4). Painting the
+answer on top of the input would collapse the two slots into one, which is
+exactly the drift the four-slot shell exists to prevent.
 
 ---
 
 ## 3. Task by task
 
-### 3.1 Depth Estimation, the best-looking browser demo in the category
+### 3.1 Depth Estimation — **shipped** at [`/depth`](../../frontend/src/routes/depth.tsx)
 
-Taxonomy task **Depth Estimation** · not built · **plan: [#12](https://github.com/bthek1/model_playground/issues/12)**. Upstream research: Depth Anything V2, Depth Pro, ZoeDepth.
+Taxonomy task **Depth Estimation** · built. Upstream research: Depth Anything V2,
+Depth Pro, ZoeDepth.
 
 Depth Anything V2 Small is 25M parameters, single pass, and has an official ONNX
 export. It runs at interactive rates on WebGPU and produces the most immediately
 impressive output of any task here.
 
-| Upstream (PyTorch) | Browser model | Backend | Notes |
-|---|---|---|---|
-| `depth-anything/Depth-Anything-V2-Small-hf` | `onnx-community/depth-anything-v2-small` | WebGPU / WASM | relative depth, the default |
-| the same, older mirror | `Xenova/depth-anything-small-hf` | WebGPU / WASM | equivalent, keeps working |
-| `apple/DepthPro-hf` | `onnx-community/DepthPro-ONNX` | WebGPU | metric depth plus focal length, but large. Gate it |
-| `Intel/zoedepth-nyu-kitti` | none | - | no export. Use Depth Pro for metric |
+| Model | Download (WebGPU · WASM) | Role |
+|---|---|---|
+| `onnx-community/depth-anything-v2-small` | 47 MB fp16 · 26 MB q8 | relative depth, the default |
+| `Xenova/depth-anything-small-hf` | 48 MB fp16 · 26 MB q8 | the older mirror, equivalent |
+| `onnx-community/DepthPro-ONNX` | **962 MB q8**, WebGPU only | metric depth plus focal length — gated |
+| `Intel/zoedepth-nyu-kitti` | none | no export. Use Depth Pro for metric |
+
+Sizes are read off the Hub's blob listing. Two findings that only a real look at
+the repos could produce:
+
+* **Depth Pro is pinned to q8 on both backends**, not merely warned about. Its
+  fp16 export is **1.8 GB**, which is past what a tab reliably holds alongside a
+  WebGPU context; q8 is still ~1 GB, so the route gates it behind an explicit
+  opt-in notice — the same gate `/text-to-audio` puts in front of MusicGen —
+  rather than relying on the picker's size line alone.
+* **The legend direction is read from the catalogue, not hard-coded.** Depth
+  Anything emits *inverse* depth (a big number is near); Depth Pro emits metres
+  (a big number is far). One ramp, two labellings, and `DepthModel.metric` picks.
+
+The page's two obligations, both about honesty rather than code:
+
+1. **The output is relative depth, not metres**, on a scale re-fitted to each
+   image — so two frames cannot be compared without aligning them first. That is
+   UI copy next to the colour bar, not a code comment.
+2. **Normalise per frame before drawing.** `drawHeatmap` does it; bypassing it
+   renders an arbitrary-scale map as uniformly black or white, and the page then
+   looks broken rather than wrong — a much harder bug to notice.
 
 ```ts
 const depth = await pipeline("depth-estimation", "onnx-community/depth-anything-v2-small",
@@ -154,9 +222,9 @@ const { predicted_depth, depth: asImage } = await depth(image);
 // asImage is an already-normalised RawImage if you just want a picture
 ```
 
-Carry the caveat into the UI copy: this is **relative** depth. The
-numbers are not metres, and comparing two frames without alignment is
-meaningless. The page should say so next to the colour bar.
+`useDepth` returns both. `depthDims()` reads `[1, h, w]` and `[h, w]` alike —
+getting that backwards transposes the map into diagonal streaks rather than
+failing.
 
 ### 3.2 Image Classification — **shipped** at [`/image-classification`](../../frontend/src/routes/image-classification.tsx)
 
@@ -198,18 +266,22 @@ const preds = await clf(image);      // [{ label, score }, ...]
 Run it: `just fe-e2e-vision` loads MobileNetV4 for real and asserts the tiger
 sample comes back as a tiger — the assertion that caught the quantization bug.
 
-### 3.3 Object Detection, the flagship live demo
+### 3.3 Object Detection — **shipped** at [`/object-detection`](../../frontend/src/routes/object-detection.tsx)
 
-Taxonomy task **Object Detection** · not built · **plan: [#13](https://github.com/bthek1/model_playground/issues/13)**. Upstream research: DETR, YOLOS, RT-DETRv2, D-FINE, RF-DETR.
+Taxonomy task **Object Detection** · built. Upstream research: DETR, YOLOS,
+RT-DETRv2, D-FINE, RF-DETR.
 
-| Upstream (PyTorch) | Browser model | Backend | Notes |
-|---|---|---|---|
-| `facebook/detr-resnet-50` | `Xenova/detr-resnet-50` | WebGPU / WASM | the set-prediction original, slow but canonical |
-| `hustvl/yolos-small` | `Xenova/yolos-small` | WebGPU / WASM | a plain ViT that detects |
-| `PekingU/rtdetr_v2_r18vd` | `onnx-community/rtdetr_r50vd` | WebGPU | the r18 variant has no export; r50 does |
-| `ustc-community/dfine-small-coco` | `onnx-community/dfine_s_coco-ONNX` | WebGPU | the localisation specialist from section 11 |
-| the same, smaller | `onnx-community/dfine_n_coco-ONNX` | WebGPU / WASM | nano. The one to default to for a live webcam |
-| `Roboflow/rf-detr-*` | none | - | no ONNX export as of this writing. Table only |
+The flagship live demo: this is the page where the app is visibly doing
+real-time inference on the user's own GPU.
+
+| Model | Download (WebGPU · WASM) | Role |
+|---|---|---|
+| `onnx-community/dfine_n_coco-ONNX` | 7.5 MB fp16 · 4.3 MB q8 | nano — the default, and the one for a webcam |
+| `onnx-community/dfine_s_coco-ONNX` | 20 MB fp16 · 11 MB q8 | the localisation specialist, still live-capable |
+| `Xenova/yolos-small` | 59 MB fp16 · 54 MB q8 | a plain ViT that detects |
+| `onnx-community/rtdetr_r50vd` | 84 MB fp16, WebGPU only | the r18 variant has no export; r50 does |
+| `Xenova/detr-resnet-50` | 80 MB fp16 · 41 MB q8 | the set-prediction original, slow and canonical |
+| `Roboflow/rf-detr-*` | none | no ONNX export. Table only |
 
 ```ts
 const det = await pipeline("object-detection", "onnx-community/dfine_n_coco-ONNX",
@@ -218,25 +290,52 @@ const out = await det(image, { threshold: 0.4, percentage: false });
 drawBoxes(ctx, out);
 ```
 
-`percentage: false` returns absolute pixels, which is what `drawBoxes` above
-expects. Getting this backwards produces boxes clustered in the top-left corner,
-which is the single most common bug on a first detection page.
+Three things the route pins, each guarding a specific failure:
 
-### 3.4 Image Segmentation, works, with a caveat about which models exist
+* **`percentage: false` lives in `useObjectDetector`, not in a caller.** The
+  default returns 0–1 fractions, `drawBoxes` wants absolute pixels, and the wrong
+  choice piles every box into the top-left corner. A unit test asserts the flag
+  reaches the pipeline — a regression test for a named bug.
+* **The threshold slider re-filters; it never re-runs.** The model is asked once
+  at a deliberately low floor (`MODEL_THRESHOLD = 0.05`) and the slider derives
+  the visible set from that list — the pure-derivation trick `/vad` uses. A
+  slider that re-runs the model is a slider nobody drags.
+* **Boxes are scaled back to the source** (`scaleDetections`). The frame is
+  downscaled before inference, so coordinates return in the smaller frame's
+  pixels while the canvas shows the original. Skipping the scale draws every box
+  a constant fraction too small and too far top-left, which reads as a mediocre
+  detector rather than as a bug in our arithmetic.
 
-Taxonomy task **Image Segmentation** · not built · **plan: [#14](https://github.com/bthek1/model_playground/issues/14)**. Upstream research: SegFormer, Mask2Former, OneFormer, EoMT-DINOv3.
+### 3.4 Image Segmentation — **shipped** at [`/segmentation`](../../frontend/src/routes/segmentation.tsx)
+
+Taxonomy task **Image Segmentation** · built (semantic; DETR panoptic offered as
+the one exception). Upstream research: SegFormer, Mask2Former, OneFormer,
+EoMT-DINOv3.
 
 Semantic segmentation ports cleanly. Instance and panoptic are thinner: only
 the DETR panoptic head has an export; Mask2Former, OneFormer and EoMT have no
-browser path.
+browser path, so the page states which of the three it is doing.
 
-| Upstream (PyTorch) | Browser model | Task | Notes |
-|---|---|---|---|
-| `nvidia/segformer-b0-finetuned-ade-512-512` | `Xenova/segformer-b0-finetuned-ade-512-512` | semantic, 150 ADE classes | the efficient baseline, ~14 MB |
-| `facebook/mask2former-*-panoptic` | `Xenova/detr-resnet-50-panoptic` | panoptic | a different model, same output shape |
-| - | `Xenova/face-parsing` | semantic, faces | a strong small demo, and it works live |
-| - | `mattmdjaga/segformer_b2_clothes` | semantic, garments | the other good live demo |
-| `shi-labs/oneformer_*`, `tue-mps/eomt-*` | none | - | no export. Table only |
+| Model | Class space | Download (WebGPU · WASM) |
+|---|---|---|
+| `Xenova/segformer-b0-finetuned-ade-512-512` | 150 ADE20K scene classes | 7.6 MB fp16 · 4.2 MB q8 — the default |
+| `Xenova/face-parsing` | 19 face parts | 164 MB fp16 · 85 MB q8 |
+| `mattmdjaga/segformer_b2_clothes` | 18 garment/body classes | **105 MB fp32, both backends** |
+| `Xenova/detr-resnet-50-panoptic` | COCO things + stuff | 83 MB fp16 · 42 MB q8 |
+| `shi-labs/oneformer_*`, `tue-mps/eomt-*`, Mask2Former | - | no export. Table only |
+
+Sizes measured, and one of them changes a decision:
+
+* **`mattmdjaga/segformer_b2_clothes` publishes only `onnx/model.onnx`** — no
+  fp16, no quantized export — so `loadOpts()` cannot resolve a file and the load
+  404s. It is pinned to `dtypes: { webgpu: "fp32", wasm: "fp32" }` with measured
+  bytes, because the params estimate would quote 55 MB for a 105 MB download.
+  This is the same situation that keeps `Xenova/mobilevitv2-1.0-imagenet1k-256`
+  out of the classification catalogue; the difference is that pinning fp32 makes
+  this one work. `just fe-e2e-models` now checks the files for *every* vision
+  catalogue, per backend the entry claims.
+* **`Xenova/face-parsing` is not small.** The research note called it "a strong
+  small demo"; it is 340 MB fp32 / 164 MB fp16. Measured beats assumed.
 
 ```ts
 const seg = await pipeline("image-segmentation", "Xenova/segformer-b0-finetuned-ade-512-512",
@@ -244,23 +343,29 @@ const seg = await pipeline("image-segmentation", "Xenova/segformer-b0-finetuned-
 const masks = await seg(image);   // [{ label, score, mask: RawImage }, ...]
 ```
 
-Each mask comes back as a single-channel `RawImage`. Composite them into one
-canvas with a per-label colour rather than rendering 150 separate images.
+Each mask comes back as a single-channel `RawImage` — **one per class present**,
+not an indexed label map. `drawMasks` composites them into one canvas with a
+per-label colour; rendering 150 separate images is the failure mode it exists to
+prevent. The class toggles and the opacity slider are pure derivations over the
+masks already in hand, so neither re-runs the model, and `visibleMasks()` paints
+the *smallest* class last so a 2%-coverage class is not buried under the sky.
 
-### 3.5 Zero-Shot Image Classification, the best "your own labels" page
+### 3.5 Zero-Shot Image Classification — **shipped** at [`/zero-shot-image-classification`](../../frontend/src/routes/zero-shot-image-classification.tsx)
 
-Taxonomy task **Zero Shot Image Classification** · not built · **plan: [#15](https://github.com/bthek1/model_playground/issues/15)**. Upstream research: CLIP, OpenCLIP, SigLIP 2, MetaCLIP 2.
+Taxonomy task **Zero Shot Image Classification** · built. Upstream research:
+CLIP, OpenCLIP, SigLIP 2, MetaCLIP 2.
 
-The most satisfying page in the category, because the user types the labels. It
-is also the cheapest live demo: the text side is encoded once and reused for
-every frame.
+The most satisfying page in the category, because the user types the labels.
 
-| Upstream (PyTorch) | Browser model | Notes |
+| Model | Scoring | Download (WebGPU · WASM) |
 |---|---|---|
-| `openai/clip-vit-base-patch32` | `Xenova/clip-vit-base-patch32` | the reference, ~150 MB fp16 |
-| `google/siglip-base-patch16-224` | `Xenova/siglip-base-patch16-224` | sigmoid loss, better calibrated scores |
-| `google/siglip2-base-patch16-224` | `onnx-community/siglip2-base-patch16-224-ONNX` | the current-generation choice |
-| `laion/CLIP-ViT-B-32-laion2B-*` | none | - |
+| `Xenova/clip-vit-base-patch32` | softmax over your labels | 289 MB fp16 · 147 MB q8 — the default |
+| `Xenova/siglip-base-patch16-224` | independent sigmoid | 388 MB fp16 · 201 MB q8 |
+| `onnx-community/siglip2-base-patch16-224-ONNX` | independent sigmoid | 716 MB fp16 · 360 MB q8 |
+| `laion/CLIP-ViT-B-32-laion2B-*` | - | no usable export |
+
+Sizes measured. Note that CLIP-B/32 is **289 MB fp16**, not the ~150 MB the
+earlier research note quoted — that figure was the q8 download.
 
 ```ts
 const zs = await pipeline("zero-shot-image-classification", "Xenova/clip-vit-base-patch32",
@@ -268,10 +373,103 @@ const zs = await pipeline("zero-shot-image-classification", "Xenova/clip-vit-bas
 const out = await zs(image, ["a photo of a cat", "a photo of a dog", "an empty room"]);
 ```
 
-**Ship the prompt-template experiment.** It is the most instructive result in
-this whole file: `"a photo of a {}"` beats a bare
-`"{}"` by several points, and a page that lets the user toggle the template
-teaches that in one click. Very few demos anywhere show this.
+**The prompt-template experiment shipped, and it is why this page exists** rather
+than a fourth classifier. The route scores *both* wordings and puts them in
+adjacent columns — a before/after the user has to hold in their head is not a
+demonstration. Each template is its own call and its own softmax; concatenating
+the two prompt sets into one call would make the wordings compete and mean
+nothing.
+
+**A trap worth knowing about, because it silently inverts the result.** The
+`zero-shot-image-classification` pipeline applies its *own* default template,
+`"This is a photo of {}"`, on top of whatever you hand it. A page that templates
+its own prompts and does not pass `hypothesis_template: "{}"` therefore compares
+"This is a photo of cat" against "This is a photo of a photo of a cat" — two
+templates, neither of them the one on screen, with the double-templated column
+losing. The first real run of this route measured exactly that (bare 0.860,
+"templated" 0.842) and it read as a finding about prompt templates. It was a bug.
+
+Labels are stored as **bare nouns** (`cat`, not `a cat`) for the same reason: the
+template supplies the article, and phrases compose into "a photo of a a cat".
+
+**Encode once, decode many is implemented** — `src/vision/zeroshot/`, and the one
+place in the app that holds an inference cache.
+
+The pipeline re-encodes the labels on every call. Label embeddings do not depend
+on the image, so on a live feed that is the text tower — roughly 40% of CLIP's
+work — re-run per frame to produce identical numbers. This task therefore owns
+its engine rather than riding the generic vision worker, which is the criterion
+§2 already stated: a task that is not a plain `pipeline()` call gets its own
+engine, as `audio/enhance/` and `audio/vad/` do. `CLIPTextModelWithProjection`
+and `CLIPVisionModelWithProjection` (`SiglipTextModel` / `SiglipVisionModel` for
+the sigmoid pair) are driven separately, and the text side is kept.
+
+The cache holds **several prompt sets, not one** (`TEXT_CACHE_LIMIT`). The page
+scores two templates side by side, so a single-entry cache would be evicted on
+every alternation and buy nothing on precisely the screen the feature exists for.
+It is cleared whenever a different checkpoint loads — embeddings from another
+model share no space with these.
+
+| Family | Text output | Tokenizer padding | Final step |
+|---|---|---|---|
+| CLIP | `text_embeds` | to the longest prompt | `softmax(scale · cos)` |
+| SigLIP | `pooler_output` | **`max_length`** | `sigmoid(scale · cos + bias)` |
+
+SigLIP's padding is not a style choice: its position embeddings assume the full
+width, and padding to the longest prompt returns different embeddings.
+
+**What splitting the towers costs, and how that cost is controlled.** The full
+`model.onnx` ends with normalise → matmul → scale → softmax. Running the towers
+alone means owning those steps, so they live in
+[`zeroshot/scoring.ts`](../../frontend/src/vision/zeroshot/scoring.ts) as pure
+arithmetic. `scale` is `exp(logit_scale)` and `bias` is `logit_bias`, **read out
+of each checkpoint's published weights** rather than guessed:
+
+| Model | `exp(logit_scale)` | `logit_bias` | Source |
+|---|---|---|---|
+| CLIP ViT-B/32 | 100.000006 | - | `openai/clip-vit-base-patch32`, `pytorch_model.bin` |
+| SigLIP base/16 | 117.330795 | -12.932437 | `google/siglip-base-patch16-224`, `model.safetensors` |
+| SigLIP 2 base/16 | 112.668907 | -16.771725 | `google/siglip2-base-patch16-224`, `model.safetensors` |
+
+CLIP's raw parameter is 4.605170, and `exp(4.605170) = 100.000006` — the ln(100)
+clamp OpenAI trains against, confirmed from the weights rather than assumed.
+
+**This arithmetic is the kind that fails silently**, which is why it is pinned by
+a spec of its own. A wrong scale leaves every score in [0, 1], leaves the ranking
+exactly as it was, and is simply not what the model said — no ordering assertion
+can catch it, and the repo has shipped this shape of bug twice before in
+`audio/enhance/`. `just fe-e2e-zeroshot` runs the real pipeline and the
+split-tower path over the same checkpoint, image and prompts in one browser and
+compares every label's score, via a harness that imports the **shipped** scoring
+module rather than a copy of it.
+
+It does one thing more, and it is the part that actually pins the constant. A
+softmax is shift-invariant, so `ln(p_i) − ln(p_j) = scale · (cos_i − cos_j)`.
+Feeding the *pipeline's* probabilities and *our* cosines into that identity
+recovers the `logit_scale` the full graph is using, independently of what the
+catalogue claims. Measured: **100.00017 and 100.00045** across two label pairs,
+against a catalogue value of 100.000006. A plain agreement check would let a
+scale of 90 through as a small offset; this would not.
+
+**The comparison has to run at fp32, and finding out why was instructive.** At q8
+the two paths disagree badly — 0.812 against 0.886 on the same label. The cause
+is not the arithmetic: `model.onnx` and `text_model.onnx`/`vision_model.onnx` are
+**separately quantized exports**, so their embeddings differ slightly, and a
+softmax at scale 100 turns a ~0.001 cosine difference into a ~0.07 probability
+difference. The tell was the implied scale coming out at 93.8 and 142.3 for the
+two label pairs — a wrong constant would have produced one consistent wrong
+number, so inconsistency pointed at the embeddings instead. At fp32 the paths
+agree to six decimal places.
+
+Two things follow. The spec runs at fp32 (~1.2 GB, hence opt-in). And the route,
+which runs q8 on WASM, does **not** reproduce the numbers the pipeline would have
+shown at q8 — both are valid quantizations of the same model, neither is the
+reference, and the label ranking is unaffected on well-posed prompts. Worth
+knowing before comparing a screenshot against a notebook.
+
+The saving is reported in the UI (`encode-cost`): image milliseconds every run,
+label milliseconds only on a miss. An optimisation nobody can see is an
+optimisation nobody can check.
 
 ### 3.6 Zero-Shot Object Detection, the same idea with boxes
 
@@ -443,13 +641,13 @@ Two useful carve-outs hide inside that list:
 
 | Taxonomy task | In-browser? | Recommended model | Best backend | If not |
 |---|---|---|---|---|
-| **Depth Estimation** | Yes, excellent | `onnx-community/depth-anything-v2-small` | WebGPU | metric depth, gate DepthPro |
+| **Depth Estimation** | **Shipped** — `/depth` | `onnx-community/depth-anything-v2-small` | WebGPU | DepthPro gated for metric |
 | **Image Classification** | **Shipped** — `/image-classification` | `Xenova/vit-base-patch16-224` | WebGPU / WASM | - |
-| **Object Detection** | Yes, full | `onnx-community/dfine_n_coco-ONNX` | WebGPU | RF-DETR to server |
-| **Image Segmentation** | Yes, semantic only | `Xenova/segformer-b0-finetuned-ade-512-512` | WebGPU | Mask2Former / OneFormer to server |
+| **Object Detection** | **Shipped** — `/object-detection` | `onnx-community/dfine_n_coco-ONNX` | WebGPU | RF-DETR to server |
+| **Image Segmentation** | **Shipped** — `/segmentation` (semantic) | `Xenova/segformer-b0-finetuned-ade-512-512` | WebGPU | Mask2Former / OneFormer to server |
 | **Image to Text** | Yes | `onnx-community/Florence-2-base-ft` | WebGPU | GOT-OCR to server |
 | **Video Classification** | Frame-level only | CLIP over sampled frames | WebGPU | real video transformers to server |
-| **Zero Shot Image Classification** | Yes, excellent | `Xenova/clip-vit-base-patch32` | WebGPU / WASM | - |
+| **Zero Shot Image Classification** | **Shipped** — `/zero-shot-image-classification` | `Xenova/clip-vit-base-patch32` | WebGPU / WASM | - |
 | **Mask Generation** | Yes, excellent | `Xenova/slimsam-77-uniform` | WebGPU | SAM-HQ, SAM 3, Grounded SAM to server |
 | **Zero Shot Object Detection** | Yes | `Xenova/owlv2-base-patch16-ensemble` | WebGPU | LLMDet to server |
 | **Image Feature Extraction** | Yes, full | `Xenova/dinov2-small` | WebGPU / WASM | - |
@@ -485,7 +683,10 @@ mechanics.
 - **Encode once, decode many** wherever the architecture allows it. SAM is the
   obvious case; CLIP zero-shot is the other one, since the label embeddings are
   constant across frames and recomputing them per frame doubles the work for
-  nothing.
+  nothing. **Implemented for `/zero-shot-image-classification`** in
+  `src/vision/zeroshot/`, which drives the two towers separately and caches
+  several label sets at once — see §3.5, including what owning the final
+  normalise/scale/softmax costs and the parity spec that controls it.
 - **Warm up on load.** The first inference compiles WebGPU shaders. On a
   detector that is 2 to 4 seconds the user should not be charged for.
 - **Weights cache after the first download**, so the second visit is instant and
@@ -510,9 +711,10 @@ mechanics.
   (canvas heatmaps, schematics, theme tokens — read before drawing anything),
   [`docs/guides/adding-a-model.md`](../guides/adding-a-model.md) §8.
 - **The shipped precedent**: the six audio routes, mapped in
-  [`docs/roadmaps/audio.md`](./audio.md), and `/image-classification` in this
+  [`docs/roadmaps/audio.md`](./audio.md), and the five vision routes in this
   category. A vision page is the same worker protocol with an image payload
-  instead of a `Float32Array`.
+  instead of a `Float32Array` — and, on the way back, a result that has been
+  through `toCloneable`.
 - Model recommendations here come from a companion collection of Python
   notebooks, which is a separate project and not a dependency of this repo. Every
   browser id above was checked against the Hugging Face API — re-check with

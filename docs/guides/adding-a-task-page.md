@@ -297,6 +297,36 @@ const handle = createVisionHandler(
 ctx.onmessage = (e) => void handle(e.data);
 ```
 
+**Check that your result can actually cross the boundary.** `postMessage` uses
+the structured-clone algorithm, which copies *own* properties and refuses
+anything else. A Transformers.js `Tensor` exposes `data` and `dims` as prototype
+getters over an internal ONNX Runtime tensor, so posting one throws
+`#<_Tensor> could not be cloned` — the vision engine therefore runs every result
+through `toCloneable` ([`vision/serialize.ts`](../../frontend/src/vision/serialize.ts))
+first. Note where this is invisible: the unit suite mocks the worker away, and a
+mocked E2E run never loads a model. If your task returns anything but plain
+objects and numbers, **only a real load will tell you**, so write the `@slow`
+spec before you believe the page works.
+
+**A pipeline is not always the right level.** Reach past it when the task has
+state the pipeline cannot hold — the test is whether something expensive is being
+recomputed that does not depend on the input that changed. `zero-shot-image-classification`
+re-encodes the candidate labels on every call, and the labels do not depend on the
+image, so on a live feed the text tower runs per frame to produce identical
+numbers; `src/vision/zeroshot/` drives the two towers separately and caches the
+text side. Same criterion as `audio/enhance/` and `audio/vad/`.
+
+Know what that costs before you do it. A composite model's graph does not end at
+the towers: CLIP's finishes with normalise → matmul → `logit_scale` → softmax, and
+running the towers alone means owning those steps. Learned constants like
+`logit_scale` live in the weights, not the config — read them out of
+`model.safetensors` (or the torch zip) rather than guessing, and **pin the result
+against the full graph**, because this arithmetic fails silently: a wrong scale
+leaves every score in [0, 1] with the ranking untouched.
+`e2e/specs/zero-shot-parity.spec.ts` is the pattern — it loads a fixture into the
+page that imports the *shipped* scoring module, so it compares the real code
+against the reference rather than one copy of an idea against another.
+
 **The message envelope is not yours to invent.** It is
 [`ModelRequest`/`ModelResponse` in `model/types.ts`](../../frontend/src/model/types.ts),
 and only the load/run *payloads* are task-specific:
@@ -388,6 +418,28 @@ The page is `ModelPage` plus the four slot components. Full specification in
 The four slots are **named props**, not children. A route therefore cannot
 reorder them, cannot drop OUTPUT when it has nothing to show, and cannot quietly
 grow a fifth stage.
+
+**For a vision route, the input half is already written.** Do not grow a sixth
+copy of it:
+
+| You need | Use |
+|---|---|
+| File / drop / sample decoding, and the object-URL lifecycle | [`useImagePick`](../../frontend/src/hooks/useImagePick.ts) |
+| A live camera: open → grab → `downscale` → one frame in flight | [`useCameraFrames`](../../frontend/src/hooks/useCameraFrames.ts) |
+| The RUN slot's preview, dropzone, samples and camera toggle | [`ImageSourcePanel`](../../frontend/src/components/vision/ImageSourcePanel.tsx) |
+| A canvas at the source's resolution, painted by a callback | [`OverlayCanvas`](../../frontend/src/components/vision/OverlayCanvas.tsx) |
+
+`ImageSourcePanel` renders the **input** only. An overlay — boxes, a depth map,
+class masks — is a *result*, and results go in OUTPUT. Painting the answer on top
+of the input collapses slots 3 and 4 into one, which is the drift the shell
+exists to prevent.
+
+Two more rules the vision routes converged on, both about not re-running the
+model: a control that only *filters* what came back (a confidence threshold, an
+opacity slider, a class toggle) derives its result on the main thread — the model
+is asked once, at a low floor — and anything drawn over a downscaled inference
+frame needs mapping back to the source (`scaleDetections`) before it is painted
+on a full-size canvas.
 
 ```tsx
 // src/routes/depth-estimation.tsx

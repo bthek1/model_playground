@@ -11,38 +11,28 @@
 // Four-slot page pattern — docs/standards/model-page-pattern.md.
 
 import { createFileRoute } from "@tanstack/react-router";
-import type { RawImage } from "@huggingface/transformers";
-import { ImageIcon, Loader2, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ImageIcon, Loader2 } from "lucide-react";
 
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
+import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
 import { Button } from "@/components/ui/button";
 import { useImageClassifier } from "@/hooks/useImageClassifier";
+import { useImagePick } from "@/hooks/useImagePick";
 import type { ClassLabel } from "@/model/types";
 import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
 import {
   DEFAULT_IMAGE_CLASSIFIER,
   IMAGE_CLASSIFIER_MODELS,
 } from "@/vision/classification";
-import { fromFile, fromUrl } from "@/vision/image";
-import { IMAGE_SAMPLES, type ImageSample } from "@/vision/samples";
+import { IMAGE_SAMPLES } from "@/vision/samples";
 
 export const Route = createFileRoute("/image-classification")({
   component: ImageClassificationPage,
 });
-
-interface Picked {
-  image: RawImage;
-  /** Object URL or sample URL, for the preview. */
-  previewUrl: string;
-  /** True when `previewUrl` is ours to revoke. */
-  owned: boolean;
-  name: string;
-}
 
 function ImageClassificationPage() {
   const session = useModelSelection({
@@ -70,20 +60,16 @@ function ImageClassificationPage() {
   } = useImageClassifier(model, session.autoLoad);
   useCacheRefresh(session, ready);
 
-  const [picked, setPicked] = useState<Picked | null>(null);
-  const [preparing, setPreparing] = useState<null | "file" | "sample">(null);
-  const [ioError, setIoError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  // One object URL alive at a time, and none after unmount: a preview URL that
-  // outlives its <img> pins the decoded bitmap in memory for the tab's lifetime.
-  const ownedUrl = useRef<string | null>(null);
-  useEffect(
-    () => () => {
-      if (ownedUrl.current) URL.revokeObjectURL(ownedUrl.current);
-    },
-    [],
-  );
+  // Picking, the object-URL lifecycle and decode errors are the same on every
+  // vision route, so they live in `useImagePick` rather than here.
+  const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
+    useImagePick({
+      // Classify straight away when a model is live; otherwise the picture sits
+      // in the preview and the Classify button lights up once it is.
+      onPicked: async (next) => {
+        if (ready) await run(next.image);
+      },
+    });
 
   const busy = running || preparing !== null;
   // Each error in the slot that produced it (§4): a failed decode belongs to
@@ -91,58 +77,9 @@ function ImageClassificationPage() {
   const loadError = status === "error" ? error : null;
   const runError = status === "error" ? null : error;
 
-  function adopt(next: Picked) {
-    if (ownedUrl.current) URL.revokeObjectURL(ownedUrl.current);
-    ownedUrl.current = next.owned ? next.previewUrl : null;
-    setPicked(next);
-  }
-
-  async function pick(
-    open: () => Promise<Picked>,
-    kind: "file" | "sample",
-  ): Promise<void> {
-    setIoError(null);
-    setPreparing(kind);
-    try {
-      const next = await open();
-      adopt(next);
-      // Classify straight away when a model is live; otherwise the picture sits
-      // in the preview and the Classify button lights up once it is.
-      if (ready) await run(next.image);
-    } catch (e) {
-      setIoError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setPreparing(null);
-    }
-  }
-
-  const onFile = (file: File | undefined) => {
-    if (!file) return;
-    void pick(
-      async () => ({
-        image: await fromFile(file),
-        previewUrl: URL.createObjectURL(file),
-        owned: true,
-        name: file.name,
-      }),
-      "file",
-    );
-  };
-
-  const onSample = (sample: ImageSample) =>
-    void pick(
-      async () => ({
-        image: await fromUrl(sample.url),
-        previewUrl: sample.url,
-        owned: false,
-        name: sample.label,
-      }),
-      "sample",
-    );
-
   const classifyCurrent = () => {
     if (!picked) return;
-    setIoError(null);
+    clearError();
     void run(picked.image).catch(() => {
       /* the hook surfaces it in OUTPUT */
     });
@@ -194,95 +131,31 @@ function ImageClassificationPage() {
           error={ioError}
           disabledHint="Load a model to classify an image. You can pick a picture first."
           controls={
-            <>
-              <Button
-                disabled={!ready || busy || !picked}
-                onClick={classifyCurrent}
-              >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Classifying…
-                  </>
-                ) : (
-                  <>
-                    <ImageIcon className="size-4" /> Classify
-                  </>
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => fileRef.current?.click()}
-              >
-                {preparing === "file" ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Decoding…
-                  </>
-                ) : (
-                  <>
-                    <Upload className="size-4" /> Upload image
-                  </>
-                )}
-              </Button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                aria-label="Upload an image"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = ""; // allow re-selecting the same file
-                  onFile(file);
-                }}
-              />
-            </>
+            <Button
+              disabled={!ready || busy || !picked}
+              onClick={classifyCurrent}
+            >
+              {running ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Classifying…
+                </>
+              ) : (
+                <>
+                  <ImageIcon className="size-4" /> Classify
+                </>
+              )}
+            </Button>
           }
         >
-          <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                onFile(e.dataTransfer.files?.[0]);
-              }}
-              className="flex min-h-40 flex-1 items-center justify-center overflow-hidden rounded-lg border border-dashed bg-muted/20 p-2"
-            >
-              {picked ? (
-                <img
-                  src={picked.previewUrl}
-                  alt={`Selected input: ${picked.name}`}
-                  className="max-h-72 max-w-full rounded object-contain"
-                />
-              ) : (
-                <p className="px-4 text-center text-sm text-balance text-muted-foreground">
-                  Drop an image here, upload one, or start from a sample below.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                Samples — the first two are easy, the rest are the cases where a
-                top-1 label starts to mislead.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {IMAGE_SAMPLES.map((sample) => (
-                  <Button
-                    key={sample.id}
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    title={sample.hint}
-                    onClick={() => onSample(sample)}
-                  >
-                    {sample.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </div>
+          <ImageSourcePanel
+            picked={picked}
+            preparing={preparing}
+            samples={IMAGE_SAMPLES}
+            sampleHint="Samples — the first two are easy, the rest are the cases where a top-1 label starts to mislead."
+            onFile={pickFile}
+            onSample={pickSample}
+            busy={busy}
+          />
         </InputPanel>
       }
       output={

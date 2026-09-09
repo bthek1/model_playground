@@ -123,3 +123,164 @@ test.describe("/image-classification", () => {
     expect(output!.y).toBeLessThan(900);
   });
 });
+
+// The Wave 1 routes. Each one repeats the promise that matters most on that
+// page, with the network mocked: the download is the user's to start, and the
+// controls that do *not* need the model work before it exists.
+
+test.describe("/depth", () => {
+  test("gates the gigabyte model behind an opt-in, and downloads nothing", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/depth");
+
+    // The default entry is quoted but not gated.
+    await expect(model.sizeNote).toContainText(/MB/);
+    await expect(page.getByTestId("heavy-model-notice")).toBeHidden();
+
+    // Depth Pro is ~1 GB, so it gets a second, blunter statement — and still
+    // fetches nothing until Load is pressed.
+    await model.button(/Depth Pro/).click();
+    await expect(page.getByTestId("heavy-model-notice")).toBeVisible();
+    await expect(model.largeModelWarning).toBeVisible();
+    expect(
+      weightRequests,
+      "selecting a gated model started its download",
+    ).toEqual([]);
+  });
+
+  test("shows a picked image with the run control still gated", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/depth");
+    await expect(model.button(/Estimate depth/)).toBeDisabled();
+
+    await model.button(/^Tiger$/).click();
+    await expect(page.getByAltText(/selected input: tiger/i)).toBeVisible();
+    await expect(model.emptyOutput).toBeVisible();
+    expect(weightRequests).toEqual([]);
+  });
+});
+
+test.describe("/object-detection", () => {
+  test("offers the threshold before a model exists, and downloads nothing", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/object-detection");
+
+    // The threshold is a pure derivation over results, so it is a live control
+    // rather than something gated on the model.
+    const threshold = page.getByLabel(/confidence threshold/i);
+    await expect(threshold).toBeVisible();
+    await threshold.fill("0.7");
+    await expect(page.getByText(/threshold: 0\.70/i)).toBeVisible();
+
+    await expect(model.button(/^Detect$/)).toBeDisabled();
+    expect(weightRequests).toEqual([]);
+  });
+
+  test("does not touch the camera until it is asked to", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    await stubHub(page);
+
+    // If the route opened a stream on mount, this would reject before the click
+    // and the button would never appear in its "off" state.
+    await page.addInitScript(() => {
+      const media = navigator.mediaDevices as unknown as {
+        getUserMedia?: () => Promise<MediaStream>;
+      };
+      (window as unknown as { __camera: number }).__camera = 0;
+      if (media) {
+        media.getUserMedia = () => {
+          (window as unknown as { __camera: number }).__camera += 1;
+          return Promise.reject(new Error("no camera in CI"));
+        };
+      }
+    });
+
+    const model = new ModelPageObject(page);
+    await page.goto("/object-detection");
+    await expect(model.button(/Use camera/)).toBeVisible();
+
+    const asked = await page.evaluate(
+      () => (window as unknown as { __camera: number }).__camera,
+    );
+    expect(asked, "the page opened the camera on mount").toBe(0);
+  });
+});
+
+test.describe("/segmentation", () => {
+  test("states the class space before anything is downloaded", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/segmentation");
+
+    // A segmenter can only say what its training set contained, so the label
+    // space is stated up front rather than discovered from a puzzling result.
+    await expect(page.getByTestId("class-space")).toContainText(/semantic/i);
+    await expect(page.getByTestId("class-space")).toContainText(/ADE20K/i);
+
+    await model.button(/DETR panoptic/).click();
+    await expect(page.getByTestId("class-space")).toContainText(/panoptic/i);
+
+    await expect(model.button(/^Segment$/)).toBeDisabled();
+    expect(weightRequests).toEqual([]);
+  });
+});
+
+test.describe("/zero-shot-image-classification", () => {
+  test("lets the labels and the template be written before the model loads", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/zero-shot-image-classification");
+
+    // Writing the labels is the whole input for this task, and it costs nothing.
+    // Bare nouns, not phrases: the template supplies the article, so `"cat"`
+    // composes into "a photo of a cat" while `"a cat"` would give "a photo of a
+    // a cat". `exact`, because the preview line below the chips quotes the first
+    // label back inside a longer sentence.
+    await expect(page.getByText("cat", { exact: true })).toBeVisible();
+    await page.getByLabel(/^Labels$/).fill("bicycle");
+    await model.button(/^Add$/).click();
+    await expect(page.getByText("bicycle", { exact: true })).toBeVisible();
+
+    await model.button(/Remove dog/).click();
+    await expect(page.getByText("dog", { exact: true })).toBeHidden();
+
+    // The template is shown applied to a real label, so the experiment is
+    // legible before it is run — and reads as English, which is the point of
+    // keeping the labels bare.
+    await expect(model.slot(3)).toContainText(/a photo of a cat/i);
+
+    await expect(model.button(/Score labels/)).toBeDisabled();
+    expect(weightRequests).toEqual([]);
+  });
+});

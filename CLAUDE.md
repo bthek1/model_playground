@@ -263,14 +263,57 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
 The second modality on the Transformers.js path, and the same shape as `src/audio/`:
 one generic worker for every discriminative task (`vision.worker.ts` — the task travels in the
 `load` message), a pure `engine.ts` that owes the same three behaviours, and thin task hooks over
-`useVisionPipeline`. Shipped: `/image-classification`. Everything else in the category is research
+`useVisionPipeline`. Shipped: `/image-classification`, `/depth`, `/object-detection`,
+`/segmentation`, `/zero-shot-image-classification`. Everything else in the category is research
 with a phased plan — see [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md).
+
+- **`/zero-shot-image-classification` is the one vision route that does not use a pipeline.**
+  `src/vision/zeroshot/` drives the CLIP/SigLIP text and vision towers separately so the label
+  embeddings are encoded **once and reused** across frames — the pipeline re-encodes them every call,
+  which on a live feed is ~40% of the work redone to produce identical numbers. That is the documented
+  criterion for owning an engine (not a plain `pipeline()` call), same as `audio/enhance/` and
+  `audio/vad/`. The cache holds several prompt sets (`TEXT_CACHE_LIMIT`), because the page compares two
+  templates and a single entry would thrash; it is cleared on a checkpoint change.
+  - **Splitting the towers means owning the model's last three steps** — normalise, scale,
+    softmax/sigmoid — in `zeroshot/scoring.ts`. `scale` is `exp(logit_scale)`, `bias` is `logit_bias`,
+    both **read out of the published weights** (CLIP 100.000006; SigLIP 117.330795 / -12.932437;
+    SigLIP2 112.668907 / -16.771725). **A wrong scale fails silently**: scores stay in [0, 1] and the
+    ranking is unchanged, so only comparing numbers against the full graph catches it —
+    `just fe-e2e-zeroshot`. That spec also *recovers* the scale from the reference model's own
+    probabilities (a softmax is shift-invariant, so `ln p_i − ln p_j = scale·(cos_i − cos_j)`),
+    which is what pins the constant rather than merely bounding the error.
+  - **The parity check must run at fp32.** `model.onnx` and `text_model.onnx`/`vision_model.onnx`
+    are *separately quantized* exports, so at q8 the two paths' embeddings differ and a scale-100
+    softmax magnifies that into a ~0.07 probability gap — measured. At fp32 they agree to six
+    decimals. The route itself still runs q8 on WASM, so its numbers do not match a q8 pipeline
+    run; both are valid quantizations and the ranking is unaffected.
+  - **The pipeline applies its own `hypothesis_template` (`"This is a photo of {}"`) by default.**
+    Any path that templates its own prompts must pass `hypothesis_template: "{}"`, or it silently
+    compares two templates that are neither of the ones on screen. Store labels as bare nouns (`cat`,
+    not `a cat`) so a template composes correctly.
+- **The shared page pieces already exist — reuse them, never re-copy.** `hooks/useImagePick.ts` (file
+  / drop / sample decoding, and the one-object-URL-at-a-time rule), `hooks/useCameraFrames.ts` (open
+  → grab → `downscale` → exactly one frame in flight), `components/vision/ImageSourcePanel.tsx` (the
+  RUN slot's input surface) and `components/vision/OverlayCanvas.tsx` (a canvas at source resolution,
+  painted by a callback). `ImageSourcePanel` renders the **input** only — an overlay is a result, and
+  results belong in OUTPUT, or the two slots collapse into one.
+- **A threshold, an opacity slider or a class toggle re-derives; it never re-runs.** Detection asks
+  the model once at a low floor and filters what came back; segmentation keeps the masks rather than
+  a finished canvas. Same pure-derivation trick `/vad` uses for its threshold.
+- **`percentage: false` is pinned in `useObjectDetector`**, and `scaleDetections` maps boxes from the
+  downscaled inference frame back onto the source. Getting either wrong looks like a mediocre
+  detector rather than a bug.
 
 - **A `RawImage` does not survive `postMessage`.** It is a class instance, so the clone arrives with
   no methods and the pipeline rejects it. Send `toPayload(image)` (pixels + `{width,height,channels}`)
   and rebuild with `fromPayload` in the worker. `toPayload` **copies by default** — the page is
   usually still displaying what it just sent, and transferring the buffer blanks the preview. Pass
   `{ copy: false }` only for a spent webcam frame.
+- **Nor does a `Tensor`, and that one throws.** Its `data`/`dims` are prototype *getters* over an
+  internal ORT tensor, so structured clone refuses it: `#<_Tensor> could not be cloned`. Every result
+  goes through `toCloneable` (`vision/serialize.ts`) before the engine posts it. Depth estimation is
+  the task that hits it, and **only a real model load surfaces it** — the unit suite mocks the worker
+  away and a mocked E2E run never loads weights.
 - **Never resize or normalise for the model.** `AutoProcessor` reads the model's own
   `preprocessor_config.json`; that file *is* the input contract. `downscale()` caps the *source*
   resolution (resolution is the throttle — 1280x720 costs ~4x 640x480) and is not preprocessing.
@@ -287,7 +330,9 @@ with a phased plan — see [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md).
   a rAF loop that posts every frame drifts seconds behind. `useCamera` owns camera teardown — a
   leaked `MediaStream` leaves the webcam light on.
 - **Normalise a single-channel map before painting it** (`drawHeatmap`): relative depth is on an
-  arbitrary scale, and without it the canvas is uniformly black or white.
+  arbitrary scale, and without it the canvas is uniformly black or white. Say so in the UI too — the
+  values are not metres — and read the ramp's direction from the catalogue entry, because Depth
+  Anything emits inverse depth (big = near) while Depth Pro emits metres (big = far).
 
 **Two Base UI gotchas (carried over from the Radix → Base UI migration):**
 

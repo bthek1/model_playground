@@ -30,11 +30,23 @@ const TASK_ROUTES = [
     heading: "Image Classification",
     downloads: true,
   },
+  { path: "/depth", heading: "Depth Estimation", downloads: true },
+  { path: "/object-detection", heading: "Object Detection", downloads: true },
+  {
+    path: "/segmentation",
+    heading: "Image Segmentation",
+    downloads: true,
+  },
+  {
+    path: "/zero-shot-image-classification",
+    heading: "Zero-Shot Image Classification",
+    downloads: true,
+  },
   // Compile-only: no weights, so LOAD auto-runs as a device probe (§7).
   { path: "/tensor", heading: "Tensor Arithmetic", downloads: false },
   // A task with nothing behind it renders the same page with empty slots, so an
   // unimplemented task reads as this page without a model — not another app.
-  { path: "/tasks/depth-estimation", heading: "Depth Estimation", downloads: false },
+  { path: "/tasks/mask-generation", heading: "Mask Generation", downloads: false },
 ] as const;
 
 test.describe("the four-slot model page contract", () => {

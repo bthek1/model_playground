@@ -24,6 +24,10 @@ test.describe("@slow model catalogue", () => {
     const { IMAGE_CLASSIFIER_MODELS } = await import(
       "../../src/vision/classification"
     );
+    const { DEPTH_MODELS } = await import("../../src/vision/depth");
+    const { DETECTOR_MODELS } = await import("../../src/vision/detection");
+    const { SEGMENTER_MODELS } = await import("../../src/vision/segmentation");
+    const { ZERO_SHOT_MODELS } = await import("../../src/vision/zeroShot");
 
     const ids = [
       ...ASR_MODELS,
@@ -35,6 +39,10 @@ test.describe("@slow model catalogue", () => {
       // checkpoint, so it is filtered out rather than asked about.
       ...VAD_MODELS.filter((m) => m.repo),
       ...IMAGE_CLASSIFIER_MODELS,
+      ...DEPTH_MODELS,
+      ...DETECTOR_MODELS,
+      ...SEGMENTER_MODELS,
+      ...ZERO_SHOT_MODELS,
     ].map((m) => m.id);
     expect(ids.length).toBeGreaterThan(0);
 
@@ -52,34 +60,49 @@ test.describe("@slow model catalogue", () => {
     // `loadOpts()` requests fp16 on WebGPU and q8 on WASM, and a catalogue entry
     // may override either (`VisionModel.dtypes`). A repo that publishes only
     // fp32 resolves fine on the API and then 404s at load time — which is why
-    // `Xenova/mobilevitv2-1.0-imagenet1k-256` is not in the catalogue at all.
-    // Assert the files, not merely the repo.
+    // `Xenova/mobilevitv2-1.0-imagenet1k-256` is not in the catalogue at all,
+    // and why `mattmdjaga/segformer_b2_clothes` is pinned to fp32 on both
+    // backends rather than left to the default. Assert the files, not merely
+    // the repo.
     const { IMAGE_CLASSIFIER_MODELS } = await import(
       "../../src/vision/classification"
     );
+    const { DEPTH_MODELS } = await import("../../src/vision/depth");
+    const { DETECTOR_MODELS } = await import("../../src/vision/detection");
+    const { SEGMENTER_MODELS } = await import("../../src/vision/segmentation");
+    const { ZERO_SHOT_MODELS } = await import("../../src/vision/zeroShot");
 
     const FILE_FOR: Record<string, string> = {
       fp16: "onnx/model_fp16.onnx",
       q8: "onnx/model_quantized.onnx",
       fp32: "onnx/model.onnx",
     };
+    const DEFAULT_DTYPE = { webgpu: "fp16", wasm: "q8" } as const;
+
+    const models = [
+      ...IMAGE_CLASSIFIER_MODELS,
+      ...DEPTH_MODELS,
+      ...DETECTOR_MODELS,
+      ...SEGMENTER_MODELS,
+      ...ZERO_SHOT_MODELS,
+    ];
 
     const missing: string[] = [];
-    for (const model of IMAGE_CLASSIFIER_MODELS) {
+    for (const model of models) {
       const res = await request.get(
         `https://huggingface.co/api/models/${model.id}`,
       );
       const files: string[] = ((await res.json()).siblings ?? []).map(
         (f: { rfilename: string }) => f.rfilename,
       );
-      const wanted = [
-        model.dtypes?.webgpu ?? "fp16",
-        model.dtypes?.wasm ?? "q8",
-      ];
-      for (const dtype of wanted) {
+      // Only the backends the entry claims: a WebGPU-only model is never asked
+      // for on WASM, so a missing q8 export there is not a bug.
+      const backends = model.backends ?? (["webgpu", "wasm"] as const);
+      for (const backend of backends) {
+        const dtype = model.dtypes?.[backend] ?? DEFAULT_DTYPE[backend];
         const file = FILE_FOR[String(dtype)];
         if (file && !files.includes(file)) {
-          missing.push(`${model.id} → ${file}`);
+          missing.push(`${model.id} (${backend}) -> ${file}`);
         }
       }
     }

@@ -11,6 +11,7 @@
 import { loadOpts, pickBackend, type DtypeSpec } from "@/model/backend";
 
 import type { ImagePayload } from "./image";
+import { toCloneable } from "./serialize";
 import type {
   VisionProgress,
   VisionRequest,
@@ -122,7 +123,10 @@ export function createVisionHandler(
     try {
       if (!pipe) throw new Error("No model loaded");
       const result = await pipe(msg.image, ...(msg.args ?? []));
-      post({ type: "result", id: msg.id, result });
+      // A pipeline result is not necessarily cloneable: a `Tensor` exposes
+      // `data`/`dims` as prototype getters and `postMessage` refuses it outright.
+      // Flatten before posting — see `serialize.ts`.
+      post({ type: "result", id: msg.id, result: toCloneable(result) });
     } catch (error) {
       post({ type: "error", id: msg.id, error: errMessage(error) });
     }
