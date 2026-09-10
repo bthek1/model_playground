@@ -51,6 +51,7 @@ docker compose exec backend python manage.py migrate
 | [docs/guides/adding-a-model.md](docs/guides/adding-a-model.md) | Add a model: WGSL kernel + registry entry |
 | [docs/guides/local-setup.md](docs/guides/local-setup.md) | Full local dev setup (Docker + without Docker) |
 | [docs/guides/onboarding.md](docs/guides/onboarding.md) | New developer orientation |
+| [docs/guides/ai-guardrails.md](docs/guides/ai-guardrails.md) | How AI assistants are fenced off: git guardrails first, `.claude/settings.json` second |
 | [docs/standards/api-contracts.md](docs/standards/api-contracts.md) | All API endpoints, request/response shapes |
 | [docs/explanations/auth-flow.md](docs/explanations/auth-flow.md) | JWT auth flow end to end |
 | [docs/guides/celery_setup.md](docs/guides/celery_setup.md) | Celery + Redis async task setup |

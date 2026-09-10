@@ -108,6 +108,10 @@ Any change to request/response shapes must be reflected in `docs/standards/api-c
 - Branch names: `feat/<topic>`, `fix/<topic>`, `chore/<topic>`
 - Commit messages: imperative present tense — "Add user registration endpoint"
 - Docs changes travel with code changes in the same commit
+- Never work directly on `main` — this holds double for an AI assistant, whose git fence is
+  documented in [`ai-guardrails.md`](ai-guardrails.md)
+- Commit or stash your own work before starting an assistant session, so there's a clean line
+  between your changes and its changes
 
 ---
 

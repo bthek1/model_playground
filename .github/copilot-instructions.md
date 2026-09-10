@@ -815,12 +815,26 @@ Any known risks, open questions, or decisions deferred.
 
 These actions must **never** be performed without explicit user confirmation:
 
-**Git operations — never run autonomously:**
-- `git commit` — do not commit code on the user's behalf
-- `git push` / `git push --force` — do not push to any remote
+**Git operations — the fence is graded, because commits and pushes are not the same risk.**
+
+*Unattended (reversible, and the reflog recovers them):* `git add`, `git commit`,
+`git checkout -b`, `git switch`, `git stash` — **on a feature branch, never on `main`.** The
+assistant commits because it was asked to; the permission only removes the prompt.
+
+*Never run autonomously — confirm first:*
+- `git push` — do not push to any remote
+- `git rebase` / `git merge`
+
+*Never at all (denied in `.claude/settings.json`):*
+- `git push --force` / `git push -f` — drops commits nobody else has fetched
 - `git reset --hard` — destructive, cannot be undone
-- `git rebase` / `git merge` on shared branches
+- `git clean` — untracked files were never in the object store; the reflog cannot help
 - `git branch -D` — do not delete branches
+- `git checkout .` — discards the working tree wholesale
+
+A pattern deny is not a security boundary (`git push origin +main` force-pushes without the
+string `--force`). The real protection is branch protection on `main` plus working on a feature
+branch — see [`docs/guides/ai-guardrails.md`](../docs/guides/ai-guardrails.md).
 
 **GitHub (remote) — never run autonomously:**
 - `gh issue create` / `gh issue edit` / `gh issue close` — plans live here, but creating or closing

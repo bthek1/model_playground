@@ -47,6 +47,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | Auth flow (JWT) | [`docs/explanations/auth-flow.md`](docs/explanations/auth-flow.md) |
 | API endpoints & request/response shapes | [`docs/standards/api-contracts.md`](docs/standards/api-contracts.md) |
 | Local dev setup | [`docs/guides/local-setup.md`](docs/guides/local-setup.md) |
+| **Git guardrails & permission config** | [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md) |
 | **End-to-end tests (Playwright)** | [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md) |
 | **A model with no Transformers.js task (bare ONNX)** | [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §9 |
 | Celery / async tasks | [`docs/guides/celery_setup.md`](docs/guides/celery_setup.md) |
@@ -114,10 +115,14 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   Reference the issue number in the commit message (`Closes #12`).
 - **Never commit `.env` files.** `.env.example` is the source of truth for required vars.
 - **Backend ↔ frontend communicate only via the API contract** — never mix their concerns.
-- **Ask before destructive or remote actions.** Do not `git commit`, `git push`, `git reset --hard`,
-  `docker compose down -v`, delete migrations, modify shared `.env` files, or create/edit/close
-  GitHub issues (`gh issue …`) without explicit confirmation. See the full list in the Copilot
-  instructions.
+- **Commits are cheap; pushes are not.** Work on a feature branch, never `main`. Committing and
+  branching run unattended — they are reversible, and `git reflog` recovers almost anything local.
+  **Ask before anything outward-facing or unrecoverable:** `git push`, `git rebase`/`git merge`,
+  `gh pr create`/`gh pr merge`, create/edit/close a GitHub issue (`gh issue …`), `docker compose
+  down -v`, deleting migrations, or modifying shared `.env` files. **Never** force-push,
+  `git reset --hard`, `git clean`, `git branch -D`, or `git checkout .` — those are denied outright
+  in `.claude/settings.json`. See [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md) and
+  the full list in the Copilot instructions.
 
 ### Backend essentials
 
@@ -425,5 +430,20 @@ The rest of the category stays on a server, with a reason per task — see
 
 ## Permissions
 
-`.claude/settings.json` allows all `Bash(*)` commands in this project to keep the local dev loop
-friction-free. The "Absolute Don'ts" above still apply — the allowlist removes prompts, not judgement.
+`.claude/settings.json` keeps a broad `Bash(*)` **allow** so the local dev loop (`just dev`,
+`just be-test`, `just fe-e2e`, `uv run …`) is friction-free, then fences the dangerous edges —
+deny beats ask beats allow:
+
+- **allow** — everything, including `git add`/`commit`/`switch`/`checkout -b`/`stash`.
+- **ask** — `git push`, `git rebase`, `git merge`, `gh pr create|merge`,
+  `gh issue create|edit|close`, `docker compose down`, `rm -rf`, plus the two `just` recipes that
+  wrap `docker compose down -v` (`just down-v`, `just db-reset`) — a wrapper is a different
+  command string, so it needs its own rule.
+- **deny** — `git push --force`/`-f`, `git reset --hard`, `git clean`, `git branch -D`,
+  `git checkout .`.
+
+Pattern denies stop accidents, not a determined command line (`git push origin +main` is a
+force-push with no `--force` in it), so the real protection is the git setup: a feature branch,
+branch protection on `main`, and the reflog. The "Absolute Don'ts" above still apply — the
+allowlist removes prompts, not judgement. Full rationale in
+[`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md).
