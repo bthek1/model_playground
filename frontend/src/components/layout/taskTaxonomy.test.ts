@@ -94,11 +94,21 @@ describe("taskCategories", () => {
     expect(at("image-to-text")).toBe("/image-to-text");
     expect(at("keypoint-detection")).toBe("/pose");
     expect(at("video-classification")).toBe("/video-classification");
+    // The one row in this category with no Hub task behind it: the Hub has no
+    // `background-removal` tag, Transformers.js invented the pipeline, and #24
+    // took the call to list it anyway rather than ship the route unlisted.
+    expect(at("background-removal")).toBe("/background-removal");
+    // Image to Image maps to the one part of it that runs in a tab: a single
+    // forward pass of super-resolution. The diffusion half stays server-side.
+    expect(at("image-to-image")).toBe("/super-resolution");
+    // Image to 3D likewise covers the depth-to-cloud subset; full
+    // reconstruction is diffusion and stays server-side.
+    expect(at("image-to-3d")).toBe("/image-to-3d");
 
     // The rest of the category is still research — they keep the placeholder
     // until their own route ships (see the sub-issues of #2).
     expect(at("text-to-image")).toBe("/tasks/text-to-image");
-    expect(at("image-to-image")).toBe("/tasks/image-to-image");
+    expect(at("image-to-video")).toBe("/tasks/image-to-video");
   });
 
   it("maps the implemented Audio tasks to their real routes", () => {

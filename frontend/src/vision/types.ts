@@ -24,7 +24,16 @@ export type VisionTask =
   | "image-segmentation"
   | "depth-estimation"
   | "image-feature-extraction"
-  | "image-to-text";
+  | "image-to-text"
+  // Two tasks that arrived with Wave 3. Both are plain `pipeline()` calls
+  // returning a `RawImage`, so neither earns an engine of its own
+  // (docs/guides/adding-a-model.md §10) — they ride this worker unchanged.
+  //
+  // `background-removal` is a Transformers.js invention rather than a Hub task:
+  // it subclasses the segmentation pipeline and puts the mask into the source's
+  // alpha channel. `image-to-image` is the super-resolution slug.
+  | "background-removal"
+  | "image-to-image";
 
 /** Load/warm-up progress. Alias of the shared `ModelProgress`. */
 export type VisionProgress = ModelProgress;

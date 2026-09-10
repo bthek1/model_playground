@@ -29,7 +29,7 @@ just fe-e2e-ui        # interactive Playwright UI (best for writing tests)
 just fe-e2e-headed    # watch a real browser drive the app
 just fe-e2e-webgpu    # only the GPU specs
 just fe-e2e-slow      # real model downloads + real ONNX sessions (minutes)
-just fe-e2e-vision    # the vision @slow specs only (seconds)
+just fe-e2e-vision    # the vision @slow specs only (tens of minutes, cold)
 just fe-e2e-models    # just the model-id check against the HF Hub (seconds)
 just fe-e2e-report    # open the HTML report from the last run
 ```
@@ -75,9 +75,10 @@ just fe-e2e-slow      # audio: sets E2E_SLOW=1 — ~2.5 min, needs network
 just fe-e2e-models    # the cheap half: every id, dtype file and sample URL (~45 s)
 just fe-e2e-enhance   # speech enhancement on both backends (~20 s + download)
 just fe-e2e-vad       # voice activity detection (~10 s, 2 MB download)
-just fe-e2e-vision    # all eleven vision routes — tens of minutes on a cold cache
+just fe-e2e-vision    # all fourteen vision routes — tens of minutes on a cold cache
 just fe-e2e-vision-one /pose      # one vision route at a time
 just fe-e2e-zeroshot  # split-tower scoring parity against the full CLIP graph
+just fe-e2e-superres  # Swin2SR against a bicubic baseline, by PSNR
 ```
 
 `fe-e2e-vision` grew from "one MobileNetV4 load" into the whole category, and it is
@@ -126,7 +127,7 @@ Add a new catalogue module — and any new sample list — to its import list in
 commit as the page.
 
 **The vision routes raised the bar a third time, and in a way worth generalising.**
-Six of the eleven have a failure mode that produces *plausible output* rather than an
+Nine of the fourteen have a failure mode that produces *plausible output* rather than an
 error, so "a result appeared" and "N rows rendered" are both worthless there. Each one's
 `@slow` spec asserts a **property** instead:
 
@@ -138,6 +139,25 @@ error, so "a result appeared" and "N rows rendered" are both worthless there. Ea
 | `/image-to-text` | a substring of the text actually printed in the picture — a model handed mis-normalised pixels still writes fluent English |
 | `/pose` | the nose is **above** the ankles — the crop origin is not added back by the processor, and without it the skeleton floats beside the person |
 | `/video-classification` | the pooled verdict names the clip's true label over a distractor, and the pooling window moves without a single new Hub request |
+| `/background-removal` | the matte covers a **plausible fraction** of the frame — a broken preprocessing path produces 0% (an empty checkerboard) or 100% (the original photo), and both render perfectly |
+| `/super-resolution` | **PSNR against a ground truth the spec constructs itself**, beating a plain bicubic resize — a mis-assembled upscale is perfectly sharp, so nothing weaker than a measurement catches it |
+| `/image-to-3d` | the point count tracks the stride the page promises, and moving either slider issues no Hub request — the cloud re-derives from the cached depth map rather than re-running |
+
+**`/super-resolution` is the one that had to build its own ground truth**, and the
+trick generalises: there was no reference image to score against, so the spec
+takes a crop of a bundled sample, halves it *in the page*, uploads that as the
+input with `setInputFiles({ buffer })` — no file on disk — and scores the model's
+2x output against the crop it started from. Whenever "what is the right answer?"
+has no bundled answer, making one from a known input is usually cheaper than
+lowering the assertion.
+
+**Two of the vision specs found real bugs this way, and both were in the sample
+set rather than the code.** `/background-removal` measured 0.2% coverage on a
+photograph of a car, because MODNet is a *portrait* matting model and returns a
+near-empty matte rather than an error on anything else. The fix was
+`PORTRAIT_SAMPLES` and a sample hint naming which model suits which picture — but
+only a measurement could have found it, since an empty cut-out looks like a page
+that has not run yet.
 
 The shape to copy: **find the assertion a broken build would fail and a working one
 would pass, and nothing weaker.** If the only thing you can think of is a count, the
@@ -179,7 +199,7 @@ frontend/
       audio.spec.ts        # audio routes with downloads blocked — fast, default run
       audio-models.spec.ts # @slow: real weights, real ONNX sessions
       vision.spec.ts       # /image-classification, weights blocked — default run
-      vision-models.spec.ts# @slow: a real MobileNetV4 load + classification
+      vision-models.spec.ts# @slow: real loads across all fourteen vision routes
       model-ids.spec.ts    # @slow, seconds: every catalogue id + vision dtypes
       webgpu/              # the GPU-only project
     utils/

@@ -155,6 +155,10 @@ consequences for a new catalogue entry:
   the **measured** `bytes` when you do, because the params estimate now lies.
 * Only a real inference catches this. Assert a *known label on a known image* in
   the `@slow` spec, never just "five rows appeared".
+* **Say in the comment whether a pin is a measurement or a precaution** — they
+  are different claims, and only one of them is evidence. The MobileNetV4 pin
+  above is a measurement. A precaution names the spec that would settle it, and
+  is dropped when that spec says so.
 
 Quote the **download size in the chosen dtype**, not the parameter count, in the
 model card. A user waiting on 300 MB does not care how many parameters that is.
@@ -184,10 +188,12 @@ are eleven: [`audio/asr.worker.ts`](../../frontend/src/audio/asr.worker.ts),
 [`vision/caption/caption.worker.ts`](../../frontend/src/vision/caption/caption.worker.ts),
 [`vision/pose/pose.worker.ts`](../../frontend/src/vision/pose/pose.worker.ts) and the
 raw-WGSL [`webgpu/worker.ts`](../../frontend/src/webgpu/worker.ts). A *twelfth*
-is only justified when a task genuinely needs different machinery.
+is only justified when a task genuinely needs different machinery — none of the
+three Wave 3 routes did: background removal and super-resolution are plain
+pipeline calls, and image-to-3D reuses depth's.
 
-**Before choosing, answer one question: is this a plain `pipeline()` call?** Six of
-the eleven vision routes are, and they all ride `vision.worker.ts` with the task string
+**Before choosing, answer one question: is this a plain `pipeline()` call?** Ten of
+the fourteen vision routes are, and they all ride `vision.worker.ts` with the task string
 in the `load` message. Four are not, and each owns an engine for a different reason —
 the pipeline throws away work you want to keep (zero-shot: it re-encodes the labels every
 call), the architecture *is* a split you want to exploit (SAM: encode once, decode many),

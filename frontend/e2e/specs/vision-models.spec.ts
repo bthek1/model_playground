@@ -516,3 +516,257 @@ test.describe("@slow real frame-level video baseline", () => {
     ).toEqual([]);
   });
 });
+
+// --- Wave 3, the carve-outs ---------------------------------------------------
+//
+// Each of these asserts a *measurement*, not an appearance, because all three
+// routes fail in ways that still render something plausible: a degenerate matte
+// is either the original photo or an empty checkerboard, a mis-assembled upscale
+// is perfectly sharp, and an inside-out point cloud is still a point cloud.
+
+test.describe("@slow real background removal", () => {
+  test.describe.configure({ mode: "serial", timeout: DOWNLOAD_BUDGET_MS });
+
+  test("/background-removal cuts the subject out and leaves the corners clear", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const model = new ModelPageObject(page);
+    await page.goto("/background-removal");
+
+    // MODNet is the default and is ~6 MB on WASM, so this spec stays fast
+    // enough to actually be run. It is also the Apache-2.0 one (#24).
+    await model.button(/^Load model$/).click();
+    await expect(page.getByTestId("model-ready")).toBeVisible({
+      timeout: DOWNLOAD_BUDGET_MS,
+    });
+
+    // A **portrait**, not the beetle. MODNet is a portrait matting model: on a
+    // photo with no person in it it returns an almost empty matte rather than
+    // failing, which is how this spec found the sample gap in the first place
+    // (0.2% coverage on the car). See PORTRAIT_SAMPLES.
+    await model.button(/^Portrait$/).click();
+    await expect(page.getByTestId("cutout-view")).toBeVisible({
+      timeout: 120_000,
+    });
+
+    // **The assertion that matters.** A broken preprocessing path produces a
+    // matte that is entirely on or entirely off, and both render cleanly — one
+    // is the original photo, the other an empty checkerboard. A plausible band
+    // is the only thing that separates a working model from either.
+    const coverage = await page.getByTestId("matte-coverage").innerText();
+    const percent = Number(/([\d.]+)%/.exec(coverage)?.[1] ?? NaN);
+    expect(
+      percent,
+      `matte covers ${percent}% of the frame — 0 or 100 means the model never really ran`,
+    ).toBeGreaterThan(5);
+    expect(percent).toBeLessThan(85);
+
+    // The soft edge survives to the UI, which is the page's other promise.
+    await expect(page.getByTestId("slot-4")).toContainText(
+      /in-between value rather than being rounded/i,
+    );
+
+    // And the matte view is a real second rendering of the same result.
+    await model.button(/^Matte$/).click();
+    await expect(page.getByTestId("matte-view")).toBeVisible();
+  });
+});
+
+test.describe("@slow real super-resolution", () => {
+  test.describe.configure({ mode: "serial", timeout: 15 * 60 * 1000 });
+
+  test("/super-resolution beats a bicubic upscale on PSNR", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const model = new ModelPageObject(page);
+    await page.goto("/super-resolution");
+
+    // **The measurement this route exists to survive**, and the only one that
+    // proves the model ran *and* that the tiles were reassembled in the right
+    // order — a shuffled reassembly is perfectly sharp and scores terribly.
+    //
+    // It needs a ground truth, so the spec makes one: take a crop of a bundled
+    // sample, halve it, and upscale *that* back to the crop's own size. The
+    // crop is then the right answer, and both the model and a plain bicubic
+    // resize can be scored against it.
+    //
+    // 320x320 in is 4 tiles — enough that seams are exercised, few enough that
+    // a real WASM run finishes.
+    const CROP = 640;
+    const { lowRes, truth } = await page.evaluate(async (crop) => {
+      const url =
+        "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/city-streets.jpg";
+      const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+
+      const cut = document.createElement("canvas");
+      cut.width = crop;
+      cut.height = crop;
+      const cctx = cut.getContext("2d")!;
+      cctx.drawImage(bitmap, 0, 0, crop, crop, 0, 0, crop, crop);
+
+      const half = document.createElement("canvas");
+      half.width = crop / 2;
+      half.height = crop / 2;
+      const hctx = half.getContext("2d")!;
+      hctx.imageSmoothingEnabled = true;
+      hctx.imageSmoothingQuality = "high";
+      hctx.drawImage(cut, 0, 0, half.width, half.height);
+
+      return {
+        lowRes: half.toDataURL("image/png").split(",")[1],
+        truth: cut.toDataURL("image/png").split(",")[1],
+      };
+    }, CROP);
+
+    await model.button(/^Load model$/).click();
+    await expect(page.getByTestId("model-ready")).toBeVisible({
+      timeout: DOWNLOAD_BUDGET_MS,
+    });
+
+    await page.getByLabel(/upload an image/i).setInputFiles({
+      name: "low-res.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(lowRes, "base64"),
+    });
+
+    // The cost is quoted before the run, in tiles and seconds.
+    const guard = page.getByTestId("size-guard");
+    await expect(guard).toBeVisible();
+    await expect(guard).toContainText("320x320 → 640x640");
+
+    const started = Date.now();
+    await model.button(/Upscale 2x/).click();
+    await expect(page.getByTestId("sr-compare")).toBeVisible({
+      timeout: 12 * 60 * 1000,
+    });
+    const elapsedMs = Date.now() - started;
+
+    const scores = await page.evaluate(async (truthB64) => {
+      const canvases = Array.from(
+        document.querySelectorAll<HTMLCanvasElement>(
+          "[data-testid='sr-compare'] canvas",
+        ),
+      );
+      if (canvases.length < 2) return null;
+      // DOM order inside the frame: bicubic first, then the model on top.
+      const [bicubic, modelOut] = canvases;
+
+      const bitmap = await createImageBitmap(
+        await (await fetch(`data:image/png;base64,${truthB64}`)).blob(),
+      );
+      const ref = document.createElement("canvas");
+      ref.width = bitmap.width;
+      ref.height = bitmap.height;
+      ref.getContext("2d")!.drawImage(bitmap, 0, 0);
+      const truth = ref
+        .getContext("2d")!
+        .getImageData(0, 0, ref.width, ref.height);
+
+      const psnr = (c: HTMLCanvasElement) => {
+        if (c.width !== truth.width || c.height !== truth.height) return null;
+        const px = c.getContext("2d")!.getImageData(0, 0, c.width, c.height);
+        let se = 0;
+        let n = 0;
+        for (let i = 0; i < px.data.length; i += 4) {
+          for (let k = 0; k < 3; k++) {
+            const d = px.data[i + k] - truth.data[i + k];
+            se += d * d;
+            n++;
+          }
+        }
+        const mse = se / n;
+        return mse === 0 ? Infinity : 10 * Math.log10((255 * 255) / mse);
+      };
+
+      return {
+        model: psnr(modelOut),
+        bicubic: psnr(bicubic),
+        width: modelOut.width,
+        height: modelOut.height,
+      };
+    }, truth);
+
+    expect(scores, "the comparison rendered no canvases").not.toBeNull();
+
+    // Geometry first: exactly 2x, so the tiles were placed and cropped
+    // correctly and the processor's reflection padding did not leak in.
+    expect(scores!.width).toBe(CROP);
+    expect(scores!.height).toBe(CROP);
+
+    // Reported so a regression in either direction is visible in the log, and
+    // so the per-tile estimate in `vision/superRes.ts` can be kept honest.
+    const tiles = 4;
+    console.log(
+      `super-resolution: model ${scores!.model?.toFixed(2)} dB vs bicubic ` +
+        `${scores!.bicubic?.toFixed(2)} dB · ${Math.round(elapsedMs / 1000)}s ` +
+        `for ${tiles} tiles (${Math.round(elapsedMs / tiles)} ms/tile)`,
+    );
+
+    expect(
+      scores!.model,
+      "the model scored no better than a plain bicubic resize — it did not run, " +
+        "the tiles were mis-assembled, or the quantization destroyed it",
+    ).toBeGreaterThan(scores!.bicubic!);
+  });
+});
+
+test.describe("@slow real point cloud", () => {
+  test.describe.configure({ mode: "serial", timeout: DOWNLOAD_BUDGET_MS });
+
+  test("/image-to-3d builds a non-degenerate cloud at the stride it promises", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const model = new ModelPageObject(page);
+    await page.goto("/image-to-3d");
+
+    // The same checkpoint /depth uses — this route adds no new model at all.
+    await model.button(/^Load model$/).click();
+    await expect(page.getByTestId("model-ready")).toBeVisible({
+      timeout: DOWNLOAD_BUDGET_MS,
+    });
+
+    await model.button(/^City street$/).click();
+    await expect(model.outputPanel).toContainText(/points/, {
+      timeout: 120_000,
+    });
+
+    /** The point count the page reports, as a number. */
+    const countPoints = async () => {
+      const text = await model.outputPanel.innerText();
+      const match = /([\d,]+)\s+points/.exec(text);
+      expect(match, `no point count in the output: ${text}`).not.toBeNull();
+      return Number(match![1].replace(/,/g, ""));
+    };
+
+    // Stride is a promise about the geometry: one point per N x N pixels.
+    await page.getByTestId("stride-2").click();
+    const atTwo = await countPoints();
+    await page.getByTestId("stride-4").click();
+    const atFour = await countPoints();
+
+    expect(atTwo).toBeGreaterThan(1000);
+    // Halving the sampling rate on both axes quarters the count. Rounding at
+    // the edges makes it approximate, not exact.
+    expect(atFour).toBeGreaterThan(atTwo / 4.6);
+    expect(atFour).toBeLessThan(atTwo / 3.4);
+
+    // Changing the stride re-derives from the cached depth map. A route that
+    // re-ran the model here would be asking for a second inference per drag.
+    const reRuns: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().includes("huggingface.co")) reRuns.push(r.url());
+    });
+    await page.getByTestId("focal-slider").fill("1.5");
+    await page.getByTestId("stride-1").click();
+    expect(reRuns, "moving a slider re-ran the depth model").toEqual([]);
+
+    // The claim the page is obliged to make survives a real run.
+    await expect(model.slot(3)).toContainText(/not a measurement/i);
+  });
+});

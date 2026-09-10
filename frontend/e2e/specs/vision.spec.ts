@@ -553,3 +553,127 @@ test.describe("/video-classification", () => {
     expect(weightRequests, "editing labels fetched model weights").toEqual([]);
   });
 });
+
+// --- Wave 3, the carve-outs ---------------------------------------------------
+//
+// Three routes that each cover *part* of a taxonomy slug, and each have one
+// promise worth asserting in a real browser rather than in jsdom.
+
+test.describe("/background-removal", () => {
+  test("states the licence beside the model, and downloads nothing", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/background-removal");
+
+    // The default is permissive and says so quietly.
+    await expect(page.getByTestId("model-licence")).toContainText(
+      /Apache-2\.0/i,
+    );
+    await expect(page.getByTestId("model-licence")).toContainText(
+      /commercial use permitted/i,
+    );
+
+    // RMBG-1.4 is the better matte and is non-commercial only. Selecting it
+    // must say so before the download, not after — that is the whole reason it
+    // is not the default (#24).
+    await model.button(/RMBG-1\.4/).click();
+    await expect(page.getByTestId("model-licence")).toContainText(
+      /non-commercial/i,
+    );
+
+    await expect(model.emptyOutput).toBeVisible();
+    expect(
+      weightRequests,
+      "reading a licence fetched model weights",
+    ).toEqual([]);
+  });
+});
+
+test.describe("/super-resolution", () => {
+  test("quotes the tile count and duration before any upscale starts", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/super-resolution");
+
+    // Nothing to guard before an image exists.
+    await expect(page.getByTestId("size-guard")).toHaveCount(0);
+
+    await model.button(/^Tiger$/).click();
+    await expect(page.getByAltText(/selected input: tiger/i)).toBeVisible();
+
+    // A run is many inferences, and the cost is stated up front — discovering
+    // that an upscale is four minutes long halfway through it is the difference
+    // between a slow page and one that appears to have hung.
+    const guard = page.getByTestId("size-guard");
+    await expect(guard).toBeVisible();
+    await expect(guard).toContainText(/tile/);
+    await expect(guard).toContainText(/→/);
+
+    await expect(model.emptyOutput).toBeVisible();
+    expect(weightRequests, "picking an image fetched weights").toEqual([]);
+  });
+
+  test("says it covers super-resolution, not image-to-image editing", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    await stubHub(page);
+
+    await page.goto("/super-resolution");
+    // The slug promises more than the model delivers, so the page says what it
+    // actually does — in its own header, above the four bands.
+    await expect(page.locator("main")).toContainText(/stay on a server/i);
+  });
+});
+
+test.describe("/image-to-3d", () => {
+  test("degrades to the depth map when the browser has no WebGPU", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    // Chromium in the default project has no GPU device, so this is the real
+    // fallback path rather than a simulated one. `detectWebGPU()` never throws:
+    // the failure is a status, and a page that answered it with an empty canvas
+    // would read as "the model failed" rather than "this machine has no GPU".
+    const model = new ModelPageObject(page);
+    await page.goto("/image-to-3d");
+
+    await expect(page.getByTestId("webgpu-unavailable")).toBeVisible();
+    await expect(model.slot(2)).toContainText(/3-D view is unavailable/i);
+
+    await expect(model.emptyOutput).toBeVisible();
+    expect(weightRequests, "the GPU probe fetched weights").toEqual([]);
+  });
+
+  test("offers the focal and density controls before a model exists", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/image-to-3d");
+
+    // Both re-derive from a cached depth map rather than re-running, so they
+    // belong to the page rather than to the model.
+    await expect(page.getByTestId("focal-slider")).toBeVisible();
+    await expect(page.getByTestId("stride-4")).toBeVisible();
+    // And the geometry claim is made whether or not anything has run.
+    await expect(model.slot(3)).toContainText(/not a measurement/i);
+  });
+});

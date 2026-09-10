@@ -2,7 +2,7 @@
 
 ## Computer Vision
 
-**Eleven of nineteen shipped.** [`/image-classification`](frontend/src/routes/image-classification.tsx),
+**Fourteen of twenty shipped.** [`/image-classification`](frontend/src/routes/image-classification.tsx),
 [`/depth`](frontend/src/routes/depth.tsx),
 [`/object-detection`](frontend/src/routes/object-detection.tsx),
 [`/segmentation`](frontend/src/routes/segmentation.tsx),
@@ -11,10 +11,14 @@
 [`/image-features`](frontend/src/routes/image-features.tsx),
 [`/mask-generation`](frontend/src/routes/mask-generation.tsx),
 [`/image-to-text`](frontend/src/routes/image-to-text.tsx),
-[`/pose`](frontend/src/routes/pose.tsx) and
-[`/video-classification`](frontend/src/routes/video-classification.tsx).
-The rest of the category stays on a server, with a reason per task — see
-[`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) §3.12.
+[`/pose`](frontend/src/routes/pose.tsx),
+[`/video-classification`](frontend/src/routes/video-classification.tsx),
+[`/background-removal`](frontend/src/routes/background-removal.tsx),
+[`/super-resolution`](frontend/src/routes/super-resolution.tsx) and
+[`/image-to-3d`](frontend/src/routes/image-to-3d.tsx).
+Twenty rather than nineteen because background removal added a taxonomy row the
+Hub does not have. The rest of the category stays on a server, with a reason per
+task — see [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) §3.12.
 
 - [x] depth estimation — [#12](https://github.com/bthek1/model_playground/issues/12)
 - [x] object detection, live from the camera — [#13](https://github.com/bthek1/model_playground/issues/13)
@@ -29,12 +33,20 @@ The rest of the category stays on a server, with a reason per task — see
 - [x] keypoint detection (pose) — [#20](https://github.com/bthek1/model_playground/issues/20)
 - [x] video classification, **as a frame-level baseline** — [#21](https://github.com/bthek1/model_playground/issues/21)
 
-Still open, the Wave 3 carve-outs:
+The Wave 3 carve-outs, each covering *part* of its slug and each saying so:
 
-- [ ] super-resolution inside Image to Image — [#22](https://github.com/bthek1/model_playground/issues/22)
-- [ ] depth-to-point-cloud, the browser half of Image to 3D — [#23](https://github.com/bthek1/model_playground/issues/23)
-- [ ] background removal — [#24](https://github.com/bthek1/model_playground/issues/24)
-      (licence and taxonomy questions are the re-scoping risk here)
+- [x] super-resolution inside Image to Image — [#22](https://github.com/bthek1/model_playground/issues/22)
+      (overlapping tiles feathered at the seams, against a bicubic baseline;
+      `just fe-e2e-superres` is what decides the WASM precision pin)
+- [x] depth-to-point-cloud, the browser half of Image to 3D — [#23](https://github.com/bthek1/model_playground/issues/23)
+      (no new model — /depth's checkpoint plus an unprojection, rendered through
+      the first WGSL *render* pass in the repo)
+- [x] background removal — [#24](https://github.com/bthek1/model_playground/issues/24)
+      Both re-scoping risks were real and both were settled before the build:
+      **licence** — RMBG-1.4 is CC non-commercial, so Apache-2.0 MODNet is the
+      default and RMBG is offered with the restriction on screen; **taxonomy** —
+      a Computer Vision row was added, a deliberate departure from the Hub's
+      task list, taking the category from nineteen rows to twenty.
 
 
 - [ ] deploy using pulumi

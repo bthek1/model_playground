@@ -145,6 +145,24 @@ and nothing else. The older hooks predate it and still expose a task-named alias
 reviewer who has read one hook should have read them all, and a renamed `run` is
 exactly what breaks that.
 
+**`cancel()` belongs to Machine A. A long run needs its own exit, and it is `stop()`.**
+`/super-resolution` is the case: one *run* is thirty inferences, one per overlapping
+tile, and a user who wants out should not have to throw away the weights to get it. So
+`useSuperRes` adds `stop()` — abandon the remaining tiles, stay `ready` — alongside the
+`cancel()` that abandons a download. Two rules come with it:
+
+- **Keep them distinct.** `cancel()` returns to `idle`; `stop()` leaves the model
+  loaded. Overloading one name for both is how a Stop button ends up costing a 54 MB
+  re-download.
+- **`running` must mean the whole sequence.** The inflight count drops to zero between
+  tiles, so a hook that forwards it verbatim flickers the spinner and re-enables the
+  transport thirty times during a single upscale. `useSuperRes` returns
+  `pipe.running || tiles != null`.
+
+A multi-inference run also owes **progress in its own terms** (`{ done, total }` tiles),
+derived from the loop rather than from a new worker message — the protocol stays one
+message per inference, which is what keeps the geometry unit-testable on the main thread.
+
 ---
 
 ## 4. The four slots
@@ -309,6 +327,9 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Mask Generation | model catalogue | weight download, **then a per-image encode** | click a point on the picture | the mask, its candidates, its decode time |
 | Keypoint Detection | **a pair** of checkpoints | both downloads, one aggregate bar | image / camera, threshold, people cap | skeletons over the frame |
 | Video Classification | CLIP catalogue, reused | weight download | a clip, labels, a sample rate | scores over time + a filmstrip |
+| Background Removal | model catalogue **+ its licence** | weight download | image / camera frame | cut-out on a checkerboard, backdrop swap, raw matte, PNG |
+| Super Resolution | model catalogue | weight download | an image, **plus the tile count and time it will cost** | a draggable split against a bicubic baseline |
+| Image to 3D | depth catalogue, reused | weight download **and** a GPU probe | image / camera, focal + density sliders | an orbitable point cloud, or the depth map and why not |
 | `/tasks/$slug` placeholder | — | — | — | "not available yet" |
 
 Where LOAD is fast and free (a shader compile), it may auto-run — pass `autoLoad`. The
@@ -352,6 +373,30 @@ ones. (That last one needed a fix: `model/progress.ts` keys its file table on **
 file**, because both checkpoints publish an `onnx/model_fp16.onnx` and the second was
 overwriting the first's entry — the bar reached 100% halfway through and the second
 download read as a stall.)
+
+**A run whose cost the user cannot guess must be quoted before it starts.**
+`/super-resolution` is many inferences, and how many depends on the picture: the RUN
+slot states the output size, the tile count and a rough duration for the resolved
+backend *before* the button is pressed, and Stop is offered while it runs. The general
+rule is the sibling of the size-before-load guardrail in §5 — **§5 is the bandwidth a
+model costs; this is the time a run costs** — and it applies wherever a run is more than
+one forward pass. Where the estimate comes from a constant, keep the constant honest:
+`MS_PER_TILE` was a guess an order of magnitude out until the `@slow` spec measured it.
+
+**LOAD may be two different questions at once.** `/image-to-3d` downloads weights *and*
+needs a GPU device for its render half, and the second can fail on a machine where the
+first succeeds. Both live in LOAD, and the GPU answer is given **before** the download
+rather than after it — better to learn there is no WebGPU before spending 50 MB. When
+the device is missing the page still runs the model and shows the depth map, saying what
+is unavailable and why; `detectWebGPU()` never throws, so the failure is a status, and a
+page that answered it with an empty canvas would read as "the model failed".
+
+**A licence can belong in SELECT.** Where a catalogue entry's terms constrain what the
+user may do with the output — `/background-removal` offers one model that is
+non-commercial only — the constraint is a property of the *choice*, so it renders beside
+the picker at the moment the choice is made, in the same amber as the size guardrail.
+The permissively licensed model is the default. A restriction discovered after the
+download is a restriction discovered too late.
 
 **A control in RUN may legitimately re-run.** The §7 rule above — a knob that only
 re-reads must never re-run — is about OUTPUT. `/pose`'s person-confidence slider and its

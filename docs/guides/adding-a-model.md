@@ -248,6 +248,15 @@ modality, a pure engine, a thin task hook. What differs is only the payload —
 guardrail are shared by both** and live in `src/model/` (`backend.ts`,
 `size.ts`); a third modality imports them rather than copying them.
 
+**On pinning `dtypes`:** the rule is "leave it unset unless a real measurement
+says otherwise", and when you do pin one, say in the comment **whether it is a
+measurement or a precaution** — they are different claims and only one of them is
+evidence. `/image-classification` pins fp32 because a q8 MobileNetV4 called a
+tiger a rattlesnake, which is a measurement. `/super-resolution` pins its WASM
+precision as a precaution (dense regression puts int8 error straight into the
+picture) and names the spec that would relax it. A pinned entry then owes
+**measured** `bytes`, because the params estimate no longer describes it.
+
 The shape is always the same four pieces:
 
 **a. Catalogue entry.** Add the model to the task's catalogue (`audio/types.ts`
@@ -495,5 +504,32 @@ owes a `@slow` spec that measures a **property**, never a count:
 | `/pose` | the nose is **above** the ankles |
 | `/zero-shot-object-detection` | a present phrase finds boxes and an absent one finds none |
 | `/image-features` | an animal's nearest neighbour is an animal |
+| `/background-removal` | the matte's **coverage band** — 0% and 100% both render beautifully |
+| `/super-resolution` | **PSNR against a ground truth**, beating a bicubic resize |
+| `/image-to-3d` | the point count tracks the stride, and sliders re-derive without a run |
 
 "Five rows appeared" passes for all of them.
+
+Two of the Wave 3 rows are worth a sentence each, because they are the cases
+where a *plain* `pipeline()` call is still the right answer and the risk sits
+somewhere else entirely:
+
+- **`/background-removal` is a plain pipeline call whose risk was a licence.**
+  `briaai/RMBG-1.4` is Creative Commons **non-commercial**, in an MIT repo, so the
+  default is Apache-2.0 MODNet and the restriction is rendered beside the choice.
+  Read the model card before the catalogue entry — it is the one thing that can
+  invalidate a route after it is built. The second risk was the *sample set*:
+  MODNet is a **portrait** matting model, and on a photo with no person in it it
+  returns a near-empty matte rather than failing. The `@slow` spec measured 0.2%
+  coverage before `PORTRAIT_SAMPLES` existed.
+- **`/super-resolution` is a plain pipeline call whose risk was arithmetic.** The
+  model is one pass, but a *run* is many of them, and the tiling and seam
+  blending around it are ours. That code (`vision/tile.ts`) is pure and
+  exhaustively unit-tested — including an identity round-trip that must reproduce
+  the input pixel for pixel — because a mis-assembled upscale is perfectly sharp
+  and looks fine. Its `@slow` spec **builds its own ground truth**: there was no
+  reference image to score against, so it crops a bundled sample, halves it in
+  the page, uploads that as the input (`setInputFiles({ buffer })`, no file on
+  disk) and scores the 2x output against the crop it started from. When "what is
+  the right answer?" has no bundled answer, making one from a known input is
+  usually cheaper than lowering the assertion.

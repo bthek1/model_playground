@@ -35,6 +35,10 @@ test.describe("@slow model catalogue", () => {
     const { SAM_MODELS } = await import("../../src/vision/sam/types");
     const { CAPTION_MODELS } = await import("../../src/vision/caption/types");
     const { POSE_MODELS } = await import("../../src/vision/pose/types");
+    const { MATTE_MODELS } = await import(
+      "../../src/vision/backgroundRemoval"
+    );
+    const { SUPER_RES_MODELS } = await import("../../src/vision/superRes");
 
     const ids = [
       ...ASR_MODELS,
@@ -54,6 +58,8 @@ test.describe("@slow model catalogue", () => {
       ...FEATURE_MODELS,
       ...SAM_MODELS,
       ...CAPTION_MODELS,
+      ...MATTE_MODELS,
+      ...SUPER_RES_MODELS,
       // A pose entry is a *pair*, so its own `id` is a composite that resolves
       // to nothing on the Hub — the two halves are what get downloaded.
       ...POSE_MODELS.flatMap((m) => [m.detector, m.pose]),
@@ -92,6 +98,10 @@ test.describe("@slow model catalogue", () => {
     const { SAM_MODELS } = await import("../../src/vision/sam/types");
     const { CAPTION_MODELS } = await import("../../src/vision/caption/types");
     const { POSE_MODELS } = await import("../../src/vision/pose/types");
+    const { MATTE_MODELS } = await import(
+      "../../src/vision/backgroundRemoval"
+    );
+    const { SUPER_RES_MODELS } = await import("../../src/vision/superRes");
 
     // Suffix per precision, applied to each of the entry's graph base names.
     // Not every repo publishes one `model.onnx`: CLIP as a feature extractor
@@ -116,6 +126,8 @@ test.describe("@slow model catalogue", () => {
       ...FEATURE_MODELS,
       ...SAM_MODELS,
       ...CAPTION_MODELS,
+      ...MATTE_MODELS,
+      ...SUPER_RES_MODELS,
       // Each half separately: the pair's `backends` gate applies to both, so it
       // is carried down here rather than declared twice in the catalogue.
       ...POSE_MODELS.flatMap((m) =>

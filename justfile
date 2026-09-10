@@ -163,12 +163,25 @@ fe-e2e-vad:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "voice activity detection"
 
 # Run the @slow vision specs: real loads of MobileNetV4, Depth Anything V2,
-# D-FINE nano, SegFormer-B0, CLIP, OWLv2, DINOv2, SlimSAM and the D-FINE+ViTPose
-# pair, each asserting a known answer on a known input. OWLv2 alone is ~155 MB,
-# so budget tens of minutes on a cold cache. The Florence-2 half runs in the
-# `webgpu` project and skips itself on a machine with no GPU device.
+# D-FINE nano, SegFormer-B0, CLIP, OWLv2, DINOv2, SlimSAM, the D-FINE+ViTPose
+# pair, and the Wave 3 carve-outs (MODNet, Swin2SR, depth-to-point-cloud), each
+# asserting a known answer or a real measurement on a known input. OWLv2 alone is
+# ~155 MB, so budget tens of minutes on a cold cache. The Florence-2 half runs in
+# the `webgpu` project and skips itself on a machine with no GPU device.
 fe-e2e-vision:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --project=webgpu --workers=1 vision-models.spec.ts
+
+# Run the @slow super-resolution spec on its own: a real Swin2SR load, a real
+# tiled upscale, and the measurement that separates a working reconstruction
+# from a mis-assembled one — the model's output, downscaled by 2, must differ
+# materially from the bicubic baseline rather than matching it.
+#
+# **This is also the spec that decides `SUPER_RES_MODELS[0].dtypes`.** WASM is
+# pinned to fp32 as a precaution (super-resolution is dense regression, where
+# int8 error lands straight in the picture). If q8 clears this bar, drop the
+# override — it costs 31 MB of download.
+fe-e2e-superres:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 --grep "super-resolution"
 
 # Run one @slow vision route at a time — the whole file is tens of minutes cold.
 #   just fe-e2e-vision-one /mask-generation

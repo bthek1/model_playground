@@ -60,6 +60,15 @@ const TASK_ROUTES = [
     heading: "Video Classification",
     downloads: true,
   },
+  {
+    path: "/background-removal",
+    heading: "Background Removal",
+    downloads: true,
+  },
+  { path: "/super-resolution", heading: "Super Resolution", downloads: true },
+  // Both runtimes on one page: the depth model downloads *and* a GPU is
+  // probed. It is still a downloading route — the probe is free and additional.
+  { path: "/image-to-3d", heading: "Image to 3D", downloads: true },
   // Compile-only: no weights, so LOAD auto-runs as a device probe (§7).
   { path: "/tensor", heading: "Tensor Arithmetic", downloads: false },
   // A task with nothing behind it renders the same page with empty slots, so an

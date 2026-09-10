@@ -17,6 +17,7 @@ import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
 import { Route as TextToAudioRouteImport } from './routes/text-to-audio'
 import { Route as TensorRouteImport } from './routes/tensor'
+import { Route as SuperResolutionRouteImport } from './routes/super-resolution'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SegmentationRouteImport } from './routes/segmentation'
 import { Route as PoseRouteImport } from './routes/pose'
@@ -25,10 +26,12 @@ import { Route as ObjectDetectionRouteImport } from './routes/object-detection'
 import { Route as MaskGenerationRouteImport } from './routes/mask-generation'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImageToTextRouteImport } from './routes/image-to-text'
+import { Route as ImageTo3dRouteImport } from './routes/image-to-3d'
 import { Route as ImageFeaturesRouteImport } from './routes/image-features'
 import { Route as ImageClassificationRouteImport } from './routes/image-classification'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as DepthRouteImport } from './routes/depth'
+import { Route as BackgroundRemovalRouteImport } from './routes/background-removal'
 import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
 import { Route as AudioClassificationRouteImport } from './routes/audio-classification'
 import { Route as AsrRouteImport } from './routes/asr'
@@ -76,6 +79,11 @@ const TensorRoute = TensorRouteImport.update({
   path: '/tensor',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SuperResolutionRoute = SuperResolutionRouteImport.update({
+  id: '/super-resolution',
+  path: '/super-resolution',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -116,6 +124,11 @@ const ImageToTextRoute = ImageToTextRouteImport.update({
   path: '/image-to-text',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImageTo3dRoute = ImageTo3dRouteImport.update({
+  id: '/image-to-3d',
+  path: '/image-to-3d',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ImageFeaturesRoute = ImageFeaturesRouteImport.update({
   id: '/image-features',
   path: '/image-features',
@@ -134,6 +147,11 @@ const HomeRoute = HomeRouteImport.update({
 const DepthRoute = DepthRouteImport.update({
   id: '/depth',
   path: '/depth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BackgroundRemovalRoute = BackgroundRemovalRouteImport.update({
+  id: '/background-removal',
+  path: '/background-removal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AudioToAudioRoute = AudioToAudioRouteImport.update({
@@ -167,10 +185,12 @@ export interface FileRoutesByFullPath {
   '/asr': typeof AsrRoute
   '/audio-classification': typeof AudioClassificationRoute
   '/audio-to-audio': typeof AudioToAudioRoute
+  '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
+  '/image-to-3d': typeof ImageTo3dRoute
   '/image-to-text': typeof ImageToTextRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
@@ -179,6 +199,7 @@ export interface FileRoutesByFullPath {
   '/pose': typeof PoseRoute
   '/segmentation': typeof SegmentationRoute
   '/signup': typeof SignupRoute
+  '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
   '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
@@ -194,10 +215,12 @@ export interface FileRoutesByTo {
   '/asr': typeof AsrRoute
   '/audio-classification': typeof AudioClassificationRoute
   '/audio-to-audio': typeof AudioToAudioRoute
+  '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
+  '/image-to-3d': typeof ImageTo3dRoute
   '/image-to-text': typeof ImageToTextRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
@@ -206,6 +229,7 @@ export interface FileRoutesByTo {
   '/pose': typeof PoseRoute
   '/segmentation': typeof SegmentationRoute
   '/signup': typeof SignupRoute
+  '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
   '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
@@ -222,10 +246,12 @@ export interface FileRoutesById {
   '/asr': typeof AsrRoute
   '/audio-classification': typeof AudioClassificationRoute
   '/audio-to-audio': typeof AudioToAudioRoute
+  '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
+  '/image-to-3d': typeof ImageTo3dRoute
   '/image-to-text': typeof ImageToTextRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
@@ -234,6 +260,7 @@ export interface FileRoutesById {
   '/pose': typeof PoseRoute
   '/segmentation': typeof SegmentationRoute
   '/signup': typeof SignupRoute
+  '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
   '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
@@ -251,10 +278,12 @@ export interface FileRouteTypes {
     | '/asr'
     | '/audio-classification'
     | '/audio-to-audio'
+    | '/background-removal'
     | '/depth'
     | '/home'
     | '/image-classification'
     | '/image-features'
+    | '/image-to-3d'
     | '/image-to-text'
     | '/login'
     | '/mask-generation'
@@ -263,6 +292,7 @@ export interface FileRouteTypes {
     | '/pose'
     | '/segmentation'
     | '/signup'
+    | '/super-resolution'
     | '/tensor'
     | '/text-to-audio'
     | '/text-to-speech'
@@ -278,10 +308,12 @@ export interface FileRouteTypes {
     | '/asr'
     | '/audio-classification'
     | '/audio-to-audio'
+    | '/background-removal'
     | '/depth'
     | '/home'
     | '/image-classification'
     | '/image-features'
+    | '/image-to-3d'
     | '/image-to-text'
     | '/login'
     | '/mask-generation'
@@ -290,6 +322,7 @@ export interface FileRouteTypes {
     | '/pose'
     | '/segmentation'
     | '/signup'
+    | '/super-resolution'
     | '/tensor'
     | '/text-to-audio'
     | '/text-to-speech'
@@ -305,10 +338,12 @@ export interface FileRouteTypes {
     | '/asr'
     | '/audio-classification'
     | '/audio-to-audio'
+    | '/background-removal'
     | '/depth'
     | '/home'
     | '/image-classification'
     | '/image-features'
+    | '/image-to-3d'
     | '/image-to-text'
     | '/login'
     | '/mask-generation'
@@ -317,6 +352,7 @@ export interface FileRouteTypes {
     | '/pose'
     | '/segmentation'
     | '/signup'
+    | '/super-resolution'
     | '/tensor'
     | '/text-to-audio'
     | '/text-to-speech'
@@ -333,10 +369,12 @@ export interface RootRouteChildren {
   AsrRoute: typeof AsrRoute
   AudioClassificationRoute: typeof AudioClassificationRoute
   AudioToAudioRoute: typeof AudioToAudioRoute
+  BackgroundRemovalRoute: typeof BackgroundRemovalRoute
   DepthRoute: typeof DepthRoute
   HomeRoute: typeof HomeRoute
   ImageClassificationRoute: typeof ImageClassificationRoute
   ImageFeaturesRoute: typeof ImageFeaturesRoute
+  ImageTo3dRoute: typeof ImageTo3dRoute
   ImageToTextRoute: typeof ImageToTextRoute
   LoginRoute: typeof LoginRoute
   MaskGenerationRoute: typeof MaskGenerationRoute
@@ -345,6 +383,7 @@ export interface RootRouteChildren {
   PoseRoute: typeof PoseRoute
   SegmentationRoute: typeof SegmentationRoute
   SignupRoute: typeof SignupRoute
+  SuperResolutionRoute: typeof SuperResolutionRoute
   TensorRoute: typeof TensorRoute
   TextToAudioRoute: typeof TextToAudioRoute
   TextToSpeechRoute: typeof TextToSpeechRoute
@@ -414,6 +453,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TensorRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/super-resolution': {
+      id: '/super-resolution'
+      path: '/super-resolution'
+      fullPath: '/super-resolution'
+      preLoaderRoute: typeof SuperResolutionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -470,6 +516,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImageToTextRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/image-to-3d': {
+      id: '/image-to-3d'
+      path: '/image-to-3d'
+      fullPath: '/image-to-3d'
+      preLoaderRoute: typeof ImageTo3dRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/image-features': {
       id: '/image-features'
       path: '/image-features'
@@ -496,6 +549,13 @@ declare module '@tanstack/react-router' {
       path: '/depth'
       fullPath: '/depth'
       preLoaderRoute: typeof DepthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/background-removal': {
+      id: '/background-removal'
+      path: '/background-removal'
+      fullPath: '/background-removal'
+      preLoaderRoute: typeof BackgroundRemovalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/audio-to-audio': {
@@ -541,10 +601,12 @@ const rootRouteChildren: RootRouteChildren = {
   AsrRoute: AsrRoute,
   AudioClassificationRoute: AudioClassificationRoute,
   AudioToAudioRoute: AudioToAudioRoute,
+  BackgroundRemovalRoute: BackgroundRemovalRoute,
   DepthRoute: DepthRoute,
   HomeRoute: HomeRoute,
   ImageClassificationRoute: ImageClassificationRoute,
   ImageFeaturesRoute: ImageFeaturesRoute,
+  ImageTo3dRoute: ImageTo3dRoute,
   ImageToTextRoute: ImageToTextRoute,
   LoginRoute: LoginRoute,
   MaskGenerationRoute: MaskGenerationRoute,
@@ -553,6 +615,7 @@ const rootRouteChildren: RootRouteChildren = {
   PoseRoute: PoseRoute,
   SegmentationRoute: SegmentationRoute,
   SignupRoute: SignupRoute,
+  SuperResolutionRoute: SuperResolutionRoute,
   TensorRoute: TensorRoute,
   TextToAudioRoute: TextToAudioRoute,
   TextToSpeechRoute: TextToSpeechRoute,

@@ -5,7 +5,7 @@
 > which checkpoint to use, and which tasks stay on a server. No Python server in
 > the inference path.
 
-**Eleven of nineteen are built.** §3.1 to §3.11 all ship —
+**Fourteen of twenty are built.** §3.1 to §3.11 and §3.13 to §3.15 all ship —
 [`/depth`](../../frontend/src/routes/depth.tsx),
 [`/image-classification`](../../frontend/src/routes/image-classification.tsx),
 [`/object-detection`](../../frontend/src/routes/object-detection.tsx),
@@ -15,17 +15,26 @@
 [`/mask-generation`](../../frontend/src/routes/mask-generation.tsx),
 [`/image-features`](../../frontend/src/routes/image-features.tsx),
 [`/image-to-text`](../../frontend/src/routes/image-to-text.tsx),
-[`/pose`](../../frontend/src/routes/pose.tsx) and
-[`/video-classification`](../../frontend/src/routes/video-classification.tsx).
-The other eight tasks in the sidebar still render the `/tasks/$slug`
+[`/pose`](../../frontend/src/routes/pose.tsx),
+[`/video-classification`](../../frontend/src/routes/video-classification.tsx),
+[`/background-removal`](../../frontend/src/routes/background-removal.tsx),
+[`/super-resolution`](../../frontend/src/routes/super-resolution.tsx) and
+[`/image-to-3d`](../../frontend/src/routes/image-to-3d.tsx).
+The other six tasks in the sidebar still render the `/tasks/$slug`
 placeholder, and §3.12 says why each of them stays on a server. This file is
 therefore two things at once: a description of the shipped `src/vision/` module
 (§1–§2), and the record of what each route settled (§3) — the verified
 checkpoint, the shape of the page, and the specific failure each decision guards.
 
-Each remaining carve-out has a phased plan of its own, opened as a sub-issue of
-[#2](https://github.com/bthek1/model_playground/issues/2); build order is in that
-issue's build-order comment. The procedure is
+The category is **twenty** rows rather than nineteen because
+[`/background-removal`](../../frontend/src/routes/background-removal.tsx) added
+one: the Hub has no `background-removal` task, so listing it is a deliberate
+departure from the taxonomy's mirror of the Hub's pipeline tags. §3.12 and
+[#24](https://github.com/bthek1/model_playground/issues/24) record that call.
+
+Two of the last three are **partial** by design, and their pages say so: Image to
+Image ships super-resolution and not editing, Image to 3D ships depth-to-cloud
+and not reconstruction. The procedure for a new page is
 [`docs/guides/adding-a-task-page.md`](../guides/adding-a-task-page.md).
 
 Vision splits more cleanly than any other category. The
@@ -37,9 +46,12 @@ text-to-video, text-to-3D, unconditional diffusion) does not run in a tab at
 all, and the reason is structural rather than a missing export: latent diffusion
 needs multi-gigabyte weights and tens of denoising steps.
 
-So this file is honest about a hard split. Sections 3.1 to 3.11 are the pages
-that were built; section 3.12 is the list of tasks that stay on a server, with
-the reason for each.
+So this file is honest about a hard split. Sections 3.1 to 3.11 and 3.13 to 3.15
+are the pages that were built; section 3.12 is the list of tasks that stay on a
+server, with the reason for each — and the three carve-outs hiding inside it that
+turned out not to need one. **§3.12 keeps its number**: it is cited from a dozen
+source comments and from `CLAUDE.md`, so the Wave 3 pages were appended after it
+rather than renumbering everything.
 
 Every model id below was checked against the Hugging Face API. Re-check before
 shipping with `just fe-e2e-models`.
@@ -850,35 +862,229 @@ defensible reason.
 
 ### 3.12 The tasks that stay on a server
 
-Nine tasks, and each has a structural reason rather than a missing export.
-They keep their `/tasks/$slug` placeholders.
+Nine tasks, and each has a structural reason rather than a missing export. Six
+keep their `/tasks/$slug` placeholders outright; **Image to Image and Image to 3D
+now have routes covering the single-pass part of each**, and the generative part
+of both stays here.
 
 | Taxonomy task | Why not in a tab |
 |---|---|
 | Text to Image | SD 1.5 is 1.7 GB at fp16 before the text encoder, and needs 20 to 50 UNet passes. SDXL-Turbo cuts the steps but not the weights |
-| Image to Image | same weights as above. The one exception is super-resolution, below |
+| Image to Image | same weights as above. **Super-resolution is the exception and now ships** — §3.14 |
 | Image to Video | SVD and LTX are multi-gigabyte, and decode a 3-D VAE per clip |
 | Unconditional Image Generation | DDPM at 1000 steps is a server job even at 32x32. Consistency models are the only part that comes close |
 | Text to Video | at the edge of a 12 GB card, let alone a tab |
 | Text to 3D | Shap-E is a diffusion model plus a NeRF decoder |
-| Image to 3D | Zero123++ is SD-derived. The depth-to-point-cloud half is the exception, below |
+| Image to 3D | Zero123++ is SD-derived. **The depth-to-point-cloud half is the exception and now ships** — §3.15 |
 | Video to Video | per-frame diffusion, so the cost of Image to Image multiplied by the frame count |
 | Grounded SAM, OneFormer, RF-DETR | model-specific: no export exists yet, so they are missing *variants* rather than missing tasks |
 
-Two useful carve-outs hide inside that list:
+Three carve-outs hid inside that list, and **all three now ship**. Each covers a
+*part* of its slug, and each page says which part — a route that quietly answered
+a smaller question than its name promises would be the worse outcome.
 
-- **Super-resolution runs in the browser** ([plan #22](https://github.com/bthek1/model_playground/issues/22)). `Xenova/swin2SR-classical-sr-x2-64`
-  is exported, and it is a single forward pass with no diffusion at all. It
-  makes a genuinely good page, and it has no taxonomy entry of its own — ship it
-  inside Image to Image.
-- **The depth-to-point-cloud half of Image to 3D runs in the browser** ([plan #23](https://github.com/bthek1/model_playground/issues/23)).
-  Depth Anything V2 gives the depth map, and the unprojection to a point cloud
-  is arithmetic. Render it with WebGL or a WGSL compute shader. This is the
-  cheapest impressive 3-D demo available.
-- **Background removal** ([plan #24](https://github.com/bthek1/model_playground/issues/24)) — `briaai/RMBG-1.4`, official ONNX — has no taxonomy row
-  of its own, but it is the preprocessing step everyone skips before image-to-3D,
-  and it stands alone as a genuinely useful page.
+- **Super-resolution runs in the browser** — §3.14,
+  [`/super-resolution`](../../frontend/src/routes/super-resolution.tsx),
+  [#22](https://github.com/bthek1/model_playground/issues/22). One forward pass
+  per tile, no diffusion. Mapped onto the **Image to Image** slug; editing and
+  img2img stay in the table above.
+- **The depth-to-point-cloud half of Image to 3D runs in the browser** — §3.15,
+  [`/image-to-3d`](../../frontend/src/routes/image-to-3d.tsx),
+  [#23](https://github.com/bthek1/model_playground/issues/23). It adds no model
+  at all: §3.1's checkpoint plus arithmetic, rendered through hand-written WGSL.
+  Zero123++ and full reconstruction stay in the table.
+- **Background removal** — §3.13,
+  [`/background-removal`](../../frontend/src/routes/background-removal.tsx),
+  [#24](https://github.com/bthek1/model_playground/issues/24). The one page here
+  with **a taxonomy row of its own that the Hub does not have**, and the one with
+  a licence constraint worth stating in the sidebar-level record. Both calls are
+  in §3.13.
 
+### 3.13 Background Removal — **shipped** at [`/background-removal`](../../frontend/src/routes/background-removal.tsx)
+
+The Wave 3 page with no Hub task behind it, and the only one in this category
+whose blocking question was a **licence** rather than an export.
+
+**The licence call, settled before the route was written**
+([#24](https://github.com/bthek1/model_playground/issues/24) Phase 1).
+`briaai/RMBG-1.4` is the better matte — visibly so on hair and fur — and it ships
+under `bria-rmbg-1.4`, a Creative Commons licence for **non-commercial use only**,
+with commercial use gated behind a paid agreement with BRIA. This repo is MIT.
+Nothing here redistributes weights either way (the browser fetches them from the
+Hub), but a default that most downstream users may not legally use is still a
+trap. So:
+
+- **`Xenova/modnet` (Apache-2.0) is the default.** It is also Transformers.js's
+  own default for this pipeline, and 6.6 MB on WASM.
+- **RMBG-1.4 is offered and labelled.** `components/vision/LicenceNote.tsx`
+  renders the restriction in the same amber as the size-before-load guardrail,
+  in the SELECT slot, at the moment the model is chosen.
+
+**The taxonomy call.** The Hub has no `background-removal` task — Transformers.js
+invented the pipeline as a subclass of image segmentation. Adding a row is
+therefore a deliberate departure from the taxonomy's mirror of the Hub, and it
+was taken: the page stands alone as useful, and an unlisted route is one nobody
+finds. That is why the category is twenty rows rather than nineteen.
+
+**The soft matte survives, and that is not something the pipeline guarantees.**
+`ImageSegmentationPipeline` picks its post-processing by looking for a
+`post_process_*_segmentation` method on the processor. Find one and it takes the
+semantic branch, which is an **argmax**: every pixel becomes 0 or 255 and the
+soft edge — the entire point of a matting model — is gone, silently. Both
+entries publish a plain `ImageFeatureExtractor`, which has no such method, so the
+pipeline falls through to the `!subtask` branch and returns a genuine 0–255
+matte. **A matting checkpoint whose repo happened to ship a
+`SegformerImageProcessor` config would be hard-thresholded and would still look
+plausible.** Check `preprocessor_config.json` before adding a third entry.
+
+Everything downstream of that is ours and lives in `vision/matte.ts`: the
+composite is a real linear blend (`src * a + bg * (1 - a)`), the raw matte is
+offered as its own view so the edge can be judged rather than assumed, and the
+download is a PNG because it is the only common format with an alpha channel.
+The unit test that matters asserts a **mid-alpha pixel blends** — a hard
+threshold passes the fully-opaque and fully-transparent cases and fails only that
+one.
+
+**MODNet is a *portrait* matting model, and asked for anything else it does not
+fail loudly.** The `@slow` spec measured **0.2% coverage** on the beetle
+photograph: a near-empty matte, which renders as a clean, empty checkerboard and
+looks like a page that has not run yet. `PORTRAIT_SAMPLES` exists because of that
+measurement, the route lists it first, and the sample hint names which model
+suits which picture. The spec now asserts a **coverage band** on a portrait, for
+the same reason `/mask-generation` asserts one: all-on and all-off are what a
+broken preprocessing path produces, and both render beautifully.
+
+| Model | Licence | Notes |
+|---|---|---|
+| `Xenova/modnet` | Apache-2.0 | 6.5M params, portrait matting, **the default** |
+| `briaai/RMBG-1.4` | `bria-rmbg-1.4`, non-commercial | 44M params, general-purpose, a better edge |
+
+---
+
+### 3.14 Super Resolution — **shipped** at [`/super-resolution`](../../frontend/src/routes/super-resolution.tsx), as the Image to Image carve-out
+
+`Xenova/swin2SR-classical-sr-x2-64`, 12M params, Apache-2.0 upstream. One forward
+pass per tile and no sampling loop at all, which is the whole reason this half of
+Image to Image runs in a tab when the other half cannot. **The page says so in
+its header** — the slug promises editing, and the route delivers upscaling.
+
+**Tiling is the correctness surface, and it fails silently.** A transformer on a
+full-resolution photo exhausts memory, so the image is cut into overlapping tiles
+and stitched back. Butt them edge to edge and every seam is a visible line;
+overlap them and feather each contribution to nearly zero across the overlap, and
+they vanish. `vision/tile.ts` is pure arithmetic over plain buffers for exactly
+this reason — the failure mode is geometric, and geometry is what a unit test can
+pin and a rendered picture cannot. Three details earned their comments:
+
+- **Normalise by accumulated weight**, not by trusting the weights to sum to one.
+  That is what makes the identity case *exact*: run tiles through a model that
+  returns them unchanged and reassembly reproduces the input pixel for pixel,
+  which is the test that catches a wrong stride or a mis-placed tile.
+- **`+ 0.5` in the feather.** Without it the outermost column of an interior seam
+  weighs exactly zero, two tiles both contribute nothing, and the division paints
+  a black line precisely where the blending was meant to hide one.
+- **`Swin2SRImageProcessor` pads the input up to a multiple of 8** and upscales
+  what it was given, so a tile can come back *larger* than `2 x tile`. Only the
+  top-left region is read. Without that crop every subsequent tile lands slightly
+  off, which reads as a soft, doubled image rather than as a bug.
+
+**The comparison is the output.** A 2x image on its own proves nothing — every
+upscaler produces one, and the eye has no reference. `CompareSlider` puts the
+result under a draggable split against a **bicubic upscale of the same input**,
+both rasterised at source resolution and revealed with `clip-path` so neither
+half is resampled by the comparison itself.
+
+**A run is many inferences, so the page quotes the cost first and offers Stop.**
+`MAX_SOURCE_SIDE` is 512 rather than 1024 because tiles grow with *area*: 512 px
+is about 6 tiles, 1024 px about 35, and on WASM that is fifteen seconds against a
+minute and a half for the same demonstration. `useSuperRes` reports `{done,
+total}` derived from the loop rather than through a new worker message, and its
+`running` covers the whole sequence — the pipeline's own inflight count drops to
+zero between tiles and would flicker the transport thirty times per upscale.
+
+**`dtypes: { wasm: "fp32" }` started as a precaution and is now a measurement.**
+`just fe-e2e-superres` upscales a 320x320 crop to 640x640 and scores it by PSNR
+against the crop it was downscaled from, alongside a bicubic resize of the same
+input:
+
+| WASM precision | model | bicubic | per tile |
+|---|---|---|---|
+| fp32 | **27.80 dB** | 27.55 dB | 32–40 s |
+| q8 | 27.39 dB | 27.55 dB | 24.2 s |
+
+**At q8 the model loses to bicubic** — it is worse than not running at all — for a
+25% saving in time and 33 MB in download. That is §3.2's quantized-MobileNetV4
+failure in a different guise: dense regression puts int8 error straight into the
+picture rather than letting an argmax absorb it. The WebGPU path is *not* covered
+by that measurement; the spec runs on WASM.
+
+Two things came out of the same run. `MS_PER_TILE.wasm` was 2,500 — out by more
+than a factor of ten, which made the size guard actively misleading, promising 23
+seconds for a run that took 273; it is 35,000 now, the middle of the observed
+range. And `MAX_SOURCE_SIDE` moved from 1024 to 512:
+tiles grow with *area*, so that is 4–9 tiles instead of 35, and it is the
+difference between a demonstration and an abandoned tab.
+
+---
+
+### 3.15 Image to 3D — **shipped** at [`/image-to-3d`](../../frontend/src/routes/image-to-3d.tsx), as the depth-to-point-cloud carve-out
+
+**The cheapest impressive demo in this file, and it adds no model at all**: §3.1's
+Depth Anything V2, unprojected. It is also the one route where the hand-written
+WGSL runtime and the Transformers.js runtime appear on the same page — see
+[`docs/explanations/webgpu-inference.md`](../explanations/webgpu-inference.md) for
+how they coexist. They do not mix: inference stays in `src/vision/` and produces a
+plain `Float32Array`, rendering stays in `src/webgpu/` and never knows a model
+exists, and the route is where they meet.
+
+**The focal length is an assumption, and the page says so next to the slider.**
+Depth Anything V2 predicts relative depth with no camera intrinsics attached — it
+cannot know the lens that took the picture — so `f` is a control with a plausible
+default (0.8x the long side, about a 64° horizontal field of view) and the
+geometry is *plausible rather than metric*. Two photos' clouds are not comparable.
+Depth Pro is the exception, which is why `unproject` takes `inverse` as a flag
+read off the catalogue entry rather than assuming a convention.
+
+**Two things in `vision/pointCloud.ts` fail silently, and the unit tests exist
+for them specifically.** Both were caught during the build:
+
+- **Inverse depth: a big value means *near*, so distance is its reciprocal.** The
+  first implementation had it backwards. The result is a recognisable point cloud
+  that is inside out — near things land far away and a scene reads as a bowl —
+  and nothing throws. The test asserts the *ordering* of two pixels, not a count.
+- **Bounds must be read back from the float32 buffer, not from the doubles that
+  produced them.** A double rounded into a `Float32Array` can land a hair outside
+  a bound computed before the write, and a consumer clamping to those bounds
+  would drop a point.
+
+A third choice is worth recording: the far plane is floored at `MIN_INVERSE = 0.1`,
+giving a 10:1 depth range. Without a floor a normalised map's zero pixel makes the
+reciprocal unbounded, the bounds put the whole visible scene in a speck, and the
+canvas reads as "the model failed" rather than as a scaling choice.
+
+**Rendering is instanced quads, not `point-list`.** WebGPU's point primitive is
+always exactly one pixel — there is no `gl_PointSize` — and a few hundred thousand
+one-pixel points on a high-DPI backing store read as faint noise. Each point is an
+instance of a two-triangle quad, offset in clip space and scaled by `w` so it
+keeps a constant size on screen. Depth testing is not optional either: without it
+the points draw in buffer order, the back of the scene paints over the front, and
+the result looks like fog.
+
+**The vertex buffer is written once per inference; the camera once per frame.** A
+cloud is megabytes, so orbiting rewrites 48 bytes of uniform rather than
+re-uploading it — the difference between an orbit that tracks the pointer and one
+that stutters. Both sliders (focal length, point density) **re-derive from the
+cached depth map and never re-run the model**, the same pure-derivation rule
+`/vad` applies to its threshold and §3.3 to its score floor.
+
+**It degrades honestly.** `detectWebGPU()` never throws, so the failure is a
+status rather than an exception — and a page that answered it with an empty canvas
+would look like the model had failed rather than like the machine lacking a
+device. On a non-`ready` status the route shows the depth map and says the 3-D
+view needs WebGPU, warns in the LOAD slot *before* the download, and an E2E spec
+asserts that path in a real Chromium with no GPU.
+
+---
 ---
 
 ## 4. Feasibility summary
@@ -896,8 +1102,9 @@ Two useful carve-outs hide inside that list:
 | **Zero Shot Object Detection** | **Shipped** — `/zero-shot-object-detection` | `Xenova/owlv2-base-patch16-ensemble` | WebGPU / WASM | LLMDet to server |
 | **Image Feature Extraction** | **Shipped** — `/image-features` | `Xenova/dinov2-small` | WebGPU / WASM | - |
 | **Keypoint Detection** | **Shipped** — `/pose` | `dfine_n_coco` + `vitpose-base-simple` | WebGPU / WASM | Sapiens2, SuperPoint to server |
-| **Image to Image** | Super-resolution only | `Xenova/swin2SR-classical-sr-x2-64` | WebGPU | editing / img2img diffusion to server |
-| **Image to 3D** | Depth-to-point-cloud only | Depth Anything V2 plus WebGL | WebGPU | Zero123++ and full reconstruction to server |
+| **Image to Image** | **Shipped** — `/super-resolution`, SR only | `Xenova/swin2SR-classical-sr-x2-64` | WebGPU / WASM | editing / img2img diffusion to server |
+| **Image to 3D** | **Shipped** — `/image-to-3d`, depth-to-cloud only | Depth Anything V2 plus WGSL | WebGPU | Zero123++ and full reconstruction to server |
+| **Background Removal** | **Shipped** — `/background-removal` | `Xenova/modnet` (Apache-2.0) | WebGPU / WASM | RMBG-1.4 offered, non-commercial licence |
 | **Text to Image** | No | - | - | server API |
 | **Image to Video** | No | - | - | server API |
 | **Unconditional Image Generation** | No | - | - | server API |
@@ -906,7 +1113,9 @@ Two useful carve-outs hide inside that list:
 | **Video to Video** | No | - | - | server API |
 
 Rule of thumb: **one forward pass runs in a tab; fifty do not.** Every "no" in
-that table is a diffusion model, and every "yes" is a single-pass network.
+that table is a diffusion model, and every "yes" is a single-pass network — and
+`/super-resolution`, which runs one pass per tile, is the case that shows the rule
+is about the *sampling loop* rather than about the number of inferences.
 
 ---
 
@@ -930,6 +1139,13 @@ mechanics.
 - **Resolution is the throttle, not the model.** A detector at 640x480 and the
   same detector at 1280x720 differ by roughly 4 times in cost. Downscale the
   frame before inference and draw the boxes on the full-size canvas.
+  `/super-resolution` is the sharpest case: its cost is *tiles*, tiles grow with
+  area, and `MAX_SOURCE_SIDE` is 512 rather than 1024 because that is 6 tiles
+  instead of 35 for the same demonstration.
+- **A GPU buffer is written once per result, not once per frame.** `/image-to-3d`
+  uploads a multi-megabyte cloud when the inference finishes and rewrites 48
+  bytes of camera uniform while the user orbits. Re-uploading per frame would
+  spend the whole budget moving data that did not change.
 - **Never queue frames.** One in flight at a time, as in section 2. A backlog is
   the reason a live demo feels laggy long before the model is the reason.
 - **Encode once, decode many** wherever the architecture allows it, and it is now
@@ -945,6 +1161,11 @@ mechanics.
     output inspection can catch.
   - `/video-classification` reuses the zero-shot text cache across every frame
     of a clip. §3.11.
+- **A control that changes the *view* re-derives; only one that changes the
+  *question* re-runs.** Detection's threshold, segmentation's opacity, `/vad`'s
+  threshold, `/background-removal`'s backdrop and matte view, and
+  `/image-to-3d`'s focal length and point density are all pure derivations over a
+  result already in hand. Each has a test asserting `run` was not called again.
 - **Warm up on load.** The first inference compiles WebGPU shaders. On a
   detector that is 2 to 4 seconds the user should not be charged for.
 - **Weights cache after the first download**, so the second visit is instant and
@@ -959,8 +1180,11 @@ mechanics.
   `image-classification`, `object-detection`, `image-segmentation`,
   `zero-shot-image-classification`, `zero-shot-object-detection`,
   `image-feature-extraction`, `image-to-text`, `mask-generation`,
-  `background-removal`.
+  `background-removal`, `image-to-image`.
 - **onnxruntime-web** for the models with no pipeline wrapper.
+- **Raw WGSL** for one thing only: `/image-to-3d`'s point-cloud render pass
+  (`webgpu/shaders/points.wgsl` + `webgpu/pointRenderer.ts`) — the first *render*
+  pipeline in this repo, every other shader here being compute.
 - **Page construction**: [`docs/guides/adding-a-task-page.md`](../guides/adding-a-task-page.md).
 - **In-repo standards**:
   [`docs/standards/model-page-pattern.md`](../standards/model-page-pattern.md)
@@ -969,7 +1193,7 @@ mechanics.
   (canvas heatmaps, schematics, theme tokens — read before drawing anything),
   [`docs/guides/adding-a-model.md`](../guides/adding-a-model.md) §8.
 - **The shipped precedent**: the six audio routes, mapped in
-  [`docs/roadmaps/audio.md`](./audio.md), and the five vision routes in this
+  [`docs/roadmaps/audio.md`](./audio.md), and the fourteen vision routes in this
   category. A vision page is the same worker protocol with an image payload
   instead of a `Float32Array` — and, on the way back, a result that has been
   through `toCloneable`.

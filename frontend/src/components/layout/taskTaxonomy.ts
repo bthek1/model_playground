@@ -65,6 +65,15 @@ const REAL_ROUTES: Record<string, string> = {
   "image-to-text": "/image-to-text",
   "keypoint-detection": "/pose",
   "video-classification": "/video-classification",
+  "background-removal": "/background-removal",
+  // The route covers the **super-resolution subset** of image-to-image only.
+  // Editing / img2img is diffusion and stays on a server (vision.md §3.12), and
+  // the page says so in its own header rather than letting the slug over-promise.
+  "image-to-image": "/super-resolution",
+  // Likewise the **depth-to-point-cloud subset** only: full reconstruction is
+  // SD-derived and stays on a server. The route adds no new model — it is
+  // /depth's checkpoint plus an unprojection.
+  "image-to-3d": "/image-to-3d",
 };
 
 function task(label: string): TaskItem {
@@ -112,6 +121,13 @@ export const taskCategories: TaskCategory[] = [
       "Image Feature Extraction",
       "Keypoint Detection",
       "Video to Video",
+      // **A deliberate departure from the Hub's task list.** Every other row in
+      // this category mirrors a Hugging Face pipeline tag; the Hub has no
+      // `background-removal` task — Transformers.js added the pipeline itself,
+      // as a subclass of image segmentation. It is listed anyway because the
+      // page stands alone as useful and an unlisted route is one nobody finds.
+      // See #24 for the call.
+      "Background Removal",
     ]),
   },
   {

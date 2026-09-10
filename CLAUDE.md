@@ -53,7 +53,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Adding a task page (end-to-end procedure)** | [`docs/guides/adding-a-task-page.md`](docs/guides/adding-a-task-page.md) |
 | Feature plans (phased) | **GitHub issues**, label [`plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) — open = active, closed = done |
 | **Audio category roadmap** (complete, 6 of 6) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
-| **Computer Vision roadmap** (11 of 19, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
+| **Computer Vision roadmap** (14 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -82,7 +82,8 @@ just fe-e2e         # playwright end-to-end (mocked API, no backend needed)
 just fe-e2e-slow    # @slow specs: real model downloads + real ONNX sessions (minutes)
 just fe-e2e-enhance # @slow speech-enhancement specs (DeepFilterNet3, WASM + WebGPU)
 just fe-e2e-vad     # @slow voice-activity-detection specs (Silero VAD, seconds)
-just fe-e2e-vision  # @slow vision specs: real loads across all 11 routes (tens of minutes cold)
+just fe-e2e-vision  # @slow vision specs: real loads across all 14 routes (tens of minutes cold)
+just fe-e2e-superres # @slow: Swin2SR vs a bicubic baseline, by PSNR
 just fe-e2e-vision-one /pose   # one @slow vision route at a time
 just fe-e2e-models  # check every model id (audio + vision) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
@@ -266,9 +267,55 @@ one generic worker for every discriminative task (`vision.worker.ts` — the tas
 `load` message), a pure `engine.ts` that owes the same three behaviours, and thin task hooks over
 `useVisionPipeline`. Shipped: `/image-classification`, `/depth`, `/object-detection`,
 `/segmentation`, `/zero-shot-image-classification`, `/zero-shot-object-detection`,
-`/image-features`, `/mask-generation`, `/image-to-text`, `/pose`, `/video-classification`.
+`/image-features`, `/mask-generation`, `/image-to-text`, `/pose`, `/video-classification`,
+`/background-removal`, `/super-resolution`, `/image-to-3d`.
 The rest of the category stays on a server, with a reason per task — see
 [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) §3.12.
+
+- **The last three cover *part* of a slug, and each page says which part.**
+  `/super-resolution` is the `image-to-image` slug's single-pass half (editing is
+  diffusion); `/image-to-3d` is `image-to-3d`'s depth-to-cloud half (reconstruction is
+  SD-derived). A route that quietly answers a smaller question than its name promises is
+  the failure mode; the header sentence is the fix, and a test asserts it.
+- **`/background-removal` added a taxonomy row the Hub does not have** (Transformers.js
+  invented the `background-removal` pipeline), taking Computer Vision from 19 rows to 20.
+  It is also the only route whose blocking question was a **licence**: `briaai/RMBG-1.4`
+  is Creative Commons **non-commercial** in an MIT repo, so Apache-2.0 `Xenova/modnet` is
+  the default and RMBG is offered with the restriction rendered beside the choice
+  (`components/vision/LicenceNote.tsx`). Read the model card before writing the catalogue
+  entry — it is the one thing that can invalidate a finished route.
+- **Never threshold a matte.** `vision/matte.ts` blends (`src*a + bg*(1-a)`) and the PNG
+  keeps its alpha; a hard threshold turns a matting model into a segmenter with extra
+  steps and cannot be undone downstream. Two traps behind it: the segmentation pipeline
+  takes an **argmax** branch whenever the processor exposes a `post_process_*_segmentation`
+  method (both entries publish a plain `ImageFeatureExtractor`, so they escape it —
+  check a third one's `preprocessor_config.json`), and **MODNet is a *portrait* matting
+  model** that returns a near-empty matte rather than an error on anything else, which is
+  why `PORTRAIT_SAMPLES` exists and is listed first.
+- **Tiling is `/super-resolution`'s whole correctness surface**, and it fails silently.
+  `vision/tile.ts` is pure so it can be pinned: normalising by *accumulated weight* makes
+  the identity round-trip exact, the `+0.5` in the feather stops a zero-weight seam
+  painting a black line, and only the top-left `scale x tile` region of a patch is read
+  because `Swin2SRImageProcessor` pads up to a multiple of 8 and a padded patch would drift
+  every later tile. A mis-assembled upscale is perfectly sharp — `just fe-e2e-superres`
+  scores it by PSNR against a ground truth the spec builds itself (crop a sample, halve it
+  in the page, upload the buffer). That spec turned the WASM precision pin from a
+  precaution into a **measurement**: at q8 Swin2SR scores 27.39 dB against bicubic's 27.55
+  — *worse than not running it* — while fp32 scores 27.80, so `dtypes: { wasm: "fp32" }`
+  stays. It also caught `MS_PER_TILE` being out by a factor of ten. **Say whether a dtype
+  pin is a measurement or a precaution**; only one of them is evidence.
+- **`/image-to-3d` is the one page where both runtimes appear, and they still do not mix.**
+  Inference is `src/vision/`, the unprojection is pure arithmetic (`vision/pointCloud.ts`),
+  the render pass is hand-written WGSL in `src/webgpu/` (`pointRenderer.ts` +
+  `shaders/points.wgsl` — the repo's first *render* pipeline). They meet in the route as a
+  `Float32Array`; neither module imports the other. Three things it settled: **inverse
+  depth means a big value is *near***, so distance is its reciprocal and getting it
+  backwards turns the scene inside out while still looking like a point cloud; **bounds
+  must be read back out of the float32 buffer**, not from the doubles that wrote them;
+  and WebGPU's `point-list` is always one pixel, so points are **instanced quads** with
+  depth testing. The vertex buffer is written once per inference, the camera uniform once
+  per frame. The focal length is an **assumption** — relative depth carries no intrinsics —
+  and the page says so beside the slider.
 
 - **Four vision tasks own an engine instead of riding the generic worker**, and the criterion is
   always the same one: it is not a plain `pipeline()` call. `vision/zeroshot/` (split towers, to

@@ -443,8 +443,9 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   task carried in the `load` message), a pure `engine.ts` owing the same three behaviours, thin task
   hooks over `useVisionPipeline`. Shipped: `/image-classification`, `/depth`, `/object-detection`,
   `/segmentation`, `/zero-shot-image-classification`, `/zero-shot-object-detection`,
-  `/image-features`, `/mask-generation`, `/image-to-text`, `/pose`, `/video-classification` — eleven
-  of nineteen. The rest stays on a server, with a reason per task — `docs/roadmaps/vision.md` §3.12.
+  `/image-features`, `/mask-generation`, `/image-to-text`, `/pose`, `/video-classification`,
+  `/background-removal`, `/super-resolution`, `/image-to-3d` — fourteen of twenty. The rest stays
+  on a server, with a reason per task — `docs/roadmaps/vision.md` §3.12.
 - **The shared page pieces already exist — reuse them, do not re-copy.** `useImagePick` (file / drop
   / sample, and the one-object-URL-at-a-time rule), `useCameraFrames` (open → grab → `downscale` →
   one frame in flight), `components/vision/ImageSourcePanel` (the RUN slot's input surface) and
@@ -465,7 +466,8 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   `onnx-community/mobilenetv4_conv_small` at q8 calls a tiger "sidewinder, horned rattlesnake" (44%);
   at fp32 it says "tiger" (62%) — depthwise-separable convs are the classic int8 casualty. Pin
   precision per backend with `VisionModel.dtypes` (`{ wasm: "fp32" }`) and supply measured `bytes`.
-  Assert a known label on a known image in the `@slow` spec (`just fe-e2e-vision`).
+  Assert a known label on a known image in the `@slow` spec (`just fe-e2e-vision`), and say in
+  the comment whether the pin is a measurement or a precaution.
 - **Never queue frames.** `useLiveFrames` grabs the next frame only when the previous result is back;
   `useCamera` owns teardown (a leaked `MediaStream` leaves the webcam light on).
 - **Normalise a single-channel map before painting it** (`drawHeatmap`) — relative depth has no fixed
@@ -518,6 +520,51 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - **`/video-classification` is a frame-level baseline and says so as a correctness requirement.**
   No real video transformer has an ONNX export; the limitation sits next to the result and an E2E
   spec asserts the copy.
+- **Three routes cover *part* of a taxonomy slug, and each page says which part.**
+  `/super-resolution` is `image-to-image`'s single-pass half (editing is diffusion);
+  `/image-to-3d` is `image-to-3d`'s depth-to-cloud half (reconstruction is SD-derived). A route
+  that quietly answers a smaller question than its name promises is the failure mode; the header
+  sentence is the fix, and a test asserts it.
+- **`/background-removal` added a Computer Vision row the Hub does not have** (Transformers.js
+  invented the `background-removal` pipeline as a segmentation subclass), taking the category from
+  19 rows to 20. It is also the only route whose blocking question was a **licence**:
+  `briaai/RMBG-1.4` is Creative Commons **non-commercial** in an MIT repo, so Apache-2.0
+  `Xenova/modnet` is the default and RMBG is offered with the restriction rendered beside the
+  choice (`components/vision/LicenceNote.tsx`). Read the model card before writing the catalogue
+  entry — it is the one thing that can invalidate a finished route.
+- **Never threshold a matte.** `vision/matte.ts` blends (`src*a + bg*(1-a)`) and the PNG keeps its
+  alpha; a hard threshold makes a matting model a segmenter with extra steps. Two traps behind it:
+  `ImageSegmentationPipeline` takes an **argmax** branch whenever the processor exposes a
+  `post_process_*_segmentation` method (both entries publish a plain `ImageFeatureExtractor`, so
+  they escape it — check a third one's `preprocessor_config.json`), and **MODNet is a *portrait*
+  matting model** which returns a near-empty matte rather than an error on anything else. The
+  `@slow` spec measured 0.2% coverage on a car before `PORTRAIT_SAMPLES` existed.
+- **Tiling is `/super-resolution`'s whole correctness surface, and it fails silently.**
+  `vision/tile.ts` is pure so it can be pinned: normalising by *accumulated weight* makes the
+  identity round-trip exact, the `+0.5` in the feather stops a zero-weight seam painting a black
+  line, and only the top-left `scale x tile` region of a patch is read because
+  `Swin2SRImageProcessor` pads up to a multiple of 8 and a padded patch drifts every later tile.
+  A mis-assembled upscale is perfectly sharp — `just fe-e2e-superres` scores it by PSNR against a
+  ground truth the spec constructs itself. A run is many inferences, so the page quotes tiles and
+  seconds **before** the button and offers Stop; `useSuperRes.running` covers the whole sequence,
+  because the pipeline's own inflight count drops to zero between tiles.
+- **`/image-to-3d` is the one page where both runtimes appear, and they still do not mix.**
+  Inference is `src/vision/`, the unprojection is pure arithmetic (`vision/pointCloud.ts`), the
+  render pass is hand-written WGSL in `src/webgpu/` (`pointRenderer.ts` + `shaders/points.wgsl` —
+  the repo's first *render* pipeline). They meet in the route as a `Float32Array`; neither module
+  imports the other. Three things it settled: **inverse depth means a big value is *near***, so
+  distance is its reciprocal and getting it backwards turns the scene inside out while still
+  looking like a point cloud; **bounds are read back out of the float32 buffer**, not from the
+  doubles that wrote them; and WebGPU's `point-list` is always one pixel, so points are
+  **instanced quads** with depth testing. Vertex buffer once per inference, camera uniform once
+  per frame. The focal length is an **assumption** — relative depth carries no intrinsics — and the
+  page says so beside the slider. It degrades to the depth map plus an explanation when
+  `detectWebGPU()` is not `ready`.
+- **When you pin `dtypes`, say whether it is a measurement or a precaution.** They are different
+  claims and only one is evidence. Both current pins are measurements now
+  (`/image-classification`'s tiger, `/super-resolution`'s PSNR), but a precaution is fine to
+  ship as long as it says so and names the spec that would settle it. Either way the entry
+  then owes **measured** `bytes`.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
@@ -531,7 +578,8 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - Real model loads: `just fe-e2e-slow` (minutes, needs network); ids only: `just fe-e2e-models`;
   speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`;
   vision only: `just fe-e2e-vision` (tens of minutes cold — one route at a time with
-  `just fe-e2e-vision-one /pose`); zero-shot scoring parity: `just fe-e2e-zeroshot`
+  `just fe-e2e-vision-one /pose`); zero-shot scoring parity: `just fe-e2e-zeroshot`;
+  super-resolution vs bicubic by PSNR: `just fe-e2e-superres`
 - Install deps: `just fe-install`
 
 ---
@@ -559,7 +607,8 @@ Key commands:
 | `just fe-e2e-vad` | Run the @slow voice-activity-detection specs (seconds) |
 | `just fe-e2e-install` | Download the Playwright browsers (once) |
 | `just fe-e2e-slow` | `@slow` specs: real model downloads + real ONNX sessions |
-| `just fe-e2e-vision` | Run the @slow vision specs: real loads across all 11 routes (tens of minutes cold) |
+| `just fe-e2e-vision` | Run the @slow vision specs: real loads across all 14 routes (tens of minutes cold) |
+| `just fe-e2e-superres` | Run the @slow super-resolution spec: Swin2SR vs a bicubic baseline, by PSNR |
 | `just fe-e2e-vision-one <route>` | One @slow vision route at a time |
 | `just fe-e2e-models` | Check every model id (audio + vision) resolves on the HF Hub (seconds) |
 | `just be-seed-e2e` | Create/reset the E2E test user (dev only) |

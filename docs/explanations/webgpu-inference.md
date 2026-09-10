@@ -6,14 +6,15 @@ Transformers.js, ONNX Runtime, or WebLLM — with models expressed as WGSL compu
 shaders. To add one see [`../guides/adding-a-model.md`](../guides/adding-a-model.md).
 
 > **Scope.** That "no framework" rule is about *this* module. Running pretrained
-> checkpoints is a separate concern living in `src/audio/`, on Transformers.js —
-> or, for speech enhancement (`audio/enhance/`) and voice activity detection
-> (`audio/vad/`), on `onnxruntime-web` directly. Those also target
-> WebGPU (falling back to WASM), but through ONNX Runtime's providers rather than
-> the pipeline below. See
+> checkpoints is a separate concern living in `src/audio/` and `src/vision/`, on
+> Transformers.js — or, for speech enhancement (`audio/enhance/`) and voice
+> activity detection (`audio/vad/`), on `onnxruntime-web` directly. Those also
+> target WebGPU (falling back to WASM), but through ONNX Runtime's providers
+> rather than the pipeline below. See
 > [`architecture.md`](architecture.md#frontend) and
 > [`../guides/adding-a-model.md`](../guides/adding-a-model.md) §8–§9. The two
-> runtimes never mix inside a module.
+> runtimes never mix inside a module — see **Two runtimes on one page** below for
+> the single route where they appear together.
 
 ## Why raw WebGPU
 
@@ -34,6 +35,7 @@ The trade-off: you write kernels yourself. Start from the reference kernels in
 | `device.ts` | `getGPUDevice()` — memoised `GPUDevice`; re-acquires after device-lost. |
 | `buffers.ts` | Create storage/uniform buffers, upload data, read results back. |
 | `pipeline.ts` | Compile a WGSL string into a `GPUComputePipeline`. |
+| `pointRenderer.ts` | `PointRenderer` — the one **render** pipeline here (every other is compute): draws `/image-to-3d`'s point cloud. Returns `null` rather than throwing when there is no device. |
 | `runtime.ts` | `runMatmul()` — the reference end-to-end kernel + benchmark. |
 | `tensorops.ts` | `runTensorOp()` — dispatch table for basic matrix arithmetic (add/sub/mul/div/matmul/transpose/scale), backing the Tensor Arithmetic page. |
 | `linearModel.ts` | `LinearTrainer` — mini-batch SGD training of a softmax classifier; the heavy matmuls use an injected `MatmulFn` (GPU in the worker, CPU in tests). Backs the Training page. |
@@ -139,6 +141,46 @@ runs a 512×512 matmul and cross-checks one output entry against a CPU reference
 to catch a broken kernel or driver. This same number is what you'd `POST` to
 `/api/registry/runs/` as run metadata.
 
+## Two runtimes on one page
+
+`/image-to-3d` is the only route where the hand-written WGSL runtime and the
+Transformers.js runtime appear together, and it is worth being precise about how,
+because "keep the runtimes separate" could otherwise read as "never on the same
+page".
+
+The rule is about **modules, not pages**:
+
+- The inference half is `src/vision/` — Depth Anything V2 through the generic
+  vision worker, exactly as `/depth` runs it. It knows nothing about rendering.
+- The geometry is `src/vision/pointCloud.ts` — pure arithmetic, no GPU, no model.
+  It turns a depth map into an interleaved `Float32Array` of `[x, y, z, r, g, b]`.
+- The render half is `src/webgpu/` — `pointRenderer.ts` plus
+  `shaders/points.wgsl`. It takes a `Float32Array` and never learns where it came
+  from.
+
+They meet in the route, as a plain buffer. Neither module imports the other, so
+neither one's rules bend: `src/webgpu/` still contains no framework, and
+`src/vision/` still contains no WGSL.
+
+Three things this page settled about the render side specifically:
+
+- **Instanced quads, not `point-list`.** WebGPU's point primitive is always one
+  pixel — there is no `gl_PointSize` — so a few hundred thousand points on a
+  high-DPI backing store read as faint noise. Each point is an instance of a
+  two-triangle quad, offset in clip space and scaled by `w` so it stays a
+  constant size on screen.
+- **Depth testing is required, not an optimisation.** Without a depth attachment
+  the points draw in buffer order and the back of the scene paints over the
+  front, which looks like fog rather than geometry.
+- **Write the vertex buffer once per result, the uniform once per frame.** The
+  cloud is megabytes; the camera is 48 bytes. Re-uploading the cloud on every
+  orbit tick is the difference between tracking the pointer and stuttering.
+
+And one about degrading: `PointRenderer.create()` returns `null` where
+`detectWebGPU()` would return a non-`ready` status, so the route renders the depth
+map and an explanation instead of an empty canvas. A 3-D view that takes the page
+down on a machine without a GPU is worse than one that says so.
+
 ## Precision & limits
 
 - Buffers here are `f32`. `shader-f16` (when advertised in `capabilities.features`)
@@ -152,4 +194,5 @@ to catch a broken kernel or driver. This same number is what you'd `POST` to
 - API for the catalog / run metadata: [`../standards/api-contracts.md`](../standards/api-contracts.md)
 - System architecture: [`architecture.md`](architecture.md)
 - The other in-browser runtime, task by task: [`../roadmaps/audio.md`](../roadmaps/audio.md)
+  and [`../roadmaps/vision.md`](../roadmaps/vision.md) (§3.15 for the point-cloud route)
 - Roadmaps for categories not yet built: the [`roadmap`-labelled issues](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap)

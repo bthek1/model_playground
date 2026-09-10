@@ -89,3 +89,34 @@ export const TEXT_SAMPLES: ImageSample[] = [
     expect: "the title, at minimum",
   },
 ];
+
+/**
+ * Pictures whose subject is **a person**, for `/background-removal`.
+ *
+ * Kept separate from `IMAGE_SAMPLES` for a reason that is a fact about the
+ * models rather than about taste: MODNet — the default, and the permissively
+ * licensed one — is a *portrait* matting model. Asked to matte a photograph of
+ * a car it does not fail loudly; it returns an almost empty matte, and the page
+ * shows an empty checkerboard. (The `@slow` spec measured 0.2% coverage on the
+ * beetle before these existed, which is how the gap was found.)
+ *
+ * So the matting route leads with these and offers the general set after. The
+ * `@slow` spec asserts a coverage band on the portrait — **change that
+ * assertion if this sample changes.**
+ */
+export const PORTRAIT_SAMPLES: ImageSample[] = [
+  {
+    id: "portrait",
+    label: "Portrait",
+    url: `${BASE}/portrait-of-woman.jpg`,
+    hint: "One person against a plain background — what portrait matting is built for",
+    expect: "a clean cut-out covering roughly the middle third of the frame",
+  },
+  {
+    id: "afro",
+    label: "Hair detail",
+    url: `${BASE}/woman-with-afro.jpg`,
+    hint: "Fine hair against a busy background — where a soft matte earns its keep",
+    expect: "strands that fade rather than a jagged silhouette",
+  },
+];

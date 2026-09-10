@@ -251,6 +251,18 @@ export function drawMasks(
 
 // --- Source pixels, and the coordinate space they live in --------------------
 
+/**
+ * `Pixels` whose buffer is a real typed array rather than merely index-readable.
+ *
+ * `Pixels` accepts an `ArrayLike<number>` so it can take a pipeline result
+ * straight off the worker, where the data may be a plain array. Everything this
+ * app *produces* allocates a `Uint8ClampedArray`, and saying so is what lets a
+ * caller slice, spread or map it without a cast.
+ */
+export interface PixelBuffer extends Omit<Pixels, "data"> {
+  data: Uint8ClampedArray;
+}
+
 /** A `RawImage`-shaped pixel buffer: interleaved samples plus its dimensions. */
 export interface Pixels {
   data: ArrayLike<number>;
