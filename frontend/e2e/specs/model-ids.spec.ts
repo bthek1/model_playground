@@ -194,7 +194,7 @@ test.describe("@slow model catalogue", () => {
     // only reason a vision route works before the user has a file of their own,
     // and the unit suite mocks `fromUrl` away entirely. A 404 here is a page
     // whose sample buttons all fail — green tests, broken page.
-    const { IMAGE_SAMPLES, TEXT_SAMPLES } = await import(
+    const { IMAGE_SAMPLES, TEXT_SAMPLES, PORTRAIT_SAMPLES } = await import(
       "../../src/vision/samples"
     );
     const { GALLERY_IMAGES } = await import("../../src/vision/gallery");
@@ -202,6 +202,7 @@ test.describe("@slow model catalogue", () => {
     const urls = [
       ...IMAGE_SAMPLES.map((s) => s.url),
       ...TEXT_SAMPLES.map((s) => s.url),
+      ...PORTRAIT_SAMPLES.map((s) => s.url),
       ...GALLERY_IMAGES.map((g) => g.url),
     ];
     expect(urls.length).toBeGreaterThan(0);

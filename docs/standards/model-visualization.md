@@ -167,6 +167,61 @@ but they share this grammar. Three rules carry over, and one is new:
   `post_process_pose_estimation` returns `labels: number[]` and nothing else names them.
   Domain drawing that carries a domain contract lives with the domain.
 
+### Comparison, transparency, and 3-D (vision, Wave 3)
+
+Three surfaces arrived with the carve-out routes, and each answers a question the
+overlays above cannot.
+
+**A result that only means something *against* something else gets a comparison,
+not a caption.** A 2x upscale on its own proves nothing — every upscaler produces
+one, and the eye has no reference. [`components/vision/CompareSlider.tsx`](../../frontend/src/components/vision/CompareSlider.tsx)
+puts the model's output under a draggable split against a **baseline the page
+computes itself** (a plain bicubic resize of the same input). Three rules:
+
+- **Both halves rasterise at source resolution** and are revealed with
+  `clip-path`, never by sizing the canvases to the display. Rasterising at display
+  size resamples both, and a comparison that resamples its own evidence can make a
+  sharpening model look like a blurring one.
+- **Both stay mounted.** Swapping which one is rendered flickers through a blank
+  frame mid-drag, exactly when the user is looking hardest.
+- **It is a `slider`, so arrow keys move it.** A drag-only comparison is a
+  comparison a keyboard user cannot make.
+
+**Transparency has to be drawn, or it is invisible.** A cut-out painted on a white
+card is indistinguishable from a subject on a white *background*, so `matte.ts`'s
+`drawCutout` paints a checkerboard first and blends the result over it — through a
+scratch canvas and `drawImage`, for the `putImageData` reason above. And the
+**alpha itself is offered as its own view** (`matteToGrey`): a cut-out hides a bad
+matte behind the subject's own colours, and a flat grey matte does not. Never
+threshold it for display — the in-between values are the model's actual answer,
+and a page that rounds them is showing a segmentation of a matting model.
+
+**A 3-D view is a render pass, and it degrades like one.** `/image-to-3d` is the
+only visualization here that is not a 2-D canvas: it is WGSL in
+[`webgpu/pointRenderer.ts`](../../frontend/src/webgpu/pointRenderer.ts). Three
+things generalise from it:
+
+- **Depth testing is not an optimisation.** Without it the points draw in buffer
+  order, the back of the scene paints over the front, and the result reads as fog
+  rather than as geometry.
+- **Points need a size the API will not give you.** WebGPU's `point-list` is
+  always exactly one pixel — there is no `gl_PointSize` — so a few hundred
+  thousand points on a high-DPI backing store read as faint noise. Draw instanced
+  quads and scale the corner offset by `w` so a point holds its size on screen.
+- **Say so when you cannot draw it.** `detectWebGPU()` never throws, so the
+  failure is a *status*. The route falls back to the depth map plus a sentence; an
+  empty canvas would read as "the model failed" rather than "this machine has no
+  GPU".
+
+**And a control that only changes the *reading* of a result must never re-run the
+model.** The backdrop swap and matte view on `/background-removal`, and the focal
+length and point density on `/image-to-3d`, all re-derive from a result already in
+hand. This is the visualization-side statement of the same rule
+[`model-page-pattern.md`](model-page-pattern.md) §7 makes about OUTPUT knobs — and
+on `/image-to-3d` it has a second consequence: the camera re-frames on a **new
+inference**, never on a re-derivation, or dragging a slider snaps the view back to
+its default and the visualization fights the user.
+
 **The coordinate space is part of the drawing, and getting it wrong is silent.**
 Every overlay here is painted onto a canvas sized to the *source* image while the model
 ran on a downscaled frame, so something has to map between them —
@@ -303,6 +358,12 @@ visualization should:
 - [ ] Reuse the `Stage` / `Arrow` / `ParamChip` / heatmap / `Legend` primitives — don't fork them.
 - [ ] Pass **both themes** and **every WebGPU status** (structure still shows with no device).
 - [ ] Give canvases `aria-label`s and pair every color with a label/number.
+- [ ] If the result only means something **against a reference**, draw the reference — a
+      comparison, not a caption, and computed by the page rather than asserted in prose.
+- [ ] If a control changes only the **reading** of a result, re-derive; never re-run. A
+      camera or a viewport re-frames on a new *result*, not on a re-derivation.
+- [ ] If the visualization needs a GPU, **say so when there isn't one** and show whatever
+      you can without it. `detectWebGPU()` returns a status; it never throws.
 
 ---
 

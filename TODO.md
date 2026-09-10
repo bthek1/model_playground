@@ -69,5 +69,23 @@ video classification reused the zero-shot engine wholesale. The shared work was 
 Hub-id spec check the files a model actually downloads, `model/progress.ts` is
 keyed on repo+file so two models share one bar, and PhraseList/OverlayCanvas.onPick
 came out of the third and second callers respectively.
-Wave 3 — the carve-outs #24, #22, #23, with #24's licence/taxonomy questions called out as re-scoping risks.
+Wave 3 — DONE. #24/#22/#23. The re-scoping risks flagged on #24 were both real
+and both were settled *before* any code was written, which is the only reason
+they cost nothing: RMBG-1.4 is CC non-commercial, so Apache-2.0 MODNet became the
+default and RMBG is offered with the restriction beside the choice; and the
+taxonomy gained a Computer Vision row the Hub does not have, taking the category
+from nineteen to twenty. The other two routes needed no new machinery at all —
+both are plain `pipeline()` calls, and image-to-3D reuses /depth's checkpoint —
+so the shared work was neither the page layer (Wave 1) nor the platform (Wave 2)
+but the **pure modules underneath**: vision/tile.ts, vision/pointCloud.ts,
+vision/matte.ts and vision/resample.ts, none of which touches a model, a worker
+or a canvas. That was deliberate. Every failure these three routes can have
+produces a *plausible picture* — an inside-out point cloud, a mis-assembled
+upscale, a hard-thresholded matte — so the arithmetic had to be somewhere a unit
+test could pin it exactly, and the model-shaped half had to be somewhere an
+@slow spec could measure it. Both halves earned their keep: the unit tests caught
+a backwards inverse-depth reciprocal and float32 bounds that excluded their own
+points, and the @slow specs caught a portrait matting model handed a photo of a
+car (0.2% coverage), a per-tile time estimate out by a factor of ten, and a q8
+Swin2SR that scores *below* bicubic.
 ```

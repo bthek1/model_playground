@@ -204,10 +204,10 @@ its own dependencies, and lives in the per-modality folders `src/audio/` and
 |---|---|---|
 | Hand-written WGSL | `src/webgpu/` | tensor arithmetic, linear/MNIST training, benchmarks |
 | Transformers.js (`@huggingface/transformers`, `kokoro-js`) | `src/audio/` | ASR, audio classification, TTS, text-to-audio |
-| Transformers.js | `src/vision/` | eleven of the nineteen Computer Vision tasks — classification, depth, detection, segmentation, both zero-shot tasks, embeddings, SAM, captioning/OCR, pose, and a frame-level video baseline |
+| Transformers.js | `src/vision/` | fourteen of the twenty Computer Vision tasks — classification, depth, detection, segmentation, both zero-shot tasks, embeddings, SAM, captioning/OCR, pose, a frame-level video baseline, background removal, super-resolution and depth-to-point-cloud |
 | `onnxruntime-web` **directly** | `src/audio/enhance/`, `src/audio/vad/` | speech enhancement (DeepFilterNet3), voice activity detection (Silero VAD) |
 
-Inside `src/vision/` there is a second split, on a different axis. Six routes are plain
+Inside `src/vision/` there is a second split, on a different axis. Ten routes are plain
 `pipeline()` calls and share one generic worker; four own an engine, because the
 pipeline abstraction fails them in four different ways — it re-encodes work worth
 keeping (`zeroshot/`), it hides a split worth exploiting (`sam/`), it cannot load the
@@ -215,6 +215,24 @@ model at all (`caption/`), or the task is two models (`pose/`). The criterion an
 four cases are in `docs/guides/adding-a-model.md` §10. An engine is always the same
 three files — a pure `engine.ts`, a thin `*.worker.ts` that is the only importer of the
 runtime, and a `client.ts` so the hook can be tested without `new Worker`.
+
+**A route may also own work that is neither the model nor the page.** Where the
+model's answer is only the middle of the job, the rest lives in a **pure module**
+under `src/vision/` that imports no runtime, no worker and no canvas — which is
+what makes it testable exactly rather than approximately: `tile.ts` (overlapping
+tiles and seam blending for super-resolution), `pointCloud.ts` (the unprojection
+behind image-to-3D), `matte.ts` (alpha compositing for background removal) and
+`resample.ts` (the bicubic baseline). Every one of them fails by producing a
+*plausible picture* rather than an error, so an assertion over the arithmetic is
+the only thing that catches it — see `docs/roadmaps/vision.md` §3.13–§3.15.
+
+**`/image-to-3d` is the one route where both client-side runtimes appear on the
+same page, and they still do not mix.** Inference is Transformers.js in
+`src/vision/`; the render pass is hand-written WGSL in `src/webgpu/`
+(`pointRenderer.ts`, the repo's first *render* pipeline — everything else there is
+compute). They meet in the route as a plain `Float32Array`, and neither module
+imports the other, so neither one's rule bends.
+See `docs/explanations/webgpu-inference.md` → **Two runtimes on one page**.
 
 The third row exists because neither model has a Transformers.js task: both repos
 publish a bare graph, so everything around it is ours. For DeepFilterNet3 that is
