@@ -306,6 +306,9 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Voice Activity Detection | model catalogue, one entry with **no weights** | ONNX graph, or nothing at all for the energy baseline | mic / file / sample clip | probability timeline + a threshold the user drags |
 | Tensor Arithmetic | the operation | WGSL pipeline compile (fast, auto) | operand matrices | heatmap + numeric grid |
 | Linear Training | architecture + hyperparams | dataset fetch + kernel compile | train loop | live weights + loss curve |
+| Mask Generation | model catalogue | weight download, **then a per-image encode** | click a point on the picture | the mask, its candidates, its decode time |
+| Keypoint Detection | **a pair** of checkpoints | both downloads, one aggregate bar | image / camera, threshold, people cap | skeletons over the frame |
+| Video Classification | CLIP catalogue, reused | weight download | a clip, labels, a sample rate | scores over time + a filmstrip |
 | `/tasks/$slug` placeholder | — | — | — | "not available yet" |
 
 Where LOAD is fast and free (a shader compile), it may auto-run — pass `autoLoad`. The
@@ -330,6 +333,40 @@ input (a prompt, a length, a voice) belongs in RUN, not OUTPUT.
 RUN like any model, so LOAD resolves immediately and the page works before anything is fetched.
 Where a task has a credible no-model baseline, shipping it beside the model is worth more than a
 paragraph of documentation about when the model is overkill.
+
+**LOAD may not be the only wait.** `/mask-generation` has two: the download, and a
+per-image *encode* that is the slow half of the first click. They are separate states
+and the page shows both — collapsing them means the user clicks, waits a second, and is
+told nothing, which is precisely the experience SAM's encode-once/decode-many
+architecture exists to avoid. The rule generalises: **a wait the user cannot predict
+needs a name in the UI.** Put the second wait in RUN, next to the input that caused it,
+not in LOAD — the model is loaded, and a LOAD slot that goes busy again would say
+otherwise. Give it its own testid so a spec can tell the two apart.
+
+**A stage may cost two models.** `/pose` is the single deliberate exception to "one model
+live at a time": top-down pose is a detector followed by a pose model on each person's
+crop, and neither half is useful alone. What the pattern requires in exchange is that the
+*user-facing* numbers stay whole — the catalogue entry names both checkpoints and quotes
+their **combined** download, and LOAD shows one aggregate bar rather than two competing
+ones. (That last one needed a fix: `model/progress.ts` keys its file table on **repo +
+file**, because both checkpoints publish an `onnx/model_fp16.onnx` and the second was
+overwriting the first's entry — the bar reached 100% halfway through and the second
+download read as a stall.)
+
+**A control in RUN may legitimately re-run.** The §7 rule above — a knob that only
+re-reads must never re-run — is about OUTPUT. `/pose`'s person-confidence slider and its
+people cap sit in RUN and *do* re-run, because filtering afterwards would mean running the
+pose model on people the user has already excluded, and that pass is the expensive half.
+The test is not "is it a slider" but **"does this change what the model is asked?"** When
+the answer is yes, say so on the page, so the difference from `/object-detection`'s
+identical-looking slider reads as a decision rather than an inconsistency.
+
+**Some models cannot run here at all, and the page should say so before the click.**
+A catalogue entry may declare `backends`; `model/useBackendProbe.ts` answers what a load
+would resolve to *before* anything downloads, and `ModelPicker` disables a model the
+machine cannot run with the reason on its row. An undecided probe (`null`) gates nothing
+— treating it as WASM greys out every WebGPU model for a frame on each page load, which
+reads as "this machine cannot run it" rather than "ask again in 10 ms".
 
 **Linear Training is the documented exception.** It does not render `ModelPage` at all,
 so it opts out of the setup-rail/workbench arrangement along with everything else. It
@@ -371,6 +408,16 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `depth-map` · `detection-canvas` · `segmentation-canvas` | vision routes | The rendered overlay, once a result exists. |
 | `encode-cost` | `/zero-shot-image-classification` | Per-tower timing, showing when the label embeddings were reused. |
 | `template-verdict` | `/zero-shot-image-classification` | The top label under each prompt template. |
+| `model-unsupported-<id>` | `ModelPicker` | That model needs a backend this machine did not resolve to. |
+| `query-groups` | `/zero-shot-object-detection` | Detections grouped by phrase — **including the phrases that found nothing**. |
+| `neighbours` · `index-size` · `embedding-facts` | `/image-features` | The ranked list, how many pictures are indexed, and the vector's norm before/after. |
+| `encoding` · `encoded` | `/mask-generation` | The per-image encode, in flight and finished. Distinct from LOAD. |
+| `point-canvas` · `points` | `/mask-generation` | The clickable input surface, and the points placed on it. |
+| `mask-canvas` · `mask-facts` · `decode-ms` | `/mask-generation` | The mask, its coverage and IoU, and the decode time the page claims. |
+| `modes` · `generate-ms` | `/image-to-text` | The capability-driven mode selector, and how long the generation took. |
+| `grounding-canvas` · `grounding-list` | `/image-to-text` | The boxes mode, which must never render as prose. |
+| `pose-canvas` · `people` · `joints` | `/pose` | Skeletons, one entry per person, and per-joint confidence **and position**. |
+| `clip-progress` · `filmstrip` · `pooled-winner` · `baseline-note` | `/video-classification` | Sampling/scoring progress, the frames the model saw, the clip-level verdict, and the limitation. |
 
 The testids are unchanged by the horizontal arrangement — `slot-N` is bound to the
 step number, not to a position in the layout.
@@ -399,10 +446,16 @@ That ambiguity is one reason §4's band labels stay generic.
 - All four slots render, with `output-empty` visible, before any run.
 - Run controls are disabled until `ready`.
 - A load error renders in LOAD, a run error in OUTPUT, and the page stays usable.
+- Any control the page says re-derives **does not** call `run` (assert the call count),
+  and any control the page says re-runs **does**.
+- Where a route declares `backends`, an unsupported model is offered but not selectable —
+  and an undecided probe gates nothing.
 
 ## 9. Checklist — adding a task page
 
 - [ ] Model catalogue entry: `id`, `label`, `hint`, `params`, measured `bytes` per backend
+      — plus `graphs` where the repo has no `model.onnx`, and `backends` where a backend
+      genuinely cannot run it
 - [ ] Worker built on the shared protocol (`load` / `run` messages, id-correlated)
 - [ ] Hook wraps `useModelWorker`; returns the §3 contract verbatim
 - [ ] Page uses `ModelPage` + the four slots — no bespoke layout, no grid of its own
@@ -414,7 +467,9 @@ That ambiguity is one reason §4's band labels stay generic.
 - [ ] OUTPUT has an empty state, a running state, and an error state
 - [ ] Errors land in the slot that produced them
 - [ ] Unit tests for the hook's state machine; a route test covering §8's list
-- [ ] Sidebar taxonomy entry mapped in `REAL_ROUTES`
+- [ ] Sidebar taxonomy entry mapped in `REAL_ROUTES`, and the taxonomy test flipped
+- [ ] Added to `e2e/specs/model-page.spec.ts`'s route table and to `model-ids.spec.ts`
+- [ ] A `@slow` spec that asserts a **property**, never a count
 
 ---
 
@@ -437,5 +492,8 @@ That ambiguity is one reason §4's band labels stay generic.
 | A compile-only page | [`routes/tensor.tsx`](../../frontend/src/routes/tensor.tsx) |
 | A page whose OUTPUT has a knob | [`routes/vad.tsx`](../../frontend/src/routes/vad.tsx) — the threshold re-derives, never re-runs |
 | A page whose input costs nothing | [`routes/image-classification.tsx`](../../frontend/src/routes/image-classification.tsx) — picking a picture works before a model exists, and classifies the moment one does |
+| A page with a second, named wait | [`routes/mask-generation.tsx`](../../frontend/src/routes/mask-generation.tsx) — LOAD is the download, `encoding` is the per-image pass |
+| A page that holds two models | [`routes/pose.tsx`](../../frontend/src/routes/pose.tsx) — one combined size, one aggregate bar, controls that re-run on purpose |
+| A page whose framing is a requirement | [`routes/video-classification.tsx`](../../frontend/src/routes/video-classification.tsx) — a frame-level baseline, said so in copy an E2E spec asserts |
 | The empty case | [`routes/tasks.$slug.tsx`](../../frontend/src/routes/tasks.$slug.tsx) |
 | The contract, asserted | [`frontend/e2e/specs/model-page.spec.ts`](../../frontend/e2e/specs/model-page.spec.ts) |

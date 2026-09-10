@@ -284,3 +284,272 @@ test.describe("/zero-shot-image-classification", () => {
     expect(weightRequests).toEqual([]);
   });
 });
+
+test.describe("/zero-shot-object-detection", () => {
+  test("lets the queries and the threshold be set before the model loads", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/zero-shot-object-detection");
+
+    // The queries are the whole input, and they cost nothing. Articles included,
+    // unlike the sibling zero-shot page: this pipeline applies no template, so
+    // what is on screen is exactly what the text tower is asked.
+    await expect(page.getByText("a person", { exact: true })).toBeVisible();
+    await page.getByLabel(/^Queries$/).fill("a red umbrella");
+    await model.button(/^Add$/).click();
+    await expect(page.getByText("a red umbrella", { exact: true })).toBeVisible();
+
+    await model.button(/Remove a car/).click();
+    await expect(page.getByText("a car", { exact: true })).toBeHidden();
+
+    // The threshold starts where an open-vocabulary detector's confident hits
+    // actually land, not at a closed detector's 0.4.
+    const threshold = page.getByLabel(/confidence threshold/i);
+    await expect(threshold).toHaveValue("0.1");
+
+    await expect(model.button(/^Detect$/)).toBeDisabled();
+    expect(weightRequests, "editing queries fetched model weights").toEqual([]);
+  });
+
+  test("quotes the download once, and warns that it is a large one", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/zero-shot-object-detection");
+
+    // Every model here passes LARGE_MODEL_BYTES on WebGPU. The guardrail must
+    // fire before the click, and only in the SELECT slot.
+    await expect(page.getByTestId("model-size-note")).toContainText(/MB/);
+    await expect(model.slot(2)).not.toContainText(/MB/);
+  });
+});
+
+test.describe("/image-features", () => {
+  test("indexes nothing on arrival, and says so", async ({ page, mockApi }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/image-features");
+
+    // The gallery is twelve real downloads plus twelve forward passes. It is
+    // opt-in for the same reason the weights are.
+    await expect(page.getByTestId("index-size")).toHaveText("0 indexed");
+    await expect(model.button(/Embed the \d+ bundled pictures/)).toBeDisabled();
+    await expect(model.button(/^Embed$/)).toBeDisabled();
+    await expect(model.emptyOutput).toBeVisible();
+    expect(weightRequests, "arriving fetched model weights").toEqual([]);
+  });
+
+  test("picking a query image costs a picture, not the weights", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/image-features");
+
+    await model.button(/^Tiger$/).click();
+    await expect(page.getByAltText(/selected input: tiger/i)).toBeVisible();
+    await expect(model.emptyOutput).toBeVisible();
+    expect(weightRequests).toEqual([]);
+  });
+});
+
+test.describe("/mask-generation", () => {
+  test("shows the picture and its click surface before any model exists", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/mask-generation");
+
+    await expect(model.button(/^Load model$/)).toBeVisible();
+    await expect(model.button(/Point at the centre/)).toBeDisabled();
+
+    // Picking a picture costs a picture. The canvas appears — the page is
+    // legible before the download — but nothing is encoded.
+    await model.button(/^City street$/).click();
+    await expect(page.getByTestId("point-canvas")).toBeVisible();
+    await expect(page.getByTestId("encoding")).toBeHidden();
+    await expect(page.getByTestId("encoded")).toBeHidden();
+    await expect(model.emptyOutput).toBeVisible();
+    expect(weightRequests, "picking an image fetched model weights").toEqual([]);
+  });
+
+  test("explains the two-point refinement before it can be used", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/mask-generation");
+
+    // Alt-click is not discoverable. The page has to say it, and it has to say
+    // it where the clicking happens.
+    await expect(model.slot(3)).toContainText(/Alt/);
+    await expect(model.slot(3)).toContainText(/this is not/i);
+  });
+});
+
+test.describe("/image-to-text", () => {
+  test("offers four modes and sets the expectation before any download", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/image-to-text");
+
+    // Florence-2's four modes come from its capability flags, not a fixed list.
+    // `exact`, because "Caption" is also a substring of "Detailed caption".
+    const modes = page.getByTestId("modes");
+    await expect(
+      modes.getByRole("button", { name: "Caption", exact: true }),
+    ).toBeVisible();
+    await expect(
+      modes.getByRole("button", { name: "Detailed caption", exact: true }),
+    ).toBeVisible();
+    await expect(modes.getByRole("button", { name: "OCR" })).toBeVisible();
+    await expect(modes.getByRole("button", { name: "Grounding" })).toBeVisible();
+
+    // The one expectation this page must set: every other vision route answers
+    // in milliseconds, this one decodes a token at a time.
+    await expect(model.slot(3)).toContainText(/expect\s+seconds/i);
+
+    await expect(model.button(/^Generate$/)).toBeDisabled();
+    expect(weightRequests, "arriving fetched model weights").toEqual([]);
+  });
+
+  test("does not offer the WebGPU-only model when the probe says WASM", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    await stubHub(page);
+
+    // No `navigator.gpu` at all — the CPU-only case, which is what a machine
+    // without a usable adapter looks like to `pickBackend`.
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "gpu", { value: undefined });
+    });
+
+    const model = new ModelPageObject(page);
+    await page.goto("/image-to-text");
+
+    // Known before the click. Offering it anyway turns a documented limitation
+    // into a failed 275 MB download.
+    await expect(
+      page.getByTestId("model-unsupported-onnx-community/Florence-2-base-ft"),
+    ).toBeVisible();
+    await expect(model.button(/Florence-2 base/)).toBeDisabled();
+    await expect(model.button(/ViT-GPT2/)).toBeEnabled();
+  });
+});
+
+test.describe("/pose", () => {
+  test("quotes both models as one download, and downloads neither", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/pose");
+
+    // The pair is what the user picks, and the size guardrail quotes the sum —
+    // a guardrail that quotes half the bytes is worse than none.
+    await expect(page.getByTestId("model-size-note")).toContainText(/90M params/);
+    await expect(page.getByTestId("model-size-note")).toContainText(/MB/);
+    await expect(model.slot(2)).not.toContainText(/MB/);
+
+    await expect(model.button(/Find poses/)).toBeDisabled();
+    await expect(model.emptyOutput).toBeVisible();
+    expect(weightRequests, "arriving fetched model weights").toEqual([]);
+  });
+
+  test("says that its two controls change the work, not the view", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/pose");
+
+    // The opposite of /object-detection's threshold, and the page has to say so:
+    // each extra person is another pose forward pass.
+    await expect(page.getByLabel(/person confidence/i)).toHaveValue("0.4");
+    await expect(page.getByLabel(/most people to pose/i)).toHaveValue("5");
+    await expect(model.slot(3)).toContainText(/moving them re-runs/i);
+  });
+});
+
+test.describe("/video-classification", () => {
+  test("calls itself a frame-level baseline, before and after any run", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/video-classification");
+
+    // **This is a correctness assertion, not a copy check.** Shipping this page
+    // as "Video Classification" without the framing teaches something false:
+    // none of the four real video transformers has an ONNX export, and what
+    // runs here cannot see motion at all.
+    await expect(model.slot(1).locator("..")).toBeVisible();
+    await expect(page.getByText(/frame-level baseline/i).first()).toBeVisible();
+    await expect(page.getByText(/never sees motion/i)).toBeVisible();
+
+    await expect(model.button(/Score the clip/)).toBeDisabled();
+    await expect(model.emptyOutput).toBeVisible();
+    expect(weightRequests, "arriving fetched model weights").toEqual([]);
+  });
+
+  test("swaps the label set with the clip, and edits before any download", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const weightRequests = await stubHub(page);
+
+    const model = new ModelPageObject(page);
+    await page.goto("/video-classification");
+
+    // A zero-shot score is relative to the labels given, so each clip carries a
+    // list with a plausible distractor in it.
+    await expect(page.getByText("an interview", { exact: true })).toBeVisible();
+    await model.button(/^Courtroom$/).click();
+    await expect(page.getByText("a courtroom", { exact: true })).toBeVisible();
+    await expect(page.getByText("an interview", { exact: true })).toBeHidden();
+
+    await page.getByLabel(/^Labels$/).fill("a rooftop");
+    await model.button(/^Add$/).click();
+    await expect(page.getByText("a rooftop", { exact: true })).toBeVisible();
+
+    expect(weightRequests, "editing labels fetched model weights").toEqual([]);
+  });
+});

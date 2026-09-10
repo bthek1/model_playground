@@ -173,13 +173,39 @@ that is the same bug, not yours.
 ## 3. Pick the worker: one per modality, never one per task
 
 The rule that keeps the frontend from sprouting a worker per route. Today there
-are six: [`audio/asr.worker.ts`](../../frontend/src/audio/asr.worker.ts),
+are eleven: [`audio/asr.worker.ts`](../../frontend/src/audio/asr.worker.ts),
 [`audio/pipeline.worker.ts`](../../frontend/src/audio/pipeline.worker.ts),
 [`audio/tts.worker.ts`](../../frontend/src/audio/tts.worker.ts),
 [`audio/enhance/enhance.worker.ts`](../../frontend/src/audio/enhance/enhance.worker.ts),
-[`audio/vad/vad.worker.ts`](../../frontend/src/audio/vad/vad.worker.ts) and the
-raw-WGSL [`webgpu/worker.ts`](../../frontend/src/webgpu/worker.ts). A *seventh*
-is only justified when a modality genuinely needs different machinery.
+[`audio/vad/vad.worker.ts`](../../frontend/src/audio/vad/vad.worker.ts),
+[`vision/vision.worker.ts`](../../frontend/src/vision/vision.worker.ts),
+[`vision/zeroshot/worker.ts`](../../frontend/src/vision/zeroshot/worker.ts),
+[`vision/sam/sam.worker.ts`](../../frontend/src/vision/sam/sam.worker.ts),
+[`vision/caption/caption.worker.ts`](../../frontend/src/vision/caption/caption.worker.ts),
+[`vision/pose/pose.worker.ts`](../../frontend/src/vision/pose/pose.worker.ts) and the
+raw-WGSL [`webgpu/worker.ts`](../../frontend/src/webgpu/worker.ts). A *twelfth*
+is only justified when a task genuinely needs different machinery.
+
+**Before choosing, answer one question: is this a plain `pipeline()` call?** Six of
+the eleven vision routes are, and they all ride `vision.worker.ts` with the task string
+in the `load` message. Four are not, and each owns an engine for a different reason —
+the pipeline throws away work you want to keep (zero-shot: it re-encodes the labels every
+call), the architecture *is* a split you want to exploit (SAM: encode once, decode many),
+the pipeline cannot load the model at all (Florence-2's model type is registered for
+image-text-to-text, not vision2seq), or the task is two models (pose). §10 of
+[`adding-a-model.md`](adding-a-model.md) works through all four with the code.
+
+Check the registry before writing the hook, not after the first load fails:
+
+```bash
+grep -n "MODEL_FOR_.*MAPPING_NAMES" -A 20 \
+  frontend/node_modules/@huggingface/transformers/src/models/registry.js
+```
+
+When a task does own an engine, it still puts **one engine per modality-shaped
+problem**, not one per model: `vision/caption/` drives Florence-2 and a
+vision-encoder-decoder behind a single `Captioner` interface, exactly as
+`tts.worker.ts` drives Kokoro, MMS and MusicGen behind one `TtsSynthesizer`.
 
 The two bare-ONNX workers are the reason the rule says "modality", not "runtime":
 enhancement and VAD both drive `onnxruntime-web` directly, but their machinery
@@ -196,11 +222,14 @@ travels in the `load` message and no new file is created.
 | A generic pipeline over a *new* modality (text, images) | a new `src/<modality>/pipeline.worker.ts` | yes, once per modality |
 | Anything that owns a capture loop (mic, camera) | its own modality worker | yes, capture loops are stateful |
 | Anything on bare `onnxruntime-web` with hand-written pre/post | its own worker | yes — `audio/enhance/` is the precedent, `audio/vad/` the smaller one |
+| A Transformers.js model the pipeline can't drive, or a split worth exploiting | its own worker | yes — see `adding-a-model.md` §10 for the four shapes |
+| Two models that are only useful together | its own worker | yes — `vision/pose/` is the only one, and it is documented as an exception |
 | Hand-written WGSL, no ML framework | `webgpu/worker.ts` | no, add a shader and a pipeline |
 
 The reason is not tidiness. Every worker duplicates the load/progress/cancel
-protocol, and every duplicate is a place for it to drift. Six protocols are
-maintainable; fifteen are not.
+protocol, and every duplicate is a place for it to drift. Eleven protocols are
+maintainable because every one of them is `ModelRequest`/`ModelResponse` with a
+different payload; eleven *bespoke* protocols would not be.
 
 ---
 
@@ -520,10 +549,22 @@ export interface DepthModel {
   hint: string;    // one line: what makes this model different from its neighbour
   params: number;  // millions. Drives the size estimate in `model/size.ts`
   bytes?: MeasuredBytes;  // per-backend override, when the estimate would mislead
+  graphs?: readonly string[];   // ONNX base names, when the repo has no `model.onnx`
+  backends?: readonly Backend[]; // only when a backend genuinely cannot run it
 }
 export const DEPTH_MODELS: DepthModel[] = [ /* … */ ];
 export const DEFAULT_DEPTH_MODEL = DEPTH_MODELS[0].id;
 ```
+
+`graphs` and `backends` are both about *not lying*, and both were added because the
+absence bit. `graphs` names the files the model actually downloads — CLIP as a feature
+extractor loads `vision_model.onnx`, SAM ships two graphs, Florence-2 four — so the
+Hub-id spec checks the right file instead of a `model.onnx` that does not exist there.
+`backends` is enforced by `ModelPicker` through `model/useBackendProbe.ts`, so a model
+this machine cannot run is greyed out with a reason rather than failing 275 MB into a
+download; declare it only when the limitation is real, because a constraint nothing
+enforces is worse than none, and a gate on every model leaves a route with nothing to
+select.
 
 Supply measured `bytes` whenever the params estimate is wrong by more than a
 little. ASR does, because its fp32 WASM decoder makes the real download roughly
@@ -590,8 +631,14 @@ model):
 - all four slots render, and `output-empty` is present before any run
 - run controls are disabled until `ready`
 - an error lands in the slot that produced it, not in a global banner
+- **every control the page claims re-derives does not call `run`** (assert the call
+  count), and every control it claims re-runs does. Both halves matter: the page makes a
+  promise about which is which, and the two look identical on screen
 - the engine's own maths, tested directly with no worker in the way — the engine
   modules exist precisely so this test needs no `new Worker`
+- the catalogue's own invariants, where it has any. A derived number is the one most
+  likely to drift: `vision/pose/types.test.ts` asserts each pair's quoted download **is
+  the sum of its two halves**, which is the mistake you make by re-measuring one half
 
 One query trap: a band is a labelled `region`, so `getByLabelText(/text/i)`
 matches both a band named "Text" and a field inside it. Query by role, or by the
@@ -602,7 +649,11 @@ browser auth, the real WebGPU probe, and page layout.
 
 **Playwright `@slow`, real downloads:** real weights, real ONNX sessions. This
 is the only layer that catches a broken model, and it exists because unit tests
-mock the network and therefore cannot.
+mock the network and therefore cannot. **Assert a property, never a count** — a mask's
+coverage band, a nose above the ankles, a phrase that finds nothing. If the only
+assertion you can think of is "N rows appeared", the spec is not yet worth its runtime;
+[`e2e-testing.md`](e2e-testing.md) tabulates the six vision routes and the specific bug
+each property catches.
 
 Shared `data-testid`s across both runners: `slot-1` through `slot-4`,
 `output-panel`, `output-empty`, `output-running`, `model-ready`,
@@ -680,15 +731,18 @@ structurally: the run controls simply do not work until the load machine says
 [ ] Four facts extracted: task string, checkpoint, input contract, output shape
 [ ] Browser id verified against the Hub; catalogue imported by `just fe-e2e-models`
 [ ] dtype chosen per backend, download size (not param count) quoted
+[ ] Is it a plain pipeline() call? If not, engine + worker + client (adding-a-model §10)
 [ ] Worker chosen by modality; no new worker without a reason
 [ ] Envelope reused from `model/types.ts`; error `id` discriminates load vs run
 [ ] Engine is a pure module: one model live, warm-up on load, cloneable output
 [ ] Hook wraps useModelWorker, returns the §3 contract verbatim, adds no alias
 [ ] Selection persisted through useModelSelection with the route's own routeKey
 [ ] Route renders all four slots; autoLoad from the session; DOM order 1-4
-[ ] REAL_ROUTES entry added; placeholder retired
+[ ] REAL_ROUTES entry added; placeholder retired; taxonomy test flipped
+[ ] Added to model-page.spec.ts's route table, and to model-ids.spec.ts's imports
 [ ] ModelCard rows created if used; task is a ModelTask choice, not a pipeline
-[ ] Vitest contract asserted; @slow spec added for the real download
+[ ] Vitest contract asserted, including which controls re-derive and which re-run
+[ ] @slow spec asserts a property of the real output, never a count
 [ ] Category roadmap issue status table updated; plan issue closed
 ```
 

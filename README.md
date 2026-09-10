@@ -59,7 +59,7 @@ docker compose exec backend python manage.py migrate
 | [docs/standards/model-visualization.md](docs/standards/model-visualization.md) | How a model and its internals are drawn (schematics, heatmaps, param chips) |
 | [docs/guides/e2e-testing.md](docs/guides/e2e-testing.md) | Playwright end-to-end tests, including the `@slow` real-weights specs |
 | [docs/roadmaps/audio.md](docs/roadmaps/audio.md) | **The Audio category, task by task** — six shipped routes, and the shared plumbing the other categories build on |
-| [docs/roadmaps/vision.md](docs/roadmaps/vision.md) | **The Computer Vision category, task by task** — the shipped `src/vision/` module, `/image-classification`, and the research the next eighteen pages come from |
+| [docs/roadmaps/vision.md](docs/roadmaps/vision.md) | **The Computer Vision category, task by task** — eleven shipped routes, what each one settled, and why the other eight stay on a server |
 | [docs/model-task-categories.md](docs/model-task-categories.md) | The Hugging Face task taxonomy, as the vocabulary for `ModelCard` categories |
 | [GitHub issues → `plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) | Phased feature plans and ADRs — open is active, closed is the record |
 | [GitHub issues → `roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) | Per-category research for the categories not yet built. A roadmap graduates to `docs/roadmaps/` once its first route ships — Audio and Computer Vision already have |
@@ -84,7 +84,8 @@ docker compose exec backend python manage.py migrate
 │       ├── api/      Axios client, query keys, API functions
 │       ├── webgpu/   Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
 │       ├── audio/    Pretrained audio models (Transformers.js; enhance/ and vad/ on bare ONNX)
-│       ├── vision/   Pretrained vision models (image I/O, canvas overlays, one generic worker)
+│       ├── vision/   Pretrained vision models (image I/O, canvas overlays; one generic
+│       │              worker, plus an engine each for zero-shot, SAM, captioning, pose)
 │       ├── model/    Shared task-page plumbing (backend probe, size guardrail, worker lifecycle)
 │       ├── components/
 │       │   ├── ui/       shadcn/ui components

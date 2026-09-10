@@ -442,8 +442,9 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - Same shape as `src/audio/`: one generic worker for every discriminative task (`vision.worker.ts`,
   task carried in the `load` message), a pure `engine.ts` owing the same three behaviours, thin task
   hooks over `useVisionPipeline`. Shipped: `/image-classification`, `/depth`, `/object-detection`,
-  `/segmentation`, `/zero-shot-image-classification`. The rest of the category is research with a
-  phased plan — `docs/roadmaps/vision.md`.
+  `/segmentation`, `/zero-shot-image-classification`, `/zero-shot-object-detection`,
+  `/image-features`, `/mask-generation`, `/image-to-text`, `/pose`, `/video-classification` — eleven
+  of nineteen. The rest stays on a server, with a reason per task — `docs/roadmaps/vision.md` §3.12.
 - **The shared page pieces already exist — reuse them, do not re-copy.** `useImagePick` (file / drop
   / sample, and the one-object-URL-at-a-time rule), `useCameraFrames` (open → grab → `downscale` →
   one frame in flight), `components/vision/ImageSourcePanel` (the RUN slot's input surface) and
@@ -484,7 +485,39 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   `"This is a photo of {}"`; pass `hypothesis_template: "{}"` when you template your own, and keep
   catalogue labels as bare nouns.
 - **A threshold, an opacity or a class toggle re-derives; it never re-runs.** The model is asked once
-  and the controls filter what it returned — the same pure-derivation trick `/vad` uses.
+  and the controls filter what it returned — the same pure-derivation trick `/vad` uses. `/pose` is
+  the documented exception and says so on the page: filtering people *after* the fact would mean
+  running the pose model on people already excluded, and that pass is the expensive half.
+- **Four vision tasks own an engine rather than riding the generic worker**, always on the same
+  criterion — it is not a plain `pipeline()` call. `vision/zeroshot/` (split towers, cached label
+  embeddings), `vision/sam/` (two graphs, encode once / decode many), `vision/caption/` (the
+  `image-to-text` pipeline resolves through `AutoModelForVision2Seq`, which has no `florence2`
+  entry — it cannot load Florence-2 at all, and has nowhere to put a task token), `vision/pose/`
+  (two models live).
+- **`/pose` is the single deliberate exception to "one model live at a time."** Its catalogue entry
+  names both checkpoints and quotes the **combined** download. Two consequences: `model/progress.ts`
+  is keyed on **repo + file** (both publish an `onnx/model_fp16.onnx`, and the second was
+  overwriting the first — the bar reached 100% halfway through), and both models are disposed with
+  `Promise.allSettled`, so a detector whose teardown throws does not skip the larger one.
+- **`VisionModel.backends` is enforced, not merely declared.** `model/useBackendProbe.ts` answers
+  "what would this load on" before anything downloads; `ModelPicker` disables a model the machine
+  cannot run with the reason on the row. A `null` probe gates nothing.
+- **`VisionModel.graphs` names the ONNX files an entry downloads** (default `["model"]`). CLIP as a
+  feature extractor loads `vision_model.onnx`, SAM ships two graphs, Florence-2 four —
+  `just fe-e2e-models` checks *those* files, since a check hard-coded to `model.onnx` looks at the
+  wrong file and passes.
+- **Two coordinate round-trips fail silently, and geometry is the only assertion that catches them.**
+  SAM: a click is in CSS pixels while the canvas is sized to the source, so `OverlayCanvas`'s
+  `onPick` converts — a mis-mapped point returns a plausible mask of whatever is there. Pose:
+  `post_process_pose_estimation` scales the heatmap peak by the box's *size* and never adds its
+  *origin*, so `vision/pose/pose.ts` does. The `@slow` specs assert a mask **coverage band** and the
+  nose **above** the ankles.
+- **Florence-2 needs `skip_special_tokens: false`** (its `<loc_…>` box tokens *are* the answer) and
+  `post_process_generation` wants **`[width, height]`** — its own JSDoc says "height x width", and
+  `inputs.original_sizes` is `[height, width]`, so following either transposes every box.
+- **`/video-classification` is a frame-level baseline and says so as a correctness requirement.**
+  No real video transformer has an ONNX export; the limitation sits next to the result and an E2E
+  spec asserts the copy.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
@@ -497,7 +530,8 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - End-to-end: `just fe-e2e` (browsers: `just fe-e2e-install`; UI: `just fe-e2e-ui`)
 - Real model loads: `just fe-e2e-slow` (minutes, needs network); ids only: `just fe-e2e-models`;
   speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`;
-  vision only: `just fe-e2e-vision`; zero-shot scoring parity: `just fe-e2e-zeroshot`
+  vision only: `just fe-e2e-vision` (tens of minutes cold — one route at a time with
+  `just fe-e2e-vision-one /pose`); zero-shot scoring parity: `just fe-e2e-zeroshot`
 - Install deps: `just fe-install`
 
 ---
@@ -525,7 +559,8 @@ Key commands:
 | `just fe-e2e-vad` | Run the @slow voice-activity-detection specs (seconds) |
 | `just fe-e2e-install` | Download the Playwright browsers (once) |
 | `just fe-e2e-slow` | `@slow` specs: real model downloads + real ONNX sessions |
-| `just fe-e2e-vision` | Run the @slow vision specs: a real MobileNetV4 load + classification (seconds) |
+| `just fe-e2e-vision` | Run the @slow vision specs: real loads across all 11 routes (tens of minutes cold) |
+| `just fe-e2e-vision-one <route>` | One @slow vision route at a time |
 | `just fe-e2e-models` | Check every model id (audio + vision) resolves on the HF Hub (seconds) |
 | `just be-seed-e2e` | Create/reset the E2E test user (dev only) |
 | `just be-startapp name` | Scaffold a new Django app |

@@ -59,6 +59,12 @@ const REAL_ROUTES: Record<string, string> = {
   "object-detection": "/object-detection",
   "image-segmentation": "/segmentation",
   "zero-shot-image-classification": "/zero-shot-image-classification",
+  "zero-shot-object-detection": "/zero-shot-object-detection",
+  "image-feature-extraction": "/image-features",
+  "mask-generation": "/mask-generation",
+  "image-to-text": "/image-to-text",
+  "keypoint-detection": "/pose",
+  "video-classification": "/video-classification",
 };
 
 function task(label: string): TaskItem {

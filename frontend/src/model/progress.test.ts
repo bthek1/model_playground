@@ -153,3 +153,43 @@ describe("summarize", () => {
     });
   });
 });
+
+describe("two models loading into one bar", () => {
+  // `/pose` is the one route that holds two models live, and both repos publish
+  // a file called `onnx/model_fp16.onnx`. Keyed on the file name alone the
+  // second model's bytes would overwrite the first's: the denominator would be
+  // one model's size, the bar would hit 100% halfway through, and the second
+  // download would read as a stall.
+  const event = (name: string, loaded: number, total: number) => ({
+    status: "progress",
+    name,
+    file: "onnx/model_fp16.onnx",
+    loaded,
+    total,
+  });
+
+  it("counts both repos' identically-named files separately", () => {
+    // Both downloads are started together (`Promise.all` in the pose engine),
+    // so both announce their size before either has finished.
+    let state = initialProgress;
+    state = reduceProgress(state, event("onnx-community/dfine_n_coco-ONNX", 0, 8_000_000));
+    state = reduceProgress(state, event("onnx-community/vitpose-base-simple", 0, 172_000_000));
+    state = reduceProgress(state, event("onnx-community/dfine_n_coco-ONNX", 8_000_000, 8_000_000));
+
+    const out = summarize(state, 0);
+    expect(out.files.count).toBe(2);
+    // The sum of both models, not whichever one wrote to the table last.
+    expect(out.total).toBe(180_000_000);
+    // Finishing the small model is not "nearly done" — it is 4% of the pair.
+    expect(out.percent).toBeLessThan(10);
+    expect(out.files.done).toBe(1);
+  });
+
+  it("still reports the plain file name in the detail line", () => {
+    const state = reduceProgress(
+      initialProgress,
+      event("onnx-community/vitpose-base-simple", 1, 2),
+    );
+    expect(summarize(state, 0).current).toBe("onnx/model_fp16.onnx");
+  });
+});

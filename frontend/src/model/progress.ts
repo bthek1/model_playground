@@ -95,7 +95,15 @@ export function reduceProgress(
     return { ...prev, phase: "warmup", current: undefined };
   }
 
-  const key = e.file ?? e.name;
+  // Keyed on **repo + file**, not on the file name alone.
+  //
+  // `/pose` is the one route that holds two models live, and both repos publish
+  // a file called `onnx/model_fp16.onnx`. Keyed on the file name the second
+  // model's bytes would overwrite the first's in this table: the denominator
+  // would be one model's size, the bar would reach 100% halfway through, and
+  // the second download would look like a stall. `name` is the repo id, which
+  // Transformers.js sends on every event alongside `file`.
+  const key = e.name && e.file ? `${e.name}/${e.file}` : (e.file ?? e.name);
   if (!key) return prev;
 
   const entry = prev.files[key] ?? { loaded: 0, total: 0, done: false };
@@ -130,7 +138,9 @@ export function reduceProgress(
     // "downloading" — the phase only moves forwards.
     phase: prev.phase === "warmup" ? "warmup" : loaded > 0 ? "downloading" : "connecting",
     percent,
-    current: e.status === "done" ? prev.current : key,
+    // The *file* name for the detail line, not the composite key: a reader
+    // wants "model_fp16.onnx", not the repo path in front of it.
+    current: e.status === "done" ? prev.current : (e.file ?? key),
   };
 }
 

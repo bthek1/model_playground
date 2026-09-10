@@ -21,7 +21,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Loader2, Plus, Tags, X } from "lucide-react";
+import { Loader2, Tags } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { InputPanel } from "@/components/model/InputPanel";
@@ -30,6 +30,7 @@ import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
+import { PhraseList } from "@/components/vision/PhraseList";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,7 +83,6 @@ function ZeroShotImageClassificationPage() {
   useCacheRefresh(session, ready);
 
   const [labels, setLabels] = useState<string[]>(DEFAULT_LABELS);
-  const [draft, setDraft] = useState("");
   const [template, setTemplate] = useState<string>(TEMPLATES.photo);
   const [compare, setCompare] = useState(true);
   const [live, setLive] = useState(false);
@@ -128,15 +128,6 @@ function ZeroShotImageClassificationPage() {
   const busy = running || preparing !== null;
   const loadError = status === "error" ? error : null;
   const runError = status === "error" ? null : error;
-
-  const addLabel = () => {
-    const value = draft.trim();
-    if (!value || labels.includes(value)) return;
-    setLabels((prev) => [...prev, value]);
-    setDraft("");
-  };
-  const removeLabel = (label: string) =>
-    setLabels((prev) => prev.filter((l) => l !== label));
 
   const scoreCurrent = () => {
     if (!picked) return;
@@ -221,49 +212,14 @@ function ZeroShotImageClassificationPage() {
             }}
           >
             <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="new-label">Labels</Label>
-                <ul className="flex flex-wrap gap-1.5">
-                  {labels.map((label) => (
-                    <li key={label}>
-                      <span className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs">
-                        {label}
-                        <button
-                          type="button"
-                          aria-label={`Remove ${label}`}
-                          onClick={() => removeLabel(label)}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-                  {labels.length === 0 && (
-                    <li className="text-xs text-muted-foreground">
-                      Add at least one label to score against.
-                    </li>
-                  )}
-                </ul>
-                <div className="flex gap-2">
-                  <Input
-                    id="new-label"
-                    value={draft}
-                    placeholder="a bicycle"
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addLabel();
-                      }
-                    }}
-                    className="max-w-xs"
-                  />
-                  <Button variant="outline" size="sm" onClick={addLabel}>
-                    <Plus className="size-4" /> Add
-                  </Button>
-                </div>
-              </div>
+              <PhraseList
+                id="new-label"
+                title="Labels"
+                items={labels}
+                onChange={setLabels}
+                placeholder="bicycle"
+                emptyHint="Add at least one label to score against."
+              />
 
               <div className="space-y-1.5">
                 <Label htmlFor="template">Prompt template</Label>

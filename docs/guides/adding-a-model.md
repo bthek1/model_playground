@@ -419,3 +419,81 @@ runs the real graph on a synthetic noisy clip and asserts the scale-invariant SD
 improves by ≥6 dB; `e2e/specs/webgpu/enhance.spec.ts` repeats it on the GPU. The
 VAD spec asserts a real speech *fraction* on a known clip for the same reason —
 it is the only test in the suite that would have caught a 512-sample window.
+
+---
+
+## 10. When the pipeline is the wrong abstraction
+
+§8 assumes `pipeline(task, model)` fits. Four vision routes found it did not, and
+they all failed the same test: **is this a plain `pipeline()` call?** If the
+answer is no, the task owns an engine — `engine.ts` (pure, testable with fakes),
+`*.worker.ts` (the only file that imports the runtime), `client.ts` (so the hook
+can mock worker creation). The plumbing above it does not change: `useModelWorker`,
+the three engine duties, `ModelPicker`, `ModelStatus`, the four slots.
+
+The four reasons, each a different shape:
+
+**a. The pipeline throws away work you want to keep.**
+`/zero-shot-image-classification` — the pipeline re-encodes the labels on every
+call, and the label embeddings do not depend on the image. `src/vision/zeroshot/`
+drives the two towers separately and caches the text side. The cost of splitting
+is owning the graph's tail (normalise → scale → softmax) in `scoring.ts`, where a
+wrong `logit_scale` fails *silently*: scores stay in [0, 1] and the ranking is
+unchanged. `just fe-e2e-zeroshot` compares against the full graph, which is the
+only thing that can catch it.
+
+**b. The architecture is a split, and the split is the point.**
+`/mask-generation` — SAM ships a vision encoder and a prompt-encoder/mask-decoder.
+`src/vision/sam/` runs the encoder once per image and decodes a mask per click.
+The trap: `SamModel.forward` computes the embeddings itself when they are
+missing, so omitting them still returns **correct masks** at full encoder cost on
+every click. Nothing in the output says so. This is also the route that showed
+encode-once/decode-many needs *two states* in the UI — LOAD is the download,
+encoding is the per-image pass, and collapsing them means the user clicks, waits
+a second, and is told nothing.
+
+**c. The pipeline cannot load the model at all.**
+`/image-to-text` — `ImageToTextPipeline` resolves through
+`AutoModelForVision2Seq`, whose registry maps `vision-encoder-decoder`,
+`idefics3` and `smolvlm`. Florence-2's model type is `florence2`, registered
+under *image-text-to-text*. It also does exactly two things — run the processor
+for `pixel_values`, call `generate({ inputs })` — so there is nowhere to put a
+task token even for the models it can load. Same shape as MusicGen needing
+`MusicgenForConditionalGeneration` rather than the `text-to-audio` pipeline.
+**Check the registry before writing the hook**, not after the first load fails:
+
+```bash
+grep -n "MODEL_FOR_.*MAPPING_NAMES" -A 20 \
+  frontend/node_modules/@huggingface/transformers/src/models/registry.js
+```
+
+`vision/caption/` then puts *both* families behind one `Captioner` interface,
+which is the same trade `tts.worker.ts` makes for Kokoro / MMS / MusicGen. One
+engine per **modality**, not per model.
+
+**d. The task is two models.**
+`/pose` — a detector finds people, a pose model runs on each person's crop.
+`src/vision/pose/` holds both live, which is the single documented exception to
+"one model live at a time", and pays for it in three places: the catalogue entry
+quotes the **combined** download, both models are loaded together so their
+progress events interleave into one bar, and both are disposed with
+`Promise.allSettled` so a teardown that throws does not skip the larger one.
+
+### The rule these share
+
+Every one of the four introduced a failure that **produces plausible output**
+rather than an error — a cached embedding that is silently recomputed, a scale
+that leaves the ranking intact, a task token a model has never seen answered with
+a fluent unrelated sentence, a skeleton offset by a crop's origin. So each one
+owes a `@slow` spec that measures a **property**, never a count:
+
+| Route | What the `@slow` spec asserts |
+|---|---|
+| `/zero-shot-image-classification` | the split path's numbers against the full graph |
+| `/mask-generation` | the mask's **coverage band** — ~0% and ~100% are what a broken coordinate space produces |
+| `/image-to-text` | a substring of the text actually printed in the picture |
+| `/pose` | the nose is **above** the ankles |
+| `/zero-shot-object-detection` | a present phrase finds boxes and an absent one finds none |
+| `/image-features` | an animal's nearest neighbour is an animal |
+
+"Five rows appeared" passes for all of them.

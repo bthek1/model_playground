@@ -53,7 +53,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Adding a task page (end-to-end procedure)** | [`docs/guides/adding-a-task-page.md`](docs/guides/adding-a-task-page.md) |
 | Feature plans (phased) | **GitHub issues**, label [`plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) — open = active, closed = done |
 | **Audio category roadmap** (complete, 6 of 6) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
-| **Computer Vision roadmap** (1 of 19, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
+| **Computer Vision roadmap** (11 of 19, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -82,7 +82,8 @@ just fe-e2e         # playwright end-to-end (mocked API, no backend needed)
 just fe-e2e-slow    # @slow specs: real model downloads + real ONNX sessions (minutes)
 just fe-e2e-enhance # @slow speech-enhancement specs (DeepFilterNet3, WASM + WebGPU)
 just fe-e2e-vad     # @slow voice-activity-detection specs (Silero VAD, seconds)
-just fe-e2e-vision  # @slow vision specs: a real MobileNetV4 load + classification (seconds)
+just fe-e2e-vision  # @slow vision specs: real loads across all 11 routes (tens of minutes cold)
+just fe-e2e-vision-one /pose   # one @slow vision route at a time
 just fe-e2e-models  # check every model id (audio + vision) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -264,8 +265,42 @@ The second modality on the Transformers.js path, and the same shape as `src/audi
 one generic worker for every discriminative task (`vision.worker.ts` — the task travels in the
 `load` message), a pure `engine.ts` that owes the same three behaviours, and thin task hooks over
 `useVisionPipeline`. Shipped: `/image-classification`, `/depth`, `/object-detection`,
-`/segmentation`, `/zero-shot-image-classification`. Everything else in the category is research
-with a phased plan — see [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md).
+`/segmentation`, `/zero-shot-image-classification`, `/zero-shot-object-detection`,
+`/image-features`, `/mask-generation`, `/image-to-text`, `/pose`, `/video-classification`.
+The rest of the category stays on a server, with a reason per task — see
+[`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) §3.12.
+
+- **Four vision tasks own an engine instead of riding the generic worker**, and the criterion is
+  always the same one: it is not a plain `pipeline()` call. `vision/zeroshot/` (split towers, to
+  cache label embeddings), `vision/sam/` (two graphs — encode once, decode many),
+  `vision/caption/` (the `image-to-text` pipeline cannot load Florence-2 at all: its model type is
+  registered for image-text-to-text, not vision2seq, and the pipeline has nowhere to put a task
+  token), and `vision/pose/` (two models live at once). Everything else is a thin hook over
+  `useVisionPipeline`.
+- **`/pose` is the single deliberate exception to "one model live at a time."** Top-down pose is a
+  detector plus a pose model and neither half is useful alone, so a catalogue entry names both and
+  quotes the **combined** download. Two consequences that bit: `model/progress.ts` had to be keyed
+  on **repo + file** (both checkpoints publish an `onnx/model_fp16.onnx`, and the second was
+  overwriting the first's entry, so the bar hit 100% halfway through), and both models are disposed
+  with `Promise.allSettled` so a detector whose teardown throws does not skip the larger one.
+- **`VisionModel.backends` is now enforced, not merely declared.** `model/useBackendProbe.ts`
+  answers "what would this load on" before anything downloads and `ModelPicker` disables a model the
+  machine cannot run, with the reason on the row. A `null` probe gates nothing — treating the
+  undecided state as WASM greys out every WebGPU model for a frame on each page load.
+- **`VisionModel.graphs` names the ONNX files an entry actually downloads** (default `["model"]`).
+  CLIP as a feature extractor loads `vision_model.onnx`; SAM ships two graphs; Florence-2 ships
+  four. `just fe-e2e-models` checks *those* files for the dtype each backend asks for — hard-coded
+  to `model.onnx` it would look at the wrong file and pass.
+- **Two coordinate round-trips are the whole correctness surface of their pages, and both fail
+  silently.** SAM: a click is in CSS pixels and the canvas is sized to the source, so `OverlayCanvas`'s
+  `onPick` owns the conversion — a mis-mapped point still returns a plausible mask. Pose:
+  `post_process_pose_estimation` scales the heatmap peak by the box's *size* and never adds its
+  *origin*, so `vision/pose/pose.ts` does — otherwise the skeleton floats beside the person. Both
+  `@slow` specs assert geometry (a mask **coverage band**, the nose **above** the ankles), because
+  no count-based assertion can catch either.
+- **`/video-classification` is a frame-level baseline and says so as a correctness requirement**,
+  not as decoration: no real video transformer has an ONNX export, the page states the limitation
+  next to the result, and an E2E spec asserts the copy.
 
 - **`/zero-shot-image-classification` is the one vision route that does not use a pipeline.**
   `src/vision/zeroshot/` drives the CLIP/SigLIP text and vision towers separately so the label

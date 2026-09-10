@@ -163,10 +163,17 @@ fe-e2e-vad:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "voice activity detection"
 
 # Run the @slow vision specs: real loads of MobileNetV4, Depth Anything V2,
-# D-FINE nano, SegFormer-B0 and CLIP, each asserting a known answer on a known
-# input. CLIP is ~150 MB, so budget minutes on a cold cache rather than seconds.
+# D-FINE nano, SegFormer-B0, CLIP, OWLv2, DINOv2, SlimSAM and the D-FINE+ViTPose
+# pair, each asserting a known answer on a known input. OWLv2 alone is ~155 MB,
+# so budget tens of minutes on a cold cache. The Florence-2 half runs in the
+# `webgpu` project and skips itself on a machine with no GPU device.
 fe-e2e-vision:
-    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 vision-models.spec.ts
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --project=webgpu --workers=1 vision-models.spec.ts
+
+# Run one @slow vision route at a time — the whole file is tens of minutes cold.
+#   just fe-e2e-vision-one /mask-generation
+fe-e2e-vision-one route:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --project=webgpu --workers=1 vision-models.spec.ts --grep "{{route}}"
 
 # Run the @slow zero-shot parity spec: the split-tower path (which caches the
 # label embeddings) scored against the full CLIP graph on the same image. The

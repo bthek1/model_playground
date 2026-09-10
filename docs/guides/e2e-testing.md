@@ -71,12 +71,21 @@ Specs tagged `@slow` are excluded by default. They download real ONNX weights
 from Hugging Face (80–220 MB per model) and open a real ONNX Runtime session:
 
 ```bash
-just fe-e2e-slow      # sets E2E_SLOW=1 — ~2.5 min, needs network
-just fe-e2e-models    # the cheap half: every model id must resolve (~5 s)
+just fe-e2e-slow      # audio: sets E2E_SLOW=1 — ~2.5 min, needs network
+just fe-e2e-models    # the cheap half: every id, dtype file and sample URL (~45 s)
 just fe-e2e-enhance   # speech enhancement on both backends (~20 s + download)
 just fe-e2e-vad       # voice activity detection (~10 s, 2 MB download)
-just fe-e2e-vision    # image classification, real weights (~20 s, 4 MB download)
+just fe-e2e-vision    # all eleven vision routes — tens of minutes on a cold cache
+just fe-e2e-vision-one /pose      # one vision route at a time
+just fe-e2e-zeroshot  # split-tower scoring parity against the full CLIP graph
 ```
+
+`fe-e2e-vision` grew from "one MobileNetV4 load" into the whole category, and it is
+now the longest job in the repo: OWLv2 alone is 155 MB, and Florence-2 is 544 MB on
+WebGPU. **Reach for `fe-e2e-vision-one` while iterating** — it greps the same file by
+route path. The Florence-2 block runs in the `webgpu` project and `test.skip`s itself
+when the picker has gated the model off, so a machine with no GPU adapter reports a
+skip rather than a failure.
 
 **These are not optional nice-to-haves.** Three bugs shipped past a fully green
 unit suite because all of them lived in exactly what the unit tests mock away:
@@ -98,12 +107,41 @@ sample to the right *words*; `vision-models.spec.ts` asserts the tiger sample
 comes back as a tiger. A count of rows would have passed while the model called
 it a snake.
 
-`model-ids.spec.ts` is the cheap half of the group and covers every modality: it
-imports the catalogue modules directly, HEADs every id against the Hub API, and
-— for vision — checks that each entry publishes the **dtype its backend asks
-for**, since a repo with only an fp32 `model.onnx` resolves fine on the API and
-then 404s at load. Add a new catalogue module to its import list in the same
+`model-ids.spec.ts` is the cheap half of the group and covers every modality. It
+imports the catalogue modules directly and checks three things:
+
+1. **Every id resolves** on the Hub API. A pose entry is a *pair*, so its own id is a
+   composite that resolves to nothing — the two halves are what get asked about.
+2. **Every entry publishes the dtype its backend asks for**, against the files it
+   actually downloads. That last part needed `VisionModel.graphs`: CLIP as a feature
+   extractor loads `vision_model.onnx`, SAM ships two graphs and Florence-2 four, so a
+   check hard-coded to `onnx/model.onnx` looks at a file that does not exist in those
+   repos and passes.
+3. **Every bundled sample and gallery picture resolves.** Same class of bug one layer up:
+   those URLs are the only reason a route works before the user has a file of their own,
+   and the unit suite mocks `fromUrl` away entirely. A 404 there is a page whose sample
+   buttons all fail, with green tests.
+
+Add a new catalogue module — and any new sample list — to its import list in the same
 commit as the page.
+
+**The vision routes raised the bar a third time, and in a way worth generalising.**
+Six of the eleven have a failure mode that produces *plausible output* rather than an
+error, so "a result appeared" and "N rows rendered" are both worthless there. Each one's
+`@slow` spec asserts a **property** instead:
+
+| Route | The property, and the bug it catches |
+|---|---|
+| `/zero-shot-object-detection` | a phrase that **is** in the picture finds boxes and one that is not finds none — a detector that boxes everything is as broken as one that boxes nothing, and only asking for something absent tells them apart |
+| `/image-features` | an animal's nearest neighbour is an animal — a mis-pooled (CLS averaged in with the patches) or unnormalised vector destroys the ordering while still filling the list |
+| `/mask-generation` | the mask's **coverage band**, 3–95% of the frame — a wrong point-coordinate space produces exactly one of the two degenerate masks, and both look plausible until measured |
+| `/image-to-text` | a substring of the text actually printed in the picture — a model handed mis-normalised pixels still writes fluent English |
+| `/pose` | the nose is **above** the ankles — the crop origin is not added back by the processor, and without it the skeleton floats beside the person |
+| `/video-classification` | the pooled verdict names the clip's true label over a distractor, and the pooling window moves without a single new Hub request |
+
+The shape to copy: **find the assertion a broken build would fail and a working one
+would pass, and nothing weaker.** If the only thing you can think of is a count, the
+spec is not yet worth its runtime.
 
 `/audio-to-audio` raises the bar again, because its pre/post-processing is ours
 rather than Transformers.js's, and wrong DSP produces plausible audio instead of

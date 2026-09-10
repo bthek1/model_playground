@@ -15,6 +15,7 @@
 
 import { AlertTriangle, HardDrive, Trash2 } from "lucide-react";
 
+import type { Backend } from "@/model/backend";
 import { sizeEstimate, type MeasuredBytes } from "@/model/size";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,15 @@ export interface PickableModel {
   params: number;
   /** Measured download bytes, where the params estimate would mislead. */
   bytes?: MeasuredBytes;
+  /**
+   * Backends this model is known to run on. Omitted means "both".
+   *
+   * A catalogue could always *declare* this; until `backend` below existed
+   * nothing consumed it, so a WebGPU-only model was still offered on a CPU-only
+   * machine and the limitation surfaced as a failed download. Declaring a
+   * constraint that nothing enforces is worse than not declaring it.
+   */
+  backends?: readonly Backend[];
 }
 
 export function ModelPicker<T extends PickableModel>({
@@ -38,12 +48,24 @@ export function ModelPicker<T extends PickableModel>({
   layout = "list",
   cached,
   onEvict,
+  backend,
 }: {
   models: readonly T[];
   value: string;
   onChange: (model: T) => void;
   disabled?: boolean;
   layout?: "list" | "row";
+  /**
+   * The backend a load would resolve to, from `useBackendProbe()`. When given,
+   * a model whose `backends` excludes it is offered but not selectable, with
+   * the reason on the row.
+   *
+   * `null` — the probe has not answered — gates nothing. Treating the undecided
+   * state as WASM would grey out every WebGPU model for a frame on each page
+   * load, which reads as "this machine cannot run it" rather than "ask again in
+   * 10 ms".
+   */
+  backend?: Backend | null;
   /**
    * Model ids already in the browser cache. Their download is free, which is
    * the single most useful thing this slot can tell someone about to click a
@@ -68,6 +90,8 @@ export function ModelPicker<T extends PickableModel>({
           const s = sizeEstimate(m.params, m.bytes);
           const isSelected = m.id === value;
           const isCached = cached?.has(m.id) ?? false;
+          const unsupported =
+            backend != null && m.backends != null && !m.backends.includes(backend);
 
           if (layout === "row") {
             return (
@@ -75,7 +99,7 @@ export function ModelPicker<T extends PickableModel>({
                 key={m.id}
                 variant={isSelected ? "default" : "outline"}
                 size="sm"
-                disabled={disabled}
+                disabled={disabled || unsupported}
                 onClick={() => onChange(m)}
                 title={`${m.hint} — ${isCached ? "already downloaded" : s.label}`}
               >
@@ -89,7 +113,7 @@ export function ModelPicker<T extends PickableModel>({
             <Button
               key={m.id}
               variant={isSelected ? "default" : "outline"}
-              disabled={disabled}
+              disabled={disabled || unsupported}
               onClick={() => onChange(m)}
               aria-pressed={isSelected}
               className="h-auto w-full flex-col items-start gap-0.5 px-3 py-2 text-left whitespace-normal"
@@ -115,6 +139,15 @@ export function ModelPicker<T extends PickableModel>({
               >
                 {m.hint}
               </span>
+              {unsupported && (
+                <span
+                  data-testid={`model-unsupported-${m.id}`}
+                  className="w-full text-xs leading-snug font-normal text-amber-600 dark:text-amber-500"
+                >
+                  Needs {m.backends?.join(" or ")} — this machine resolved to{" "}
+                  {backend}.
+                </span>
+              )}
             </Button>
           );
         })}

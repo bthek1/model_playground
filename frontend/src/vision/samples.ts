@@ -60,3 +60,32 @@ export const IMAGE_SAMPLES: ImageSample[] = [
 ];
 
 export const DEFAULT_IMAGE_SAMPLE = IMAGE_SAMPLES[0].id;
+
+/**
+ * Pictures whose subject is **printed text**, for `/image-to-text`.
+ *
+ * Kept out of `IMAGE_SAMPLES` on purpose: an advertisement is a poor sample for
+ * a detector or a depth model, and a sample row is a set of suggestions, not a
+ * catalogue. The OCR route appends these to the shared five.
+ *
+ * The `@slow` spec asserts a substring of what the model reads back off the
+ * Coca-Cola advertisement — **change that assertion if this sample changes**,
+ * because "some text came back" would pass on a broken processor path that
+ * hands the model noise.
+ */
+export const TEXT_SAMPLES: ImageSample[] = [
+  {
+    id: "coca-cola",
+    label: "Advertisement",
+    url: `${BASE}/coca_cola_advertisement.png`,
+    hint: "Large printed text on a busy background — the OCR case",
+    expect: "the brand name, and most of the surrounding copy",
+  },
+  {
+    id: "book-cover",
+    label: "Book cover",
+    url: `${BASE}/book-cover.png`,
+    hint: "Title, author, publisher — several sizes of type at once",
+    expect: "the title, at minimum",
+  },
+];

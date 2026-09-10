@@ -204,8 +204,17 @@ its own dependencies, and lives in the per-modality folders `src/audio/` and
 |---|---|---|
 | Hand-written WGSL | `src/webgpu/` | tensor arithmetic, linear/MNIST training, benchmarks |
 | Transformers.js (`@huggingface/transformers`, `kokoro-js`) | `src/audio/` | ASR, audio classification, TTS, text-to-audio |
-| Transformers.js | `src/vision/` | image classification (and the rest of the vision category as it lands) |
+| Transformers.js | `src/vision/` | eleven of the nineteen Computer Vision tasks — classification, depth, detection, segmentation, both zero-shot tasks, embeddings, SAM, captioning/OCR, pose, and a frame-level video baseline |
 | `onnxruntime-web` **directly** | `src/audio/enhance/`, `src/audio/vad/` | speech enhancement (DeepFilterNet3), voice activity detection (Silero VAD) |
+
+Inside `src/vision/` there is a second split, on a different axis. Six routes are plain
+`pipeline()` calls and share one generic worker; four own an engine, because the
+pipeline abstraction fails them in four different ways — it re-encodes work worth
+keeping (`zeroshot/`), it hides a split worth exploiting (`sam/`), it cannot load the
+model at all (`caption/`), or the task is two models (`pose/`). The criterion and the
+four cases are in `docs/guides/adding-a-model.md` §10. An engine is always the same
+three files — a pure `engine.ts`, a thin `*.worker.ts` that is the only importer of the
+runtime, and a `client.ts` so the hook can be tested without `new Worker`.
 
 The third row exists because neither model has a Transformers.js task: both repos
 publish a bare graph, so everything around it is ours. For DeepFilterNet3 that is

@@ -35,6 +35,7 @@ export function ImageSourcePanel({
   onSample,
   busy,
   camera,
+  preview,
   children,
 }: {
   picked: PickedImage | null;
@@ -47,6 +48,17 @@ export function ImageSourcePanel({
   busy: boolean;
   /** Omit on a route with no live mode. */
   camera?: CameraControl;
+  /**
+   * Replace the still preview with something the route draws itself.
+   *
+   * Exactly one route needs this — `/mask-generation`, where the user *clicks
+   * the picture* to place points and the markers have to appear on it. Those
+   * markers are input, not a result, so they belong in this slot rather than in
+   * OUTPUT; an `<img>` cannot carry them. Everything else here — the drop
+   * target, the samples, the upload button, the camera — is still shared, which
+   * is the reason this is an override rather than a fourth copy of the panel.
+   */
+  preview?: ReactNode;
   /** Extra task controls — a threshold slider, a label editor. */
   children?: ReactNode;
 }) {
@@ -88,17 +100,18 @@ export function ImageSourcePanel({
           />
         )}
         {!live &&
-          (picked ? (
-            <img
-              src={picked.previewUrl}
-              alt={`Selected input: ${picked.name}`}
-              className="max-h-72 max-w-full rounded object-contain"
-            />
-          ) : (
-            <p className="px-4 text-center text-sm text-balance text-muted-foreground">
-              Drop an image here, upload one, or start from a sample below.
-            </p>
-          ))}
+          (preview ??
+            (picked ? (
+              <img
+                src={picked.previewUrl}
+                alt={`Selected input: ${picked.name}`}
+                className="max-h-72 max-w-full rounded object-contain"
+              />
+            ) : (
+              <p className="px-4 text-center text-sm text-balance text-muted-foreground">
+                Drop an image here, upload one, or start from a sample below.
+              </p>
+            )))}
       </div>
 
       {camera?.error && (

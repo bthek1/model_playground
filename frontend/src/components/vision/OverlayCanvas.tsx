@@ -13,6 +13,14 @@ import { useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 
+/** A click on the canvas, already converted to source-image pixels. */
+export interface CanvasPick {
+  x: number;
+  y: number;
+  /** True when the click carried Alt — `/mask-generation`'s negative point. */
+  alt: boolean;
+}
+
 export function OverlayCanvas({
   width,
   height,
@@ -20,6 +28,7 @@ export function OverlayCanvas({
   label,
   className,
   testId,
+  onPick,
 }: {
   width: number;
   height: number;
@@ -29,6 +38,17 @@ export function OverlayCanvas({
   label: string;
   className?: string;
   testId?: string;
+  /**
+   * Make the canvas clickable, with the click reported in **source-image**
+   * pixels rather than CSS ones.
+   *
+   * The conversion belongs here rather than in a caller: the canvas is sized to
+   * the source and scaled down by CSS, so a raw `offsetX` is in display pixels
+   * and is wrong by the scale factor. On `/mask-generation` that error is
+   * invisible — SAM returns a perfectly plausible mask of whatever happens to
+   * be at the mis-mapped point.
+   */
+  onPick?: (pick: CanvasPick) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -52,7 +72,27 @@ export function OverlayCanvas({
       role="img"
       aria-label={label}
       data-testid={testId}
-      className={cn("h-auto max-w-full rounded", className)}
+      onClick={
+        onPick &&
+        ((event) => {
+          const canvas = event.currentTarget;
+          const rect = canvas.getBoundingClientRect();
+          // happy-dom reports a zero-sized rect; fall back to 1:1 rather than
+          // dividing by zero and reporting Infinity.
+          const scaleX = rect.width > 0 ? width / rect.width : 1;
+          const scaleY = rect.height > 0 ? height / rect.height : 1;
+          onPick({
+            x: (event.clientX - rect.left) * scaleX,
+            y: (event.clientY - rect.top) * scaleY,
+            alt: event.altKey,
+          });
+        })
+      }
+      className={cn(
+        "h-auto max-w-full rounded",
+        onPick && "cursor-crosshair",
+        className,
+      )}
     />
   );
 }

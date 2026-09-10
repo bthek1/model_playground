@@ -83,11 +83,22 @@ describe("taskCategories", () => {
     expect(at("zero-shot-image-classification")).toBe(
       "/zero-shot-image-classification",
     );
+    expect(at("zero-shot-object-detection")).toBe(
+      "/zero-shot-object-detection",
+    );
+    // The one Computer Vision route whose path is not its slug — "image
+    // features" is what the page is called, and `/image-feature-extraction`
+    // reads like a spec section.
+    expect(at("image-feature-extraction")).toBe("/image-features");
+    expect(at("mask-generation")).toBe("/mask-generation");
+    expect(at("image-to-text")).toBe("/image-to-text");
+    expect(at("keypoint-detection")).toBe("/pose");
+    expect(at("video-classification")).toBe("/video-classification");
 
     // The rest of the category is still research — they keep the placeholder
     // until their own route ships (see the sub-issues of #2).
-    expect(at("mask-generation")).toBe("/tasks/mask-generation");
-    expect(at("keypoint-detection")).toBe("/tasks/keypoint-detection");
+    expect(at("text-to-image")).toBe("/tasks/text-to-image");
+    expect(at("image-to-image")).toBe("/tasks/image-to-image");
   });
 
   it("maps the implemented Audio tasks to their real routes", () => {

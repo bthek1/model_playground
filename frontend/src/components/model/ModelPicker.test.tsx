@@ -193,4 +193,89 @@ describe("ModelPicker", () => {
       expect(screen.queryByTestId("model-evict")).toBeNull();
     });
   });
+
+  describe("backends", () => {
+    // `PickableModel.backends` was declarable from Wave 0 and read by nothing
+    // until /image-to-text needed it. Declaring a constraint that nothing
+    // enforces is worse than not declaring it: the limitation surfaced as a
+    // failed 275 MB download instead of a greyed-out row.
+    const GATED: PickableModel[] = [
+      { ...MODELS[0], backends: ["webgpu"] },
+      MODELS[1],
+    ];
+
+    it("gates nothing while the probe is still undecided", () => {
+      // `null` means "ask again in 10 ms", not "no GPU". Treating it as WASM
+      // would grey out every WebGPU model for a frame on each page load.
+      render(
+        <ModelPicker models={GATED} value="large" onChange={() => {}} backend={null} />,
+      );
+      expect(screen.getByRole("button", { name: /tiny model/i })).toBeEnabled();
+      expect(screen.queryByTestId("model-unsupported-small")).toBeNull();
+    });
+
+    it("gates nothing when no probe result is passed at all", () => {
+      // Every route that predates the probe keeps its old behaviour.
+      render(<ModelPicker models={GATED} value="large" onChange={() => {}} />);
+      expect(screen.getByRole("button", { name: /tiny model/i })).toBeEnabled();
+    });
+
+    it("disables a model this machine cannot run, and says why", () => {
+      render(
+        <ModelPicker
+          models={GATED}
+          value="large"
+          onChange={() => {}}
+          backend="wasm"
+        />,
+      );
+      expect(screen.getByRole("button", { name: /tiny model/i })).toBeDisabled();
+      const note = screen.getByTestId("model-unsupported-small");
+      expect(note).toHaveTextContent(/needs webgpu/i);
+      expect(note).toHaveTextContent(/wasm/i);
+    });
+
+    it("leaves the models that do run selectable", () => {
+      // A route whose every model is gated has no model at all.
+      render(
+        <ModelPicker
+          models={GATED}
+          value="large"
+          onChange={() => {}}
+          backend="wasm"
+        />,
+      );
+      expect(screen.getByRole("button", { name: /big model/i })).toBeEnabled();
+    });
+
+    it("offers a gated model normally once the backend supports it", () => {
+      render(
+        <ModelPicker
+          models={GATED}
+          value="large"
+          onChange={() => {}}
+          backend="webgpu"
+        />,
+      );
+      expect(screen.getByRole("button", { name: /tiny model/i })).toBeEnabled();
+      expect(screen.queryByTestId("model-unsupported-small")).toBeNull();
+    });
+
+    it("gates the compact chip row too, not just the rail's list", async () => {
+      const onChange = vi.fn();
+      render(
+        <ModelPicker
+          models={GATED}
+          value="large"
+          onChange={onChange}
+          layout="row"
+          backend="wasm"
+        />,
+      );
+      const chip = screen.getByRole("button", { name: /tiny model/i });
+      expect(chip).toBeDisabled();
+      await userEvent.click(chip);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+  });
 });

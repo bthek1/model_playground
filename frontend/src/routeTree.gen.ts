@@ -9,7 +9,9 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ZeroShotObjectDetectionRouteImport } from './routes/zero-shot-object-detection'
 import { Route as ZeroShotImageClassificationRouteImport } from './routes/zero-shot-image-classification'
+import { Route as VideoClassificationRouteImport } from './routes/video-classification'
 import { Route as VadRouteImport } from './routes/vad'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
@@ -17,9 +19,13 @@ import { Route as TextToAudioRouteImport } from './routes/text-to-audio'
 import { Route as TensorRouteImport } from './routes/tensor'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SegmentationRouteImport } from './routes/segmentation'
+import { Route as PoseRouteImport } from './routes/pose'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as ObjectDetectionRouteImport } from './routes/object-detection'
+import { Route as MaskGenerationRouteImport } from './routes/mask-generation'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ImageToTextRouteImport } from './routes/image-to-text'
+import { Route as ImageFeaturesRouteImport } from './routes/image-features'
 import { Route as ImageClassificationRouteImport } from './routes/image-classification'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as DepthRouteImport } from './routes/depth'
@@ -29,12 +35,22 @@ import { Route as AsrRouteImport } from './routes/asr'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TasksSlugRouteImport } from './routes/tasks.$slug'
 
+const ZeroShotObjectDetectionRoute = ZeroShotObjectDetectionRouteImport.update({
+  id: '/zero-shot-object-detection',
+  path: '/zero-shot-object-detection',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ZeroShotImageClassificationRoute =
   ZeroShotImageClassificationRouteImport.update({
     id: '/zero-shot-image-classification',
     path: '/zero-shot-image-classification',
     getParentRoute: () => rootRouteImport,
   } as any)
+const VideoClassificationRoute = VideoClassificationRouteImport.update({
+  id: '/video-classification',
+  path: '/video-classification',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VadRoute = VadRouteImport.update({
   id: '/vad',
   path: '/vad',
@@ -70,6 +86,11 @@ const SegmentationRoute = SegmentationRouteImport.update({
   path: '/segmentation',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PoseRoute = PoseRouteImport.update({
+  id: '/pose',
+  path: '/pose',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlaygroundRoute = PlaygroundRouteImport.update({
   id: '/playground',
   path: '/playground',
@@ -80,9 +101,24 @@ const ObjectDetectionRoute = ObjectDetectionRouteImport.update({
   path: '/object-detection',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MaskGenerationRoute = MaskGenerationRouteImport.update({
+  id: '/mask-generation',
+  path: '/mask-generation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImageToTextRoute = ImageToTextRouteImport.update({
+  id: '/image-to-text',
+  path: '/image-to-text',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImageFeaturesRoute = ImageFeaturesRouteImport.update({
+  id: '/image-features',
+  path: '/image-features',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ImageClassificationRoute = ImageClassificationRouteImport.update({
@@ -134,9 +170,13 @@ export interface FileRoutesByFullPath {
   '/depth': typeof DepthRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
+  '/image-features': typeof ImageFeaturesRoute
+  '/image-to-text': typeof ImageToTextRoute
   '/login': typeof LoginRoute
+  '/mask-generation': typeof MaskGenerationRoute
   '/object-detection': typeof ObjectDetectionRoute
   '/playground': typeof PlaygroundRoute
+  '/pose': typeof PoseRoute
   '/segmentation': typeof SegmentationRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
@@ -144,7 +184,9 @@ export interface FileRoutesByFullPath {
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
+  '/video-classification': typeof VideoClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
+  '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesByTo {
@@ -155,9 +197,13 @@ export interface FileRoutesByTo {
   '/depth': typeof DepthRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
+  '/image-features': typeof ImageFeaturesRoute
+  '/image-to-text': typeof ImageToTextRoute
   '/login': typeof LoginRoute
+  '/mask-generation': typeof MaskGenerationRoute
   '/object-detection': typeof ObjectDetectionRoute
   '/playground': typeof PlaygroundRoute
+  '/pose': typeof PoseRoute
   '/segmentation': typeof SegmentationRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
@@ -165,7 +211,9 @@ export interface FileRoutesByTo {
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
+  '/video-classification': typeof VideoClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
+  '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesById {
@@ -177,9 +225,13 @@ export interface FileRoutesById {
   '/depth': typeof DepthRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
+  '/image-features': typeof ImageFeaturesRoute
+  '/image-to-text': typeof ImageToTextRoute
   '/login': typeof LoginRoute
+  '/mask-generation': typeof MaskGenerationRoute
   '/object-detection': typeof ObjectDetectionRoute
   '/playground': typeof PlaygroundRoute
+  '/pose': typeof PoseRoute
   '/segmentation': typeof SegmentationRoute
   '/signup': typeof SignupRoute
   '/tensor': typeof TensorRoute
@@ -187,7 +239,9 @@ export interface FileRoutesById {
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
+  '/video-classification': typeof VideoClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
+  '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
   '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRouteTypes {
@@ -200,9 +254,13 @@ export interface FileRouteTypes {
     | '/depth'
     | '/home'
     | '/image-classification'
+    | '/image-features'
+    | '/image-to-text'
     | '/login'
+    | '/mask-generation'
     | '/object-detection'
     | '/playground'
+    | '/pose'
     | '/segmentation'
     | '/signup'
     | '/tensor'
@@ -210,7 +268,9 @@ export interface FileRouteTypes {
     | '/text-to-speech'
     | '/training'
     | '/vad'
+    | '/video-classification'
     | '/zero-shot-image-classification'
+    | '/zero-shot-object-detection'
     | '/tasks/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -221,9 +281,13 @@ export interface FileRouteTypes {
     | '/depth'
     | '/home'
     | '/image-classification'
+    | '/image-features'
+    | '/image-to-text'
     | '/login'
+    | '/mask-generation'
     | '/object-detection'
     | '/playground'
+    | '/pose'
     | '/segmentation'
     | '/signup'
     | '/tensor'
@@ -231,7 +295,9 @@ export interface FileRouteTypes {
     | '/text-to-speech'
     | '/training'
     | '/vad'
+    | '/video-classification'
     | '/zero-shot-image-classification'
+    | '/zero-shot-object-detection'
     | '/tasks/$slug'
   id:
     | '__root__'
@@ -242,9 +308,13 @@ export interface FileRouteTypes {
     | '/depth'
     | '/home'
     | '/image-classification'
+    | '/image-features'
+    | '/image-to-text'
     | '/login'
+    | '/mask-generation'
     | '/object-detection'
     | '/playground'
+    | '/pose'
     | '/segmentation'
     | '/signup'
     | '/tensor'
@@ -252,7 +322,9 @@ export interface FileRouteTypes {
     | '/text-to-speech'
     | '/training'
     | '/vad'
+    | '/video-classification'
     | '/zero-shot-image-classification'
+    | '/zero-shot-object-detection'
     | '/tasks/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -264,9 +336,13 @@ export interface RootRouteChildren {
   DepthRoute: typeof DepthRoute
   HomeRoute: typeof HomeRoute
   ImageClassificationRoute: typeof ImageClassificationRoute
+  ImageFeaturesRoute: typeof ImageFeaturesRoute
+  ImageToTextRoute: typeof ImageToTextRoute
   LoginRoute: typeof LoginRoute
+  MaskGenerationRoute: typeof MaskGenerationRoute
   ObjectDetectionRoute: typeof ObjectDetectionRoute
   PlaygroundRoute: typeof PlaygroundRoute
+  PoseRoute: typeof PoseRoute
   SegmentationRoute: typeof SegmentationRoute
   SignupRoute: typeof SignupRoute
   TensorRoute: typeof TensorRoute
@@ -274,17 +350,33 @@ export interface RootRouteChildren {
   TextToSpeechRoute: typeof TextToSpeechRoute
   TrainingRoute: typeof TrainingRoute
   VadRoute: typeof VadRoute
+  VideoClassificationRoute: typeof VideoClassificationRoute
   ZeroShotImageClassificationRoute: typeof ZeroShotImageClassificationRoute
+  ZeroShotObjectDetectionRoute: typeof ZeroShotObjectDetectionRoute
   TasksSlugRoute: typeof TasksSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/zero-shot-object-detection': {
+      id: '/zero-shot-object-detection'
+      path: '/zero-shot-object-detection'
+      fullPath: '/zero-shot-object-detection'
+      preLoaderRoute: typeof ZeroShotObjectDetectionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/zero-shot-image-classification': {
       id: '/zero-shot-image-classification'
       path: '/zero-shot-image-classification'
       fullPath: '/zero-shot-image-classification'
       preLoaderRoute: typeof ZeroShotImageClassificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/video-classification': {
+      id: '/video-classification'
+      path: '/video-classification'
+      fullPath: '/video-classification'
+      preLoaderRoute: typeof VideoClassificationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/vad': {
@@ -336,6 +428,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SegmentationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pose': {
+      id: '/pose'
+      path: '/pose'
+      fullPath: '/pose'
+      preLoaderRoute: typeof PoseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/playground': {
       id: '/playground'
       path: '/playground'
@@ -350,11 +449,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ObjectDetectionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mask-generation': {
+      id: '/mask-generation'
+      path: '/mask-generation'
+      fullPath: '/mask-generation'
+      preLoaderRoute: typeof MaskGenerationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/image-to-text': {
+      id: '/image-to-text'
+      path: '/image-to-text'
+      fullPath: '/image-to-text'
+      preLoaderRoute: typeof ImageToTextRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/image-features': {
+      id: '/image-features'
+      path: '/image-features'
+      fullPath: '/image-features'
+      preLoaderRoute: typeof ImageFeaturesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/image-classification': {
@@ -424,9 +544,13 @@ const rootRouteChildren: RootRouteChildren = {
   DepthRoute: DepthRoute,
   HomeRoute: HomeRoute,
   ImageClassificationRoute: ImageClassificationRoute,
+  ImageFeaturesRoute: ImageFeaturesRoute,
+  ImageToTextRoute: ImageToTextRoute,
   LoginRoute: LoginRoute,
+  MaskGenerationRoute: MaskGenerationRoute,
   ObjectDetectionRoute: ObjectDetectionRoute,
   PlaygroundRoute: PlaygroundRoute,
+  PoseRoute: PoseRoute,
   SegmentationRoute: SegmentationRoute,
   SignupRoute: SignupRoute,
   TensorRoute: TensorRoute,
@@ -434,7 +558,9 @@ const rootRouteChildren: RootRouteChildren = {
   TextToSpeechRoute: TextToSpeechRoute,
   TrainingRoute: TrainingRoute,
   VadRoute: VadRoute,
+  VideoClassificationRoute: VideoClassificationRoute,
   ZeroShotImageClassificationRoute: ZeroShotImageClassificationRoute,
+  ZeroShotObjectDetectionRoute: ZeroShotObjectDetectionRoute,
   TasksSlugRoute: TasksSlugRoute,
 }
 export const routeTree = rootRouteImport

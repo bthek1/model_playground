@@ -139,4 +139,46 @@ describe("ImageSourcePanel", () => {
     expect(screen.getByRole("button", { name: /decoding/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^Tiger$/ })).toBeDisabled();
   });
+
+  describe("preview override", () => {
+    // Exactly one route needs this — /mask-generation, where the user *clicks
+    // the picture* to place points and the markers have to appear on it. Those
+    // markers are input, not a result, so they belong in this slot rather than
+    // OUTPUT; an `<img>` cannot carry them.
+    it("replaces the still preview, keeping the rest of the panel shared", () => {
+      renderPanel({
+        picked,
+        preview: <canvas data-testid="point-canvas" />,
+      });
+
+      expect(screen.getByTestId("point-canvas")).toBeInTheDocument();
+      expect(screen.queryByAltText(/selected input/i)).not.toBeInTheDocument();
+      // The reason this is an override and not a fourth copy of the panel.
+      expect(screen.getByRole("button", { name: /^cats$/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /upload image/i })).toBeInTheDocument();
+    });
+
+    it("replaces the placeholder too, so a route can draw before a pick", () => {
+      renderPanel({ preview: <canvas data-testid="point-canvas" /> });
+      expect(screen.getByTestId("point-canvas")).toBeInTheDocument();
+      expect(screen.queryByText(/drop an image here/i)).not.toBeInTheDocument();
+    });
+
+    it("still yields to the camera when one is live", () => {
+      // The live `<video>` owns the surface; a route with both would otherwise
+      // paint a stale frame over a running stream.
+      renderPanel({
+        picked,
+        preview: <canvas data-testid="point-canvas" />,
+        camera: { live: true, onToggle: vi.fn(), videoRef: noopRef },
+      });
+      expect(screen.queryByTestId("point-canvas")).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/camera preview/i)).toBeInTheDocument();
+    });
+
+    it("leaves the default preview alone when no override is given", () => {
+      renderPanel({ picked });
+      expect(screen.getByAltText(/selected input: cat\.png/i)).toBeInTheDocument();
+    });
+  });
 });

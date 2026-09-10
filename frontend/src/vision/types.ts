@@ -50,6 +50,19 @@ export interface VisionModel {
    */
   backends?: readonly Backend[];
   /**
+   * The ONNX graph base names this entry actually downloads, relative to
+   * `onnx/`. Defaults to `["model"]`.
+   *
+   * Not every repo publishes one `model.onnx`: CLIP as a feature extractor
+   * loads `vision_model.onnx` alone (Transformers.js sets `model_file_name`
+   * per class), and SAM ships `vision_encoder` plus
+   * `prompt_encoder_mask_decoder`. `model-ids.spec.ts` uses this to check that
+   * the dtype a backend asks for is actually published — a repo with only an
+   * fp32 export resolves fine on the API and 404s at load time, and a check
+   * hard-coded to `model.onnx` would look at the wrong file and pass.
+   */
+  graphs?: readonly string[];
+  /**
    * Override the weight precision `loadOpts()` would pick, per backend. The
    * escape hatch for a model whose quantized export is broken — the vision
    * counterpart of `asrLoadOpts()`, and used for the same reason. Leave it

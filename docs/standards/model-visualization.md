@@ -153,6 +153,30 @@ but they share this grammar. Three rules carry over, and one is new:
 - **Composite masks through a scratch canvas**, then `drawImage`. `putImageData`
   *replaces* pixels including alpha, so writing an overlay straight onto the
   target erases the picture underneath instead of tinting it.
+- **Opacity is how an overlay expresses doubt.** A pose heatmap always has a maximum
+  somewhere, so an occluded ankle comes back as a confident-looking *guess*, not as an
+  absence. `pose/skeleton.ts` fades a joint below its confidence floor rather than
+  hiding it — and draws each limb at the **lower** of its two joints' confidences,
+  because an edge is only as believable as its weakest end and averaging would let one
+  solid joint carry a guessed one into looking certain. Never fade to nothing: "the
+  model put it here and does not believe it" is information, and a joint that vanishes
+  is indistinguishable from one the model never returned.
+- **A skeleton is not a generic overlay**, which is why `pose/skeleton.ts` owns it rather
+  than `draw.ts`. The three forms in `draw.ts` are meaningful for any task; a skeleton is
+  meaningless without its specific 17-keypoint ordering, and the index *is* the label —
+  `post_process_pose_estimation` returns `labels: number[]` and nothing else names them.
+  Domain drawing that carries a domain contract lives with the domain.
+
+**The coordinate space is part of the drawing, and getting it wrong is silent.**
+Every overlay here is painted onto a canvas sized to the *source* image while the model
+ran on a downscaled frame, so something has to map between them —
+`scaleDetections` for boxes, `scalePeople` for a skeleton and its box together (scaling
+one without the other shrinks the skeleton away from its own outline). The same applies
+in reverse for input: `OverlayCanvas`'s `onPick` converts a click from CSS pixels back to
+source pixels, because the canvas is scaled down by CSS and a raw offset is wrong by that
+factor. None of these produce an error when wrong — they produce a plausible picture. A
+canvas assertion cannot catch it either, so the checks live in pure unit tests over the
+arithmetic and in `@slow` specs that assert geometry.
 
 ---
 

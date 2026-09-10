@@ -5,18 +5,25 @@
 > which checkpoint to use, and which tasks stay on a server. No Python server in
 > the inference path.
 
-**Five of nineteen are built.** [`/image-classification`](../../frontend/src/routes/image-classification.tsx)
-(§3.2), [`/depth`](../../frontend/src/routes/depth.tsx) (§3.1),
-[`/object-detection`](../../frontend/src/routes/object-detection.tsx) (§3.3),
-[`/segmentation`](../../frontend/src/routes/segmentation.tsx) (§3.4) and
-[`/zero-shot-image-classification`](../../frontend/src/routes/zero-shot-image-classification.tsx)
-(§3.5) ship; the other fourteen tasks in the sidebar still render the
-`/tasks/$slug` placeholder. This file is therefore two things at once: a
-description of the shipped `src/vision/` module (§1–§2), and the research the
-next page gets written from (§3) — the verified checkpoint per task, the shape of
-the page, and, for nine of them, the reason not to bother.
+**Eleven of nineteen are built.** §3.1 to §3.11 all ship —
+[`/depth`](../../frontend/src/routes/depth.tsx),
+[`/image-classification`](../../frontend/src/routes/image-classification.tsx),
+[`/object-detection`](../../frontend/src/routes/object-detection.tsx),
+[`/segmentation`](../../frontend/src/routes/segmentation.tsx),
+[`/zero-shot-image-classification`](../../frontend/src/routes/zero-shot-image-classification.tsx),
+[`/zero-shot-object-detection`](../../frontend/src/routes/zero-shot-object-detection.tsx),
+[`/mask-generation`](../../frontend/src/routes/mask-generation.tsx),
+[`/image-features`](../../frontend/src/routes/image-features.tsx),
+[`/image-to-text`](../../frontend/src/routes/image-to-text.tsx),
+[`/pose`](../../frontend/src/routes/pose.tsx) and
+[`/video-classification`](../../frontend/src/routes/video-classification.tsx).
+The other eight tasks in the sidebar still render the `/tasks/$slug`
+placeholder, and §3.12 says why each of them stays on a server. This file is
+therefore two things at once: a description of the shipped `src/vision/` module
+(§1–§2), and the record of what each route settled (§3) — the verified
+checkpoint, the shape of the page, and the specific failure each decision guards.
 
-Each unbuilt task has a phased plan of its own, opened as a sub-issue of
+Each remaining carve-out has a phased plan of its own, opened as a sub-issue of
 [#2](https://github.com/bthek1/model_playground/issues/2); build order is in that
 issue's build-order comment. The procedure is
 [`docs/guides/adding-a-task-page.md`](../guides/adding-a-task-page.md).
@@ -30,9 +37,9 @@ text-to-video, text-to-3D, unconditional diffusion) does not run in a tab at
 all, and the reason is structural rather than a missing export: latent diffusion
 needs multi-gigabyte weights and tens of denoising steps.
 
-So this file is honest about a hard split. Sections 3.1 to 3.11 are pages that
-can be built; section 3.12 is the list of tasks that stay on a server, with the
-reason for each.
+So this file is honest about a hard split. Sections 3.1 to 3.11 are the pages
+that were built; section 3.12 is the list of tasks that stay on a server, with
+the reason for each.
 
 Every model id below was checked against the Hugging Face API. Re-check before
 shipping with `just fe-e2e-models`.
@@ -471,138 +478,375 @@ The saving is reported in the UI (`encode-cost`): image milliseconds every run,
 label milliseconds only on a miss. An optimisation nobody can see is an
 optimisation nobody can check.
 
-### 3.6 Zero-Shot Object Detection, the same idea with boxes
+### 3.6 Zero-Shot Object Detection — **shipped** at [`/zero-shot-object-detection`](../../frontend/src/routes/zero-shot-object-detection.tsx)
 
-Taxonomy task **Zero Shot Object Detection** · not built · **plan: [#16](https://github.com/bthek1/model_playground/issues/16)**. Upstream research: OWL-ViT, OWLv2, Grounding DINO, LLMDet.
+Taxonomy task **Zero Shot Object Detection** · built. Upstream research: OWL-ViT,
+OWLv2, Grounding DINO, LLMDet.
 
-| Upstream (PyTorch) | Browser model | Notes |
+§3.5 without the fixed class list, §3.3 with localisation — the page where the
+two halves of the category meet.
+
+| Model | Queries read as | Download (WebGPU · WASM) |
 |---|---|---|
-| `google/owlvit-base-patch32` | `Xenova/owlvit-base-patch32` | query lists and image queries |
-| `google/owlv2-base-patch16-ensemble` | `Xenova/owlv2-base-patch16-ensemble` | the self-training jump, and the better default |
-| `IDEA-Research/grounding-dino-tiny` | `onnx-community/grounding-dino-tiny-ONNX` | detection as phrase grounding |
-| `iSEE-Laboratory/llmdet_tiny` | none | - |
+| `Xenova/owlv2-base-patch16-ensemble` | candidate labels | 308 MB fp16 · 155 MB q8 — the default |
+| `Xenova/owlvit-base-patch32` | candidate labels | 307 MB fp16 · 155 MB q8 |
+| `onnx-community/grounding-dino-tiny-ONNX` | free-text phrases | 360 MB fp16 · 204 MB q8 |
+| `iSEE-Laboratory/llmdet_tiny` | - | no export; server-side |
+
+Sizes are ONNX blob totals read off the Hub, not a params estimate — OWLv2 carries
+both towers in one graph and the estimate would be badly wrong. All three pass
+`LARGE_MODEL_BYTES` on WebGPU, and the picker says so before anything downloads.
 
 ```ts
 const owl = await pipeline("zero-shot-object-detection", "Xenova/owlv2-base-patch16-ensemble",
                            loadOpts(backend));
-const out = await owl(image, ["a hand", "a coffee cup", "a laptop"], { threshold: 0.2 });
+const out = await owl(image, ["a person", "a car"], { threshold: 0.02, percentage: false });
 ```
 
-One thing belongs in the UI above all else: **the prompt is the model.** Threshold and query wording move the results more than the checkpoint
-choice does, so both belong in the RUN slot as live controls rather than being
-hard-coded.
+**The prompt is the model** — and here more literally than on §3.5. That page
+templates a bare noun into `"a photo of a {}"`; this pipeline tokenizes
+`candidate_labels` **verbatim**, so the text on screen *is* what the model is
+asked, and the shipped defaults keep their articles (`"a person"`). Quietly
+templating here would show one prompt and score another.
 
-### 3.7 Mask Generation, interactive by construction
+Three things this route settled:
 
-Taxonomy task **Mask Generation** · not built · **plan: [#17](https://github.com/bthek1/model_playground/issues/17)**. Upstream research: SAM, SAM-HQ, SAM 2.1, Grounded SAM.
+- **The threshold starts at 0.1, not 0.4.** An open-vocabulary model spreads its
+  probability over an unbounded label space, so OWLv2's confident hits land where
+  a COCO detector's uncertain ones do. A closed-detector default renders an empty
+  canvas over a picture full of correctly-found objects — which reads as a broken
+  page rather than a badly-chosen number.
+- **The slider re-filters; only editing a query re-runs.** Same pure derivation as
+  §3.3 and `/vad`, and it matters more here: a re-run costs a 300 MB model a
+  second of work.
+- **Queries that found nothing keep their row.** "Which of my phrases matched
+  nothing" is the question the page exists to answer, and a list that silently
+  omits the misses answers it wrong. Grounding DINO replies with a *fragment* of
+  the query rather than the query itself, so an unasked-for label gets its own
+  heading instead of being dropped (`groupByQuery`).
 
-This is the one task whose architecture was designed for exactly the interaction
-a web page provides: **encode once, decode many.** The image encoder runs once
-when the picture loads, then every click decodes a mask in a few milliseconds.
-That is why SAM feels instant, and it is why the browser version feels as good
-as the desktop one.
+The `@slow` spec asserts the asymmetry, not a count: `"a cat"` finds boxes on the
+cats sample and `"a purple giraffe"` finds none. A detector that boxes everything
+is as broken as one that boxes nothing, and only asking for something absent
+tells them apart.
 
-| Upstream (PyTorch) | Browser model | Notes |
+### 3.7 Mask Generation — **shipped** at [`/mask-generation`](../../frontend/src/routes/mask-generation.tsx)
+
+Taxonomy task **Mask Generation** · built. Upstream research: SAM, SAM-HQ,
+SAM 2.1, Grounded SAM.
+
+The one task whose architecture was designed for exactly the interaction a web
+page provides: **encode once, decode many.** The vision encoder runs once when
+the picture is picked; every click after that decodes a mask in milliseconds.
+
+| Model | Graphs | Download (WebGPU · WASM) |
 |---|---|---|
-| `facebook/sam-vit-base`, `Zigeng/SlimSAM-uniform-77` | `Xenova/slimsam-77-uniform` | ~40 MB, split into `vision_encoder` and `prompt_encoder_mask_decoder` |
-| `facebook/sam2.1-hiera-tiny` | `onnx-community/sam2.1-hiera-tiny-ONNX` | the 2.1 line, larger, same split |
-| `syscv-community/sam-hq-vit-base`, `facebook/sam3` | none | - |
+| `Xenova/slimsam-77-uniform` | `vision_encoder` + `prompt_encoder_mask_decoder` | 21 MB fp16 · 14 MB q8 — the default |
+| `onnx-community/sam2.1-hiera-tiny-ONNX` | same split, external weights | 78 MB fp16 · 62 MB q8 |
+| `syscv-community/sam-hq-vit-base`, `facebook/sam3` | - | no export; server-side |
 
-Structure the engine around the split, because the split is the whole point:
+Sizes are the sum of **both** graphs' blobs, including the `.onnx_data`
+external-weights sidecars SAM 2.1 uses. Quoting only the decoder — the small
+half — would understate SlimSAM by 60% and SAM 2.1 by 85%.
 
 ```ts
-// one call when the image changes
-const embeddings = await visionEncoder(processedImage);
+// once per image: `get_image_embeddings` runs vision_encoder alone
+const inputs = await processor(image);
+const embeddings = await model.get_image_embeddings(inputs);
 
-// one call per click, reusing the embeddings. Sub-100ms.
-const { pred_masks, iou_scores } = await maskDecoder({
-  image_embeddings: embeddings,
-  input_points: [[[x, y]]],
-  input_labels: [[1]],            // 1 = positive, 0 = negative
-});
+// once per click: passing the embeddings in makes `forward` skip the encoder
+const input_points = processor.reshape_input_points([[[x, y]]],
+                       inputs.original_sizes, inputs.reshaped_input_sizes);
+const input_labels = new Tensor("int64", BigInt64Array.from([1n]), [1, 1, 1]);
+const { pred_masks, iou_scores } = await model({ ...embeddings, input_points, input_labels });
+const masks = await processor.post_process_masks(pred_masks,
+                 inputs.original_sizes, inputs.reshaped_input_sizes);
 ```
 
-Two states, not one: LOAD covers the download, and a second "encoding" state
-covers the per-image encode. Collapsing them means the user clicks and waits
-with no explanation.
+This is the third module in the app to own an engine rather than ride a generic
+pipeline worker (`audio/enhance/`, `audio/vad/`, `vision/zeroshot/` are the
+others), and the criterion is the documented one: it is not a plain `pipeline()`
+call. Five things it settled:
 
-### 3.8 Image Feature Extraction, the invisible task that powers the rest
+- **Two states, not one.** LOAD is the download; a separate *encoding* state is
+  the per-image encoder pass — the slow half of the first click, and something
+  the user has no way to guess is happening. The page shows both, and shows the
+  decode time beside every mask, because sub-100 ms is a claim this page can
+  simply prove.
+- **The encode is its own id-correlated `run` request, not a progress event.**
+  #17 sketched `{ status: "encoding" }` on the shared envelope. A progress event
+  has **no failure path**: an encode that fails would either be swallowed or
+  push Machine A to `error` and force a reload of weights that are perfectly
+  fine. As a request it lands in Machine B, where the model stays loaded and the
+  next picture still works — and the id keeps a decode from resolving against a
+  superseded encode.
+- **Passing `image_embeddings` in is what makes the split real.** `SamModel`'s
+  `forward` computes them itself when they are missing, so omitting them still
+  returns correct masks — at full encoder cost, on every click, silently. That
+  is the one bug on this page that no output inspection can catch.
+- **Clicks are converted to source pixels by the canvas** (`OverlayCanvas`'s
+  `onPick`), not by the route. The canvas is sized to the source and scaled down
+  by CSS, so a raw offset is wrong by the scale factor — and SAM answers a
+  mis-mapped point with a perfectly plausible mask of whatever happens to be
+  there. The `@slow` spec therefore asserts a **coverage band**: a mask covering
+  ~0% or ~100% of the frame is exactly what a broken coordinate space produces,
+  and both look fine until measured.
+- **`input_labels` is int64.** `BigInt64Array`, matching the `ones()` default the
+  model falls back to; a `Float32Array` fails inside ONNX Runtime with a shape
+  error naming neither the tensor nor the cause.
 
-Taxonomy task **Image Feature Extraction** · not built · **plan: [#18](https://github.com/bthek1/model_playground/issues/18)**. Upstream research: DINOv2, CLIP, SigLIP 2, DINOv3.
+All three candidate masks are offered, not just the winner: a single point is
+ambiguous by construction — the wheel, the door, or the whole car — and SAM
+returns one mask per reading rather than guessing. Point markers are drawn over
+the *input* (`ImageSourcePanel`'s `preview` override exists for this one case),
+because they are input; the mask is the result and lives in OUTPUT.
+
+### 3.8 Image Feature Extraction — **shipped** at [`/image-features`](../../frontend/src/routes/image-features.tsx)
+
+Taxonomy task **Image Feature Extraction** · built. Upstream research: DINOv2,
+CLIP, SigLIP 2, DINOv3.
 
 No visible output of its own, which makes the page a similarity search: embed a
-small gallery in the browser, embed the webcam frame, show the nearest
-neighbours. The whole index lives in memory, so it is genuinely private.
+twelve-picture gallery in the tab, embed the query, show the nearest neighbours.
+The whole index lives in memory, so it is genuinely private.
 
-| Upstream (PyTorch) | Browser model | Notes |
+| Model | Vector | Download (WebGPU · WASM) |
 |---|---|---|
-| `facebook/dinov2-base` | `Xenova/dinov2-small` | self-supervised features, ~22M params |
-| `facebook/dinov3-vitb16-*` | `onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX` | the section 13 leader, small variant |
-| `openai/clip-vit-base-patch32` | `Xenova/clip-vit-base-patch32` | language-aligned, use when text queries matter |
+| `Xenova/dinov2-small` | CLS or mean of patches, 384-d | 44 MB fp16 · 24 MB q8 — the default |
+| `onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX` | CLS or mean, 384-d | 22 MB q8 on **both** backends |
+| `Xenova/dinov2-base` | CLS or mean, 768-d | 173 MB fp16 · 91 MB q8 |
+| `Xenova/clip-vit-base-patch32` | one projected 512-d vector | 176 MB fp16 · 89 MB q8 (vision tower only) |
 
 ```ts
 const feat = await pipeline("image-feature-extraction", "Xenova/dinov2-small", loadOpts(backend));
-const emb = await feat(image, { pooling: "cls", normalize: true });
+const tokens = await feat(image);            // Tensor [1, 1 + patches, dim]
 ```
 
-The question **which vector do you actually take** is a real UI control here.
-CLS token against mean-pooled patches gives visibly different neighbours, and a
-toggle makes that legible in a way prose cannot.
+Four things this route settled, and two of them contradict the plan in #18 —
+in both cases because a measurement said so.
 
-### 3.9 Image-to-Text, captioning and OCR
+- **The pipeline's option is `pool`, a boolean, not `{ pooling, normalize }`.**
+  That signature belongs to the *text* feature-extraction pipeline. The image
+  one returns `last_hidden_state` when `pool` is falsy and `pooler_output` when
+  it is true, and it never normalises. So the normalising is ours
+  (`vision/similarity.ts`), and the page displays the pre-normalisation L2 norm
+  next to the unit-length result — "the vectors are normalised" is a claim, and
+  this is the page that can simply show it.
+- **The pooling toggle re-ranks; it does not re-embed.** One forward pass returns
+  every token row, so `poolEmbedding` derives CLS *and* the mean of the patches
+  from the same pass. #18 assumed the toggle would re-run the model; over a
+  twelve-image gallery that is the difference between instant and a quarter of a
+  minute, and the shipped behaviour follows the same pure-derivation rule as the
+  detection and VAD thresholds. Only the **checkpoint** invalidates the index.
+- **CLIP is in the catalogue, and it offers no pooling choice.**
+  `AutoModelForImageFeatureExtraction` resolves CLIP to
+  `CLIPVisionModelWithProjection`, which loads `vision_model.onnx` (not
+  `model.onnx`) and — verified by reading the export's output names — emits
+  `image_embeds` alone. So the page gets one projected, language-aligned 512-d
+  vector and says there is nothing to choose, rather than showing a dead toggle.
+  `VisionModel.graphs` is what tells `just fe-e2e-models` to check the right file.
+- **DINOv3 publishes no fp16 export** — fp32, q4 and q8 only — so its precision is
+  pinned to q8 on both backends. Left to `loadOpts()`, WebGPU would ask for a
+  file that does not exist. Same class of failure as the missing `mobilevitv2`
+  export, and `just fe-e2e-models` is what catches it.
 
-Taxonomy task **Image to Text** · not built · **plan: [#19](https://github.com/bthek1/model_playground/issues/19)**. Upstream research: BLIP, Florence-2, SmolVLM2, GOT-OCR 2.0.
+The gallery is twelve pictures chosen as **clusters** (three animals, three city
+scenes, two portraits, two landscapes, two objects), because a similarity search
+over a set with no near neighbours has nothing to show. The `@slow` spec queries
+with the tiger — which is deliberately *not* in the gallery — and asserts the top
+neighbour is an animal. A mis-pooled or unnormalised vector destroys exactly that
+ordering while still producing a full, plausible-looking list.
 
-| Upstream (PyTorch) | Browser model | Backend | Notes |
-|---|---|---|---|
-| `nlpconnect/vit-gpt2-image-captioning` | `Xenova/vit-gpt2-image-captioning` | WASM ok | the cheap caption, ~250 MB |
-| `florence-community/Florence-2-base` | `onnx-community/Florence-2-base-ft` | WebGPU | one 0.23B model doing caption, dense caption, OCR and grounding by task token |
-| `HuggingFaceTB/SmolVLM2-2.2B-Instruct` | `HuggingFaceTB/SmolVLM-256M-Instruct` | WebGPU | the 2.2B does not fit a tab; the 256M does |
-| `Salesforce/blip-image-captioning-large` | none usable | - | the only mirror, `onnx-community/Salesforce_blip-image-captioning-base`, ships `split_0/1.onnx` rather than the transformers.js layout |
-| `stepfun-ai/GOT-OCR-2.0-hf` | none | - | no export. Florence-2 covers OCR instead |
+### 3.9 Image to Text — **shipped** at [`/image-to-text`](../../frontend/src/routes/image-to-text.tsx)
 
-Florence-2 is the standout because one download covers captioning, dense
-captioning, OCR and grounding. The task token selects the behaviour:
+Taxonomy task **Image to Text** · built. Upstream research: BLIP, Florence-2,
+SmolVLM2, GOT-OCR 2.0.
+
+The first vision route with a **generative decoder**: runs take seconds, not
+milliseconds, and there is deliberately no live camera mode.
+
+| Model | Modes | Download (WebGPU · WASM) |
+|---|---|---|
+| `onnx-community/Florence-2-base-ft` | caption · detailed caption · OCR · grounding | 544 MB fp16 · 275 MB q8 — the default, **WebGPU only** |
+| `Xenova/vit-gpt2-image-captioning` | caption | 482 MB fp16 · 246 MB q8 |
+| `HuggingFaceTB/SmolVLM-256M-Instruct` | - | needs a chat template; that is Image-Text-to-Text, not this row |
+| `Salesforce/blip-*` | - | the only mirror ships `split_0/1.onnx`, not the transformers.js layout |
+| `stepfun-ai/GOT-OCR-2.0-hf` | - | no export; Florence-2 covers OCR instead |
+
+**The plan in #18's sibling — #19 — assumed `pipeline("image-to-text")` with a
+task token in the run payload. It cannot work, and the reason is worth
+recording.** `ImageToTextPipeline._call` does exactly two things: run the
+processor for `pixel_values`, and call `model.generate({ inputs })`. There is
+nowhere to put a task token. Worse, it resolves its model through
+`AutoModelForVision2Seq`, whose registry maps `vision-encoder-decoder`,
+`idefics3` and `smolvlm` — Florence-2's model type is `florence2`, which lives in
+the *image-text-to-text* mapping, so the pipeline cannot load it at all. Same
+shape of finding as MusicGen needing `MusicgenForConditionalGeneration` rather
+than the `text-to-audio` pipeline.
+
+So `vision/caption/` owns an engine, with two implementations behind one
+`Captioner` interface — the precedent being `tts.worker.ts`, which owns Kokoro,
+MMS and MusicGen behind one `TtsSynthesizer` for the same reason.
 
 ```ts
-const florence = await pipeline("image-to-text", "onnx-community/Florence-2-base-ft",
-                                { device: "webgpu", dtype: "fp16" });
-await florence(image, { task: "<CAPTION>" });
-await florence(image, { task: "<DETAILED_CAPTION>" });
-await florence(image, { task: "<OCR>" });
-await florence(image, { task: "<OD>" });        // boxes, drawable with drawBoxes()
+const prompts = processor.construct_prompts("<OCR>");   // → "What is the text in the image?"
+const inputs = await processor(image, prompts);
+const ids = await model.generate({ ...inputs, max_new_tokens: 512 });
+const text = processor.batch_decode(ids, { skip_special_tokens: false })[0];
+const answer = processor.post_process_generation(text, "<OCR>", [image.width, image.height]);
 ```
 
-### 3.10 Keypoint Detection, pose in the browser
+Four details in those five lines are silent when wrong:
 
-Taxonomy task **Keypoint Detection** · not built · **plan: [#20](https://github.com/bthek1/model_playground/issues/20)**. Upstream research: RT-DETR + ViTPose, Sapiens2, SuperPoint, LightGlue.
+- **`skip_special_tokens: false`.** Florence-2's box answers *are* special tokens
+  — `<loc_412>` per coordinate — so stripping them returns a caption with the
+  boxes quietly deleted rather than an error.
+- **`image_size` is `[width, height]`.** `post_process_generation` maps
+  coordinates with `image_size[i % 2]` over an `x, y, x, y` sequence, so it wants
+  width first. Its own JSDoc says "height x width", and `inputs.original_sizes`
+  *is* `[height, width]` — passing that transposes every box on a non-square
+  picture. Use `RawImage.size`.
+- **The prompt is text, not the token.** `construct_prompts` resolves `<OCR>`
+  against the model's own `preprocessor_config.json`. Sending the raw token
+  tokenizes it as literal characters and the model answers something fluent and
+  unrelated.
+- **A task token a model has never seen does not error.** It produces a
+  confident, fluent, wrong sentence. So the catalogue carries per-model
+  capability flags, the UI offers exactly those, and switching model resets an
+  unsupported mode rather than sending it.
 
-Top-down pose is two models: detect people, then run the pose model on each
-crop. Both halves have exports.
+**Florence-2 is gated to WebGPU by the picker, not left to fail at load.** That
+required actually consuming `VisionModel.backends`, which every catalogue had
+been free to declare since Wave 0 and which nothing read — `model/useBackendProbe.ts`
+answers "what would this load on" before anything downloads, and `ModelPicker`
+disables a model the machine cannot run, with the reason on the row. A `null`
+probe (not yet answered) gates nothing: treating the undecided state as WASM
+greys out every WebGPU model for a frame on each page load.
 
-| Upstream (PyTorch) | Browser model | Notes |
-|---|---|---|
-| `PekingU/rtdetr_r50vd_coco_o365` (the detector) | `onnx-community/rtdetr_r50vd` or `onnx-community/dfine_n_coco-ONNX` | step 1, person boxes only |
-| `usyd-community/vitpose-base-simple` | `onnx-community/vitpose-base-simple` | step 2, 17 COCO keypoints per crop |
-| `facebook/sapiens2-pose-0.4b` | none | - | 308 keypoints, no export |
-| `magic-leap-community/superpoint`, `ETH-CVG/lightglue_superpoint` | none | - | interest points and matching stay server-side for now |
+The `@slow` spec runs in the `webgpu` project and asserts three things — a
+plausible caption on the tiger, **`coca|cola` read off the bundled
+advertisement**, and grounding rendering as a canvas rather than as prose. The
+OCR substring is the one that catches a broken processor path: a model handed
+mis-normalised pixels still produces fluent text.
 
-Budget for two models live at once here, which is the one place this guide
-relaxes the one-model rule. Keep the detector small precisely because of that:
-the nano D-FINE plus ViTPose fits comfortably; two base-sized models does not.
+### 3.10 Keypoint Detection — **shipped** at [`/pose`](../../frontend/src/routes/pose.tsx)
 
-### 3.11 Video Classification, and why it is really per-frame classification
+Taxonomy task **Keypoint Detection** · built. Upstream research: ViTPose,
+Sapiens2, SuperPoint, LightGlue.
 
-Taxonomy task **Video Classification** · not built · **plan: [#21](https://github.com/bthek1/model_playground/issues/21)**. Upstream research: VideoMAE, TimeSformer, X-CLIP, V-JEPA 2.
+Top-down pose is **two models** — detect people, then run the pose model on each
+person's crop — which makes this the one page that deliberately holds two models
+live, and the documented exception to §5.
+
+| Pair | Combined download (WebGPU · WASM) |
+|---|---|
+| `onnx-community/dfine_n_coco-ONNX` + `onnx-community/vitpose-base-simple` | 180 MB fp16 · 92 MB q8 — the default, and the live one |
+| `onnx-community/rtdetr_r50vd` + `onnx-community/vitpose-base-simple` | 260 MB fp16 · 133 MB q8, still images only |
+| `facebook/sapiens2-pose-0.4b` | 308 keypoints, no export |
+| `magic-leap-community/superpoint`, `ETH-CVG/lightglue_superpoint` | interest points / matching stay server-side |
+
+**The catalogue entry is the pair, not either half**, and it quotes the
+**combined** download — a guardrail that quotes half the bytes is worse than
+none. It is also the case that makes "fires on the sum" a real distinction: the
+RT-DETR pair is 88 MB of detector plus 172 MB of pose model, each comfortably
+under `LARGE_MODEL_BYTES` and 260 MB together, over it.
+
+```ts
+const detections = await detector(image, { threshold: 0.05, percentage: false });
+const boxes = personBoxes(detections, { threshold, maxPeople })
+  .map((d) => cropBox(d.box, image.width, image.height));   // COCO [x, y, w, h]
+const crops = await Promise.all(boxes.map(([x, y, w, h]) => image.crop([x, y, x + w, y + h])));
+const { heatmaps } = await poseModel(await processor(crops));
+const poses = processor.post_process_pose_estimation(heatmaps, boxes.map((b) => [b]));
+```
+
+**The coordinate round-trip is the whole correctness surface of this page, and
+the trap is inside `post_process_pose_estimation`:**
+
+```js
+const xScale = bbox.at(-2) / width;                    // box *width* / heatmap width
+const keypoint = [(xScale * xWeightedSum) / sum, …];   // …and no origin
+```
+
+It scales the heatmap peak by the box's **size** and never adds the box's
+**origin**. Pass the whole image as the box — as the single-person example
+upstream ships does — and the origin is (0, 0), so the omission is invisible.
+Pass a crop and every joint is offset by the crop's top-left corner: the skeleton
+floats beside the person, drawn confidently, and every count-based test passes.
+`pose.ts` owns that addition, it is pure, and it is asserted against
+hand-computed values; the `@slow` spec then makes the coarse anatomical check —
+**the nose must be above the ankles** — which is the only kind of assertion that
+catches this.
+
+Four other things this route settled:
+
+- **`model/progress.ts` had to be keyed on repo + file.** Both checkpoints
+  publish an `onnx/model_fp16.onnx`, so keyed on the file name the second
+  model's bytes overwrote the first's: the denominator became one model's size,
+  the bar reached 100% halfway through, and the second download read as a stall.
+  Both models are also *loaded together* (`Promise.all`) so their progress
+  events interleave and the aggregate has both denominators from the start.
+- **The threshold and the people cap change the work, not the view.** The
+  opposite of §3.3's slider, and deliberately: filtering afterwards would mean
+  running the pose model on people the user has already excluded, and that pass
+  is the expensive half. The page says so rather than looking inconsistent.
+- **Both models are disposed, with `Promise.allSettled`.** A detector whose
+  teardown throws must not skip the pose model's, which is the larger of the
+  two — this is the one place a half-finished teardown leaks 170 MB.
+- **A low-confidence joint is dimmed, never hidden and never drawn boldly.** A
+  heatmap always has a maximum somewhere, so an occluded ankle comes back as a
+  confident-looking guess rather than as an absence. A limb is drawn at the
+  *lower* of its two joints' confidences: averaging would let one solid joint
+  carry a guessed one into looking certain.
+
+### 3.11 Video Classification — **shipped** at [`/video-classification`](../../frontend/src/routes/video-classification.tsx), **as a frame-level baseline**
+
+Taxonomy task **Video Classification** · built, *and labelled for what it is*.
+Upstream research: VideoMAE, TimeSformer, X-CLIP, V-JEPA 2.
 
 **None of the four video transformers has an ONNX export.** They attend across
-time as well as space, and nobody has shipped a browser-runnable one.
+time as well as space, and nobody has shipped a browser-runnable one. What ships
+here is the control experiment: sample frames, score each with CLIP zero-shot,
+pool over a sliding window. The page's thesis is the question *does motion
+actually matter*, answered from the other direction — this is what you get when
+the model can only see single frames.
 
-What you can honestly build is the control experiment: sample frames, classify
-each one with CLIP zero-shot, and pool the scores over a sliding window. The
-question worth asking is "does motion actually matter", and a page that only sees
-single frames answers it from the other direction. Label it as what it is — a
-frame-level baseline, not video classification.
+| Model | Role |
+|---|---|
+| `Xenova/clip-vit-base-patch32` and the rest of §3.5's catalogue | scores each sampled frame; reused wholesale |
+| VideoMAE · TimeSformer · X-CLIP · V-JEPA 2 | no export; a real temporal model stays server-side |
+
+**The labelling is the correctness requirement, not decoration.** The limitation
+is in the page title's description, next to the result, and asserted by an E2E
+spec — which is unusual and deliberate. Shipping this as "Video Classification"
+without the framing teaches something false.
+
+Three things it settled:
+
+- **"Encode once, decode many" applies twice on this page.** The label
+  embeddings are constant across every frame, so §3.5's text cache computes them
+  once per label edit rather than once per frame — on a 60-frame clip, the
+  difference between seconds and a minute. And the **pooling window re-derives**:
+  smoothing is pure (`pool.ts`) over scores already in hand, so moving the
+  slider redraws the chart without re-scoring the clip, which would be N CLIP
+  passes.
+- **Sampling seeks, it does not play.** Setting `currentTime` and awaiting
+  `seeked` decodes only the frames asked for; a 30-second clip must not take 30
+  seconds to sample. Two caps, both stated in the UI: the *rate* is the cost dial
+  and the *count* is the hard stop, because this is the page most likely to be
+  handed a ten-minute video and without the second cap that is not slow, it is a
+  hung tab.
+- **Frames are sampled at half-step offsets, not from zero.** The first frame of
+  a clip is very often black or a fade, and a baseline whose first data point is
+  "an image of darkness" reads as a model failure rather than an editing
+  convention.
+
+The sliding mean is also the *honest* pooling for this page: the route has no way
+to know a frame follows the one before it, and averaging a neighbourhood is the
+most a model that cannot see motion is entitled to do with time. The clip-level
+verdict is computed from the **unpooled** series — averaging an already-averaged
+series would weight the middle of the clip more heavily than its ends for no
+defensible reason.
 
 ### 3.12 The tasks that stay on a server
 
@@ -645,13 +889,13 @@ Two useful carve-outs hide inside that list:
 | **Image Classification** | **Shipped** — `/image-classification` | `Xenova/vit-base-patch16-224` | WebGPU / WASM | - |
 | **Object Detection** | **Shipped** — `/object-detection` | `onnx-community/dfine_n_coco-ONNX` | WebGPU | RF-DETR to server |
 | **Image Segmentation** | **Shipped** — `/segmentation` (semantic) | `Xenova/segformer-b0-finetuned-ade-512-512` | WebGPU | Mask2Former / OneFormer to server |
-| **Image to Text** | Yes | `onnx-community/Florence-2-base-ft` | WebGPU | GOT-OCR to server |
-| **Video Classification** | Frame-level only | CLIP over sampled frames | WebGPU | real video transformers to server |
+| **Image to Text** | **Shipped** — `/image-to-text` | `onnx-community/Florence-2-base-ft` | WebGPU | GOT-OCR to server; SmolVLM is Image-Text-to-Text |
+| **Video Classification** | **Shipped** — `/video-classification`, frame-level baseline | CLIP over sampled frames | WebGPU / WASM | real video transformers to server |
 | **Zero Shot Image Classification** | **Shipped** — `/zero-shot-image-classification` | `Xenova/clip-vit-base-patch32` | WebGPU / WASM | - |
-| **Mask Generation** | Yes, excellent | `Xenova/slimsam-77-uniform` | WebGPU | SAM-HQ, SAM 3, Grounded SAM to server |
-| **Zero Shot Object Detection** | Yes | `Xenova/owlv2-base-patch16-ensemble` | WebGPU | LLMDet to server |
-| **Image Feature Extraction** | Yes, full | `Xenova/dinov2-small` | WebGPU / WASM | - |
-| **Keypoint Detection** | Yes, pose only | `onnx-community/vitpose-base-simple` + detector | WebGPU | Sapiens2, SuperPoint to server |
+| **Mask Generation** | **Shipped** — `/mask-generation` | `Xenova/slimsam-77-uniform` | WebGPU / WASM | SAM-HQ, SAM 3, Grounded SAM to server |
+| **Zero Shot Object Detection** | **Shipped** — `/zero-shot-object-detection` | `Xenova/owlv2-base-patch16-ensemble` | WebGPU / WASM | LLMDet to server |
+| **Image Feature Extraction** | **Shipped** — `/image-features` | `Xenova/dinov2-small` | WebGPU / WASM | - |
+| **Keypoint Detection** | **Shipped** — `/pose` | `dfine_n_coco` + `vitpose-base-simple` | WebGPU / WASM | Sapiens2, SuperPoint to server |
 | **Image to Image** | Super-resolution only | `Xenova/swin2SR-classical-sr-x2-64` | WebGPU | editing / img2img diffusion to server |
 | **Image to 3D** | Depth-to-point-cloud only | Depth Anything V2 plus WebGL | WebGPU | Zero123++ and full reconstruction to server |
 | **Text to Image** | No | - | - | server API |
@@ -672,21 +916,35 @@ The research these models come from targets 12 GB of VRAM and frees memory
 aggressively. A tab is tighter, and the same discipline applies with different
 mechanics.
 
-- **One model live at a time**, with the pose page as the single deliberate
-  exception. `await model.dispose()` after nulling the reference. There is no
-  `torch.cuda.empty_cache()`, so disposing is the entire mechanism.
+- **One model live at a time**, with `/pose` as the single deliberate exception
+  (§3.10 — top-down pose is a detector plus a pose model, and neither half is
+  useful alone). `await model.dispose()` after nulling the reference. There is
+  no `torch.cuda.empty_cache()`, so disposing is the entire mechanism. The pose
+  engine disposes both halves with `Promise.allSettled`: a detector whose
+  teardown throws must not skip the pose model's, which is the larger of the two.
+- **A model the machine cannot run is not offered.** `VisionModel.backends` was
+  declarable from Wave 0 and read by nothing until `/image-to-text` needed it;
+  `model/useBackendProbe.ts` now answers "what would this load on" before
+  anything downloads, and `ModelPicker` disables the row with the reason on it
+  rather than letting a 275 MB download fail.
 - **Resolution is the throttle, not the model.** A detector at 640x480 and the
   same detector at 1280x720 differ by roughly 4 times in cost. Downscale the
   frame before inference and draw the boxes on the full-size canvas.
 - **Never queue frames.** One in flight at a time, as in section 2. A backlog is
   the reason a live demo feels laggy long before the model is the reason.
-- **Encode once, decode many** wherever the architecture allows it. SAM is the
-  obvious case; CLIP zero-shot is the other one, since the label embeddings are
-  constant across frames and recomputing them per frame doubles the work for
-  nothing. **Implemented for `/zero-shot-image-classification`** in
-  `src/vision/zeroshot/`, which drives the two towers separately and caches
-  several label sets at once — see §3.5, including what owning the final
-  normalise/scale/softmax costs and the parity spec that controls it.
+- **Encode once, decode many** wherever the architecture allows it, and it is now
+  implemented in all three places it applies:
+  - `/zero-shot-image-classification` (`src/vision/zeroshot/`) drives the two
+    towers separately and caches several label sets at once — see §3.5,
+    including what owning the final normalise/scale/softmax costs and the
+    parity spec that controls it.
+  - `/mask-generation` (`src/vision/sam/`) is the architectural case: the vision
+    encoder runs once per image and every click decodes from the cached
+    embedding. §3.7 — and note that `SamModel.forward` silently re-encodes when
+    the embeddings are not passed in, which is the one bug on that page no
+    output inspection can catch.
+  - `/video-classification` reuses the zero-shot text cache across every frame
+    of a clip. §3.11.
 - **Warm up on load.** The first inference compiles WebGPU shaders. On a
   detector that is 2 to 4 seconds the user should not be charged for.
 - **Weights cache after the first download**, so the second visit is instant and
