@@ -84,7 +84,7 @@ function ObjectDetectionPage() {
     retry,
     cancel,
     run,
-  } = useObjectDetector(model, session.autoLoad);
+  } = useObjectDetector(model);
   useCacheRefresh(session, ready);
 
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
@@ -111,12 +111,7 @@ function ObjectDetectionPage() {
   );
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        if (ready) await detect(next.image);
-        else setFrame({ image: next.image, scale: 1 });
-      },
-    });
+useImagePick();
 
   const onFrame = useCallback(
     async (f: RawImage) => {
@@ -185,7 +180,6 @@ function ObjectDetectionPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

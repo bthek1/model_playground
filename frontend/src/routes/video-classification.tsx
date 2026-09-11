@@ -93,7 +93,7 @@ function VideoClassificationPage() {
     cancel,
     run,
     stop,
-  } = useVideoClassifier(model, session.autoLoad);
+  } = useVideoClassifier(model);
   useCacheRefresh(session, ready);
 
   const [sample, setSample] = useState<VideoSample>(VIDEO_SAMPLES[0]);
@@ -189,7 +189,6 @@ function VideoClassificationPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

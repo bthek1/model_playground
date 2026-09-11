@@ -7,16 +7,17 @@
 // Four-slot page pattern — docs/standards/model-page-pattern.md.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Mic, Tags, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { Loader2, Tags } from "lucide-react";
+import { useState } from "react";
 
 import {
   CLASSIFIER_MODELS,
   DEFAULT_CLASSIFIER_MODEL,
   DEFAULT_ZERO_SHOT_LABELS,
 } from "@/audio/classification";
-import { decodeToMono, recordMic } from "@/audio/io";
 import type { ClassLabel } from "@/audio/pipelineTypes";
+import { AUDIO_SAMPLES } from "@/audio/samples";
+import { AudioSourcePanel } from "@/components/audio/AudioSourcePanel";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -25,6 +26,7 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAudioClassifier } from "@/hooks/useAudioClassifier";
+import { useAudioPick } from "@/hooks/useAudioPick";
 import {
   useCacheRefresh,
   useModelSelection,
@@ -60,43 +62,30 @@ function AudioClassificationPage() {
     load,
     retry,
     cancel,
-  } = useAudioClassifier(model, session.autoLoad);
+  } = useAudioClassifier(model);
   useCacheRefresh(session, ready);
 
   const [labelsText, setLabelsText] = useState(
     DEFAULT_ZERO_SHOT_LABELS.join("\n"),
   );
-  const [preparing, setPreparing] = useState<null | "file" | "mic">(null);
-  const [ioError, setIoError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const input = useAudioPick();
 
-  const busy = running || preparing !== null;
+  const busy = running || input.preparing !== null;
   const labels = labelsText
     .split(/[\n,]/)
     .map((l) => l.trim())
     .filter(Boolean);
 
-  async function runOn(
-    source: () => Promise<Float32Array>,
-    kind: "file" | "mic",
-  ) {
-    setIoError(null);
-    setPreparing(kind);
-    try {
-      const audio = await source();
-      await classify(audio, labels);
-    } catch (e) {
-      setIoError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setPreparing(null);
-    }
-  }
-
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file
-    if (!file) return;
-    void runOn(async () => decodeToMono(await file.arrayBuffer()), "file");
+  // The only trigger. The clip is already decoded and held by `useAudioPick`,
+  // so this re-runs the same audio as often as the user likes — after editing
+  // CLAP's prompts, or after switching to a different checkpoint.
+  const classifyCurrent = () => {
+    const audio = input.take();
+    if (!audio) return;
+    input.clearError();
+    void classify(audio, labels).catch(() => {
+      /* the hook surfaces it in OUTPUT */
+    });
   };
 
   // Capture failures (mic denied, undecodable file) belong in RUN; the model's
@@ -126,7 +115,6 @@ function AudioClassificationPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}
@@ -137,65 +125,58 @@ function AudioClassificationPage() {
       run={
         <InputPanel
           ready={ready}
-          error={ioError}
-          disabledHint="Load a model to classify a sound."
+          error={input.error}
+          disabledHint="Load a model to classify a sound. You can pick a clip first."
           controls={
-            <>
-              <Button
-                disabled={!ready || busy}
-                onClick={() => void runOn(() => recordMic(RECORD_SECONDS), "mic")}
-              >
-                {preparing === "mic" ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Recording…
-                  </>
-                ) : (
-                  <>
-                    <Mic className="size-4" /> Record {RECORD_SECONDS}s
-                  </>
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                disabled={!ready || busy}
-                onClick={() => fileRef.current?.click()}
-              >
-                {preparing === "file" ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Decoding…
-                  </>
-                ) : (
-                  <>
-                    <Upload className="size-4" /> Upload audio
-                  </>
-                )}
-              </Button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                onChange={onFile}
-              />
-            </>
+            <Button
+              disabled={!ready || busy || !input.clip || (isZeroShot && labels.length === 0)}
+              onClick={classifyCurrent}
+            >
+              {running ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Classifying…
+                </>
+              ) : (
+                <>
+                  <Tags className="size-4" /> Classify
+                </>
+              )}
+            </Button>
           }
         >
-          {isZeroShot && (
-            <div className="flex min-h-0 flex-1 flex-col space-y-1.5">
-              <Label htmlFor="labels">
-                Labels to score against (one per line)
-              </Label>
-              <textarea
-                id="labels"
-                value={labelsText}
-                onChange={(e) => setLabelsText(e.target.value)}
-                rows={5}
-                className="min-h-28 w-full flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm"
-                placeholder="a dog barking&#10;rain falling&#10;a car engine"
-              />
-            </div>
-          )}
+          <AudioSourcePanel
+            clip={input.clip}
+            preparing={input.preparing}
+            samples={AUDIO_SAMPLES}
+            sampleHint="Samples — speech clips, so a general sound tagger should land on a speech tag and CLAP should prefer a speech prompt."
+            onFile={input.pickFile}
+            onSample={input.pickSample}
+            onRecord={input.record}
+            recordSeconds={RECORD_SECONDS}
+            busy={busy}
+          >
+            {isZeroShot && (
+              <div className="flex min-h-0 flex-col space-y-1.5">
+                <Label htmlFor="labels">
+                  Labels to score against (one per line)
+                </Label>
+                <textarea
+                  id="labels"
+                  value={labelsText}
+                  onChange={(e) => setLabelsText(e.target.value)}
+                  rows={5}
+                  className="min-h-28 w-full resize-none rounded-md border bg-background px-3 py-2 text-sm"
+                  placeholder="a dog barking&#10;rain falling&#10;a car engine"
+                />
+                {/* Editing prompts changes the answer, so it must not change it
+                    silently: CLAP is re-scored on the next Classify, not on
+                    this keystroke. */}
+                <p className="text-xs text-muted-foreground">
+                  Edit the prompts, then press Classify to re-score the same clip.
+                </p>
+              </div>
+            )}
+          </AudioSourcePanel>
         </InputPanel>
       }
       output={
@@ -209,7 +190,7 @@ function AudioClassificationPage() {
           running={running}
           runningLabel="Classifying…"
           error={runError}
-          empty="Record or upload a clip and the ranked tags appear here."
+          empty="Pick a clip, then press Classify — the ranked tags appear here."
         >
           {result && result.length > 0 && (
             <ul className="space-y-2">

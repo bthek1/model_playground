@@ -25,7 +25,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
 import { Loader2, Maximize2, Square, Wand2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -85,19 +85,34 @@ function SuperResolutionPage() {
     run,
     stop,
     meta,
-  } = useSuperRes(model, session.autoLoad);
+  } = useSuperRes(model);
   useCacheRefresh(session, ready);
+
+  const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
+    useImagePick();
 
   // The capped source, kept so the guard can quote a tile count before the run
   // and so the comparison has the exact pixels the model was given.
+  //
+  // Derived from the pick rather than set by it: capping the resolution is part
+  // of *describing* the input (it is what the tile count is counted over), so it
+  // has to happen before the user commits — but it must not slide into running
+  // the model, which is what the old `onPicked` callback did. An effect keeps
+  // the two apart.
   const [input, setInput] = useState<RawImage | null>(null);
-
-  const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        setInput(await downscale(next.image, MAX_SOURCE_SIDE));
-      },
+  useEffect(() => {
+    if (!picked) {
+      setInput(null);
+      return;
+    }
+    let live = true;
+    void downscale(picked.image, MAX_SOURCE_SIDE).then((small) => {
+      if (live) setInput(small);
     });
+    return () => {
+      live = false;
+    };
+  }, [picked]);
 
   const busy = running || preparing !== null;
   const loadError = status === "error" ? error : null;
@@ -158,7 +173,6 @@ function SuperResolutionPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

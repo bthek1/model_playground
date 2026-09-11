@@ -126,10 +126,7 @@ describe("SuperResolutionPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(useSuperRes).toHaveBeenCalledWith(
-      "Xenova/swin2SR-classical-sr-x2-64",
-      false,
-    );
+    expect(useSuperRes).toHaveBeenCalledWith("Xenova/swin2SR-classical-sr-x2-64");
     expect(baseState.load).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));

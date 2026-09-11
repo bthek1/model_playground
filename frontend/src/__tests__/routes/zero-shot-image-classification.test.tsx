@@ -92,6 +92,18 @@ function renderPage() {
   render(<Page />);
 }
 
+const RUN_BUTTON = /score labels/i;
+
+// The RUN trigger. Picking an input never starts an inference any more
+// (model-page-pattern.md §1.6), so a test that wants a result asks for one.
+async function pickAndRun(sample: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name: sample }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
+}
+
 const ready = (extra: Partial<UseZeroShotImageResult> = {}) => ({
   ...baseState,
   status: "ready" as const,
@@ -120,10 +132,7 @@ describe("ZeroShotImageClassificationPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(useZeroShotImage).toHaveBeenCalledWith(
-      "Xenova/clip-vit-base-patch32",
-      false,
-    );
+    expect(useZeroShotImage).toHaveBeenCalledWith("Xenova/clip-vit-base-patch32");
     expect(baseState.load).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));
@@ -162,7 +171,7 @@ describe("ZeroShotImageClassificationPage", () => {
     mockState = ready();
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /^cats$/i }));
+    await pickAndRun(/^cats$/i);
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
 
     expect(mockRun).toHaveBeenCalledWith(
@@ -177,7 +186,7 @@ describe("ZeroShotImageClassificationPage", () => {
     renderPage();
 
     fireEvent.click(screen.getByLabelText(/also score the bare/i));
-    fireEvent.click(screen.getByRole("button", { name: /^cats$/i }));
+    await pickAndRun(/^cats$/i);
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
 
     expect(mockRun.mock.calls[0][2]).toEqual(["a photo of a {}"]);
@@ -192,7 +201,7 @@ describe("ZeroShotImageClassificationPage", () => {
     fireEvent.change(screen.getByLabelText(/prompt template/i), {
       target: { value: "a blurry photo of a {}" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^cats$/i }));
+    await pickAndRun(/^cats$/i);
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
 
     expect(mockRun.mock.calls[0][2]).toContain("a blurry photo of a {}");
@@ -201,7 +210,7 @@ describe("ZeroShotImageClassificationPage", () => {
   it("shows one column per template, in the user's own words", async () => {
     mockState = ready({ result: RESULT });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^cats$/i }));
+    await pickAndRun(/^cats$/i);
 
     const out = within(screen.getByTestId("slot-4"));
     await waitFor(() =>
@@ -228,7 +237,7 @@ describe("ZeroShotImageClassificationPage", () => {
     // text tower is ~40% of CLIP's work and is skipped entirely on a cache hit.
     mockState = ready({ result: RESULT });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^cats$/i }));
+    await pickAndRun(/^cats$/i);
 
     const out = within(screen.getByTestId("slot-4"));
     await waitFor(() =>
@@ -245,7 +254,7 @@ describe("ZeroShotImageClassificationPage", () => {
     // is present" — and the model has no way to say "none of these".
     mockState = ready({ result: RESULT });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^cats$/i }));
+    await pickAndRun(/^cats$/i);
 
     const out = within(screen.getByTestId("slot-4"));
     await waitFor(() =>

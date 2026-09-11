@@ -76,8 +76,18 @@ describe("useTts", () => {
     expect(result.current.status).toBe("loading");
   });
 
-  it("posts a load message with the model on mount", () => {
-    const { result } = renderHook(() => useTts("onnx-community/Kokoro-82M-v1.0-ONNX"));
+  it("defaults to idle — a mount is not a download", () => {
+    const { result } = renderHook(() =>
+      useTts("onnx-community/Kokoro-82M-v1.0-ONNX"),
+    );
+    expect(result.current.status).toBe("idle");
+    expect(spawned).toBe(0);
+  });
+
+  it("posts a load message with the model once asked", () => {
+    const { result } = renderHook(() =>
+      useTts("onnx-community/Kokoro-82M-v1.0-ONNX", true),
+    );
     expect(result.current.loading).toBe(true);
     expect(lastWorker.posted[0].message).toEqual({
       type: "load",
@@ -86,14 +96,14 @@ describe("useTts", () => {
   });
 
   it("flips to ready and records the backend", async () => {
-    const { result } = renderHook(() => useTts());
+    const { result } = renderHook(() => useTts(undefined, true));
     act(() => lastWorker.emit({ type: "ready", model: "m", backend: "webgpu" }));
     await waitFor(() => expect(result.current.ready).toBe(true));
     expect(result.current.backend).toBe("webgpu");
   });
 
   it("resolves synthesize() with the correlated audio and stores it", async () => {
-    const { result } = renderHook(() => useTts());
+    const { result } = renderHook(() => useTts(undefined, true));
     act(() => lastWorker.emit({ type: "ready", model: "m", backend: "wasm" }));
 
     let promise!: Promise<unknown>;
@@ -117,7 +127,7 @@ describe("useTts", () => {
   });
 
   it("rejects synthesize() on a matching error", async () => {
-    const { result } = renderHook(() => useTts());
+    const { result } = renderHook(() => useTts(undefined, true));
     act(() => lastWorker.emit({ type: "ready", model: "m", backend: "wasm" }));
 
     let promise!: Promise<unknown>;
@@ -130,14 +140,14 @@ describe("useTts", () => {
   });
 
   it("marks status error on an id-less load error", async () => {
-    const { result } = renderHook(() => useTts());
+    const { result } = renderHook(() => useTts(undefined, true));
     act(() => lastWorker.emit({ type: "error", error: "load failed" }));
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(result.current.error).toBe("load failed");
   });
 
   it("terminates the worker on unmount", () => {
-    const { unmount } = renderHook(() => useTts());
+    const { unmount } = renderHook(() => useTts(undefined, true));
     const worker = lastWorker;
     unmount();
     expect(worker.terminated).toBe(true);

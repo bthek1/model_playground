@@ -69,6 +69,18 @@ function renderPage() {
   render(<Page />);
 }
 
+const RUN_BUTTON = /estimate depth/i;
+
+// The RUN trigger. Picking an input never starts an inference any more
+// (model-page-pattern.md §1.6), so a test that wants a result asks for one.
+async function pickAndRun(sample: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name: sample }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
+}
+
 const ready = (extra: Partial<UseDepthResult> = {}) => ({
   ...baseState,
   status: "ready" as const,
@@ -101,10 +113,7 @@ describe("DepthPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(useDepth).toHaveBeenCalledWith(
-      "onnx-community/depth-anything-v2-small",
-      false,
-    );
+    expect(useDepth).toHaveBeenCalledWith("onnx-community/depth-anything-v2-small");
     expect(baseState.load).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));
@@ -137,11 +146,19 @@ describe("DepthPage", () => {
     expect(baseState.load).not.toHaveBeenCalled();
   });
 
-  it("estimates depth as soon as a sample is picked", async () => {
+  it("picks a sample without running, then estimates when asked", async () => {
     mockState = ready();
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+    );
+    // Picking is input. A depth pass on every sample click is bandwidth and
+    // GPU time the user never asked for.
+    expect(mockRun).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
     expect(downscale).toHaveBeenCalledWith(fakeImage, 640);
   });
@@ -161,7 +178,7 @@ describe("DepthPage", () => {
     // something false: the scale is arbitrary and re-fitted per image.
     mockState = ready({ result: DEPTH });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await pickAndRun(/^tiger$/i);
 
     await waitFor(() =>
       expect(screen.getByTestId("depth-map")).toBeInTheDocument(),

@@ -115,10 +115,7 @@ describe("VideoClassificationPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(useVideoClassifier).toHaveBeenCalledWith(
-      "Xenova/clip-vit-base-patch32",
-      false,
-    );
+    expect(useVideoClassifier).toHaveBeenCalledWith("Xenova/clip-vit-base-patch32");
     expect(baseState.load).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));

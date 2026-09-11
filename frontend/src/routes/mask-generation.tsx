@@ -86,7 +86,7 @@ function MaskGenerationPage() {
     load,
     retry,
     cancel,
-  } = useSam(model, session.autoLoad);
+  } = useSam(model);
   useCacheRefresh(session, ready);
 
   const [points, setPoints] = useState<SamPoint[]>([]);
@@ -94,64 +94,64 @@ function MaskGenerationPage() {
   // The frame that was encoded, at the resolution the masks come back in.
   const [frame, setFrame] = useState<RawImage | null>(null);
 
-  const prepare = useCallback(
-    async (token: string, image: RawImage) => {
-      const small = await downscale(image, MAX_INFERENCE_SIDE);
+  const { picked, preparing, error: ioError, pickFile, pickSample } =
+    useImagePick();
+
+  // The frame is *input*, so it is derived from the pick and nothing else.
+  // Capping the resolution is arithmetic on pixels, not inference — it is what
+  // makes the picture clickable and what the masks' coordinates are relative
+  // to. Both of SAM's graphs stay behind the RUN button below.
+  useEffect(() => {
+    if (!picked) {
+      setFrame(null);
+      return;
+    }
+    let live = true;
+    void downscale(picked.image, MAX_INFERENCE_SIDE).then((small) => {
+      if (!live) return;
       setFrame(small);
       setPoints([]);
       setCandidate(0);
-      await encode(`${token}:${small.width}x${small.height}`, small);
-    },
-    [encode],
-  );
-
-  const { picked, preparing, error: ioError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        reset();
-        setPoints([]);
-        setCandidate(0);
-        // A picture the user has picked is shown whether or not a model exists,
-        // so the page is legible before the download. Only the encode is gated.
-        if (ready) await prepare(next.name, next.image);
-        else setFrame(await downscale(next.image, MAX_INFERENCE_SIDE));
-      },
+      reset();
     });
-
-  // Loading a model with a picture already on screen encodes it, rather than
-  // making the user re-pick to get to a usable state.
-  useEffect(() => {
-    if (!ready || !picked || encoded || encoding) return;
-    void prepare(picked.name, picked.image).catch(() => {
-      /* the hook surfaces it in OUTPUT */
-    });
-  }, [ready, picked, encoded, encoding, prepare]);
+    return () => {
+      live = false;
+    };
+  }, [picked, reset]);
 
   const busy = running || encoding || preparing !== null;
   const loadError = status === "error" ? error : null;
   const runError = status === "error" ? null : error;
 
-  const decode = useCallback(
-    (next: SamPoint[]) => {
-      if (next.length === 0) return;
-      void run(next).catch(() => {
-        /* the hook surfaces it in OUTPUT */
-      });
-    },
-    [run],
-  );
+  // Clicking the picture places a point. It does **not** decode: on this route
+  // the pointer is the input device, so a click that ran the model made the
+  // canvas a hidden RUN trigger and the button beside it a no-op.
+  const addPoint = useCallback((point: SamPoint) => {
+    setPoints((prev) => [...prev, point]);
+    setCandidate(0);
+  }, []);
 
-  const addPoint = useCallback(
-    (point: SamPoint) => {
-      setPoints((prev) => {
-        const next = [...prev, point];
-        decode(next);
-        return next;
-      });
-      setCandidate(0);
-    },
-    [decode],
-  );
+  // The one RUN action, and it owns both graphs. Encoding is a prerequisite of
+  // decoding rather than a stage of its own — SAM's split exists so that the
+  // expensive half is paid once per picture, which is a caching decision, not
+  // something to ask the user about twice.
+  const generate = useCallback(() => {
+    if (!frame || points.length === 0) return;
+    const shot = points;
+    void (async () => {
+      try {
+        if (!encoded) {
+          await encode(
+            `${picked?.name ?? "frame"}:${frame.width}x${frame.height}`,
+            frame,
+          );
+        }
+        await run(shot);
+      } catch {
+        /* the hook surfaces it in OUTPUT */
+      }
+    })();
+  }, [frame, points, encoded, encode, run, picked]);
 
   const clearPoints = () => {
     setPoints([]);
@@ -200,7 +200,6 @@ function MaskGenerationPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}
@@ -217,14 +216,7 @@ function MaskGenerationPage() {
             <>
               <Button
                 variant="outline"
-                disabled={!ready || !encoded || points.length === 0}
-                onClick={clearPoints}
-              >
-                <Trash2 className="size-4" /> Clear points
-              </Button>
-              <Button
-                variant="outline"
-                disabled={!ready || !encoded || !frame || busy}
+                disabled={!frame || busy}
                 onClick={() =>
                   frame &&
                   addPoint({
@@ -234,10 +226,33 @@ function MaskGenerationPage() {
                   })
                 }
               >
-                {/* The keyboard route to a mask. Clicking a canvas is
+                {/* The keyboard route to a point. Clicking a canvas is
                     inherently a pointer gesture, and a page whose only input is
-                    a click is a page some people cannot use at all. */}
+                    a click is a page some people cannot use at all. Placing a
+                    point needs no model, so it is not gated on one. */}
                 <MousePointerClick className="size-4" /> Point at the centre
+              </Button>
+              <Button
+                variant="outline"
+                disabled={points.length === 0 || busy}
+                onClick={clearPoints}
+              >
+                <Trash2 className="size-4" /> Clear points
+              </Button>
+              <Button
+                disabled={!ready || busy || !frame || points.length === 0}
+                onClick={generate}
+              >
+                {busy ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    {encoding ? "Encoding…" : "Cutting out…"}
+                  </>
+                ) : (
+                  <>
+                    <Scissors className="size-4" /> Generate mask
+                  </>
+                )}
               </Button>
             </>
           }

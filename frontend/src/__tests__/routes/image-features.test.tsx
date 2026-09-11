@@ -103,6 +103,8 @@ function renderPage() {
   return render(<Page />);
 }
 
+const RUN_BUTTON = /^embed$/i;
+
 const ready = (extra: Partial<UseImageFeaturesResult> = {}) => ({
   ...baseState,
   status: "ready" as const,
@@ -139,7 +141,7 @@ describe("ImageFeaturesPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(useImageFeatures).toHaveBeenCalledWith("Xenova/dinov2-small", false);
+    expect(useImageFeatures).toHaveBeenCalledWith("Xenova/dinov2-small");
     expect(baseState.load).not.toHaveBeenCalled();
     expect(buildIndex).not.toHaveBeenCalled();
 
@@ -171,10 +173,18 @@ describe("ImageFeaturesPage", () => {
     await waitFor(() => expect(buildIndex).toHaveBeenCalledWith(GALLERY_IMAGES));
   });
 
-  it("embeds as soon as a sample is picked, on a capped frame", async () => {
+  it("picks a sample without running, then embeds when asked, on a capped frame", async () => {
     mockState = ready();
     renderPage();
+
     fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+    );
+    // Picking an input is not asking for an inference.
+    expect(mockRun).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
     expect(downscale).toHaveBeenCalledWith(fakeImage, 640);
   });

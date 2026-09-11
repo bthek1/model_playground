@@ -110,6 +110,40 @@ async function pickSample() {
   await waitFor(() => expect(fromUrl).toHaveBeenCalled());
 }
 
+/**
+ * The one RUN action: "Generate mask" encodes the picture if it isn't encoded
+ * yet, then decodes the points. Encoding used to fire off an effect the moment
+ * a model and a picture coexisted, and each click on the canvas decoded
+ * immediately — two inferences nobody pressed a button for.
+ */
+/**
+ * Place the centre point — the keyboard route to a query.
+ *
+ * Waits for *enabled*, not merely present: the button exists from the first
+ * render and only lights up once the capped frame lands, and `fireEvent.click`
+ * on a disabled button is a silent no-op.
+ */
+async function placeCentrePoint() {
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: /point at the centre/i }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /point at the centre/i }));
+}
+
+async function generate() {
+  // Re-queried inside the `waitFor`, never captured before it: a React
+  // re-render replaces the DOM node, and polling the detached original is a
+  // flake that never resolves.
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: /generate mask/i }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /generate mask/i }));
+}
+
 describe("MaskGenerationPage", () => {
   it("renders the heading and both model options", () => {
     renderPage();
@@ -126,7 +160,7 @@ describe("MaskGenerationPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(useSam).toHaveBeenCalledWith("Xenova/slimsam-77-uniform", false);
+    expect(useSam).toHaveBeenCalledWith("Xenova/slimsam-77-uniform");
     expect(baseState.load).not.toHaveBeenCalled();
     expect(mockEncode).not.toHaveBeenCalled();
 
@@ -157,13 +191,27 @@ describe("MaskGenerationPage", () => {
     expect(mockEncode).not.toHaveBeenCalled();
   });
 
-  it("encodes a picked image once a model is ready, on a capped frame", async () => {
+  it("shows a picked image on a capped frame, and encodes nothing yet", async () => {
     mockState = ready();
     renderPage();
     await pickSample();
 
+    // Capping the resolution is arithmetic on pixels — it is what makes the
+    // picture clickable — so it happens on the pick. Both of SAM's graphs wait.
+    await waitFor(() => expect(downscale).toHaveBeenCalledWith(fakeImage, 640));
+    await screen.findByTestId("point-canvas");
+    expect(mockEncode).not.toHaveBeenCalled();
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it("encodes on the first Generate, on a capped frame", async () => {
+    mockState = ready();
+    renderPage();
+    await pickSample();
+    await placeCentrePoint();
+    await generate();
+
     await waitFor(() => expect(mockEncode).toHaveBeenCalledTimes(1));
-    expect(downscale).toHaveBeenCalledWith(fakeImage, 640);
     // The token carries the image's identity *and* its size, so a re-render
     // reuses the embedding while a different picture does not.
     expect(mockEncode.mock.calls[0][0]).toBe("City street:8x8");
@@ -202,14 +250,18 @@ describe("MaskGenerationPage", () => {
     );
   });
 
-  it("decodes a click on the picture as a positive point", async () => {
+  it("reads a click on the picture as a positive point, and decodes on request", async () => {
     mockState = ready({ encoded: true });
     renderPage();
     await pickSample();
 
     const canvas = await screen.findByTestId("point-canvas");
     fireEvent.click(canvas, { clientX: 4, clientY: 4 });
+    // Placing a point is input. Decoding on every click made the canvas a
+    // hidden RUN trigger, and a mis-aimed click cost an inference.
+    expect(mockRun).not.toHaveBeenCalled();
 
+    await generate();
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
     expect(mockRun.mock.calls[0][0]).toEqual([
       { x: expect.any(Number), y: expect.any(Number), positive: true },
@@ -226,21 +278,24 @@ describe("MaskGenerationPage", () => {
 
     const canvas = await screen.findByTestId("point-canvas");
     fireEvent.click(canvas, { clientX: 4, clientY: 4, altKey: true });
+    await generate();
 
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
     expect(mockRun.mock.calls[0][0][0].positive).toBe(false);
   });
 
-  it("does not decode a click before the image is encoded", async () => {
+  it("keeps Generate disabled until there is a point to decode", async () => {
     mockState = ready({ encoded: false });
     renderPage();
     await pickSample();
+    await screen.findByTestId("point-canvas");
 
-    fireEvent.click(await screen.findByTestId("point-canvas"), {
-      clientX: 4,
-      clientY: 4,
-    });
+    // A picture alone is not a query: SAM needs somewhere to look.
+    expect(
+      screen.getByRole("button", { name: /generate mask/i }),
+    ).toBeDisabled();
     expect(mockRun).not.toHaveBeenCalled();
+    expect(mockEncode).not.toHaveBeenCalled();
   });
 
   it("offers a keyboard route to a mask", async () => {
@@ -250,9 +305,9 @@ describe("MaskGenerationPage", () => {
     renderPage();
     await pickSample();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: /point at the centre/i }),
-    );
+    await placeCentrePoint();
+    await generate();
+
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
     expect(mockRun.mock.calls[0][0]).toEqual([{ x: 4, y: 4, positive: true }]);
   });
@@ -271,8 +326,11 @@ describe("MaskGenerationPage", () => {
         within(screen.getByTestId("points")).getAllByRole("listitem"),
       ).toHaveLength(2),
     );
-    // The second decode is asked with both points — that is what refining means.
-    expect(mockRun.mock.calls[1][0]).toHaveLength(2);
+    // Two points, one decode. Refining is now "place the points you want, then
+    // ask" rather than an inference per click.
+    await generate();
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+    expect(mockRun.mock.calls[0][0]).toHaveLength(2);
   });
 
   it("clears the points and the embedding-backed state together", async () => {

@@ -17,6 +17,13 @@ vi.mock("@/audio/io", () => ({
   toWavBlob: vi.fn(() => new Blob()),
 }));
 
+// happy-dom has no canvas 2D context; Waveform renders its own guarded
+// fallback and is covered by its own tests.
+vi.mock("@/components/audio/Waveform", () => ({
+  Waveform: () => <div data-testid="waveform" />,
+  LiveWaveform: () => <div data-testid="live-waveform" />,
+}));
+
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
@@ -100,10 +107,20 @@ describe("AudioToAudioPage", () => {
     expect(mockLoad).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the transport disabled until the model is ready", () => {
+  // Choosing a clip needs no model, so the sources are open from the start and
+  // only Enhance waits for one.
+  it("lets a clip be chosen before the model exists, and gates only Enhance", () => {
     renderPage();
-    expect(screen.getByRole("button", { name: /record/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /upload audio/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /record/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /upload audio/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^enhance$/i })).toBeDisabled();
+  });
+
+  it("keeps Enhance disabled until a clip is held", () => {
+    mockState = readyState;
+    renderPage();
+    expect(screen.getByRole("button", { name: /^enhance$/i })).toBeDisabled();
+    expect(screen.getByTestId("audio-input-empty")).toBeInTheDocument();
   });
 
   it("decodes and records at 48 kHz — not the 16 kHz every other route uses", async () => {
@@ -119,7 +136,7 @@ describe("AudioToAudioPage", () => {
     expect(recordMic).toHaveBeenCalledWith(expect.any(Number), 48000);
   });
 
-  it("enhances an uploaded file and keeps a copy of the input for playback", async () => {
+  it("loads an upload into the input, then enhances it on request", async () => {
     mockState = readyState;
     const enhanced = new Float32Array([0.9, 0.8]);
     mockRun.mockResolvedValue({ audio: enhanced, sampleRate: 48000 });
@@ -131,12 +148,20 @@ describe("AudioToAudioPage", () => {
 
     await waitFor(() => expect(decodeToMono).toHaveBeenCalled());
     expect(decodeToMono).toHaveBeenCalledWith(expect.anything(), 48000);
+    // Uploading is not asking for an inference — this page's is 6 s of audio
+    // through a hand-written DSP chain.
+    expect(mockRun).not.toHaveBeenCalled();
+    // The held clip is on screen, named, before anything is spent on it.
+    expect(screen.getByText(/noisy\.wav/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^enhance$/i }));
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
 
-    // `run` transfers (and detaches) its argument, so the route must have kept
-    // its own copy — otherwise the "before" row would render an empty buffer.
-    const passed = mockRun.mock.calls[0][0];
-    expect(passed).not.toBe(decodeToMono.mock.results[0].value);
+    // `run` transfers (and detaches) its argument, so a *copy* is handed over —
+    // otherwise the "before" row would render an empty buffer and a second
+    // Enhance would be impossible.
+    const decoded = (await decodeToMono.mock.results[0].value) as Float32Array;
+    expect(mockRun.mock.calls[0][0]).not.toBe(decoded);
     await waitFor(() =>
       expect(screen.getByText(/noisy input/i)).toBeInTheDocument(),
     );
@@ -154,6 +179,10 @@ describe("AudioToAudioPage", () => {
     fireEvent.change(input, {
       target: { files: [new File(["x"], "a.wav", { type: "audio/wav" })] },
     });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^enhance$/i })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^enhance$/i }));
     await waitFor(() => expect(screen.getByText(/enhanced/i)).toBeInTheDocument());
 
     const plays = screen.getAllByRole("button", { name: /^play$/i });

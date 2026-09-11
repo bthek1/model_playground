@@ -1,11 +1,14 @@
 // Per-route model preferences, persisted across page loads.
 //
 // A refresh cannot keep a Worker or an ONNX session alive — nothing persists an
-// in-memory model. What it can keep is the *decisions*: which model the user
-// picked, and whether they had asked for it to be loaded. Paired with the cache
-// probe in `model/cache.ts`, that is enough to put the page back where it was
-// without re-asking for consent the user already gave and without spending a
-// byte (see `model/useModelSelection.ts` for the resume rule).
+// in-memory model. What it can keep is the one decision that is cheap to
+// restore and costs nothing to be wrong about: **which model was selected**.
+//
+// It deliberately does *not* persist "and load it again". Loading a model is
+// the LOAD button's job and nothing else's (model-page-pattern.md §1.2), so a
+// revisited page puts the user's model back in the picker and then waits. The
+// cache probe in `model/cache.ts` still runs — it makes the one click an
+// informed one ("Cached · no download") rather than replacing it.
 //
 // UI state only, per CLAUDE.md — no server data lives in Zustand.
 
@@ -47,10 +50,7 @@ const safeStorage = {
 interface ModelPrefsState {
   /** Route key → last selected model id, e.g. `asr` → `onnx-community/whisper-base`. */
   selected: Record<string, string>;
-  /** Route key → the user asked for this model to be loaded. */
-  autoResume: Record<string, boolean>;
   selectModel: (routeKey: string, modelId: string) => void;
-  setAutoResume: (routeKey: string, on: boolean) => void;
   /** Drop a stored id that is no longer in the catalogue. */
   forget: (routeKey: string) => void;
 }
@@ -59,24 +59,25 @@ export const useModelPrefs = create<ModelPrefsState>()(
   persist(
     immer((set) => ({
       selected: {},
-      autoResume: {},
       selectModel: (routeKey, modelId) =>
         set((s) => {
           s.selected[routeKey] = modelId;
-          // A different model is a different download: the old consent does not
-          // carry over to it.
-          s.autoResume[routeKey] = false;
-        }),
-      setAutoResume: (routeKey, on) =>
-        set((s) => {
-          s.autoResume[routeKey] = on;
         }),
       forget: (routeKey) =>
         set((s) => {
           delete s.selected[routeKey];
-          delete s.autoResume[routeKey];
         }),
     })),
-    { name: "model-prefs", storage: createJSONStorage(() => safeStorage) },
+    {
+      name: "model-prefs",
+      storage: createJSONStorage(() => safeStorage),
+      // Only `selected` is persisted, and saying so explicitly is what stops an
+      // old blob from outliving the feature that wrote it: earlier versions
+      // stored an `autoResume` flag, and without `partialize` zustand merges
+      // that dead key back into state on rehydration and writes it out again
+      // on every save. Nothing reads it — but a persisted flag that says "load
+      // this on sight" is not the thing to leave lying around.
+      partialize: (s) => ({ selected: s.selected }),
+    },
   ),
 );

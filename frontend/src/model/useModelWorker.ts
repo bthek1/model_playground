@@ -28,9 +28,11 @@ export interface UseModelWorkerOptions {
   /** Merged into the `{ type: "load" }` message. */
   loadMessage: Record<string, unknown>;
   /**
-   * Start loading as soon as the hook mounts. `true` preserves the historical
-   * behaviour; pages that download weights pass `false` so the user consents
-   * first (model-page-pattern.md §1.2). Compile-only tasks keep `true`.
+   * Start loading as soon as the hook mounts. **Defaults to `false`, and every
+   * task hook leaves it there.** Weights are the user's bandwidth and the tab's
+   * memory: the LOAD button is the only thing allowed to spend either
+   * (model-page-pattern.md §1.2). The option survives for a hypothetical
+   * compile-only task with nothing to download — not as a convenience.
    */
   autoLoad?: boolean;
   /** Rejection message when `run()` is called with no live worker. */
@@ -81,7 +83,7 @@ export function useModelWorker<TResult>({
   createWorker,
   key,
   loadMessage,
-  autoLoad = true,
+  autoLoad = false,
   notReadyMessage = "Model worker not ready",
 }: UseModelWorkerOptions): UseModelWorkerResult<TResult> {
   const workerRef = useRef<Worker | null>(null);

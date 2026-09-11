@@ -48,7 +48,7 @@ describe("useAudioClassifier", () => {
     expect(usePipeline).toHaveBeenCalledWith(
       "audio-classification",
       DEFAULT_CLASSIFIER_MODEL,
-      true,
+      false,
     );
 
     vi.clearAllMocks();
@@ -56,16 +56,26 @@ describe("useAudioClassifier", () => {
     expect(usePipeline).toHaveBeenCalledWith(
       "zero-shot-audio-classification",
       ZERO_SHOT_MODEL,
-      true,
+      false,
     );
   });
 
-  it("forwards autoLoad so the route can defer the download", () => {
-    renderHook(() => useAudioClassifier(DEFAULT_CLASSIFIER_MODEL, false));
+  // The default is `false`, both here and in `usePipeline`. It used to be
+  // `true`, which made "forget the second argument" a silent download.
+  it("defers the download by default, and forwards an explicit opt-in", () => {
+    renderHook(() => useAudioClassifier(DEFAULT_CLASSIFIER_MODEL));
     expect(usePipeline).toHaveBeenCalledWith(
       expect.any(String),
       DEFAULT_CLASSIFIER_MODEL,
       false,
+    );
+
+    vi.clearAllMocks();
+    renderHook(() => useAudioClassifier(DEFAULT_CLASSIFIER_MODEL, true));
+    expect(usePipeline).toHaveBeenCalledWith(
+      expect.any(String),
+      DEFAULT_CLASSIFIER_MODEL,
+      true,
     );
   });
 
@@ -84,7 +94,7 @@ describe("useAudioClassifier", () => {
     expect(usePipeline).toHaveBeenCalledWith(
       CLASSIFIER_MODELS[0].task,
       CLASSIFIER_MODELS[0].id,
-      true,
+      false,
     );
   });
 

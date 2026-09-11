@@ -91,7 +91,7 @@ function BackgroundRemovalPage() {
     cancel,
     run,
     meta,
-  } = useBackgroundRemoval(model, session.autoLoad);
+  } = useBackgroundRemoval(model);
   useCacheRefresh(session, ready);
 
   const [live, setLive] = useState(false);
@@ -106,11 +106,7 @@ function BackgroundRemovalPage() {
   );
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        if (ready) await cut(next.image);
-      },
-    });
+useImagePick();
 
   const onFrame = useCallback(
     async (frame: RawImage) => {
@@ -170,7 +166,6 @@ function BackgroundRemovalPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

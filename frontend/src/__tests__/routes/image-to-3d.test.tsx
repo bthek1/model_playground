@@ -104,6 +104,18 @@ function renderPage() {
   render(<Page />);
 }
 
+const RUN_BUTTON = /build point cloud/i;
+
+// The RUN trigger. Picking an input never starts an inference any more
+// (model-page-pattern.md §1.6), so a test that wants a result asks for one.
+async function pickAndRun(sample: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name: sample }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
+}
+
 const ready = (extra: Partial<UseDepthResult> = {}) => ({
   ...baseState,
   status: "ready" as const,
@@ -141,10 +153,7 @@ describe("ImageTo3DPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(useDepth).toHaveBeenCalledWith(
-      "onnx-community/depth-anything-v2-small",
-      false,
-    );
+    expect(useDepth).toHaveBeenCalledWith("onnx-community/depth-anything-v2-small");
     expect(baseState.load).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));
@@ -180,10 +189,18 @@ describe("ImageTo3DPage", () => {
     expect(screen.getByTestId("focal-slider")).toBeInTheDocument();
   });
 
-  it("builds a cloud as soon as a sample is picked", async () => {
+  it("picks a sample without running, then builds a cloud when asked", async () => {
     mockState = ready();
     renderPage();
+
     fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+    );
+    // Picking an input is not asking for an inference.
+    expect(mockRun).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
   });
 
@@ -193,7 +210,7 @@ describe("ImageTo3DPage", () => {
     // the same question for its threshold.
     mockState = ready({ result: DEPTH });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await pickAndRun(/^tiger$/i);
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
 
     fireEvent.change(screen.getByTestId("focal-slider"), {
@@ -207,7 +224,7 @@ describe("ImageTo3DPage", () => {
   it("changes the point count with the stride", async () => {
     mockState = ready({ result: DEPTH });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await pickAndRun(/^tiger$/i);
     await screen.findByTestId("cloud-canvas");
 
     // 4x4 at stride 2 is 2x2 = 4 points; at stride 1 it is 16.
@@ -224,7 +241,7 @@ describe("ImageTo3DPage", () => {
     supported.value = false;
     mockState = ready({ result: DEPTH });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await pickAndRun(/^tiger$/i);
 
     await screen.findByTestId("cloud-fallback");
     expect(screen.queryByTestId("cloud-canvas")).not.toBeInTheDocument();

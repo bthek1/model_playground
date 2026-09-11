@@ -47,7 +47,7 @@ export interface UseTtsResult {
  */
 export function useTts(
   model: string = DEFAULT_TTS_MODEL,
-  autoLoad = true,
+  autoLoad = false,
 ): UseTtsResult {
   const worker = useModelWorker<TtsAudio>({
     createWorker: createTtsWorker,

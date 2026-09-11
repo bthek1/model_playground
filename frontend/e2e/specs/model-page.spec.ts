@@ -180,29 +180,34 @@ test.describe("a model page after a refresh", () => {
     expect(hubRequests, "a refresh re-downloaded weights").toEqual([]);
   });
 
-  test("resumes a load only when the weights are already cached", async ({
+  test("never resumes a load, even for weights already on this machine", async ({
     page,
     mockApi,
   }) => {
     await mockApi();
+    const hubRequests: string[] = [];
     await page.route(
       (url) => url.hostname.endsWith("huggingface.co"),
-      // Hang rather than abort: a resume that starts must be observable in the
-      // LOAD slot rather than racing straight to an error.
-      () => {},
+      (r) => {
+        hubRequests.push(r.request().url());
+        return r.abort();
+      },
     );
 
     const model = new ModelPageObject(page);
     await page.goto("/text-to-speech");
 
-    // Seed what a previous session would have left behind: the consent, and a
-    // file in the bucket Transformers.js caches into.
+    // Seed what a previous session leaves behind: the selection, and a file in
+    // the bucket Transformers.js caches into. An older build also stored an
+    // `autoResume` consent flag here and turned it into a download on the next
+    // visit; the flag is seeded too, so a stale blob in a real user's browser
+    // cannot bring that behaviour back.
     await page.evaluate(
       async ([modelId]) => {
         localStorage.setItem(
           "model-prefs",
           JSON.stringify({
-            state: { selected: {}, autoResume: { tts: true } },
+            state: { selected: { tts: modelId }, autoResume: { tts: true } },
             version: 0,
           }),
         );
@@ -217,11 +222,12 @@ test.describe("a model page after a refresh", () => {
 
     await page.reload();
 
-    // The badge says the download is free, and the load resumes on its own.
+    // The badge says the download would be free — and the page still waits to
+    // be asked. Cheap is not the same as consented.
     await expect(model.cachedBadge(KOKORO)).toBeVisible();
-    await expect(model.loadProgress).toBeVisible();
-    // Labelled as a re-load from cache, never as a session that survived.
-    await expect(model.loadProgress).toContainText(/restoring from cache/i);
+    await expect(model.button(/^Load model \(cached\)$/)).toBeVisible();
+    await expect(model.loadProgress).toBeHidden();
+    expect(hubRequests, "a cached model loaded without being asked").toEqual([]);
   });
 
   test("does not resume a model whose weights are gone", async ({

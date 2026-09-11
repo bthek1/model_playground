@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * The four-slot model page (docs/standards/model-page-pattern.md): every task
@@ -92,6 +92,25 @@ export class ModelPageObject {
    */
   async load(): Promise<void> {
     await this.loadButton.click();
+  }
+
+  /**
+   * Press the RUN slot's trigger, whatever this route calls it.
+   *
+   * Choosing an input never starts an inference (model-page-pattern.md §1.6):
+   * a sample click, a file drop and a recording all land in INPUT and stop, so
+   * every spec that wants a result asks for one here.
+   *
+   * Waits for *enabled*, not merely present: the button exists from the first
+   * render and only lights up once a model is ready and an input is held, and
+   * a Playwright click on a disabled button times out with a far less useful
+   * message than "still disabled".
+   */
+  async run(name: string | RegExp): Promise<void> {
+    const trigger = this.button(name);
+    await trigger.waitFor();
+    await expect(trigger).toBeEnabled();
+    await trigger.click();
   }
 
   /**

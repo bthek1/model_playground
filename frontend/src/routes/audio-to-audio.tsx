@@ -13,7 +13,7 @@
 // See docs/guides/adding-a-model.md §9 (a bare ONNX graph).
 
 import { createFileRoute } from "@tanstack/react-router";
-import { AudioWaveform, Download, Loader2, Mic, Play, Upload } from "lucide-react";
+import { AudioWaveform, Download, Loader2, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -21,7 +21,9 @@ import {
   ENHANCE_MODELS,
   SAMPLE_RATE,
 } from "@/audio/enhance/types";
-import { decodeToMono, play, recordMic, toWavBlob } from "@/audio/io";
+import { play, toWavBlob } from "@/audio/io";
+import { AUDIO_SAMPLES } from "@/audio/samples";
+import { AudioSourcePanel } from "@/components/audio/AudioSourcePanel";
 import { Waveform } from "@/components/audio/Waveform";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -29,6 +31,7 @@ import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
+import { useAudioPick } from "@/hooks/useAudioPick";
 import { useEnhance } from "@/hooks/useEnhance";
 import {
   useCacheRefresh,
@@ -69,19 +72,21 @@ function AudioToAudioPage() {
     retry,
     cancel,
     run,
-  } = useEnhance(model, session.autoLoad);
+  } = useEnhance(model);
   useCacheRefresh(session, ready);
 
-  const [input, setInput] = useState<Float32Array | null>(null);
-  const [preparing, setPreparing] = useState<null | "file" | "mic">(null);
-  const [ioError, setIoError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  // 48 kHz, not the 16 kHz default — DeepFilterNet3 is natively 48 kHz and
+  // resampling down would discard the band it exists to repair.
+  const input = useAudioPick({ sampleRate: SAMPLE_RATE });
+  // The clip the current "before/after" pair belongs to, captured at run time,
+  // so picking a new input doesn't retitle an older result's comparison.
+  const [enhanced, setEnhanced] = useState<Float32Array | null>(null);
   const playbackRef = useRef<AudioContext | null>(null);
 
   // Stop playback when the page goes away — an AudioContext outlives the route.
   useEffect(() => () => void playbackRef.current?.close(), []);
 
-  const busy = running || preparing !== null;
+  const busy = running || input.preparing !== null;
   // Each error in the slot that produced it (§4): capture failures in RUN, a
   // load failure in LOAD, an enhancement failure in OUTPUT.
   const loadError = status === "error" ? error : null;
@@ -92,33 +97,17 @@ function AudioToAudioPage() {
     playbackRef.current = play(samples, SAMPLE_RATE);
   }
 
-  async function enhanceFrom(
-    source: () => Promise<Float32Array>,
-    kind: "file" | "mic",
-  ) {
-    setIoError(null);
-    setPreparing(kind);
-    try {
-      const audio = await source();
-      // `run` transfers the buffer to the worker, which detaches it — keep our
-      // own copy so the "before" waveform and A/B playback still have samples.
-      setInput(audio.slice());
-      await run(audio);
-    } catch (e) {
-      setIoError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setPreparing(null);
-    }
-  }
-
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file
-    if (!file) return;
-    void enhanceFrom(
-      async () => decodeToMono(await file.arrayBuffer(), SAMPLE_RATE),
-      "file",
-    );
+  // The only trigger. `take()` hands the worker a copy — it detaches the buffer
+  // it is given, and the "before" waveform plus A/B playback need the samples
+  // to survive the run.
+  const enhanceCurrent = () => {
+    const audio = input.take();
+    if (!audio) return;
+    input.clearError();
+    setEnhanced(audio.slice());
+    void run(audio).catch(() => {
+      /* the hook surfaces it in OUTPUT */
+    });
   };
 
   const download = () => {
@@ -159,7 +148,6 @@ function AudioToAudioPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}
@@ -170,75 +158,57 @@ function AudioToAudioPage() {
       run={
         <InputPanel
           ready={ready}
-          error={ioError}
-          disabledHint="Load the model to enhance a clip."
+          error={input.error}
+          disabledHint="Load the model to enhance a clip. You can pick one first."
           controls={
-            <>
-              <Button
-                disabled={!ready || busy}
-                onClick={() =>
-                  void enhanceFrom(
-                    () => recordMic(RECORD_SECONDS, SAMPLE_RATE),
-                    "mic",
-                  )
-                }
-              >
-                {preparing === "mic" ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Recording…
-                  </>
-                ) : (
-                  <>
-                    <Mic className="size-4" /> Record {RECORD_SECONDS}s
-                  </>
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                disabled={!ready || busy}
-                onClick={() => fileRef.current?.click()}
-              >
-                {preparing === "file" ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Decoding…
-                  </>
-                ) : (
-                  <>
-                    <Upload className="size-4" /> Upload audio
-                  </>
-                )}
-              </Button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                onChange={onFile}
-              />
-            </>
+            <Button
+              disabled={!ready || busy || !input.clip}
+              onClick={enhanceCurrent}
+            >
+              {running ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Enhancing…
+                </>
+              ) : (
+                <>
+                  <AudioWaveform className="size-4" /> Enhance
+                </>
+              )}
+            </Button>
           }
-        />
+        >
+          <AudioSourcePanel
+            clip={input.clip}
+            preparing={input.preparing}
+            samples={AUDIO_SAMPLES}
+            sampleHint="Samples — clean studio speech, so the interesting test is your own noisy recording."
+            onFile={input.pickFile}
+            onSample={input.pickSample}
+            onRecord={input.record}
+            recordSeconds={RECORD_SECONDS}
+            busy={busy}
+          />
+        </InputPanel>
       }
       output={
         <OutputPanel
           title="Before / after"
           description={
-            input
-              ? `Same clip, ${(input.length / SAMPLE_RATE).toFixed(1)}s at 48 kHz. Play both and listen to the noise floor.`
+            enhanced
+              ? `Same clip, ${(enhanced.length / SAMPLE_RATE).toFixed(1)}s at 48 kHz. Play both and listen to the noise floor.`
               : undefined
           }
           running={running}
           runningLabel="Enhancing…"
           error={runError}
-          empty="Record or upload a noisy clip — the original and the denoised version appear here, one above the other."
+          empty="Pick a noisy clip, then press Enhance — the original and the denoised version appear here, one above the other."
         >
-          {input && (
+          {enhanced && (
             <div className="space-y-5">
               <ClipRow
                 title="Noisy input"
-                samples={input}
-                onPlay={() => playClip(input)}
+                samples={enhanced}
+                onPlay={() => playClip(enhanced)}
                 tone="text-muted-foreground"
               />
               {result && (

@@ -8,6 +8,11 @@
 // The bar is fed the *aggregate* (`loadProgress`), never a raw per-file event —
 // see `model/progress.ts` for why. Three things a user asks while waiting, all
 // answered on screen: how far along, how much data, and how long so far.
+//
+// `idle` is where every visit starts, including a revisit to a model whose
+// weights are already cached: the button here is the only thing in the app that
+// moves Machine A out of it (§1.2). Nothing resumes on mount, so there is no
+// "restoring" state to label.
 
 import {
   CheckCircle2,
@@ -51,12 +56,6 @@ export function ModelStatus({
   cached = false,
   /** How long the completed load took, for the ready chip. */
   loadedInMs = null,
-  /**
-   * The page is re-loading a model the user had loaded before the refresh.
-   * Only ever set on a cache hit, so it costs no bandwidth — but it is labelled
-   * honestly as a re-load, not as a session that survived.
-   */
-  restoring = false,
   /** Disable the load button while an input is being prepared, etc. */
   disabled = false,
 }: {
@@ -69,7 +68,6 @@ export function ModelStatus({
   onCancel?: () => void;
   cached?: boolean;
   loadedInMs?: number | null;
-  restoring?: boolean;
   disabled?: boolean;
 }) {
   if (status === "idle") {
@@ -93,8 +91,8 @@ export function ModelStatus({
             number here just made the rail say it twice. */}
         <p className="text-xs leading-snug text-muted-foreground">
           {cached
-            ? "Already downloaded — loads from the browser cache."
-            : "Downloaded once, then cached by the browser."}
+            ? "Already downloaded — loads from the browser cache. Nothing is in memory until you press Load."
+            : "Downloaded once, then cached by the browser. Nothing downloads until you press Load."}
         </p>
       </div>
     );
@@ -161,9 +159,7 @@ export function ModelStatus({
       <p className="flex items-start gap-1.5 text-xs leading-snug break-all text-muted-foreground">
         <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" />
         <span>
-          {restoring && p?.phase !== "warmup"
-            ? "Restoring from cache…"
-            : phaseLabel(p?.phase)}
+          {phaseLabel(p?.phase)}
           {p?.current ? ` · ${p.current}` : ""}
         </span>
       </p>

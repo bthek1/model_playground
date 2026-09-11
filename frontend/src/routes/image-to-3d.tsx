@@ -90,7 +90,7 @@ function ImageTo3DPage() {
     retry,
     cancel,
     run,
-  } = useDepth(model, session.autoLoad);
+  } = useDepth(model);
   useCacheRefresh(session, ready);
 
   const [source, setSource] = useState<RawImage | null>(null);
@@ -108,12 +108,7 @@ function ImageTo3DPage() {
   );
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        if (ready) await estimate(next.image);
-        else setSource(await downscale(next.image, MAX_INFERENCE_SIDE));
-      },
-    });
+useImagePick();
 
   const onFrame = useCallback(
     async (frame: RawImage) => {
@@ -199,7 +194,6 @@ function ImageTo3DPage() {
             loadProgress={loadProgress}
             loadedInMs={loadedInMs}
             cached={session.isCached}
-            restoring={session.restoring}
             error={loadError}
             onLoad={session.onLoad(load)}
             onCancel={session.onCancel(cancel)}

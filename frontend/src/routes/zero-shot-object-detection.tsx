@@ -96,7 +96,7 @@ function ZeroShotObjectDetectionPage() {
     retry,
     cancel,
     run,
-  } = useZeroShotDetector(model, session.autoLoad);
+  } = useZeroShotDetector(model);
   useCacheRefresh(session, ready);
 
   const [queries, setQueries] = useState<string[]>(DEFAULT_QUERIES);
@@ -122,12 +122,7 @@ function ZeroShotObjectDetectionPage() {
   );
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        if (ready && queries.length > 0) await detect(next.image);
-        else setFrame({ image: next.image, scale: 1 });
-      },
-    });
+useImagePick();
 
   const onFrame = useCallback(
     async (f: RawImage) => {
@@ -200,7 +195,6 @@ function ZeroShotObjectDetectionPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

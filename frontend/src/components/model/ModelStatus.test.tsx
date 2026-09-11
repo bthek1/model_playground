@@ -105,16 +105,17 @@ describe("ModelStatus", () => {
       );
     });
 
-    it("labels a cache-backed resume honestly", () => {
+    // There used to be a `restoring` prop, for a load this page started on its
+    // own because the model was cached and had been loaded before. Nothing
+    // resumes on mount any more (model/useModelSelection.ts), so a load is
+    // always one the user just asked for and the phase label is the whole
+    // story.
+    it("has no state for a load nobody asked for", () => {
       render(
-        <ModelStatus
-          {...base}
-          status="loading"
-          restoring
-          loadProgress={progress()}
-        />,
+        <ModelStatus {...base} status="loading" loadProgress={progress()} />,
       );
-      expect(screen.getByText(/restoring from cache/i)).toBeInTheDocument();
+      expect(screen.getByText(/downloading weights/i)).toBeInTheDocument();
+      expect(screen.queryByText(/restoring/i)).not.toBeInTheDocument();
     });
 
     it("offers cancel only while loading, and only when the page handles it", async () => {

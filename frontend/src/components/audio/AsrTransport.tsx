@@ -14,6 +14,7 @@ import {
   Play,
   Square,
 } from "lucide-react";
+
 import { useEffect, useRef, useState } from "react";
 
 import { play, toWavBlob } from "@/audio/io";
@@ -34,18 +35,23 @@ import {
  * Known-good clips with reference transcripts — an end-to-end model health check
  * that doesn't depend on the user's mic. Garbage output here means the model,
  * not the microphone.
+ *
+ * Picking one **loads it into the input and stops there.** These buttons used to
+ * fetch, decode and transcribe in one press, which made a row of sample clips
+ * into three hidden RUN triggers and meant browsing them cost an inference each
+ * (the TED clip is 60 s of it). `onSelect` says what it does.
  */
 export function SampleClips({
   selected,
   loadingId,
   disabled,
-  onRun,
+  onSelect,
 }: {
   selected: AudioSample | null;
   /** Id of the clip currently being fetched/decoded, if any. */
   loadingId: string | null;
   disabled: boolean;
-  onRun: (sample: AudioSample) => void;
+  onSelect: (sample: AudioSample) => void;
 }) {
   return (
     <Card>
@@ -54,8 +60,9 @@ export function SampleClips({
           <FlaskConical className="size-4" /> Test with a sample clip
         </CardTitle>
         <CardDescription>
-          Not sure the model works? Run a known clip and compare the output below
-          with the reference. Garbage here means the model, not your mic.
+          Not sure the model works? Load a known clip, press Transcribe, and
+          compare the output with the reference. Garbage here means the model,
+          not your mic.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -66,7 +73,7 @@ export function SampleClips({
               variant={selected?.id === s.id ? "default" : "outline"}
               size="sm"
               disabled={disabled}
-              onClick={() => onRun(s)}
+              onClick={() => onSelect(s)}
               title={s.hint}
             >
               {loadingId === s.id ? (
@@ -113,17 +120,11 @@ export function AudioTake({
   stream,
   clip,
   sampleRate,
-  canTranscribe,
-  transcribing,
-  onTranscribe,
 }: {
   recording: boolean;
   stream: MediaStream | null;
   clip: Float32Array | null;
   sampleRate: number;
-  canTranscribe: boolean;
-  transcribing: boolean;
-  onTranscribe: (clip: Float32Array) => void;
 }) {
   const [playState, setPlayState] = useState<"idle" | "playing" | "paused">(
     "idle",
@@ -198,7 +199,7 @@ export function AudioTake({
         <CardDescription>
           {recording
             ? "Live microphone signal"
-            : "Your take — replay it, download it, or run another model on it"}
+            : "Your take — replay it, download it, or press Transcribe below to run a model over it again"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -228,22 +229,6 @@ export function AudioTake({
                 )}
                 <Button variant="outline" size="sm" onClick={onDownload}>
                   <Download className="size-4" /> Download WAV
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!canTranscribe}
-                  onClick={() => onTranscribe(clip)}
-                >
-                  {transcribing ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" /> Transcribing…
-                    </>
-                  ) : (
-                    <>
-                      <AudioLines className="size-4" /> Transcribe clip
-                    </>
-                  )}
                 </Button>
               </div>
             </>

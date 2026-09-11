@@ -42,6 +42,7 @@ test.describe("@slow real model loads", () => {
     expect(["webgpu", "wasm"]).toContain(await audio.backend());
 
     await audio.modelButton(/JFK/).click();
+    await audio.run(/^Transcribe$/);
     // The reference transcript for the clip — a model that loads but decodes
     // garbage is still broken, so assert the words, not just "some text".
     await expect(
@@ -60,6 +61,7 @@ test.describe("@slow real model loads", () => {
     await audio.waitForReady(DOWNLOAD_BUDGET_MS);
 
     await audio.modelButton(/JFK/).click();
+    await audio.run(/^Transcribe$/);
 
     // Scope to the Transcript card — the sample card also quotes the reference.
     const transcript = page
@@ -174,6 +176,8 @@ test.describe("@slow speech enhancement", () => {
       mimeType: "audio/wav",
       buffer: await clip.body(),
     });
+    // Uploading fills INPUT and stops there; Enhance is the trigger.
+    await audio.run(/^Enhance$/);
 
     // Both rows only render once real samples came back from the worker.
     await expect(page.getByText("Noisy input")).toBeVisible({
@@ -217,6 +221,7 @@ test.describe("@slow voice activity detection", () => {
       mimeType: "audio/wav",
       buffer: await clip.body(),
     });
+    await audio.run(/Detect speech/);
 
     // The clip is 11 s of continuous speech with a short lead-in, so a working
     // detector finds a few seconds of speech in a handful of segments. A frame
@@ -264,6 +269,7 @@ test.describe("@slow voice activity detection", () => {
       mimeType: "audio/wav",
       buffer: await clip.body(),
     });
+    await audio.run(/Detect speech/);
 
     await expect(page.getByText(/segments? · [\d.]+s speech/)).toBeVisible({
       timeout: 60_000,

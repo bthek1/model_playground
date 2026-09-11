@@ -39,6 +39,10 @@ function workerFactory() {
   };
 }
 
+// Most tests here are about load *mechanics*, so they opt into `autoLoad` to
+// get a worker without a click. The hook's own default is the opposite — see
+// "the default is idle" below, which is the guardrail
+// (model-page-pattern.md §1.2).
 function setup(options: { autoLoad?: boolean; key?: string } = {}) {
   const factory = workerFactory();
   const view = renderHook(
@@ -47,7 +51,7 @@ function setup(options: { autoLoad?: boolean; key?: string } = {}) {
         createWorker: factory.createWorker,
         key,
         loadMessage: { model: key },
-        autoLoad: options.autoLoad,
+        autoLoad: options.autoLoad ?? true,
         notReadyMessage: "not ready",
       }),
     { initialProps: { key: options.key ?? "model-a" } },
@@ -56,8 +60,24 @@ function setup(options: { autoLoad?: boolean; key?: string } = {}) {
 }
 
 describe("useModelWorker — Machine A (model lifecycle)", () => {
-  it("auto-loads by default: loading on mount, then ready", async () => {
-    const { result, factory } = setup();
+  it("the default is idle: no option, no worker, no download", () => {
+    const factory = workerFactory();
+    const { result } = renderHook(() =>
+      useModelWorker<string>({
+        createWorker: factory.createWorker,
+        key: "model-a",
+        loadMessage: { model: "model-a" },
+      }),
+    );
+
+    // Weights are the user's bandwidth. A hook that had to be *told* not to
+    // spend it got it wrong on three routes; the safe value is the default.
+    expect(result.current.status).toBe("idle");
+    expect(factory.spawned).toHaveLength(0);
+  });
+
+  it("loads on mount when explicitly asked, then goes ready", async () => {
+    const { result, factory } = setup({ autoLoad: true });
 
     expect(result.current.status).toBe("loading");
     expect(factory.last.posted[0].message).toEqual({

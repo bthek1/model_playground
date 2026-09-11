@@ -14,6 +14,14 @@ vi.mock("@/audio/io", () => ({
   toWavBlob: vi.fn(() => new Blob()),
 }));
 
+// happy-dom has no canvas 2D context; the waveform renders its own guarded
+// fallback and is covered by its own tests. The VAD timeline is left real —
+// its `img` role is what several assertions below look for.
+vi.mock("@/components/audio/Waveform", () => ({
+  Waveform: () => <div data-testid="waveform" />,
+  LiveWaveform: () => <div data-testid="live-waveform" />,
+}));
+
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
@@ -67,6 +75,23 @@ function renderPage() {
   render(<Page />);
 }
 
+/** Upload a clip into the INPUT slot. Runs nothing — that is the point. */
+function uploadClip(name = "a.wav") {
+  const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+  fireEvent.change(input, {
+    target: { files: [new File(["x"], name, { type: "audio/wav" })] },
+  });
+}
+
+/** Upload, wait for the clip to land, then ask for a detection. */
+async function uploadAndDetect(name = "a.wav") {
+  uploadClip(name);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: /detect speech/i })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /detect speech/i }));
+}
+
 const readyState: VadTask = {
   ...baseState,
   status: "ready",
@@ -108,9 +133,10 @@ describe("VadPage", () => {
 
   it("downloads nothing on mount", () => {
     renderPage();
-    // Both halves matter: `autoLoad: false` is what keeps the worker unspawned,
-    // and `load` not being called is what proves nothing routed around it.
-    expect(useVadSpy).toHaveBeenCalledWith(expect.any(String), false);
+    // Both halves matter: the hook is handed no auto-load option at all (its
+    // default is `idle`), and `load` not being called proves nothing routed
+    // around the button.
+    expect(useVadSpy).toHaveBeenCalledWith(expect.any(String));
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
@@ -140,11 +166,36 @@ describe("VadPage", () => {
     expect(mockLoad).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the transport disabled until the model is ready", () => {
+  // Choosing a clip needs no detector, so the sources are open from the start;
+  // only the Detect button waits for one. The old page gated all three, which
+  // forced a download before the user was allowed to pick what to run it on.
+  it("lets a clip be chosen before a model exists, and gates only Detect", () => {
     renderPage();
-    expect(screen.getByRole("button", { name: /record/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /upload audio/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /^jfk$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /record/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /upload audio/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^jfk$/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /detect speech/i })).toBeDisabled();
+  });
+
+  it("keeps Detect disabled until a clip is held", () => {
+    mockState = readyState;
+    renderPage();
+    expect(screen.getByRole("button", { name: /detect speech/i })).toBeDisabled();
+    expect(screen.getByTestId("audio-input-empty")).toBeInTheDocument();
+  });
+
+  it("loads a clip into the input and runs nothing until asked", async () => {
+    mockState = readyState;
+    mockRun.mockResolvedValue(detection());
+    renderPage();
+
+    uploadClip();
+    await waitFor(() => expect(decodeToMono).toHaveBeenCalled());
+    expect(mockRun).not.toHaveBeenCalled();
+    expect(screen.getByTestId("output-empty")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /detect speech/i }));
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
   });
 
   it("decodes at the default 16 kHz — this is not the 48 kHz route", async () => {
@@ -154,9 +205,9 @@ describe("VadPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /record/i }));
     await waitFor(() => expect(recordMic).toHaveBeenCalled());
-    // No explicit rate: `recordMic`'s own default is 16 kHz. Passing 48000 here
-    // would be the audio-to-audio assumption leaking across.
-    expect(recordMic).toHaveBeenCalledWith(expect.any(Number));
+    // 16 kHz, explicitly. Passing 48000 here would be the audio-to-audio
+    // assumption leaking across.
+    expect(recordMic).toHaveBeenCalledWith(expect.any(Number), 16_000);
   });
 
   it("hands the decoded samples straight to run, and still draws them", async () => {
@@ -164,18 +215,16 @@ describe("VadPage", () => {
     mockRun.mockResolvedValue(mockState.result!);
     renderPage();
 
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(input, {
-      target: { files: [new File(["x"], "take.wav", { type: "audio/wav" })] },
-    });
+    await uploadAndDetect("take.wav");
 
     await waitFor(() => expect(decodeToMono).toHaveBeenCalled());
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
-    // The decoded array itself goes to the worker — `useVad` transfers its
-    // buffer rather than copying a long take across the boundary.
-    expect(mockRun.mock.calls[0][0]).toBe(
-      await decodeToMono.mock.results[0].value,
-    );
+    // A *copy* of the held clip goes to the worker, which detaches the buffer
+    // it is given. Handing over the stored array itself would blank the input
+    // waveform and make a second Detect impossible.
+    const decoded = (await decodeToMono.mock.results[0].value) as Float32Array;
+    expect(mockRun.mock.calls[0][0]).not.toBe(decoded);
+    expect(Array.from(mockRun.mock.calls[0][0])).toEqual(Array.from(decoded));
     // And the timeline still renders, which it could not do if the route had
     // kept the (now detached) original instead of a copy.
     await waitFor(() =>
@@ -190,10 +239,7 @@ describe("VadPage", () => {
     mockRun.mockResolvedValue(mockState.result!);
     renderPage();
 
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(input, {
-      target: { files: [new File(["x"], "a.wav", { type: "audio/wav" })] },
-    });
+    await uploadAndDetect();
 
     // Frames 2–9 at 32 ms each: 0:00 → 0:00, and 8 frames is 0.3s.
     await waitFor(() =>
@@ -207,10 +253,7 @@ describe("VadPage", () => {
     mockRun.mockResolvedValue(mockState.result!);
     renderPage();
 
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(input, {
-      target: { files: [new File(["x"], "a.wav", { type: "audio/wav" })] },
-    });
+    await uploadAndDetect();
     await waitFor(() => expect(screen.getByText(/1 segment/)).toBeInTheDocument());
     expect(mockRun).toHaveBeenCalledTimes(1);
 
@@ -245,10 +288,7 @@ describe("VadPage", () => {
     decodeToMono.mockRejectedValueOnce(new Error("Unsupported audio format"));
     renderPage();
 
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(input, {
-      target: { files: [new File(["x"], "a.txt", { type: "text/plain" })] },
-    });
+    uploadClip("a.txt");
 
     await waitFor(() =>
       expect(

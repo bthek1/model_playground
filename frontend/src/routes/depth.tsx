@@ -114,7 +114,7 @@ function DepthPage() {
     retry,
     cancel,
     run,
-  } = useDepth(model, session.autoLoad);
+  } = useDepth(model);
   useCacheRefresh(session, ready);
 
   // The frame the current result belongs to, kept so OUTPUT can show the source
@@ -138,12 +138,7 @@ function DepthPage() {
   );
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        if (ready) await estimate(next.image);
-        else setSource(await downscale(next.image, MAX_INFERENCE_SIDE));
-      },
-    });
+useImagePick();
 
   const onFrame = useCallback(
     async (frame: RawImage) => {
@@ -207,7 +202,6 @@ function DepthPage() {
             loadProgress={loadProgress}
             loadedInMs={loadedInMs}
             cached={session.isCached}
-            restoring={session.restoring}
             error={loadError}
             onLoad={session.onLoad(load)}
             onCancel={session.onCancel(cancel)}

@@ -47,16 +47,16 @@ const baseState: UseTtsResult = {
 };
 let mockState: UseTtsResult = { ...baseState };
 
-// The gate is no longer "don't mount the hook" — the hook is always mounted and
-// simply starts `idle`. The spy therefore records its *arguments*, because
-// `autoLoad === false` is now what guarantees nothing downloads on arrival.
-const useTts = vi.fn((model: string, autoLoad?: boolean) => {
-  void model;
-  void autoLoad;
+// The gate is not "don't mount the hook" — the hook is always mounted and
+// simply starts `idle`. The spy records its arguments forwarded verbatim,
+// arity included: the route passes the model and *nothing else*, and "there is
+// no second argument" is what guarantees nothing downloads on arrival.
+const useTts = vi.fn((...args: unknown[]) => {
+  void args;
   return mockState;
 });
 vi.mock("@/hooks/useTts", () => ({
-  useTts: (model: string, autoLoad?: boolean) => useTts(model, autoLoad),
+  useTts: (...args: unknown[]) => useTts(...args),
 }));
 
 const { Route } = await import("@/routes/text-to-audio");
@@ -86,9 +86,10 @@ describe("TextToAudioPage", () => {
       screen.getByRole("heading", { name: /Text to Audio/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Experimental — and slow/i)).toBeInTheDocument();
-    // Nothing may download before the user accepts the cost. The hook is mounted
-    // — that is now free — but it must have been told not to auto-load.
-    expect(useTts).toHaveBeenCalledWith(expect.any(String), false);
+    // Nothing may download before the user accepts the cost. The hook is
+    // mounted — that is free — and it is handed no auto-load option at all,
+    // because its default is `idle`.
+    expect(useTts).toHaveBeenCalledWith(expect.any(String));
     expect(baseState.load).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: /^Generate/ })).toBeDisabled();
   });

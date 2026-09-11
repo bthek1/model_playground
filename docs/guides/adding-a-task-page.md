@@ -484,7 +484,7 @@ function DepthPage() {
     models: DEPTH_MODELS,
     fallback: DEPTH_MODELS[0],
   });
-  const task = useDepth(session.model.id, session.autoLoad);
+  const task = useDepth(session.model.id);   // no autoLoad: the default is `idle`
   useCacheRefresh(session, task.ready);
 
   // A load error belongs in LOAD, a run error in OUTPUT. `status` splits them.
@@ -514,23 +514,30 @@ function DepthPage() {
 }
 ```
 
-`useModelSelection` supplies `session.autoLoad`, which is the entire refresh
-story: it is true **only** when a stored load intent meets a cache hit. Do not
-pass a literal `true`.
+`useModelSelection` has **no `autoLoad` to give you**: it cannot start a load, so
+there is no argument to pass and no path by which mounting the page begins one.
 
-Three rules fall out of the pattern, and all three are asserted by tests:
+Four rules fall out of the pattern, and all four are asserted by tests:
 
-1. **Nothing downloads until the user asks.** `idle` is the default. The size
-   estimate and the large-model warning are shown first, and quoted exactly
+1. **Nothing downloads until the user presses LOAD.** `idle` is the default. The
+   size estimate and the large-model warning are shown first, and quoted exactly
    once, by `ModelPicker` — `ModelStatus` must not repeat the number.
-2. **A refresh restores decisions, not sessions.** A Worker cannot outlive a
-   page load. [`store/models.ts`](../../frontend/src/store/models.ts) persists
-   the selected model and the *intent* to load it;
-   [`model/useModelSelection.ts`](../../frontend/src/model/useModelSelection.ts)
-   resumes on mount only when that intent meets a cache hit from `model/cache.ts`.
-   When the cache probe is uncertain it answers "not cached", because the safe
-   direction is one extra click, never bandwidth spent unasked.
-3. **Layout is horizontal, and `ModelPage` already does it.** SELECT and LOAD
+2. **Nothing runs until the user presses GENERATE.** Choosing an input — a
+   sample, a file, a finished recording, a point on a picture — puts it in the
+   INPUT band and stops. So does editing a parameter beside it. The trigger in
+   the transport row is the only caller of `run`. Hold the input
+   ([`useImagePick`](../../frontend/src/hooks/useImagePick.ts) /
+   [`useAudioPick`](../../frontend/src/hooks/useAudioPick.ts)) so pressing it
+   twice costs one decode and two inferences, not two of each.
+3. **A refresh restores the selection, not the session, and not the load.** A
+   Worker cannot outlive a page load.
+   [`store/models.ts`](../../frontend/src/store/models.ts) persists the selected
+   model and nothing else; the page comes back `idle` even when
+   `model/cache.ts` reports the weights are already here. A cache hit changes
+   the LOAD button's words, never whether it has to be pressed. When the probe
+   is uncertain it answers "not cached", because the safe direction is one extra
+   click, never bandwidth spent unasked.
+4. **Layout is horizontal, and `ModelPage` already does it.** SELECT and LOAD
    collapse into a setup rail of about 20rem; RUN and OUTPUT sit side by side as
    the workbench, so a result never lands below the fold. Placement is by
    CSS-grid *area*, which is what keeps **DOM order 1, 2, 3, 4 at every
@@ -630,12 +637,20 @@ spec rather than writing it fresh.
 with [`asr.test.tsx`](../../frontend/src/__tests__/routes/asr.test.tsx) as the
 model):
 
-- nothing downloads on mount: `autoLoad: false` **and** `load` was not called
+- nothing downloads on mount: the hook was called with **no `autoLoad` argument**
+  **and** `load` was not called
 - `load` and `retry` fire from the LOAD slot, `cancel` from the progress row
-- the refresh pair: a stored selection is restored; a stored intent **plus** a
-  cache hit resumes the load, and a stored intent **without** one does not
+- a refresh restores the stored selection and leaves the page `idle` — including
+  when the weights are cached, which is the case that used to auto-load
+- **choosing an input runs nothing**: pick a sample with the model `ready` and
+  assert `run` was not called and `output-empty` is still there; then press the
+  trigger and assert it was. This is the most valuable assertion in the list,
+  because an input that silently starts an inference looks like a working page
+- **the input survives its run**: press the trigger twice (or change a parameter
+  and press again) and assert the source was consumed once — one `fetch`, one
+  `decodeToMono`, one `recordMic` — while `run` was called twice
 - all four slots render, and `output-empty` is present before any run
-- run controls are disabled until `ready`
+- the input sources work in `idle`; only the GENERATE trigger is gated on `ready`
 - an error lands in the slot that produced it, not in a global banner
 - **every control the page claims re-derives does not call `run`** (assert the call
   count), and every control it claims re-runs does. Both halves matter: the page makes a

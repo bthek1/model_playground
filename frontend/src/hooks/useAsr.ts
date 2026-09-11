@@ -49,7 +49,7 @@ export interface UseAsrResult {
  */
 export function useAsr(
   model: string = DEFAULT_ASR_MODEL,
-  autoLoad = true,
+  autoLoad = false,
 ): UseAsrResult {
   const worker = useModelWorker<AsrResult>({
     createWorker: createAsrWorker,

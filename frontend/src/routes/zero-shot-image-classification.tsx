@@ -79,7 +79,7 @@ function ZeroShotImageClassificationPage() {
     retry,
     cancel,
     run,
-  } = useZeroShotImage(model, session.autoLoad);
+  } = useZeroShotImage(model);
   useCacheRefresh(session, ready);
 
   const [labels, setLabels] = useState<string[]>(DEFAULT_LABELS);
@@ -106,11 +106,7 @@ function ZeroShotImageClassificationPage() {
   );
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        if (ready && labels.length > 0) await score(next.image);
-      },
-    });
+useImagePick();
 
   const onFrame = useCallback(
     async (frame: RawImage) => {
@@ -165,7 +161,6 @@ function ZeroShotImageClassificationPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

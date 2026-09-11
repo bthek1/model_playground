@@ -85,16 +85,22 @@ describe("useImagePick", () => {
     expect(result.current.picked).toBeNull();
   });
 
-  it("keeps an inference failure out of its own error slot", async () => {
-    // A failed run belongs to OUTPUT, where the task hook already reports it.
-    // Surfacing it here too would put the same message in two slots at once.
-    const onPicked = vi.fn().mockRejectedValue(new Error("session failed"));
-    const { result } = renderHook(() => useImagePick({ onPicked }));
+  // The hook used to take an `onPicked` callback, and every vision route used
+  // it to run the model on the freshly decoded image — which turned the sample
+  // row and the file dialog into hidden RUN triggers. Picking is input; the
+  // route's button is the only trigger (model-page-pattern.md §1.6).
+  it("takes no run callback at all — picking cannot start an inference", () => {
+    // Typed as taking no arguments, so this is the runtime half of the same
+    // guarantee: anything handed in is ignored rather than quietly invoked.
+    const onPicked = vi.fn();
+    const { result } = renderHook(() =>
+      (useImagePick as (o?: unknown) => ReturnType<typeof useImagePick>)({
+        onPicked,
+      }),
+    );
 
     act(() => result.current.pickSample(sample));
-    await waitFor(() => expect(onPicked).toHaveBeenCalled());
-    expect(result.current.error).toBeNull();
-    expect(result.current.picked).not.toBeNull();
+    expect(onPicked).not.toHaveBeenCalled();
   });
 
   it("ignores an empty file selection rather than clearing the preview", async () => {

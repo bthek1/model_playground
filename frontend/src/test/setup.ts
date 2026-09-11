@@ -38,13 +38,12 @@ for (const name of ["localStorage", "sessionStorage"] as const) {
   })
 }
 
-// Model-page preferences (selected model, resume intent) persist to
-// localStorage, so without this a test that switches models leaks that choice
-// into every later test in the file — the page would start on a model the test
-// never chose.
+// The selected model persists to localStorage, so without this a test that
+// switches models leaks that choice into every later test in the file — the
+// page would start on a model the test never chose.
 afterEach(() => {
   localStorage.clear()
-  useModelPrefs.setState({ selected: {}, autoResume: {} })
+  useModelPrefs.setState({ selected: {} })
 })
 
 // Start the MSW mock server for the whole suite. Tests that mock `@/api/client`

@@ -3,12 +3,24 @@
 Every task page in Model Playground is the same four-stage pipeline:
 
 ```
-  ┌────────┐    ┌──────┐    ┌─────┐    ┌────────┐
-  │ SELECT │───▶│ LOAD │───▶│ RUN │───▶│ OUTPUT │
-  └────────┘    └──────┘    └─────┘    └────────┘
-   which        weights      give it     show what
-   model?       → memory     an input    came back
+  ┌────────┐    ┌──────────┐    ┌───────┐    ┌────────────┐    ┌────────┐
+  │ SELECT │───▶│   LOAD   │───▶│ INPUT │───▶│  GENERATE  │───▶│ OUTPUT │
+  └────────┘    └──────────┘    └───────┘    └────────────┘    └────────┘
+   which         [button]        give it       [button]          show what
+   model?        weights         something     run the           came back
+                 → memory        to chew on    model
+   ─ choose ─    ─ commit ─      ─ choose ─    ─ commit ─
 ```
+
+**Two of those five are buttons, and they are the only two.** SELECT and INPUT are
+*choices*: they cost nothing, they can be changed freely, and they are reversible.
+LOAD and GENERATE are *commitments*: one spends the user's bandwidth and the tab's
+memory, the other spends their GPU and their time. Choosing never commits — that is
+the one sentence this whole document is arguing for.
+
+Four **bands** render this (SELECT · LOAD · INPUT · OUTPUT — GENERATE is the trigger
+that lives in the INPUT band's transport row), which is why `ModelPage` has four slots
+and the testids are `slot-1`…`slot-4`.
 
 Text-to-Speech, ASR, Audio Classification, Image Classification, Depth Estimation,
 Object Detection — the modality changes, the pipeline does not. This document is the
@@ -26,9 +38,13 @@ that document covers **how we draw a model**, this one covers **how a user drive
    step they are on. Stages that don't apply are rendered as a completed/skipped state,
    not omitted — omission makes two task pages look structurally different when they
    aren't.
-2. **Loading is explicit and consented.** Model weights are the user's bandwidth and the
-   tab's memory budget. Show the size *before* the download starts, and start it on an
-   action — never as a side effect of navigating to the page.
+2. **Loading is explicit and consented, and the LOAD button is the only thing that does
+   it.** Model weights are the user's bandwidth and the tab's memory budget. Show the
+   size *before* the download starts, and start it on that press — never as a side
+   effect of navigating to the page, selecting a model, or returning to a page you were
+   on earlier. **A cache hit does not change this.** Cached weights make the click cheap;
+   they do not make it unnecessary, and "it was free" is not the user's judgement to
+   have made for them. See §5b.
 3. **One state machine, one vocabulary.** Every task hook exposes the same `status`,
    `progress`, `backend`, `error`, `run`, `running`, `result`. A reviewer who has read
    one task hook has read all of them.
@@ -36,6 +52,23 @@ that document covers **how we draw a model**, this one covers **how a user drive
    only ever sees messages. Nothing model-shaped blocks the UI thread.
 5. **Degrade, don't disappear.** No WebGPU → WASM. No mic → file upload. Model failed to
    load → an error in the LOAD slot with a retry, not a blank page.
+6. **Running is explicit, and the GENERATE button is the only thing that does it.**
+   Choosing an input — clicking a sample, dropping a file, finishing a recording,
+   placing a point on a picture — puts it in the INPUT band and stops there. It never
+   starts an inference. Nor does editing a parameter beside it: a prompt, a label set,
+   a template, a threshold. The consequences of getting this wrong are not subtle:
+   a row of five sample images becomes five hidden run triggers, so browsing them costs
+   five inferences; a 60-second audio clip is transcribed because someone wanted to read
+   its reference text; and the GENERATE button sitting beside them does nothing the user
+   has not already been charged for. The corollary is worth stating on its own: **the
+   INPUT band's sources are not gated on a loaded model.** Picking what to run before
+   deciding what to run it with is a sensible order to work in, and gating the sources
+   forces a download before the user is allowed to choose.
+7. **Derivation is not running.** Once a result is in hand, a control that only re-reads
+   it re-derives on the main thread and asks the model nothing — `/vad`'s threshold,
+   detection's confidence floor, segmentation's opacity and class toggles. §7 covers
+   this; it is the one case where a control may act without a press, precisely because
+   it spends nothing.
 
 ---
 
@@ -197,6 +230,44 @@ judged.
 └──────────────────────┴────────────────────────────────────────────────────────┘
 ```
 
+Note what is and is not gated in band 3. The **transport row** — the GENERATE trigger,
+and `/asr`'s Start listening — is gated on `ready`; that is the commitment. The **input
+surface above it** is not: the sample row, the upload button, the drop target, the mic,
+and any parameter beside them all work in `idle`, because choosing what to run costs
+nothing and needing a model first inverts the order people actually work in.
+
+### 4b. The INPUT band holds the input, and holding it is the point
+
+The input is **state**, not an event that passes through on its way to the worker. Every
+route keeps the decoded thing — a `RawImage`, a `Float32Array`, a list of points — and
+hands the worker a copy or a downscale of it. Three things follow, and each of them was
+a bug before this was true:
+
+- **Re-running costs nothing extra.** Switch checkpoint, press GENERATE again, same
+  input. No re-fetch, no re-decode, no second recording. `fe-e2e-models`-cheap models
+  and 60-second clips are equally affected.
+- **A parameter is a reason to re-run, not a reason to re-capture.** CLAP's prompts,
+  zero-shot's template, the mode on `/image-to-text`: edit, press GENERATE, compare.
+  Editing the prompts used to mean recording again.
+- **An audio worker detaches the buffer it is given.** `useAudioPick`'s `take()` returns
+  `clip.audio.slice()` for exactly this reason — hand over the stored array itself and
+  the waveform goes blank and the second GENERATE has nothing to send. The vision side
+  has the same trap in `toPayload`'s `copy` flag.
+
+The shared input surfaces are [`useImagePick`](../../frontend/src/hooks/useImagePick.ts) with
+[`ImageSourcePanel`](../../frontend/src/components/vision/ImageSourcePanel.tsx), and
+[`useAudioPick`](../../frontend/src/hooks/useAudioPick.ts) with
+[`AudioSourcePanel`](../../frontend/src/components/audio/AudioSourcePanel.tsx).
+Neither pick hook takes a callback, and that is deliberate: `useImagePick` used to accept
+an `onPicked`, thirteen routes used it to fire an inference on decode, and the parameter
+is gone rather than merely unused so it cannot come back one route at a time.
+
+**The result belongs to the input that produced it, and they are separate state.** A
+route captures the frame or clip it actually ran on (`frame`, `source`, `scored`,
+`enhanced`) *inside* its run function, and OUTPUT renders that — not the input currently
+held. Otherwise picking a new clip redraws the waveform under the previous result's
+timeline, and the page shows a comparison that was never computed.
+
 ### 4a. Breakpoints
 
 | Width | Arrangement |
@@ -222,10 +293,12 @@ a scroll container.
   work the user is waiting on.
 - LOAD is the only slot that may show a progress bar. Inference progress belongs in
   OUTPUT.
-- RUN controls are `disabled={!ready || running}`. There is no "queue it up" affordance.
-  The transport row is `sticky bottom-0` inside the input column, so a tall input
-  surface can scroll without carrying Run out of reach — sticky, not bottom-pinned:
-  pinning leaves a chasm on every task whose input is short.
+- The GENERATE trigger is `disabled={!ready || running || <no input held>}`. There is no
+  "queue it up" affordance, and no path to an inference that does not go through it. The
+  input *sources* above it are not gated at all (§1.6). The transport row is
+  `sticky bottom-0` inside the input column, so a tall input surface can scroll without
+  carrying GENERATE out of reach — sticky, not bottom-pinned: pinning leaves a chasm on
+  every task whose input is short.
 - OUTPUT always renders, and fills its column. An empty state that describes the coming
   result is worth more than a collapsed section, and it stops the page from jumping
   when the result lands.
@@ -287,14 +360,33 @@ in-memory model, and no amount of UI should imply otherwise. What persists is:
 
 - **the selection** (`store/models.ts`, `localStorage`), validated against the catalogue
   on read — a stored id we no longer ship falls back to the default and is dropped;
-- **the intent to load it**, recorded when the user presses Load and cleared on cancel or
-  a model change;
-- **the weights**, in the browser's cache, which is what makes a resume free.
+- **the weights**, in the browser's cache, which is what makes the next load free.
 
-The resume rule, in `model/useModelSelection.ts`: auto-load on mount **only when the
-stored intent and a cache hit agree**. An uncached model stays `idle` and asks, however
-recently it was used. While a resume runs, the slot says "Restoring from cache…" — the
-load is real and is described as one.
+**A refresh restores the decision, never the download.** The page comes back on the
+model you chose, in `idle`, with the LOAD button saying "Load model (cached)" and the
+copy beside it saying the bytes are already here. Then it waits.
+
+This was not always true, and the reason it is worth a section is the argument that
+made it untrue. An earlier revision also persisted *the intent to load* — a flag set
+when you pressed Load — and `useModelSelection` resumed the load on mount whenever that
+flag met a cache hit. The reasoning was airtight on cost: the weights are local, the
+resume spends no bandwidth, and the user had already consented once. It was still wrong,
+for two reasons that cost has nothing to say about:
+
+- **A cached load is not a free load.** It still occupies hundreds of megabytes of the
+  tab's memory, still holds a GPU device, and still takes seconds of a warm-up the user
+  is now watching instead of doing what they came to do.
+- **A page that starts working before you ask it to is a page you do not control.** The
+  user arrives, has touched nothing, and the machine is busy. Whether that cost bytes is
+  not the question they are asking.
+
+So the flag is gone, and `store/models.ts` declares `partialize` to keep a stale
+`autoResume` key in someone's existing `localStorage` from quietly reviving the
+behaviour. What the cache probe (`model/cache.ts`) is still for is **telling the truth
+about the click**: "Load model (cached) · already downloaded" is a different offer from
+"Load model · 88 MB", and a user makes a different decision about each. Informing a
+choice is the useful half of knowing the weights are there; making the choice for them
+was not.
 
 ## 6. Backend selection
 
@@ -448,6 +540,8 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `output-running` | `OutputPanel` | A first run is in flight. Absent when a previous result is still shown. |
 | `error-note` | `ErrorNote` | Any error. Also `role="alert"` — prefer the role in assertions. |
 | `live-fps` | `ImageSourcePanel` | Measured end-to-end frame rate. Present only while the camera runs. |
+| `audio-input` | `AudioSourcePanel` | The held clip: its name, duration, rate and waveform. The audio routes' "what am I about to run on?". |
+| `audio-input-empty` | `AudioSourcePanel` | No clip chosen yet. The audio counterpart of `output-empty`. |
 | `heavy-model-notice` | `/depth` | The opt-in a gigabyte-scale model gets on top of the size line. |
 | `class-space` | `/segmentation` | What the selected model can possibly say, stated before the run. |
 | `depth-map` · `detection-canvas` · `segmentation-canvas` | vision routes | The rendered overlay, once a result exists. |
@@ -482,14 +576,23 @@ That ambiguity is one reason §4's band labels stay generic.
 
 **What every task page's tests should cover**, beyond the task's own behaviour:
 
-- Nothing downloads on mount — assert the hook was called with `autoLoad: false`
-  *and* that `load` was not called.
+- Nothing downloads on mount — assert the hook was called with **no `autoLoad` argument
+  at all** (its default is `idle`) *and* that `load` was not called.
 - `load()` fires from the LOAD slot, `retry()` from its error state, `cancel()` from the
   progress row.
-- The refresh pair: a stored selection is restored; a stored intent **plus** a cache hit
-  resumes the load, and a stored intent **without** one does not.
+- After a refresh: the stored selection is restored, and the page is still `idle` —
+  **including when the weights are cached**, which is the case that used to auto-load.
+  Seed a stale `autoResume` key in `localStorage` and assert it changes nothing.
+- **Choosing an input runs nothing.** Pick a sample with a model `ready` and assert
+  `run` was *not* called and `output-empty` is still visible; then press GENERATE and
+  assert it was. This is the assertion most worth writing, because the failure it
+  catches — an input that silently triggers an inference — looks like a working page.
+- **The input survives its run.** Press GENERATE twice, or change a parameter and press
+  again, and assert the source was consumed once (one `fetch`, one `decodeToMono`, one
+  `recordMic`) while `run` was called twice.
+- The input *sources* are usable in `idle`; only the GENERATE trigger is gated on
+  `ready`.
 - All four slots render, with `output-empty` visible, before any run.
-- Run controls are disabled until `ready`.
 - A load error renders in LOAD, a run error in OUTPUT, and the page stays usable.
 - Any control the page says re-derives **does not** call `run` (assert the call count),
   and any control the page says re-runs **does**.
@@ -505,10 +608,15 @@ That ambiguity is one reason §4's band labels stay generic.
 - [ ] Hook wraps `useModelWorker`; returns the §3 contract verbatim
 - [ ] Page uses `ModelPage` + the four slots — no bespoke layout, no grid of its own
 - [ ] The input surface fills its column (`flex-1`) if it is the column's main element
-- [ ] `idle` default: nothing downloads until the user asks
+- [ ] `idle` default: nothing downloads until the LOAD button is pressed — not on
+      arrival, not on a model change, not on a refresh with the weights cached
 - [ ] Selection persisted through `useModelSelection`, with the route's own `routeKey`
 - [ ] Size estimate + large-model warning shown before load
-- [ ] Every RUN control gated on `ready`
+- [ ] The input is **held** (`useImagePick` / `useAudioPick` or equivalent state), and
+      choosing one runs nothing — no callback fires an inference on decode
+- [ ] Exactly one GENERATE trigger, gated on `ready` + an input; the input sources above
+      it are not gated at all
+- [ ] A parameter beside the input re-runs on the next GENERATE, never on the keystroke
 - [ ] OUTPUT has an empty state, a running state, and an error state
 - [ ] Errors land in the slot that produced them
 - [ ] Unit tests for the hook's state machine; a route test covering §8's list

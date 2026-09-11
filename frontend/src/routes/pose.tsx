@@ -88,7 +88,7 @@ function PosePage() {
     retry,
     cancel,
     run,
-  } = usePose(model, session.autoLoad);
+  } = usePose(model);
   useCacheRefresh(session, ready);
 
   const [threshold, setThreshold] = useState(DEFAULT_PERSON_THRESHOLD);
@@ -112,12 +112,7 @@ function PosePage() {
   );
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        if (ready) await estimate(next.image);
-        else setFrame({ image: next.image, scale: 1 });
-      },
-    });
+useImagePick();
 
   const onFrame = useCallback(
     async (f: RawImage) => {
@@ -188,7 +183,6 @@ function PosePage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

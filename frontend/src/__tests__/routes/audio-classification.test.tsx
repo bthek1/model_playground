@@ -6,9 +6,17 @@ import type { UseAudioClassifierResult } from "@/hooks/useAudioClassifier";
 // Mock the mic/decode helpers so the record button resolves without real
 // AudioContext/getUserMedia (absent in the test env).
 const recordMic = vi.fn().mockResolvedValue(new Float32Array([0.1]));
+const decodeToMono = vi.fn().mockResolvedValue(new Float32Array([0.2]));
 vi.mock("@/audio/io", () => ({
   recordMic: (...args: unknown[]) => recordMic(...args),
-  decodeToMono: vi.fn(),
+  decodeToMono: (...args: unknown[]) => decodeToMono(...args),
+}));
+
+// happy-dom has no canvas 2D context; Waveform renders its own guarded
+// fallback and is covered by its own tests.
+vi.mock("@/components/audio/Waveform", () => ({
+  Waveform: () => <div data-testid="waveform" />,
+  LiveWaveform: () => <div data-testid="live-waveform" />,
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -74,11 +82,22 @@ describe("AudioClassificationPage", () => {
     expect(screen.getByRole("button", { name: /clap \(zero-shot\)/i })).toBeInTheDocument();
   });
 
-  it("disables the record/upload controls until the model is ready", () => {
+  // Getting audio in and running a model on it are different things, so the
+  // sources are *not* gated on a loaded model — picking a clip first is a
+  // sensible order to work in. Only the Classify button is gated.
+  it("lets a clip be chosen before a model exists, and gates only Classify", () => {
     renderPage();
-    expect(screen.getByRole("button", { name: /record 5s/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /upload audio/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /record 5s/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /upload audio/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^classify$/i })).toBeDisabled();
     expect(screen.getByText(/load a model to classify/i)).toBeInTheDocument();
+  });
+
+  it("keeps Classify disabled until a clip is held, however ready the model", () => {
+    mockState = { ...baseState, status: "ready", idle: false, ready: true };
+    renderPage();
+    expect(screen.getByRole("button", { name: /^classify$/i })).toBeDisabled();
+    expect(screen.getByTestId("audio-input-empty")).toBeInTheDocument();
   });
 
   it("downloads nothing on arrival and loads on request", () => {
@@ -131,7 +150,9 @@ describe("AudioClassificationPage", () => {
     expect(screen.getByText(/add at least one label/i)).toBeInTheDocument();
   });
 
-  it("parses newline/comma-separated prompts and passes them to classify on record", async () => {
+  // Recording captures the clip and stops. It used to classify it too, which
+  // meant editing CLAP's prompts required recording all over again.
+  it("records into the input without classifying, then classifies on request", async () => {
     mockState = { ...baseState, status: "ready", idle: false, ready: true, isZeroShot: true };
     renderPage();
 
@@ -140,10 +161,41 @@ describe("AudioClassificationPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /record 5s/i }));
 
+    await waitFor(() => expect(recordMic).toHaveBeenCalledWith(5, 16_000));
+    await waitFor(() =>
+      expect(screen.getByTestId("waveform")).toBeInTheDocument(),
+    );
+    expect(mockClassify).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /^classify$/i }));
     await waitFor(() => expect(mockClassify).toHaveBeenCalledTimes(1));
-    expect(recordMic).toHaveBeenCalledWith(5);
     const [audio, labels] = mockClassify.mock.calls[0];
     expect(audio).toBeInstanceOf(Float32Array);
     expect(labels).toEqual(["cat", "dog", "bird"]);
+  });
+
+  // The point of holding the clip rather than consuming it: the prompts are
+  // the interesting variable on a zero-shot page, and re-scoring must not cost
+  // a second recording.
+  it("re-scores the same clip after the prompts change", async () => {
+    mockState = { ...baseState, status: "ready", idle: false, ready: true, isZeroShot: true };
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /record 5s/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId("waveform")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^classify$/i }));
+    await waitFor(() => expect(mockClassify).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(screen.getByLabelText(/labels to score against/i), {
+      target: { value: "rain\nthunder" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^classify$/i }));
+
+    await waitFor(() => expect(mockClassify).toHaveBeenCalledTimes(2));
+    expect(mockClassify.mock.calls[1][1]).toEqual(["rain", "thunder"]);
+    expect(recordMic).toHaveBeenCalledTimes(1); // the mic was used once
   });
 });

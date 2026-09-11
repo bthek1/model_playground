@@ -36,9 +36,6 @@ function takeProps(over: Partial<Parameters<typeof AudioTake>[0]> = {}) {
     stream: null,
     clip: CLIP,
     sampleRate: 16000,
-    canTranscribe: true,
-    transcribing: false,
-    onTranscribe: vi.fn(),
     ...over,
   };
 }
@@ -119,26 +116,20 @@ describe("AudioTake", () => {
     expect(screen.getByRole("button", { name: /^play$/i })).toBeInTheDocument();
   });
 
-  it("re-transcribes the retained take on request", async () => {
-    const onTranscribe = vi.fn();
-    render(<AudioTake {...takeProps({ onTranscribe })} />);
-
-    await userEvent.click(screen.getByRole("button", { name: /transcribe clip/i }));
-    expect(onTranscribe).toHaveBeenCalledWith(CLIP);
+  // This surface used to carry its own "Transcribe clip" button, which made two
+  // RUN triggers on one page. The take now feeds the route's single Transcribe
+  // button, and what is left here is playback and download — local, cheap, and
+  // nothing to do with a model.
+  it("runs nothing itself: no transcribe control lives here", () => {
+    render(<AudioTake {...takeProps()} />);
+    expect(
+      screen.queryByRole("button", { name: /transcrib/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it("blocks re-transcription while one is already running", () => {
-    render(
-      <AudioTake {...takeProps({ canTranscribe: false, transcribing: true })} />,
-    );
-    expect(screen.getByRole("button", { name: /transcribing/i })).toBeDisabled();
-  });
-
-  it("keeps playback available while a transcription runs", () => {
+  it("keeps playback available regardless of what the model is doing", () => {
     // Listening back is local and cheap; gating it on the model would be rude.
-    render(
-      <AudioTake {...takeProps({ canTranscribe: false, transcribing: true })} />,
-    );
+    render(<AudioTake {...takeProps()} />);
     expect(screen.getByRole("button", { name: /^play$/i })).toBeEnabled();
   });
 });
@@ -148,7 +139,7 @@ describe("SampleClips", () => {
     selected: null,
     loadingId: null,
     disabled: false,
-    onRun: vi.fn(),
+    onSelect: vi.fn(),
   };
 
   it("offers every catalogue clip", () => {
@@ -160,15 +151,16 @@ describe("SampleClips", () => {
     }
   });
 
-  it("runs the clip the user picked", async () => {
-    const onRun = vi.fn();
-    render(<SampleClips {...props} onRun={onRun} />);
+  // Picking a clip loads it into the input. It does *not* transcribe it: with
+  // three clips on screen, one of them 60 s long, "browse the samples" used to
+  // mean "spend three inferences".
+  it("selects the clip the user picked, and starts nothing", async () => {
+    const onSelect = vi.fn();
+    render(<SampleClips {...props} onSelect={onSelect} />);
 
     const first = AUDIO_SAMPLES[0];
-    await userEvent.click(
-      screen.getByRole("button", { name: first.label }),
-    );
-    expect(onRun).toHaveBeenCalledWith(first);
+    await userEvent.click(screen.getByRole("button", { name: first.label }));
+    expect(onSelect).toHaveBeenCalledWith(first);
   });
 
   it("shows the reference transcript so the output can be eyeballed", () => {

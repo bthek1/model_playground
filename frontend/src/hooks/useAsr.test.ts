@@ -77,8 +77,16 @@ describe("useAsr", () => {
     expect(result.current.status).toBe("loading");
   });
 
-  it("posts a load message on mount and starts loading", () => {
+  it("defaults to idle — a mount is not a download", () => {
     const { result } = renderHook(() => useAsr("onnx-community/whisper-base"));
+    expect(result.current.status).toBe("idle");
+    expect(spawned).toBe(0);
+  });
+
+  it("posts a load message once asked, and starts loading", () => {
+    const { result } = renderHook(() =>
+      useAsr("onnx-community/whisper-base", true),
+    );
     expect(result.current.loading).toBe(true);
     expect(result.current.ready).toBe(false);
     expect(lastWorker.posted[0].message).toEqual({
@@ -88,14 +96,14 @@ describe("useAsr", () => {
   });
 
   it("flips to ready and records the backend on the ready message", async () => {
-    const { result } = renderHook(() => useAsr());
+    const { result } = renderHook(() => useAsr(undefined, true));
     act(() => lastWorker.emit({ type: "ready", model: "m", backend: "webgpu" }));
     await waitFor(() => expect(result.current.ready).toBe(true));
     expect(result.current.backend).toBe("webgpu");
   });
 
   it("resolves transcribe() with the correlated result and transfers audio", async () => {
-    const { result } = renderHook(() => useAsr());
+    const { result } = renderHook(() => useAsr(undefined, true));
     act(() => lastWorker.emit({ type: "ready", model: "m", backend: "wasm" }));
 
     const audio = new Float32Array([0.1, 0.2, 0.3]);
@@ -117,7 +125,7 @@ describe("useAsr", () => {
   });
 
   it("rejects transcribe() on a matching run error", async () => {
-    const { result } = renderHook(() => useAsr());
+    const { result } = renderHook(() => useAsr(undefined, true));
     act(() => lastWorker.emit({ type: "ready", model: "m", backend: "wasm" }));
 
     let promise!: Promise<unknown>;
@@ -130,14 +138,14 @@ describe("useAsr", () => {
   });
 
   it("marks status error on an id-less (load) error", async () => {
-    const { result } = renderHook(() => useAsr());
+    const { result } = renderHook(() => useAsr(undefined, true));
     act(() => lastWorker.emit({ type: "error", error: "load failed" }));
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(result.current.error).toBe("load failed");
   });
 
   it("terminates the worker on unmount", () => {
-    const { unmount } = renderHook(() => useAsr());
+    const { unmount } = renderHook(() => useAsr(undefined, true));
     const worker = lastWorker;
     unmount();
     expect(worker.terminated).toBe(true);

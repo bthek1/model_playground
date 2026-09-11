@@ -90,6 +90,18 @@ function renderPage() {
   return render(<Page />);
 }
 
+const RUN_BUTTON = /^generate$/i;
+
+// The RUN trigger. Picking an input never starts an inference any more
+// (model-page-pattern.md §1.6), so a test that wants a result asks for one.
+async function pickAndRun(sample: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name: sample }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
+}
+
 const ready = (extra: Partial<UseImageToTextResult> = {}) => ({
   ...baseState(),
   status: "ready" as const,
@@ -130,10 +142,7 @@ describe("ImageToTextPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(useImageToText).toHaveBeenCalledWith(
-      "onnx-community/Florence-2-base-ft",
-      false,
-    );
+    expect(useImageToText).toHaveBeenCalledWith("onnx-community/Florence-2-base-ft");
     expect(mockState.load).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));
@@ -208,10 +217,18 @@ describe("ImageToTextPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("generates as soon as a sample is picked, on a capped frame", async () => {
+  it("picks a sample without running, then generates when asked, on a capped frame", async () => {
     mockState = ready();
     renderPage();
+
     fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+    );
+    // Picking an input is not asking for an inference.
+    expect(mockRun).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
     expect(downscale).toHaveBeenCalledWith(fakeImage, 1024);
   });
@@ -246,7 +263,7 @@ describe("ImageToTextPage", () => {
       },
     });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await pickAndRun(/^tiger$/i);
 
     await waitFor(() =>
       expect(screen.getByTestId("grounding-canvas")).toBeInTheDocument(),

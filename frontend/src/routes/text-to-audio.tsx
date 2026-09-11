@@ -122,7 +122,7 @@ function TextToAudioPage() {
     load,
     retry,
     cancel,
-  } = useTts(model, session.autoLoad);
+  } = useTts(model);
   useCacheRefresh(session, ready);
 
   const meta = session.model;
@@ -197,7 +197,6 @@ function TextToAudioPage() {
             loadProgress={loadProgress}
             loadedInMs={loadedInMs}
             cached={session.isCached}
-            restoring={session.restoring}
             error={loadError}
             onLoad={session.onLoad(load)}
             onCancel={session.onCancel(cancel)}

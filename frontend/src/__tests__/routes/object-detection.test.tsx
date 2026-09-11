@@ -76,6 +76,18 @@ function renderPage() {
   return render(<Page />);
 }
 
+const RUN_BUTTON = /^detect$/i;
+
+// The RUN trigger. Picking an input never starts an inference any more
+// (model-page-pattern.md §1.6), so a test that wants a result asks for one.
+async function pickAndRun(sample: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name: sample }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
+}
+
 const ready = (extra: Partial<UseObjectDetectorResult> = {}) => ({
   ...baseState,
   status: "ready" as const,
@@ -137,10 +149,7 @@ describe("ObjectDetectionPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(useObjectDetector).toHaveBeenCalledWith(
-      "onnx-community/dfine_n_coco-ONNX",
-      false,
-    );
+    expect(useObjectDetector).toHaveBeenCalledWith("onnx-community/dfine_n_coco-ONNX");
     expect(baseState.load).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));
@@ -159,11 +168,18 @@ describe("ObjectDetectionPage", () => {
     expect(screen.getByRole("button", { name: /^detect$/i })).toBeDisabled();
   });
 
-  it("detects as soon as a sample is picked, on a capped frame", async () => {
+  it("picks a sample without running, then detects when asked, on a capped frame", async () => {
     mockState = ready();
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /^city street$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+    );
+    // Picking an input is not asking for an inference.
+    expect(mockRun).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
     // Resolution is the throttle: the source is capped before inference, and
     // the boxes are mapped back onto the original for display.
@@ -175,7 +191,7 @@ describe("ObjectDetectionPage", () => {
     // re-runs the model is a slider nobody drags.
     mockState = ready({ result: DETECTIONS });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^city street$/i }));
+    await pickAndRun(/^city street$/i);
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
 
     expect(screen.getByText("person")).toBeInTheDocument();
@@ -199,7 +215,7 @@ describe("ObjectDetectionPage", () => {
     // A wrong box is only legible next to its label.
     mockState = ready({ result: DETECTIONS });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^city street$/i }));
+    await pickAndRun(/^city street$/i);
 
     await waitFor(() =>
       expect(screen.getByTestId("detection-canvas")).toBeInTheDocument(),

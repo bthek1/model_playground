@@ -91,7 +91,7 @@ function ImageToTextPage() {
     retry,
     cancel,
     run,
-  } = useImageToText(model, session.autoLoad);
+  } = useImageToText(model);
   useCacheRefresh(session, ready);
 
   // The frame the model saw. Boxes come back in its pixels, so the canvas has
@@ -108,13 +108,7 @@ function ImageToTextPage() {
   );
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        const small = await downscale(next.image, MAX_INFERENCE_SIDE);
-        setFrame(small);
-        if (ready) await run(small);
-      },
-    });
+useImagePick();
 
   const busy = running || preparing !== null;
   const loadError = status === "error" ? error : null;
@@ -167,7 +161,6 @@ function ImageToTextPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

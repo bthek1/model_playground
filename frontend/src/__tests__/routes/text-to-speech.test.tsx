@@ -48,10 +48,12 @@ let mockState: UseTtsResult = { ...baseState };
 
 // What the page asks the worker layer for — the second argument is the resolved
 // auto-load decision, which is the whole refresh story (see useModelSelection).
-const useTtsArgs = vi.fn<(model: string, autoLoad: boolean) => void>();
+// Forwarded verbatim, arity included: the route passes the model and *nothing
+// else*, and "there is no second argument" is the guarantee.
+const useTtsArgs = vi.fn<(...args: unknown[]) => void>();
 vi.mock("@/hooks/useTts", () => ({
-  useTts: (model: string, autoLoad: boolean) => {
-    useTtsArgs(model, autoLoad);
+  useTts: (...args: unknown[]) => {
+    useTtsArgs(...args);
     return mockState;
   },
 }));
@@ -153,38 +155,36 @@ describe("TextToSpeechPage", () => {
       );
     });
 
-    it("resumes a model that is already in the browser cache", async () => {
-      useModelPrefs.setState({ autoResume: { tts: true } });
+    // A cached model is one click, not zero. The page used to resume it on
+    // mount, which put a model in memory before the user had touched anything.
+    it("does not load a cached model — it says the click is cheap instead", async () => {
       cached = new Set([KOKORO]);
       renderPage();
 
-      // Nothing is auto-loaded until the probe answers…
-      expect(useTtsArgs).toHaveBeenLastCalledWith(KOKORO, false);
-      // …and then it resumes, because the bytes are already on this machine.
       await waitFor(() =>
-        expect(useTtsArgs).toHaveBeenLastCalledWith(KOKORO, true),
+        expect(screen.getByTestId("model-size-note")).toHaveTextContent(
+          /already downloaded/i,
+        ),
       );
-      expect(screen.getByTestId("model-size-note")).toHaveTextContent(
-        /already downloaded/i,
-      );
+      expect(useTtsArgs).toHaveBeenLastCalledWith(KOKORO);
+      expect(baseState.load).not.toHaveBeenCalled();
     });
 
-    it("does NOT re-download a model that is not cached, however recently used", async () => {
-      useModelPrefs.setState({ autoResume: { tts: true } });
+    it("does NOT download a model that is not cached either", async () => {
       renderPage();
 
       await waitFor(() =>
         expect(screen.getByRole("button", { name: /load model/i })).toBeEnabled(),
       );
       // The guardrail: consent to a *download* is never inferred.
-      expect(useTtsArgs).not.toHaveBeenCalledWith(KOKORO, true);
       expect(baseState.load).not.toHaveBeenCalled();
     });
 
-    it("remembers that the user asked to load, for next time", () => {
+    it("records nothing about the load, so the next visit asks again", () => {
       renderPage();
       fireEvent.click(screen.getByRole("button", { name: /load model/i }));
-      expect(useModelPrefs.getState().autoResume.tts).toBe(true);
+      expect(baseState.load).toHaveBeenCalledOnce();
+      expect(JSON.stringify(useModelPrefs.getState())).not.toContain("Resume");
     });
   });
 

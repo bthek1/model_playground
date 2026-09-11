@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseLiveAsrResult } from "@/hooks/useLiveAsr";
@@ -27,7 +33,10 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     createFileRoute: vi
       .fn()
       .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({ path, options: opts }),
+        (path: string) => (opts: Record<string, unknown>) => ({
+          path,
+          options: opts,
+        }),
       ),
   };
 });
@@ -63,11 +72,13 @@ const baseState: UseLiveAsrResult = {
 };
 let mockState: UseLiveAsrResult = { ...baseState };
 
-// The second argument is the resolved auto-load decision — the refresh story.
-const useLiveAsrArgs = vi.fn<(model: string, autoLoad: boolean) => void>();
+// Forwarded verbatim, arity included: the route passes the model and *nothing
+// else*, and "there is no second argument" is the guarantee (the hook's own
+// `autoLoad` default is `false`).
+const useLiveAsrArgs = vi.fn<(...args: unknown[]) => void>();
 vi.mock("@/hooks/useLiveAsr", () => ({
-  useLiveAsr: (model: string, autoLoad: boolean) => {
-    useLiveAsrArgs(model, autoLoad);
+  useLiveAsr: (...args: unknown[]) => {
+    useLiveAsrArgs(...args);
     return mockState;
   },
 }));
@@ -107,15 +118,25 @@ describe("AsrPage", () => {
     expect(
       screen.getByRole("heading", { name: /automatic speech recognition/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /whisper base/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /moonshine tiny/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /whisper base/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /moonshine tiny/i }),
+    ).toBeInTheDocument();
   });
 
   it("disables the listen/upload controls until the model is ready", () => {
     renderPage();
-    expect(screen.getByRole("button", { name: /start listening/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /upload audio/i })).toBeDisabled();
-    expect(screen.getByText(/load a model to start transcribing/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /start listening/i }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /upload audio/i }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/load a model to start transcribing/i),
+    ).toBeInTheDocument();
   });
 
   it("downloads nothing on arrival and loads on request", () => {
@@ -141,19 +162,39 @@ describe("AsrPage", () => {
       ).toHaveAttribute("aria-pressed", "true");
     });
 
-    it("resumes only a model whose weights are already downloaded", async () => {
-      useModelPrefs.setState({ autoResume: { asr: true } });
+    // The refresh restores the *decision*, never the download. A revisit used
+    // to resume a cached model on mount, which meant arriving at the page put
+    // a model in GPU memory before the user had touched anything.
+    it("does not load a cached model, even one loaded before the refresh", async () => {
       cached = new Set([WHISPER]);
       renderPage();
 
-      expect(useLiveAsrArgs).toHaveBeenLastCalledWith(WHISPER, false);
       await waitFor(() =>
-        expect(useLiveAsrArgs).toHaveBeenLastCalledWith(WHISPER, true),
+        expect(
+          screen.getByRole("button", { name: /load model \(cached\)/i }),
+        ).toBeEnabled(),
       );
+      expect(useLiveAsrArgs).toHaveBeenLastCalledWith(WHISPER);
+      expect(mockLoad).not.toHaveBeenCalled();
     });
 
-    it("still asks before re-downloading an uncached model", async () => {
-      useModelPrefs.setState({ autoResume: { asr: true } });
+    it("says the weights are cached, so the one click is an informed one", async () => {
+      cached = new Set([WHISPER]);
+      renderPage();
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: /load model \(cached\)/i }),
+        ).toBeInTheDocument(),
+      );
+      // Scoped to LOAD: the picker's own row carries a "cached" badge too, and
+      // an unscoped query matches both.
+      expect(
+        within(screen.getByTestId("slot-2")).getByText(/already downloaded/i),
+      ).toBeInTheDocument();
+    });
+
+    it("still asks before downloading an uncached model", async () => {
       renderPage();
 
       await waitFor(() =>
@@ -161,7 +202,6 @@ describe("AsrPage", () => {
           screen.getByRole("button", { name: /load model/i }),
         ).toBeEnabled(),
       );
-      expect(useLiveAsrArgs).not.toHaveBeenCalledWith(WHISPER, true);
       expect(mockLoad).not.toHaveBeenCalled();
     });
   });
@@ -189,7 +229,9 @@ describe("AsrPage", () => {
       backend: "webgpu",
     };
     renderPage();
-    expect(screen.getByRole("button", { name: /start listening/i })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /start listening/i }),
+    ).toBeEnabled();
     expect(screen.getByText(/running on/i)).toBeInTheDocument();
     // The intro copy also mentions "WebGPU"; the status badge holds the exact
     // lowercase backend value.
@@ -235,7 +277,9 @@ describe("AsrPage", () => {
     mockState = { ...baseState, status: "ready", idle: false, ready: true };
     renderPage();
     expect(screen.queryByText(/^audio$/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /waveform/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: /waveform/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the live waveform while recording", () => {
@@ -255,7 +299,7 @@ describe("AsrPage", () => {
     expect(screen.getByText(/live microphone signal/i)).toBeInTheDocument();
   });
 
-  it("shows the retained take with play / download / re-transcribe actions", () => {
+  it("shows the retained take with play / download, and no run control", () => {
     const clip = new Float32Array(16000 * 2); // 2 s of silence
     mockState = {
       ...baseState,
@@ -267,12 +311,19 @@ describe("AsrPage", () => {
       text: "hello",
     };
     renderPage();
-    expect(screen.getByRole("img", { name: /audio waveform/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /audio waveform/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/0:02\.0/)).toBeInTheDocument(); // duration chip
     expect(screen.getByRole("button", { name: /play/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /download wav/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /download wav/i }),
+    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /transcribe clip/i }));
+    // The take's own "Transcribe clip" button is gone: a page with two RUN
+    // triggers has no single answer to "what runs the model?". The take feeds
+    // the transport's one Transcribe button instead.
+    fireEvent.click(screen.getByRole("button", { name: /^transcribe$/i }));
     expect(mockTranscribeClip).toHaveBeenCalledWith(clip);
   });
 
@@ -303,7 +354,9 @@ describe("AsrPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /^stop$/i }));
     expect(playCtx.close).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: /^play$/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^stop$/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^stop$/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a spinner and blocks re-runs while a transcription is in flight", () => {
@@ -317,16 +370,24 @@ describe("AsrPage", () => {
       clip: new Float32Array(16000),
     };
     renderPage();
-    expect(screen.getByRole("button", { name: /transcribing…/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /transcribing…/i }),
+    ).toBeDisabled();
   });
 
-  it("offers sample clips and disables them until the model is ready", () => {
+  // Picking a clip needs no model, so the clips are live from the start. The
+  // 60 s TED sample is why: gating them forced a download first, and running
+  // them on click charged an inference for a browse.
+  it("offers sample clips, choosable before a model is loaded", () => {
     renderPage();
     expect(screen.getByText(/test with a sample clip/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^jfk$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^jfk$/i })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /^transcribe$/i }),
+    ).toBeDisabled();
   });
 
-  it("runs a sample clip through the model and shows its reference", async () => {
+  it("loads a sample clip and its reference, and transcribes only on request", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -339,11 +400,24 @@ describe("AsrPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^jfk$/i }));
 
-    await waitFor(() => expect(mockTranscribeClip).toHaveBeenCalledTimes(1));
+    // The reference transcript is on screen so the output can be compared to
+    // it — before a model has been spent, not after.
+    await waitFor(() =>
+      expect(
+        screen.getByText(/ask not what your country/i),
+      ).toBeInTheDocument(),
+    );
     expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/jfk\.wav$/));
+    expect(mockTranscribeClip).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /^transcribe$/i }),
+      ).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^transcribe$/i }));
+    await waitFor(() => expect(mockTranscribeClip).toHaveBeenCalledTimes(1));
     expect(mockTranscribeClip.mock.calls[0][0]).toBeInstanceOf(Float32Array);
-    // The reference transcript is shown so the output can be compared to it.
-    expect(screen.getByText(/ask not what your country/i)).toBeInTheDocument();
   });
 
   it("surfaces a failed sample fetch as an error", async () => {
@@ -363,7 +437,12 @@ describe("AsrPage", () => {
   });
 
   it("surfaces a load error from the hook", () => {
-    mockState = { ...baseState, status: "error", idle: false, error: "download failed" };
+    mockState = {
+      ...baseState,
+      status: "error",
+      idle: false,
+      error: "download failed",
+    };
     renderPage();
     expect(screen.getByText(/download failed/i)).toBeInTheDocument();
   });

@@ -19,11 +19,10 @@
 // See docs/guides/adding-a-model.md §9 (a bare ONNX graph).
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Activity, Loader2, Mic, Upload } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { Activity, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
 
-import { decodeToMono, recordMic } from "@/audio/io";
-import { AUDIO_SAMPLES, type AudioSample } from "@/audio/samples";
+import { AUDIO_SAMPLES } from "@/audio/samples";
 import {
   DEFAULT_THRESHOLD,
   speechSeconds,
@@ -31,6 +30,7 @@ import {
 } from "@/audio/vad/segments";
 import { DEFAULT_VAD_MODEL, VAD_MODELS } from "@/audio/vad/types";
 import { formatTimestamp } from "@/audio/waveform";
+import { AudioSourcePanel } from "@/components/audio/AudioSourcePanel";
 import { VadTimeline } from "@/components/audio/VadTimeline";
 import { Waveform } from "@/components/audio/Waveform";
 import { InputPanel } from "@/components/model/InputPanel";
@@ -40,6 +40,7 @@ import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useAudioPick } from "@/hooks/useAudioPick";
 import { useVad } from "@/hooks/useVad";
 import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
 
@@ -75,18 +76,17 @@ function VadPage() {
     retry,
     cancel,
     run,
-  } = useVad(model, session.autoLoad);
+  } = useVad(model);
   useCacheRefresh(session, ready);
 
-  const [input, setInput] = useState<Float32Array | null>(null);
+  const input = useAudioPick();
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
-  const [preparing, setPreparing] = useState<null | "file" | "mic" | "sample">(
-    null,
-  );
-  const [ioError, setIoError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  // The clip the *current* probabilities belong to, captured at run time. Not
+  // the same thing as the clip currently held in INPUT: picking a new one must
+  // not redraw the waveform under an older result's timeline.
+  const [scored, setScored] = useState<Float32Array | null>(null);
 
-  const busy = running || preparing !== null;
+  const busy = running || input.preparing !== null;
   // Each error in the slot that produced it (§4): capture failures in RUN, a
   // load failure in LOAD, a detection failure in OUTPUT.
   const loadError = status === "error" ? error : null;
@@ -107,38 +107,18 @@ function VadPage() {
     [result, threshold],
   );
 
-  async function detectFrom(
-    source: () => Promise<Float32Array>,
-    kind: "file" | "mic" | "sample",
-  ) {
-    setIoError(null);
-    setPreparing(kind);
-    try {
-      const audio = await source();
-      // `run` transfers the buffer to the worker, which detaches it — keep our
-      // own copy so the waveform still has samples to draw.
-      setInput(audio.slice());
-      await run(audio);
-    } catch (e) {
-      setIoError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setPreparing(null);
-    }
-  }
-
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file
-    if (!file) return;
-    void detectFrom(async () => decodeToMono(await file.arrayBuffer()), "file");
+  // The only trigger. `take()` hands over a copy because the worker detaches
+  // the buffer it is given; the clip itself stays in INPUT, so the same audio
+  // can be re-scored against a different checkpoint without re-uploading it.
+  const detectCurrent = () => {
+    const audio = input.take();
+    if (!audio) return;
+    input.clearError();
+    setScored(audio.slice());
+    void run(audio).catch(() => {
+      /* the hook surfaces it in OUTPUT */
+    });
   };
-
-  const onSample = (sample: AudioSample) =>
-    void detectFrom(async () => {
-      const response = await fetch(sample.url);
-      if (!response.ok) throw new Error(`${sample.label}: ${response.status}`);
-      return decodeToMono(await response.arrayBuffer());
-    }, "sample");
 
   return (
     <ModelPage
@@ -169,7 +149,6 @@ function VadPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}
@@ -180,71 +159,36 @@ function VadPage() {
       run={
         <InputPanel
           ready={ready}
-          error={ioError}
-          disabledHint="Load a detector to analyse a clip."
+          error={input.error}
+          disabledHint="Load a detector to analyse a clip. You can pick one first."
           controls={
-            <>
-              <Button
-                disabled={!ready || busy}
-                onClick={() =>
-                  void detectFrom(() => recordMic(RECORD_SECONDS), "mic")
-                }
-              >
-                {preparing === "mic" ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Recording…
-                  </>
-                ) : (
-                  <>
-                    <Mic className="size-4" /> Record {RECORD_SECONDS}s
-                  </>
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                disabled={!ready || busy}
-                onClick={() => fileRef.current?.click()}
-              >
-                {preparing === "file" ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Decoding…
-                  </>
-                ) : (
-                  <>
-                    <Upload className="size-4" /> Upload audio
-                  </>
-                )}
-              </Button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                onChange={onFile}
-              />
-            </>
+            <Button
+              disabled={!ready || busy || !input.clip}
+              onClick={detectCurrent}
+            >
+              {running ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Detecting…
+                </>
+              ) : (
+                <>
+                  <Activity className="size-4" /> Detect speech
+                </>
+              )}
+            </Button>
           }
         >
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Record, upload, or start from a known clip — speech mixed with
-              silence shows the detector off best.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {AUDIO_SAMPLES.map((sample) => (
-                <Button
-                  key={sample.id}
-                  variant="outline"
-                  size="sm"
-                  disabled={!ready || busy}
-                  onClick={() => onSample(sample)}
-                >
-                  {sample.label}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <AudioSourcePanel
+            clip={input.clip}
+            preparing={input.preparing}
+            samples={AUDIO_SAMPLES}
+            sampleHint="Samples — speech mixed with silence shows the detector off best."
+            onFile={input.pickFile}
+            onSample={input.pickSample}
+            onRecord={input.record}
+            recordSeconds={RECORD_SECONDS}
+            busy={busy}
+          />
         </InputPanel>
       }
       output={
@@ -267,12 +211,12 @@ function VadPage() {
           running={running}
           runningLabel="Detecting…"
           error={runError}
-          empty="Run a clip and its speech probability appears here, frame by frame, with the segments it implies."
+          empty="Pick a clip, then press Detect speech — its probability appears here frame by frame, with the segments it implies."
         >
-          {result && input && (
+          {result && scored && (
             <div className="space-y-5">
               <div className="space-y-1">
-                <Waveform samples={input} className="text-muted-foreground" />
+                <Waveform samples={scored} className="text-muted-foreground" />
                 <VadTimeline
                   probabilities={result.probabilities}
                   threshold={threshold}

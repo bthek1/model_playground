@@ -9,6 +9,14 @@
 //
 // It owns the *input* half only. The model, the run and the result stay with the
 // route's task hook — this hook never sees either.
+//
+// **Picking is not running.** This hook used to take an `onPicked` callback and
+// every vision route used it to fire an inference the moment a decode finished,
+// which made the sample row and the file dialog into hidden run triggers: a
+// user browsing the samples spent a GPU inference per click, and the Generate
+// button beside them was decoration. Choosing an input now only *shows* the
+// input (model-page-pattern.md §1.6); the RUN button is the only thing that
+// runs the model. There is deliberately no hook left to re-attach.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RawImage } from "@huggingface/transformers";
@@ -39,23 +47,10 @@ export interface UseImagePickResult {
   clear: () => void;
 }
 
-export function useImagePick({
-  /**
-   * Called with the freshly decoded image. A page uses it to run the model
-   * immediately when one is loaded. Awaited so `preparing` covers the whole
-   * round trip, but its **failures are swallowed**: an inference error belongs
-   * to the OUTPUT slot, where the task hook already puts it, not to this one.
-   */
-  onPicked,
-}: { onPicked?: (picked: PickedImage) => void | Promise<void> } = {}): UseImagePickResult {
+export function useImagePick(): UseImagePickResult {
   const [picked, setPicked] = useState<PickedImage | null>(null);
   const [preparing, setPreparing] = useState<null | "file" | "sample">(null);
   const [error, setError] = useState<string | null>(null);
-
-  // A ref, not a dep: routes pass an inline closure over `ready`, and re-creating
-  // the pick callbacks on every render would churn every button below them.
-  const onPickedRef = useRef(onPicked);
-  onPickedRef.current = onPicked;
 
   const ownedUrl = useRef<string | null>(null);
   useEffect(
@@ -79,13 +74,7 @@ export function useImagePick({
       setError(null);
       setPreparing(kind);
       try {
-        const next = await open();
-        adopt(next);
-        try {
-          await onPickedRef.current?.(next);
-        } catch {
-          /* the task hook surfaces an inference failure in OUTPUT */
-        }
+        adopt(await open());
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {

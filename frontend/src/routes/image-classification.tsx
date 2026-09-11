@@ -57,19 +57,13 @@ function ImageClassificationPage() {
     retry,
     cancel,
     run,
-  } = useImageClassifier(model, session.autoLoad);
+  } = useImageClassifier(model);
   useCacheRefresh(session, ready);
 
   // Picking, the object-URL lifecycle and decode errors are the same on every
   // vision route, so they live in `useImagePick` rather than here.
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      // Classify straight away when a model is live; otherwise the picture sits
-      // in the preview and the Classify button lights up once it is.
-      onPicked: async (next) => {
-        if (ready) await run(next.image);
-      },
-    });
+useImagePick();
 
   const busy = running || preparing !== null;
   // Each error in the slot that produced it (§4): a failed decode belongs to
@@ -117,7 +111,6 @@ function ImageClassificationPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

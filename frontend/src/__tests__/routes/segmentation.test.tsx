@@ -80,6 +80,18 @@ function renderPage() {
   render(<Page />);
 }
 
+const RUN_BUTTON = /^segment$/i;
+
+// The RUN trigger. Picking an input never starts an inference any more
+// (model-page-pattern.md §1.6), so a test that wants a result asks for one.
+async function pickAndRun(sample: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name: sample }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
+}
+
 const ready = (extra: Partial<UseSegmenterResult> = {}) => ({
   ...baseState,
   status: "ready" as const,
@@ -108,10 +120,7 @@ describe("SegmentationPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(useSegmenter).toHaveBeenCalledWith(
-      "Xenova/segformer-b0-finetuned-ade-512-512",
-      false,
-    );
+    expect(useSegmenter).toHaveBeenCalledWith("Xenova/segformer-b0-finetuned-ade-512-512");
     expect(baseState.load).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));
@@ -144,7 +153,7 @@ describe("SegmentationPage", () => {
   it("composites one canvas from every mask, with a legend", async () => {
     mockState = ready({ result: MASKS });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^city street$/i }));
+    await pickAndRun(/^city street$/i);
 
     await waitFor(() =>
       expect(screen.getByTestId("segmentation-canvas")).toBeInTheDocument(),
@@ -163,7 +172,7 @@ describe("SegmentationPage", () => {
   it("hides a class without re-running the model", async () => {
     mockState = ready({ result: MASKS });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^city street$/i }));
+    await pickAndRun(/^city street$/i);
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
 
     const legend = within(screen.getByTestId("slot-4"));
@@ -182,7 +191,7 @@ describe("SegmentationPage", () => {
   it("re-composites on an opacity change without re-running the model", async () => {
     mockState = ready({ result: MASKS });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^city street$/i }));
+    await pickAndRun(/^city street$/i);
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
 
     fireEvent.change(screen.getByLabelText(/overlay opacity/i), {

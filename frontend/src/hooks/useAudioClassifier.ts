@@ -30,7 +30,7 @@ export interface UseAudioClassifierResult extends UsePipelineResult {
  */
 export function useAudioClassifier(
   model: string = DEFAULT_CLASSIFIER_MODEL,
-  autoLoad = true,
+  autoLoad = false,
 ): UseAudioClassifierResult {
   const meta = useMemo(
     () => CLASSIFIER_MODELS.find((m) => m.id === model) ?? CLASSIFIER_MODELS[0],

@@ -10,14 +10,13 @@ const persisted = () =>
 
 beforeEach(() => {
   localStorage.clear();
-  useModelPrefs.setState({ selected: {}, autoResume: {} });
+  useModelPrefs.setState({ selected: {} });
 });
 
 describe("useModelPrefs", () => {
   it("starts empty — a first visit has no opinion about any route", () => {
     const { result } = renderHook(() => useModelPrefs());
     expect(result.current.selected).toEqual({});
-    expect(result.current.autoResume).toEqual({});
   });
 
   it("stores a selection per route, and writes it through to localStorage", () => {
@@ -34,55 +33,44 @@ describe("useModelPrefs", () => {
     expect(persisted().selected.asr).toBe("onnx-community/whisper-base");
   });
 
-  it("does not carry a load consent over to a different model", () => {
-    const { result } = renderHook(() => useModelPrefs());
-    act(() => result.current.setAutoResume("asr", true));
-
-    act(() => result.current.selectModel("asr", "onnx-community/moonshine-tiny"));
-
-    // A different model is a different download: the old consent says nothing
-    // about it, and resuming on it would spend bandwidth unasked.
-    expect(result.current.autoResume.asr).toBe(false);
-  });
-
-  it("records and clears the intent to load", () => {
+  // The store used to carry a second field — `autoResume`, "the user pressed
+  // Load on this route once" — which `useModelSelection` turned into a download
+  // on the next visit. Nothing persists an intent to load any more: the LOAD
+  // button is the only path to the network, so there is nothing to remember and
+  // nothing that can make a revisit spend bandwidth on its own.
+  it("persists the selection and nothing else — no intent to load is stored", () => {
     const { result } = renderHook(() => useModelPrefs());
 
-    act(() => result.current.setAutoResume("tts", true));
-    expect(persisted().autoResume.tts).toBe(true);
+    act(() => result.current.selectModel("tts", "onnx-community/Kokoro-82M"));
 
-    act(() => result.current.setAutoResume("tts", false));
-    expect(result.current.autoResume.tts).toBe(false);
+    expect(Object.keys(persisted())).toEqual(["selected"]);
+    expect(JSON.stringify(persisted())).not.toContain("Resume");
   });
 
   it("forgets a route entirely, for a model id we no longer ship", () => {
     const { result } = renderHook(() => useModelPrefs());
     act(() => result.current.selectModel("asr", "retired/model"));
-    act(() => result.current.setAutoResume("asr", true));
 
     act(() => result.current.forget("asr"));
 
     expect(result.current.selected.asr).toBeUndefined();
-    expect(result.current.autoResume.asr).toBeUndefined();
   });
 
   it("survives a store rehydration — the point of persisting at all", async () => {
     const { result } = renderHook(() => useModelPrefs());
     act(() => result.current.selectModel("tts", "kokoro"));
-    act(() => result.current.setAutoResume("tts", true));
 
     // Stand in for a page reload: drop the in-memory state, then rehydrate the
     // way a fresh page load does. The stored copy is re-seeded first because
     // clearing the state persists *that* — a real reload never sees the write.
     const stored = localStorage.getItem("model-prefs")!;
-    useModelPrefs.setState({ selected: {}, autoResume: {} });
+    useModelPrefs.setState({ selected: {} });
     localStorage.setItem("model-prefs", stored);
     await act(async () => {
       await useModelPrefs.persist.rehydrate();
     });
 
     expect(useModelPrefs.getState().selected.tts).toBe("kokoro");
-    expect(useModelPrefs.getState().autoResume.tts).toBe(true);
   });
 
   it("keeps working when storage is unavailable", () => {

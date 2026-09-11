@@ -76,9 +76,17 @@ describe("usePipeline", () => {
     expect(result.current.status).toBe("loading");
   });
 
-  it("posts a load message with the task + model on mount", () => {
+  it("defaults to idle — a mount is not a download", () => {
     const { result } = renderHook(() =>
       usePipeline("audio-classification", "onnx-community/ast"),
+    );
+    expect(result.current.status).toBe("idle");
+    expect(spawned).toBe(0);
+  });
+
+  it("posts a load message with the task + model once asked", () => {
+    const { result } = renderHook(() =>
+      usePipeline("audio-classification", "onnx-community/ast", true),
     );
     expect(result.current.loading).toBe(true);
     expect(lastWorker.posted[0].message).toEqual({
@@ -89,14 +97,14 @@ describe("usePipeline", () => {
   });
 
   it("flips to ready and records the backend", async () => {
-    const { result } = renderHook(() => usePipeline("audio-classification", "m"));
+    const { result } = renderHook(() => usePipeline("audio-classification", "m", true));
     act(() => lastWorker.emit({ type: "ready", model: "m", backend: "webgpu" }));
     await waitFor(() => expect(result.current.ready).toBe(true));
     expect(result.current.backend).toBe("webgpu");
   });
 
   it("resolves run() with the correlated result and transfers the input", async () => {
-    const { result } = renderHook(() => usePipeline("audio-classification", "m"));
+    const { result } = renderHook(() => usePipeline("audio-classification", "m", true));
     act(() => lastWorker.emit({ type: "ready", model: "m", backend: "wasm" }));
 
     const input = new Float32Array([0.1, 0.2, 0.3]);
@@ -117,7 +125,7 @@ describe("usePipeline", () => {
   });
 
   it("rejects run() on a matching error", async () => {
-    const { result } = renderHook(() => usePipeline("audio-classification", "m"));
+    const { result } = renderHook(() => usePipeline("audio-classification", "m", true));
     act(() => lastWorker.emit({ type: "ready", model: "m", backend: "wasm" }));
 
     let promise!: Promise<unknown>;
@@ -130,14 +138,14 @@ describe("usePipeline", () => {
   });
 
   it("marks status error on an id-less load error", async () => {
-    const { result } = renderHook(() => usePipeline("audio-classification", "m"));
+    const { result } = renderHook(() => usePipeline("audio-classification", "m", true));
     act(() => lastWorker.emit({ type: "error", error: "load failed" }));
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(result.current.error).toBe("load failed");
   });
 
   it("terminates the worker on unmount", () => {
-    const { unmount } = renderHook(() => usePipeline("audio-classification", "m"));
+    const { unmount } = renderHook(() => usePipeline("audio-classification", "m", true));
     const worker = lastWorker;
     unmount();
     expect(worker.terminated).toBe(true);

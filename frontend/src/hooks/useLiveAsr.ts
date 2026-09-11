@@ -99,7 +99,7 @@ export interface UseLiveAsrResult {
  */
 export function useLiveAsr(
   model: string = DEFAULT_ASR_MODEL,
-  autoLoad = true,
+  autoLoad = false,
 ): UseLiveAsrResult {
   const asr = useAsr(model, autoLoad);
   const { transcribe, ready } = asr;

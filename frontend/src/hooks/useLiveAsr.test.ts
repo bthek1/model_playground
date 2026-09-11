@@ -114,11 +114,11 @@ describe("useLiveAsr", () => {
     expect(useAsr).toHaveBeenCalledWith("onnx-community/whisper-base", false);
   });
 
-  it("auto-loads by default, as the non-route callers expect", async () => {
+  it("defers the download by default — a mount must not spend bandwidth", async () => {
     const { useLiveAsr } = await import("./useLiveAsr");
 
     renderHook(() => useLiveAsr("onnx-community/whisper-base"));
-    expect(useAsr).toHaveBeenCalledWith("onnx-community/whisper-base", true);
+    expect(useAsr).toHaveBeenCalledWith("onnx-community/whisper-base", false);
   });
 
   it("re-exposes status, idle and the load actions for the LOAD slot", async () => {

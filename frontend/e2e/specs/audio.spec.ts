@@ -104,9 +104,12 @@ test.describe("audio routes", () => {
     await expect(audio.largeModelWarning).toHaveCount(0);
     expect(hubRequests, "no weights before the user asks").toEqual([]);
 
-    // Transport is dead until a model is loaded.
-    await expect(audio.modelButton(/Upload audio/)).toBeDisabled();
-    await expect(audio.modelButton(/Record/)).toBeDisabled();
+    // The *sources* are live from the start — choosing a clip needs no model,
+    // and gating them forced a download before the user was allowed to say
+    // what to run it on. Only the RUN trigger waits.
+    await expect(audio.modelButton(/Upload audio/)).toBeEnabled();
+    await expect(audio.modelButton(/Record/)).toBeEnabled();
+    await expect(audio.modelButton(/^Enhance$/)).toBeDisabled();
 
     await audio.load();
     // With the Hub blocked the load must fail visibly rather than spin forever.
@@ -192,9 +195,12 @@ test.describe("audio routes", () => {
     await audio.blockModelDownloads();
     await page.goto("/asr");
 
-    // Nothing may be dispatched to a worker that has no model loaded.
+    // Nothing may be dispatched to a worker that has no model loaded: both RUN
+    // triggers are dead. The sample clips are not — picking one loads it into
+    // the input, and the 60 s TED clip is exactly why that must be free.
     await expect(audio.modelButton(/Start listening/)).toBeDisabled();
-    await expect(audio.modelButton(/Upload audio/)).toBeDisabled();
-    await expect(audio.modelButton(/JFK/)).toBeDisabled();
+    await expect(audio.modelButton(/^Transcribe$/)).toBeDisabled();
+    await expect(audio.modelButton(/Upload audio/)).toBeEnabled();
+    await expect(audio.modelButton(/JFK/)).toBeEnabled();
   });
 });

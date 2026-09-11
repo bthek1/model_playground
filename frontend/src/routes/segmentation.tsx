@@ -80,7 +80,7 @@ function SegmentationPage() {
     retry,
     cancel,
     run,
-  } = useSegmenter(model, session.autoLoad);
+  } = useSegmenter(model);
   useCacheRefresh(session, ready);
 
   const [source, setSource] = useState<RawImage | null>(null);
@@ -101,12 +101,7 @@ function SegmentationPage() {
   );
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        if (ready) await segment(next.image);
-        else setSource(await downscale(next.image, MAX_INFERENCE_SIDE));
-      },
-    });
+useImagePick();
 
   const onFrame = useCallback(
     async (frame: RawImage) => {
@@ -181,7 +176,6 @@ function SegmentationPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

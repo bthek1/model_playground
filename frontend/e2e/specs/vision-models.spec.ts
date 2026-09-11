@@ -33,6 +33,7 @@ test.describe("@slow real vision model loads", () => {
     });
 
     await model.button(/^Tiger$/).click();
+    await model.run(/^Classify$/);
 
     // A model that loads and returns garbage is still broken, so assert the
     // label — not merely that five rows appeared. `tiger` and `tiger cat` are
@@ -58,6 +59,7 @@ test.describe("@slow real vision model loads", () => {
     });
 
     await model.button(/^Cats$/).click();
+    await model.run(/^Classify$/);
     // Five rows, each with a percentage: the near-tie this page exists to make
     // visible is only visible if all five are there.
     const scores = model.outputPanel.locator("li");
@@ -91,6 +93,7 @@ test.describe("@slow real vision model loads", () => {
     // map — which is what a broken normalisation or a transposed read produces
     // — would render as a flat colour and fail here.
     await model.button(/^Tiger$/).click();
+    await model.run(/Estimate depth/);
     await expect(page.getByTestId("depth-map")).toBeVisible({ timeout: 60_000 });
 
     const spread = await page
@@ -123,6 +126,7 @@ test.describe("@slow real vision model loads", () => {
     // `percentage` set the wrong way round, which is the bug this route is most
     // likely to grow.
     await model.button(/^Cats$/).click();
+    await model.run(/^Detect$/);
     await expect(page.getByTestId("detection-canvas")).toBeVisible({
       timeout: 60_000,
     });
@@ -154,6 +158,7 @@ test.describe("@slow real vision model loads", () => {
     // to label mapping was not read off by one — an off-by-one produces a
     // perfectly plausible-looking mask set with the wrong names on it.
     await model.button(/^City street$/).click();
+    await model.run(/^Segment$/);
     await expect(page.getByTestId("segmentation-canvas")).toBeVisible({
       timeout: 60_000,
     });
@@ -178,6 +183,7 @@ test.describe("@slow real vision model loads", () => {
     });
 
     await model.button(/^Cats$/).click();
+    await model.run(/Score labels/);
     await expect(page.getByTestId("template-verdict")).toBeVisible({
       timeout: 90_000,
     });
@@ -241,6 +247,7 @@ test.describe("@slow real vision model loads", () => {
     await model.button(/^Add$/).click();
 
     await model.button(/^Cats$/).click();
+    await model.run(/^Detect$/);
     await expect(page.getByTestId("detection-canvas")).toBeVisible({
       timeout: 120_000,
     });
@@ -281,6 +288,7 @@ test.describe("@slow real vision model loads", () => {
     // a full, plausible-looking list — which is why "five rows appeared" is not
     // an acceptable assertion here.
     await model.button(/^Tiger$/).click();
+    await model.run(/^Embed$/);
     await expect(page.getByTestId("neighbours")).toBeVisible({ timeout: 60_000 });
 
     const first = page.getByTestId("neighbours").locator("li").first();
@@ -324,11 +332,17 @@ test.describe("@slow real vision model loads", () => {
     });
 
     await model.button(/^Beetle \(car\)$/).click();
+    // Picking the picture encodes nothing: both of SAM's graphs wait behind the
+    // one RUN action, and placing a point is input.
+    await expect(page.getByTestId("encoded")).toBeHidden();
+    await model.button(/Point at the centre/).click();
+
+    // Generate does the encode *and* the decode — encoding is a prerequisite
+    // of decoding, not a stage the user should be asked about twice.
+    await model.run(/Generate mask/);
     // The encode state exists and completes — the half of the wait that is not
     // the download, and which the user has no way to guess is happening.
     await expect(page.getByTestId("encoded")).toBeVisible({ timeout: 120_000 });
-
-    await model.button(/Point at the centre/).click();
     await expect(page.getByTestId("mask-canvas")).toBeVisible({
       timeout: 60_000,
     });
@@ -351,7 +365,8 @@ test.describe("@slow real vision model loads", () => {
       model.outputPanel.getByRole("button", { name: /^3 · 0\./ }),
     ).toBeVisible();
 
-    // And the claim the page makes about itself: the click is decode-only.
+    // And the claim the page makes about itself: a *second* Generate on the
+    // same picture is decode-only, because the embedding is cached.
     const decode = await page.getByTestId("decode-ms").innerText();
     const ms = Number(/decode (\d+) ms/.exec(decode)?.[1] ?? NaN);
     expect(Number.isFinite(ms)).toBe(true);
@@ -386,6 +401,7 @@ test.describe("@slow real vision model loads on WebGPU", () => {
     // 1. Captioning. A plausible noun, on a picture whose subject is not in
     //    doubt — "a string came back" would pass on a model generating noise.
     await model.button(/^Tiger$/).click();
+    await model.run(/^Generate$/);
     await expect(model.outputPanel).toContainText(/tiger|cat|animal/i, {
       timeout: 180_000,
     });
@@ -407,6 +423,7 @@ test.describe("@slow real vision model loads on WebGPU", () => {
       .getByRole("button", { name: "Grounding" })
       .click();
     await model.button(/^City street$/).click();
+    await model.run(/^Generate$/);
     await expect(page.getByTestId("grounding-canvas")).toBeVisible({
       timeout: 180_000,
     });
@@ -431,6 +448,7 @@ test.describe("@slow real two-model pose", () => {
     });
 
     await model.button(/^Football match$/).click();
+    await model.run(/Find poses/);
     await expect(page.getByTestId("pose-canvas")).toBeVisible({
       timeout: 120_000,
     });
@@ -547,6 +565,7 @@ test.describe("@slow real background removal", () => {
     // failing, which is how this spec found the sample gap in the first place
     // (0.2% coverage on the car). See PORTRAIT_SAMPLES.
     await model.button(/^Portrait$/).click();
+    await model.run(/Remove background/);
     await expect(page.getByTestId("cutout-view")).toBeVisible({
       timeout: 120_000,
     });
@@ -732,6 +751,7 @@ test.describe("@slow real point cloud", () => {
     });
 
     await model.button(/^City street$/).click();
+    await model.run(/Build point cloud/);
     await expect(model.outputPanel).toContainText(/points/, {
       timeout: 120_000,
     });

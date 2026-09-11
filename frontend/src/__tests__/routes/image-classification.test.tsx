@@ -91,12 +91,10 @@ describe("ImageClassificationPage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    // Both halves matter: the hook is asked not to auto-load, *and* nothing has
-    // called load() behind the user's back.
-    expect(useImageClassifier).toHaveBeenCalledWith(
-      "Xenova/vit-base-patch16-224",
-      false,
-    );
+    // Both halves matter: the hook is handed no auto-load option at all (its
+    // default is `idle`), *and* nothing has called load() behind the user's
+    // back.
+    expect(useImageClassifier).toHaveBeenCalledWith("Xenova/vit-base-patch16-224");
     expect(baseState.load).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));
@@ -123,16 +121,36 @@ describe("ImageClassificationPage", () => {
     expect(screen.getByRole("button", { name: /^classify$/i })).toBeDisabled();
   });
 
-  it("classifies a sample image as soon as one is picked", async () => {
+  // The core of the SELECT → LOAD → INPUT → GENERATE contract, and the thing
+  // this page got wrong: picking an image used to classify it immediately, so a
+  // user comparing the sample row spent one inference per click and the
+  // Classify button beside them did nothing they hadn't already paid for.
+  it("shows a picked sample and runs nothing, even with a model ready", async () => {
     mockState = ready();
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
 
-    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
-    expect(fromUrl).toHaveBeenCalledWith(
-      expect.stringContaining("tiger.jpg"),
+    await waitFor(() =>
+      expect(screen.getByAltText(/selected input: tiger/i)).toBeInTheDocument(),
     );
+    expect(fromUrl).toHaveBeenCalledWith(expect.stringContaining("tiger.jpg"));
+    expect(mockRun).not.toHaveBeenCalled();
+    expect(screen.getByTestId("output-empty")).toBeInTheDocument();
+  });
+
+  it("classifies the picked image when — and only when — Classify is pressed", async () => {
+    mockState = ready();
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^classify$/i })).toBeEnabled(),
+    );
+    expect(mockRun).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /^classify$/i }));
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
     expect(mockRun).toHaveBeenCalledWith(fakeImage);
   });
 
@@ -146,7 +164,7 @@ describe("ImageClassificationPage", () => {
     expect(mockRun).not.toHaveBeenCalled();
   });
 
-  it("classifies an uploaded file and revokes the preview it replaces", async () => {
+  it("previews an uploaded file and revokes the preview it replaces", async () => {
     mockState = ready();
     renderPage();
 
@@ -154,9 +172,10 @@ describe("ImageClassificationPage", () => {
     const file = new File(["x"], "cat.png", { type: "image/png" });
     fireEvent.change(input, { target: { files: [file] } });
 
-    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
-    expect(fromFile).toHaveBeenCalledWith(file);
+    await waitFor(() => expect(fromFile).toHaveBeenCalledWith(file));
     expect(URL.createObjectURL).toHaveBeenCalledWith(file);
+    // Opening a file dialog is not asking for an inference.
+    expect(mockRun).not.toHaveBeenCalled();
 
     // A second pick frees the first preview: an object URL that outlives its
     // <img> pins the decoded bitmap for the tab's lifetime.
@@ -164,7 +183,7 @@ describe("ImageClassificationPage", () => {
     await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:preview"));
   });
 
-  it("accepts a dropped image", async () => {
+  it("accepts a dropped image, and still waits to be told to run", async () => {
     mockState = ready();
     renderPage();
 
@@ -173,7 +192,7 @@ describe("ImageClassificationPage", () => {
     fireEvent.drop(dropzone, { dataTransfer: { files: [file] } });
 
     await waitFor(() => expect(fromFile).toHaveBeenCalledWith(file));
-    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+    expect(mockRun).not.toHaveBeenCalled();
   });
 
   it("re-runs the image already picked when the user asks again", async () => {
@@ -184,8 +203,12 @@ describe("ImageClassificationPage", () => {
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
-    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^classify$/i })).toBeEnabled(),
+    );
 
+    fireEvent.click(screen.getByRole("button", { name: /^classify$/i }));
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /^classify$/i }));
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(2));
     expect(fromUrl).toHaveBeenCalledTimes(1); // the image was not re-fetched

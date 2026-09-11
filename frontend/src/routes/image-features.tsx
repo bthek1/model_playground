@@ -88,7 +88,7 @@ function ImageFeaturesPage() {
     buildIndex,
     addToIndex,
     clearIndex,
-  } = useImageFeatures(model, session.autoLoad);
+  } = useImageFeatures(model);
   useCacheRefresh(session, ready);
 
   const [kind, setKind] = useState<VectorKind>("cls");
@@ -111,11 +111,7 @@ function ImageFeaturesPage() {
   );
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
-    useImagePick({
-      onPicked: async (next) => {
-        if (ready) await embed(next.image);
-      },
-    });
+useImagePick();
 
   const onFrame = useCallback(
     async (frame: RawImage) => {
@@ -211,7 +207,6 @@ function ImageFeaturesPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}

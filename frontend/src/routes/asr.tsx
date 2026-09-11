@@ -9,8 +9,8 @@
 // `components/audio/AsrTransport.tsx`.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Mic, Square, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { AudioLines, Loader2, Mic, Square, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { decodeToMono } from "@/audio/io";
 import { type AudioSample } from "@/audio/samples";
@@ -34,8 +34,8 @@ export const Route = createFileRoute("/asr")({
 });
 
 function AsrPage() {
-  // Selection and the resume decision survive a refresh; the weights themselves
-  // are re-loaded from the browser cache (model/useModelSelection.ts).
+  // The selected model survives a refresh; the weights do not, and are not
+  // re-fetched until the LOAD button is pressed (model/useModelSelection.ts).
   const session = useModelSelection({
     routeKey: "asr",
     models: ASR_MODELS,
@@ -63,7 +63,7 @@ function AsrPage() {
     load,
     retry,
     cancel,
-  } = useLiveAsr(model, session.autoLoad);
+  } = useLiveAsr(model);
   useCacheRefresh(session, ready);
 
   const [decoding, setDecoding] = useState(false);
@@ -71,6 +71,17 @@ function AsrPage() {
   const [sample, setSample] = useState<AudioSample | null>(null);
   const [ioError, setIoError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // The clip Transcribe will run on: a sample, an upload, or the last take.
+  // Held rather than consumed, so the same audio can be pushed through a second
+  // model without re-fetching or re-recording it.
+  const [pending, setPending] = useState<Float32Array | null>(null);
+
+  // A finished take becomes the pending clip. Input-to-input, not a run: the
+  // live loop that produced it has already stopped, and Transcribe is what
+  // re-runs it.
+  useEffect(() => {
+    if (clip) setPending(clip);
+  }, [clip]);
 
   const busy = recording || decoding || loadingSample != null;
   const loadError = status === "error" ? error : null;
@@ -85,7 +96,7 @@ function AsrPage() {
       setSample(null);
       setDecoding(true);
       try {
-        await transcribeClip(await decodeToMono(await file.arrayBuffer()));
+        setPending(await decodeToMono(await file.arrayBuffer()));
       } catch (err) {
         setIoError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -94,10 +105,10 @@ function AsrPage() {
     })();
   };
 
-  // Fetch a known clip, decode it, and run the current model on it. The clip's
-  // reference transcript stays on screen so the output can be eyeballed against
-  // it — an end-to-end model health check that doesn't depend on the mic.
-  const runSample = (s: AudioSample) => {
+  // Fetch a known clip and decode it into the input. It is **not** transcribed
+  // here: the clip's reference transcript is on screen so the output can be
+  // eyeballed against it, and the user decides when to spend a model on it.
+  const selectSample = (s: AudioSample) => {
     void (async () => {
       setIoError(null);
       setSample(s);
@@ -107,13 +118,23 @@ function AsrPage() {
         if (!res.ok) {
           throw new Error(`Couldn't fetch ${s.label} (HTTP ${res.status})`);
         }
-        await transcribeClip(await decodeToMono(await res.arrayBuffer()));
+        setPending(await decodeToMono(await res.arrayBuffer()));
       } catch (err) {
         setIoError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoadingSample(null);
       }
     })();
+  };
+
+  // The one-shot trigger, beside the live loop's Start/Stop. Both are explicit
+  // presses; nothing here runs off a decode.
+  const transcribeCurrent = () => {
+    if (!pending) return;
+    setIoError(null);
+    void transcribeClip(pending).catch(() => {
+      /* the hook surfaces it in OUTPUT */
+    });
   };
 
   return (
@@ -145,7 +166,6 @@ function AsrPage() {
           loadProgress={loadProgress}
           loadedInMs={loadedInMs}
           cached={session.isCached}
-          restoring={session.restoring}
           error={loadError}
           onLoad={session.onLoad(load)}
           onCancel={session.onCancel(cancel)}
@@ -157,7 +177,7 @@ function AsrPage() {
         <InputPanel
           ready={ready}
           error={ioError}
-          disabledHint="Load a model to start transcribing."
+          disabledHint="Load a model to transcribe. You can pick a clip first."
           controls={
             <>
               {recording ? (
@@ -170,9 +190,11 @@ function AsrPage() {
                 </Button>
               )}
 
+              {/* Not gated on a model: decoding a file is input, and the
+                  clip sits in INPUT until Transcribe is pressed. */}
               <Button
                 variant="outline"
-                disabled={!ready || busy}
+                disabled={busy}
                 onClick={() => fileRef.current?.click()}
               >
                 {decoding ? (
@@ -192,14 +214,30 @@ function AsrPage() {
                 className="hidden"
                 onChange={onFile}
               />
+
+              <Button
+                disabled={!ready || busy || running || !pending}
+                onClick={transcribeCurrent}
+              >
+                {running && !recording ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Transcribing…
+                  </>
+                ) : (
+                  <>
+                    <AudioLines className="size-4" /> Transcribe
+                  </>
+                )}
+              </Button>
             </>
           }
         >
+          {/* Picking a clip needs no model, so it is not gated on one. */}
           <SampleClips
             selected={sample}
             loadingId={loadingSample}
-            disabled={!ready || busy || running}
-            onRun={runSample}
+            disabled={busy || running}
+            onSelect={selectSample}
           />
 
           <AudioTake
@@ -207,9 +245,6 @@ function AsrPage() {
             stream={stream}
             clip={clip}
             sampleRate={sampleRate}
-            canTranscribe={ready && !busy && !running}
-            transcribing={running}
-            onTranscribe={(c) => void transcribeClip(c)}
           />
         </InputPanel>
       }
@@ -234,7 +269,7 @@ function AsrPage() {
               ? "Updating live as you speak"
               : text
                 ? "Final transcript"
-                : "Press Start listening and speak, or upload a clip"
+                : "Press Start listening and speak, or load a clip and press Transcribe"
           }
           // While recording, the growing transcript *is* the feedback — a spinner
           // over it would hide the thing the user is watching.

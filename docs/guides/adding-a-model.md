@@ -120,10 +120,18 @@ in [`../standards/model-page-pattern.md`](../standards/model-page-pattern.md), w
 with a checklist for exactly this step.
 
 The short version: wrap the shared worker plumbing rather than re-deriving it, default to
-`idle` so nothing downloads until the user asks, gate every run control on `ready`, always
-render the OUTPUT slot, and put each error in the slot that produced it. Selection and the
-resume-after-refresh decision come from `useModelSelection` — don't hold the model in a
-route-local `useState`, or the user's choice dies on every reload.
+`idle` so nothing downloads until the LOAD button is pressed, hold the input rather than
+running on it as it arrives, gate the GENERATE trigger on `ready`, always render the
+OUTPUT slot, and put each error in the slot that produced it. Selection comes from
+`useModelSelection` — don't hold the model in a route-local `useState`, or the user's
+choice dies on every reload.
+
+**Two buttons, and only two.** LOAD spends bandwidth and memory; GENERATE spends GPU and
+time. Everything else — picking a model, picking an input, editing a parameter — is a
+choice that costs nothing and commits to nothing. A page where clicking a sample image
+runs the model, or where arriving at the page downloads it, has collapsed a choice into a
+commitment; that is the failure this pipeline exists to prevent, and it is spelled out in
+[`model-page-pattern.md` §1.2 and §1.6](../standards/model-page-pattern.md).
 
 **The hook.** Wrap [`useModelWorker`](../../frontend/src/model/useModelWorker.ts) — it owns
 worker creation and teardown, the id-correlated pending table, the response switch, and both
@@ -131,12 +139,12 @@ state machines. A task hook is a thin typed wrapper plus whatever is genuinely
 task-specific:
 
 ```ts
-export function useMyTask(model: string, autoLoad = true) {
+export function useMyTask(model: string, autoLoad = false) {
   const worker = useModelWorker<MyResult>({
     createWorker: createMyWorker,
     key: model,                       // changing this tears down and resets
     loadMessage: { model },
-    autoLoad,                         // pass `false` for weight downloads
+    autoLoad,                         // leave it false for anything that downloads
     notReadyMessage: "My worker not ready",
   });
   const { run } = worker;
@@ -145,9 +153,8 @@ export function useMyTask(model: string, autoLoad = true) {
 }
 ```
 
-**The selection.** One hook owns which model is picked, whether its weights are already
-downloaded, and whether a load should resume after a refresh
-([`model-page-pattern.md` §5b](../standards/model-page-pattern.md)):
+**The selection.** One hook owns which model is picked and whether its weights are
+already downloaded ([`model-page-pattern.md` §5b](../standards/model-page-pattern.md)):
 
 ```ts
 const session = useModelSelection({
@@ -156,13 +163,15 @@ const session = useModelSelection({
   fallback: MY_MODELS[0],
 });
 const { status, ready, loadProgress, loadedInMs, load, retry, cancel, … } =
-  useMyTask(session.model.id, session.autoLoad);
+  useMyTask(session.model.id);      // no second argument — the default is `idle`
 useCacheRefresh(session, ready);    // re-probe the cache once the download lands
 ```
 
-`session.autoLoad` is `false` until the cache probe answers, and only ever becomes `true`
-for a model that is **already cached and was previously loaded by this user** — so the
-"nothing downloads on mount" guarantee is unchanged.
+The hook has **no `autoLoad` to hand you**, deliberately: it cannot start a load, so
+there is no path by which arriving at a page, switching models, or refreshing begins a
+download. What the cache probe gives you is `session.isCached`, which changes the LOAD
+button's words ("Load model (cached)") and the copy beneath it — an informed click, not
+an absent one.
 
 **The page.** Four named slots — the shell will not let you reorder them, drop OUTPUT, or
 grow a fifth stage:
@@ -178,7 +187,7 @@ grow a fifth stage:
                        onEvict={(m) => void session.evict(m.id)} />}
   load={<ModelStatus status={status} backend={backend}
                      loadProgress={loadProgress} loadedInMs={loadedInMs}
-                     cached={session.isCached} restoring={session.restoring}
+                     cached={session.isCached}
                      error={status === "error" ? error : null}
                      onLoad={session.onLoad(load)}
                      onCancel={session.onCancel(cancel)}
@@ -191,15 +200,37 @@ grow a fifth stage:
 ```
 
 `ModelStatus` takes `loadProgress` — the aggregate from `model/progress.ts` — never the
-raw `progress` event. Wrapping `load`/`cancel` in `session.onLoad`/`session.onCancel` is
-what records (and clears) the consent that a later refresh reads back.
+raw `progress` event. `session.onLoad` / `session.onCancel` wrap the actions so every
+route's LOAD slot is wired identically.
+
+**The RUN slot holds its input.** Whatever the modality, the decoded thing is state:
+[`useImagePick`](../../frontend/src/hooks/useImagePick.ts) for images,
+[`useAudioPick`](../../frontend/src/hooks/useAudioPick.ts) for audio, or your own
+`useState` for a task neither fits. Neither pick hook takes an "on picked" callback, and
+that is the point — the RUN slot's single trigger reads the held input and is the only
+thing that calls `run`:
+
+```tsx
+const input = useAudioPick();                 // or useImagePick()
+
+const generate = () => {
+  const audio = input.take();                 // a *copy* — the worker detaches it
+  if (!audio) return;
+  input.clearError();
+  void run(audio).catch(() => { /* surfaced in OUTPUT */ });
+};
+```
+
+Capture whatever OUTPUT needs to render the result *inside* the run, not from the input
+currently held — otherwise choosing a new input restyles the previous result.
 
 The `status === "error" ? … : …` split on both slots is the §2 discriminator in practice:
 a load failure belongs in LOAD, anything else came from a run and belongs in OUTPUT.
 
 **If your task has no weights** — a WGSL kernel compiles in milliseconds — use
 [`DeviceStatus`](../../frontend/src/components/model/DeviceStatus.tsx) in the LOAD band
-instead and leave `autoLoad` at `true`. The `/tensor` route is the reference. The band still
+instead, and that is the one case for passing `autoLoad: true` explicitly. The `/tensor`
+route is the reference. The band still
 renders, so the page keeps the same rhythm as one that downloads 200 MB.
 
 **Band labels stay generic** (Model / Load / Input / Output). `ModelPage` accepts a `labels`

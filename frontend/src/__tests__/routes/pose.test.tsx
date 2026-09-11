@@ -100,6 +100,18 @@ function renderPage() {
   return render(<Page />);
 }
 
+const RUN_BUTTON = /find poses/i;
+
+// The RUN trigger. Picking an input never starts an inference any more
+// (model-page-pattern.md §1.6), so a test that wants a result asks for one.
+async function pickAndRun(sample: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name: sample }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
+}
+
 const ready = (extra: Partial<UsePoseResult> = {}) => ({
   ...baseState,
   status: "ready" as const,
@@ -137,7 +149,7 @@ describe("PosePage", () => {
 
   it("downloads nothing on arrival, and loads only on request", () => {
     renderPage();
-    expect(usePose).toHaveBeenCalledWith("dfine-n+vitpose-base", false);
+    expect(usePose).toHaveBeenCalledWith("dfine-n+vitpose-base");
     expect(baseState.load).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /load model/i }));
@@ -180,10 +192,18 @@ describe("PosePage", () => {
     expect(screen.getByRole("button", { name: /find poses/i })).toBeDisabled();
   });
 
-  it("estimates as soon as a sample is picked, on a capped frame", async () => {
+  it("picks a sample without running, then estimates when asked, on a capped frame", async () => {
     mockState = ready();
     renderPage();
+
     fireEvent.click(screen.getByRole("button", { name: /football match/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: RUN_BUTTON })).toBeEnabled(),
+    );
+    // Picking an input is not asking for an inference.
+    expect(mockRun).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
     expect(downscale).toHaveBeenCalledWith(fakeImage, 640);
     expect(mockRun).toHaveBeenCalledWith(fakeImage, {
@@ -199,7 +219,7 @@ describe("PosePage", () => {
     // pass is the expensive half.
     mockState = ready({ result: RESULT });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /football match/i }));
+    await pickAndRun(/football match/i);
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
 
     fireEvent.change(screen.getByLabelText(/person confidence/i), {
@@ -220,7 +240,7 @@ describe("PosePage", () => {
   it("says how many people it posed out of how many it found, and what each half cost", async () => {
     mockState = ready({ result: RESULT });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /football match/i }));
+    await pickAndRun(/football match/i);
 
     await waitFor(() =>
       expect(screen.getByTestId("pose-canvas")).toBeInTheDocument(),
@@ -234,7 +254,7 @@ describe("PosePage", () => {
   it("lists one entry per person, and their joints on request", async () => {
     mockState = ready({ result: RESULT });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /football match/i }));
+    await pickAndRun(/football match/i);
 
     await waitFor(() =>
       expect(screen.getByTestId("people")).toBeInTheDocument(),
@@ -257,7 +277,7 @@ describe("PosePage", () => {
   it("says that a faint joint is a guess, not an absence", async () => {
     mockState = ready({ result: RESULT });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /football match/i }));
+    await pickAndRun(/football match/i);
     await waitFor(() =>
       expect(screen.getByTestId("slot-4")).toHaveTextContent(
         /the faint ones are guesses/i,
@@ -270,7 +290,7 @@ describe("PosePage", () => {
       result: { people: [], detected: 0, detectMs: 12, poseMs: 0 },
     });
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /football match/i }));
+    await pickAndRun(/football match/i);
     await waitFor(() =>
       expect(screen.getByTestId("slot-4")).toHaveTextContent(
         /no people above the confidence threshold/i,

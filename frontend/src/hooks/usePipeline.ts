@@ -45,7 +45,7 @@ export interface UsePipelineResult {
 export function usePipeline(
   task: PipelineTask,
   model: string,
-  autoLoad = true,
+  autoLoad = false,
 ): UsePipelineResult {
   const worker = useModelWorker<unknown>({
     createWorker: createPipelineWorker,
