@@ -417,6 +417,7 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Voice Activity Detection | model catalogue, one entry with **no weights** | ONNX graph, or nothing at all for the energy baseline | mic / file / sample clip | probability timeline + a threshold the user drags |
 | Tensor Arithmetic | the operation | WGSL pipeline compile (fast, auto) | operand matrices | heatmap + numeric grid |
 | Linear Training | architecture + hyperparams | dataset fetch + kernel compile | train loop | live weights + loss curve |
+| Graph ML | the GNN architecture | **a GPU probe and a bundled dataset**, neither of them a download | Train / Stop, and a **depth slider that re-trains** | the graph repainted per epoch, plus accuracy against depth |
 | Mask Generation | model catalogue | weight download, **then a per-image encode** | click a point on the picture | the mask, its candidates, its decode time |
 | Keypoint Detection | **a pair** of checkpoints | both downloads, one aggregate bar | image / camera, threshold, people cap | skeletons over the frame |
 | Video Classification | CLIP catalogue, reused | weight download | a clip, labels, a sample rate | scores over time + a filmstrip |
@@ -441,6 +442,15 @@ whether the knob changes the *model's* answer or only the *reading* of it. A kno
 re-reads must never re-run — otherwise the control lags the pointer, `running` flickers, and the
 page charges the user's battery for a display preference. A knob that genuinely changes the
 input (a prompt, a length, a voice) belongs in RUN, not OUTPUT.
+
+**A page may have nothing to download at all.** `/graph` has no checkpoint — the network
+is written as WGSL and trained in the tab — and its dataset is 161 KB bundled with the
+app. LOAD is therefore two questions, neither of them bandwidth: is there a GPU
+([`DeviceStatus`](../../frontend/src/components/model/DeviceStatus.tsx)), and has the
+graph been decoded and laid out. The GPU answer comes first, because it decides which of
+the two compute paths a run takes. The band still exists and still has to be pressed:
+the layout behind it costs about a second, and a page that silently spent that on arrival
+would be doing work the user did not ask for.
 
 **A catalogue entry may cost nothing.** `/vad` offers an energy-based baseline alongside Silero:
 `bytes: { webgpu: 0, wasm: 0 }`, no repo, no download. It still passes through SELECT → LOAD →
@@ -490,6 +500,13 @@ non-commercial only — the constraint is a property of the *choice*, so it rend
 the picker at the moment the choice is made, in the same amber as the size guardrail.
 The permissively licensed model is the default. A restriction discovered after the
 download is a restriction discovered too late.
+
+**A control that changes the model's *shape* belongs in RUN, and re-runs.** `/graph`'s
+depth slider is the case that makes the §7 rule concrete in both directions at once: on
+the same page, depth (RUN) re-trains because 8 layers is a different model from 2, while
+the predicted/true colour switch (OUTPUT) re-reads the run already in hand and never
+re-runs. Having both on one page means the difference has to be *stated* rather than
+inferred, so the page says it beside the slider.
 
 **A control in RUN may legitimately re-run.** The §7 rule above — a knob that only
 re-reads must never re-run — is about OUTPUT. `/pose`'s person-confidence slider and its

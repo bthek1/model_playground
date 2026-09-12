@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { mulberry32 } from "@/lib/random";
 
+import { AttentionPropagator } from "./gat";
 import {
   accuracyOn,
   archScales,
@@ -13,6 +14,8 @@ import {
   type GnnInput,
   makeCpuAggregate,
   makeNeighbourSmoothness,
+  type Propagator,
+  scaledGatherPropagator,
   deadFraction,
   predict,
   prepareInput,
@@ -61,12 +64,44 @@ function features(seed = 5): Float32Array {
   return x;
 }
 
-function makeTrainer(arch: GnnArch, layers: number, seed = 11) {
+/**
+ * Propagator factory for an architecture. GAT needs its own RNG stream so that
+ * two trainers built with the same seed initialise identically — which is what
+ * the dropout gradient check relies on.
+ */
+function propagatorFor(arch: GnnArch, seed: number): (nFeat: number) => Propagator {
+  if (arch === "gat") {
+    const rand = mulberry32(seed ^ 0x9e3779b9);
+    return (nFeat) =>
+      new AttentionPropagator(GRAPH.rowPtr, GRAPH.colIdx, N, nFeat, rand);
+  }
   const { alpha, beta } = archScales(arch, GRAPH.degree);
+  const aggregate = makeCpuAggregate(GRAPH.rowPtr, GRAPH.colIdx, N, alpha, beta);
+  return () => scaledGatherPropagator(aggregate);
+}
+
+/**
+ * Nudge the biases off zero before a gradient check.
+ *
+ * Biases initialise to zero, and a node whose previous layer is entirely dead
+ * then has a preactivation of **exactly** 0 — sitting on ReLU's kink, where the
+ * function is not differentiable and a central difference averages the slope
+ * with the flat side, reporting half the true gradient. That is a property of
+ * the test point, not of the backward pass, so the check is done at a generic
+ * point instead. Deterministic, so a re-seeded copy perturbs identically.
+ */
+function offsetBiases(trainer: GnnTrainer, seed = 77): void {
+  const rand = mulberry32(seed);
+  for (const bias of trainer.biases) {
+    for (let i = 0; i < bias.length; i++) bias[i] = (rand() - 0.5) * 0.2;
+  }
+}
+
+function makeTrainer(arch: GnnArch, layers: number, seed = 11) {
   return new GnnTrainer(
     {
       matmul: cpuMatmulFn,
-      aggregate: makeCpuAggregate(GRAPH.rowPtr, GRAPH.colIdx, N, alpha, beta),
+      propagator: propagatorFor(arch, seed),
       smoothness: makeNeighbourSmoothness(GRAPH.rowPtr, GRAPH.colIdx),
     },
     { nNodes: N, nFeat: NFEAT, nClasses: NCLASSES, hidden: 5, layers },
@@ -166,12 +201,13 @@ describe("makeCpuAggregate", () => {
  * claim to be the slope of, one parameter at a time.
  */
 describe("GnnTrainer gradients", () => {
-  const ARCHES: GnnArch[] = ["gcn", "sage", "gin"];
+  const ARCHES: GnnArch[] = ["gcn", "sage", "gin", "gat"];
 
   for (const arch of ARCHES) {
     for (const layers of [1, 2, 3]) {
       it(`match finite differences — ${arch}, ${layers} layer(s)`, async () => {
         const trainer = makeTrainer(arch, layers);
+        offsetBiases(trainer);
         trainer.setInput(input());
 
         const forward = await trainer.forward(0, false);
@@ -182,6 +218,12 @@ describe("GnnTrainer gradients", () => {
           const checks = [
             { params: trainer.weights[l], grad: grads.dW[l], what: `dW[${l}]` },
             { params: trainer.biases[l], grad: grads.db[l], what: `db[${l}]` },
+            // GAT's two attention vectors; empty for every other architecture.
+            ...trainer.propagators[l].parameters().map((p, i) => ({
+              params: p.value,
+              grad: p.grad,
+              what: `attention[${l}][${i}]`,
+            })),
           ];
           for (const { params, grad, what } of checks) {
             // A handful of entries per tensor: enough to catch a transposed or
@@ -217,7 +259,7 @@ describe("GnnTrainer gradients", () => {
    * weights and then draws the same mask, so a perturbed copy sees the identical
    * dropout pattern.
    */
-  for (const arch of ["gcn", "sage", "gin"] as GnnArch[]) {
+  for (const arch of ["gcn", "sage", "gin", "gat"] as GnnArch[]) {
     for (const layers of [1, 2]) {
       it(`match finite differences under dropout — ${arch}, ${layers} layer(s)`, async () => {
         const SEED = 23;
@@ -226,6 +268,7 @@ describe("GnnTrainer gradients", () => {
 
         const fresh = () => {
           const t = makeTrainer(arch, layers, SEED);
+          offsetBiases(t);
           t.setInput(inp);
           return t;
         };
@@ -295,7 +338,7 @@ describe("fitGnn", () => {
         epochs: 120,
         arch: "gcn",
       },
-      { onMetrics: (m) => seen.push(m.loss) },
+      { onEpoch: (m) => seen.push(m.loss) },
     );
 
     expect(seen).toHaveLength(120);
@@ -313,7 +356,7 @@ describe("fitGnn", () => {
       { train: TRAIN, val: TRAIN, test: TRAIN },
       { learningRate: 0.05, weightDecay: 0, dropout: 0, epochs: 50, arch: "gcn" },
       {
-        onMetrics: () => epochs++,
+        onEpoch: () => epochs++,
         shouldStop: () => epochs >= 3,
       },
     );

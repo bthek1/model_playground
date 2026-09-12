@@ -39,9 +39,24 @@ The trade-off: you write kernels yourself. Start from the reference kernels in
 | `runtime.ts` | `runMatmul()` — the reference end-to-end kernel + benchmark. |
 | `tensorops.ts` | `runTensorOp()` — dispatch table for basic matrix arithmetic (add/sub/mul/div/matmul/transpose/scale), backing the Tensor Arithmetic page. |
 | `linearModel.ts` | `LinearTrainer` — mini-batch SGD training of a softmax classifier; the heavy matmuls use an injected `MatmulFn` (GPU in the worker, CPU in tests). Backs the Training page. |
+| `gnn.ts` | `GnnTrainer` — an L-layer graph neural network and its backward pass, over injected `matmul` and `Propagator` ops (GPU in the worker, CPU reference in tests). Backs the Graph ML page. |
+| `gat.ts` | `AttentionPropagator` — GAT's per-edge attention. The one architecture that is **not** a scaled gather, and the one that does not use the aggregation shader. |
+| `gnnRuntime.ts` | `GraphAggregator` — the aggregation kernel's device buffers and dispatch. The graph is uploaded **once** and left on the device for the whole training run. |
+| `graphSession.ts` | Worker-side owner of the Cora dataset, its layout and a streaming training run. Neither the 15.5 MB feature matrix nor the layout ever crosses `postMessage`. |
 | `shaders/*.wgsl` | The compute kernels (imported as strings via Vite `?raw`). |
 | `worker.ts` | Web Worker that owns the device and runs jobs off the main thread. |
 | `workerClient.ts` | Main-thread promise API over the worker (request correlation). |
+
+> **The aggregation kernel is the second shape of compute here.** `matmul.wgsl` is
+> dense arithmetic over contiguous rows; `gnn_aggregate.wgsl` is a **scaled gather
+> over a compressed-sparse-row graph** — one invocation per node, each walking its
+> own neighbour slice — which is what message passing is. It carries three
+> invariants that fail silently rather than loudly: the self-loop is *not* stored
+> and is added by the kernel (`A_hat = A + I`), the graph must be symmetric because
+> that is what makes the backward pass's transpose the same dispatch with the two
+> scale vectors swapped, and the projection must happen before the gather. CSR and
+> not a dense adjacency matrix: Cora dense is 29 MB of mostly zeros against ~40 KB.
+> See [`../roadmaps/graph.md`](../roadmaps/graph.md).
 
 > **Training-page visualization.** The Training route is a full-bleed **stage**
 > whose background *is* the model's architecture schematic

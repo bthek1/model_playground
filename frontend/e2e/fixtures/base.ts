@@ -71,8 +71,18 @@ export const test = base.extend<Fixtures>({
   },
 
   webgpuStatus: async ({ page }, use) => {
-    // Needs a document before navigator is reachable; about:blank is enough.
-    await page.goto("about:blank");
+    // Must be probed from a **served origin**, not about:blank.
+    //
+    // `navigator.gpu` is only exposed in a secure context, and about:blank has
+    // an opaque origin that does not qualify — so probing there reports
+    // "unsupported" on every machine, working GPU or not, and every spec in
+    // e2e/specs/webgpu/ skips itself for a reason that is not true. It is the
+    // same secure-context trap the app itself documents for LAN origins
+    // (docs/explanations/webgpu-inference.md); the test harness had it too.
+    //
+    // An app route rather than a static asset, because `page.goto` below is
+    // wrapped in `ensureMounted` and a bare asset has no app to mount.
+    await page.goto("/");
     await use(await probeWebGPU(page));
   },
 });

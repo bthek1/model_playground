@@ -56,6 +56,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | Feature plans (phased) | **GitHub issues**, label [`plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) — open = active, closed = done |
 | **Audio category roadmap** (complete, 6 of 6) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
 | **Computer Vision roadmap** (14 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
+| **Graph ML roadmap** (node classification + oversmoothing shipped; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -195,6 +196,54 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   also needs `dom.webgpu.enabled` in `about:config`. See [`docs/explanations/webgpu-inference.md`](docs/explanations/webgpu-inference.md).
 - To add a model: write the kernel + register a `ModelCard`. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md).
 
+
+### In-browser graph learning (`/graph`)
+
+The other carve-out, and the opposite one: there is **no checkpoint at all**. A graph
+neural network is one sparse gather repeated a few times, so the model is written as WGSL
+and trained in the tab. `lib/cora.ts` + `lib/data/cora.bin` (the dataset),
+`lib/graphLayout.ts`, `webgpu/gnn.ts` + `webgpu/gat.ts` (the model and its backward pass),
+`webgpu/shaders/gnn_aggregate.wgsl` + `webgpu/gnnRuntime.ts` (the kernel), and
+`webgpu/graphSession.ts` (the worker side). See [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md).
+
+- **Message passing is one scaled gather**, `out[i] = α_i Σ_{j ∈ N(i) ∪ {i}} β_j x[j]`, and
+  GCN / GraphSAGE / GIN are just a choice of the two scale vectors. Three invariants, all
+  of which fail *silently*: the **self-loop is not stored** and is added by the kernel
+  (`A_hat = A + I`; storing it double-counts), the **graph must be symmetric** because that
+  is what makes the backward pass's `Âᵀ` the same kernel with α and β swapped, and you must
+  **project before you gather** (`Â(XW)`, never `(ÂX)W` — 2708×16 versus 2708×1433).
+  `lib/cora.test.ts` asserts the first two over the real committed binary.
+- **GAT is not a scale vector, and the roadmap was wrong to say it was.** Its coefficients
+  are learned per *edge* from the features, the layer owns two vectors, and the gradient
+  flows into the features twice. It goes through the `Propagator` seam instead, and its
+  gather deliberately **does not** use the shader: it is O(|E|·d) ≈ 0.2 ms next to a
+  2708×1433×16 projection that already runs on the GPU. The page says which half runs where.
+- **A wrong aggregation still produces a falling loss and a plausible accuracy curve.** The
+  guard is a **finite-difference gradient check** per architecture (`webgpu/gnn.test.ts`),
+  plus a GPU-vs-CPU kernel cross-check in `e2e/specs/webgpu/graph.spec.ts`. Two things that
+  check needed: it runs at a **generic point** (zero-init biases put some preactivations
+  exactly on ReLU's kink, where a central difference reports half the gradient), and it
+  needs a **dropout pass**, because the masked input transpose is unreachable without one.
+- **Cora is bundled sparse-encoded, 161 KB.** Dense f32 features are 15.5 MB; the matrix is
+  1.27% dense with every stored value 1. `scripts/prepare-cora.mjs` rebuilds it and prints
+  its header. Input dropout is worth several points (0.754 → 0.776) and is affordable only
+  because `prepareInput` records where the 49 216 nonzeros land in **both** layouts —
+  re-masking and re-transposing 3.9 M elements per epoch would cost more than the model.
+- **The layout is the expensive part, not the model** (~900 ms vs ~2 s). Computed once in
+  the worker and never recomputed: changing the architecture or the depth re-trains, and
+  must never re-lay-out. The features never cross `postMessage` — the worker fetches and
+  decodes the dataset itself and sends back only what the canvas draws (~80 KB).
+- **Oversmoothing needs a number, and the obvious one is wrong.** Mean pairwise cosine over
+  all node pairs does *not* move monotonically with depth on real Cora; similarity between
+  **adjacent** nodes does (0.947 → 0.978 as accuracy falls 0.78 → 0.52). Rows are normalised
+  first so shrinkage is not mistaken for smoothing. **GIN's collapse is a different failure**
+  — unnormalised sum overflows and ReLU zeroes everything — so `deadFraction` is reported
+  separately and the page refuses to call it oversmoothing.
+- **`e2e/specs/webgpu/` was skipping everywhere, on every machine.** The fixture probed
+  `navigator.gpu` from `about:blank`, whose opaque origin is not a secure context, so the
+  probe always said `unsupported`. It now probes from a served origin, and the webgpu
+  project passes `--enable-unsafe-swiftshader` so a runner with no `/dev/dri` still executes
+  real WGSL. If you add a kernel, that is what will check it.
 
 ### In-browser pretrained models (`src/audio/`, `src/vision/`)
 

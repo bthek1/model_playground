@@ -30,6 +30,7 @@ import { Route as ImageTo3dRouteImport } from './routes/image-to-3d'
 import { Route as ImageFeaturesRouteImport } from './routes/image-features'
 import { Route as ImageClassificationRouteImport } from './routes/image-classification'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as GraphRouteImport } from './routes/graph'
 import { Route as DepthRouteImport } from './routes/depth'
 import { Route as BackgroundRemovalRouteImport } from './routes/background-removal'
 import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
@@ -144,6 +145,11 @@ const HomeRoute = HomeRouteImport.update({
   path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GraphRoute = GraphRouteImport.update({
+  id: '/graph',
+  path: '/graph',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DepthRoute = DepthRouteImport.update({
   id: '/depth',
   path: '/depth',
@@ -187,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/graph': typeof GraphRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
@@ -217,6 +224,7 @@ export interface FileRoutesByTo {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/graph': typeof GraphRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
@@ -248,6 +256,7 @@ export interface FileRoutesById {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/graph': typeof GraphRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
@@ -280,6 +289,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/graph'
     | '/home'
     | '/image-classification'
     | '/image-features'
@@ -310,6 +320,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/graph'
     | '/home'
     | '/image-classification'
     | '/image-features'
@@ -340,6 +351,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/graph'
     | '/home'
     | '/image-classification'
     | '/image-features'
@@ -371,6 +383,7 @@ export interface RootRouteChildren {
   AudioToAudioRoute: typeof AudioToAudioRoute
   BackgroundRemovalRoute: typeof BackgroundRemovalRoute
   DepthRoute: typeof DepthRoute
+  GraphRoute: typeof GraphRoute
   HomeRoute: typeof HomeRoute
   ImageClassificationRoute: typeof ImageClassificationRoute
   ImageFeaturesRoute: typeof ImageFeaturesRoute
@@ -544,6 +557,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/graph': {
+      id: '/graph'
+      path: '/graph'
+      fullPath: '/graph'
+      preLoaderRoute: typeof GraphRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/depth': {
       id: '/depth'
       path: '/depth'
@@ -603,6 +623,7 @@ const rootRouteChildren: RootRouteChildren = {
   AudioToAudioRoute: AudioToAudioRoute,
   BackgroundRemovalRoute: BackgroundRemovalRoute,
   DepthRoute: DepthRoute,
+  GraphRoute: GraphRoute,
   HomeRoute: HomeRoute,
   ImageClassificationRoute: ImageClassificationRoute,
   ImageFeaturesRoute: ImageFeaturesRoute,

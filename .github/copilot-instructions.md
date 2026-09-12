@@ -469,6 +469,39 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   See `docs/guides/adding-a-model.md` §8 (Transformers.js) or §9 (a bare ONNX graph — DFN3 is the
   reference, `src/audio/vad/` the smaller one to read first).
 
+**Graph machine learning (`/graph`) — the opposite carve-out: no checkpoint at all.**
+
+- A GNN is one sparse gather repeated a few times, so the model is **written as WGSL and trained in
+  the tab**. `lib/cora.ts` + `lib/data/cora.bin`, `lib/graphLayout.ts`, `webgpu/gnn.ts` +
+  `webgpu/gat.ts`, `webgpu/shaders/gnn_aggregate.wgsl` + `webgpu/gnnRuntime.ts`,
+  `webgpu/graphSession.ts`. Full write-up in `docs/roadmaps/graph.md`.
+- **Message passing is one scaled gather**, `out[i] = α_i Σ_{j ∈ N(i) ∪ {i}} β_j x[j]`; GCN /
+  GraphSAGE / GIN are a choice of the two scale vectors. Three invariants that fail **silently**:
+  the **self-loop is not stored** and is added by the kernel (storing it double-counts), the graph
+  **must be symmetric** because that is what makes the backward pass's `Âᵀ` the same kernel with
+  α and β swapped, and **project before you gather** (`Â(XW)`, never `(ÂX)W`). `lib/cora.test.ts`
+  asserts the first two against the real committed binary.
+- **GAT is not a scale vector.** Its coefficients are learned per *edge* from the features, so it
+  goes through the `Propagator` seam and its gather deliberately does **not** use the shader —
+  O(|E|·d) ≈ 0.2 ms beside a projection that already runs on the GPU. The page says which half runs
+  where.
+- **A wrong aggregation still produces a falling loss and a plausible accuracy curve.** The guards
+  are a **finite-difference gradient check** per architecture (`webgpu/gnn.test.ts`) and a GPU-vs-CPU
+  kernel cross-check (`e2e/specs/webgpu/graph.spec.ts`). The check must run at a **generic point**
+  (zero-init biases put preactivations exactly on ReLU's kink) and must include a **dropout pass**
+  (the masked input transpose is unreachable without one).
+- **Cora is bundled sparse-encoded, 161 KB** (dense f32 would be 15.5 MB). Input dropout is worth
+  several points and is affordable only via the nonzero pattern in both layouts. **The layout is the
+  expensive part, not the model** — computed once in the worker, never recomputed on a
+  hyperparameter change. Features never cross `postMessage`.
+- **Oversmoothing needs a number, and the obvious one is wrong**: use similarity between *adjacent*
+  nodes, not all pairs. **GIN's collapse is overflow, not oversmoothing** — `deadFraction` is
+  reported separately so the page cannot conflate them.
+- **`e2e/specs/webgpu/` used to skip on every machine**: the fixture probed `navigator.gpu` from
+  `about:blank`, an opaque origin and therefore not a secure context. It now probes a served origin,
+  and the webgpu project passes `--enable-unsafe-swiftshader` so a runner with no `/dev/dri` still
+  executes real WGSL.
+
 **In-browser vision (`src/vision/`) — the second modality on the same path:**
 
 - Same shape as `src/audio/`: one generic worker for every discriminative task (`vision.worker.ts`,

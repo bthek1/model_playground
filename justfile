@@ -158,6 +158,17 @@ fe-e2e-slow:
 fe-e2e-enhance:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --project=webgpu --workers=1 --grep "speech enhancement"
 
+# Run the @slow /graph specs: a real 200-epoch GNN training run on Cora, pinned
+# by an accuracy floor, plus the depth sweep that measures oversmoothing. Nothing
+# is downloaded — the dataset is bundled — but on SwiftShader budget ~10 minutes.
+fe-e2e-graph:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/graph.spec.ts
+
+# Rebuild the bundled Cora dataset from the LINQS release (needs curl + tar).
+# Only needed to change the binary format; the dataset itself has not moved.
+fe-data-cora:
+    cd frontend && node scripts/prepare-cora.mjs
+
 # Run the @slow voice-activity-detection specs (Silero VAD, ~2 MB, seconds)
 fe-e2e-vad:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "voice activity detection"
@@ -209,7 +220,9 @@ fe-e2e-ui:
 fe-e2e-headed:
     cd frontend && npm run test:e2e:headed
 
-# Run only the WebGPU E2E project (needs a real GPU)
+# Run only the WebGPU E2E project: real WGSL, each kernel cross-checked against a
+# CPU reference. On a machine with no GPU device node Chromium falls back to
+# SwiftShader — slow, but numerically real — so these run on a CI runner too.
 fe-e2e-webgpu:
     cd frontend && npx playwright test --project=webgpu
 

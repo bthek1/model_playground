@@ -31,7 +31,7 @@ import { gaussian, mulberry32 } from "@/lib/random";
 
 import type { MatmulFn } from "./linearModel";
 
-export type GnnArch = "gcn" | "sage" | "gin";
+export type GnnArch = "gcn" | "sage" | "gin" | "gat";
 
 /** Human-facing names and the one-line description each row needs in SELECT. */
 export const GNN_ARCHITECTURES: Record<
@@ -53,7 +53,20 @@ export const GNN_ARCHITECTURES: Record<
     aggregation: "(A+I)",
     note: "Unnormalised sum (ε = 0). The most expressive aggregation, and the one whose activations grow with depth.",
   },
+  gat: {
+    label: "GAT",
+    aggregation: "softmax_j LeakyReLU(aᵀ[h_i ‖ h_j])",
+    note: "Learned attention: the weight on each neighbour is computed from the pair, not from the degrees. Single head.",
+  },
 };
+
+/** The three architectures that are a choice of scale vectors. GAT is not. */
+export const SCALED_ARCHES = ["gcn", "sage", "gin"] as const;
+export type ScaledArch = (typeof SCALED_ARCHES)[number];
+
+export function isScaledArch(arch: GnnArch): arch is ScaledArch {
+  return arch !== "gat";
+}
 
 /**
  * A scaled gather over a fixed graph: `out[i] = Σ_{j ∈ N(i) ∪ {i}} α_i·β_j·x[j]`
@@ -71,17 +84,57 @@ export type AggregateFn = (
   transposed: boolean,
 ) => Promise<Float32Array>;
 
+/** A learnable tensor and the buffer its gradient accumulates into. */
+export interface Parameter {
+  value: Float32Array;
+  grad: Float32Array;
+}
+
 /**
- * The operations the trainer does not implement itself. `matmul` and `aggregate`
- * are the two that run on the GPU in production and on a CPU reference in tests;
- * `smoothness` needs the graph's edge list, which the trainer is deliberately not
- * given (it only ever sees the two scale vectors).
+ * One layer's message-passing step, and the seam GAT needed.
+ *
+ * For GCN, GraphSAGE and GIN this is a scaled gather with no parameters, and its
+ * backward really is `Âᵀ · dz`. Attention is not: `α_ij` is *computed from* the
+ * features being propagated, so the gradient flows back through the per-edge
+ * softmax into the same features as well as through the values, and the layer
+ * owns two learnable vectors of its own. Wrapping both behind one interface is
+ * what lets the trainer's forward and backward loops stay identical for all four
+ * architectures — see `gat.ts` for the half that is not a gather.
+ */
+export interface Propagator {
+  /** Â · s, stashing whatever the backward pass will need. */
+  forward(s: Float32Array, nFeat: number): Promise<Float32Array>;
+  /**
+   * The gradient with respect to `s`, given the gradient with respect to this
+   * step's output. Accumulates into `parameters()`'s gradient buffers.
+   */
+  backward(dz: Float32Array, nFeat: number): Promise<Float32Array>;
+  /** Learnable parameters this step owns; empty for a plain gather. */
+  parameters(): Parameter[];
+}
+
+/**
+ * The operations the trainer does not implement itself. `matmul` and the
+ * propagator's gather are the two that run on the GPU in production and on a CPU
+ * reference in tests; `smoothness` needs the graph's edge list, which the trainer
+ * is deliberately not given.
  */
 export interface GnnOps {
   matmul: MatmulFn;
-  aggregate: AggregateFn;
+  /** Built once per layer, because an attention layer owns per-layer weights. */
+  propagator: (nFeat: number) => Propagator;
   /** Mean cosine similarity between adjacent nodes' rows of an `n × nFeat` H. */
   smoothness: (h: Float32Array, nFeat: number) => number;
+}
+
+/** Wrap a parameterless `AggregateFn` as a `Propagator`. */
+export function scaledGatherPropagator(aggregate: AggregateFn): Propagator {
+  return {
+    forward: (s, nFeat) => aggregate(s, nFeat, false),
+    // Âᵀ is the same gather with the scales swapped — see the file header.
+    backward: (dz, nFeat) => aggregate(dz, nFeat, true),
+    parameters: () => [],
+  };
 }
 
 /**
@@ -165,9 +218,15 @@ export interface GnnSplitIndices {
   test: Uint32Array;
 }
 
-/** The per-architecture scale vectors. `degree` excludes the self-loop. */
+/**
+ * The per-architecture scale vectors. `degree` excludes the self-loop.
+ *
+ * GAT is absent by construction: its coefficients are learned per edge from the
+ * features, not derived from the degrees, so there is no pair of vectors to
+ * return. The type keeps that from being a runtime surprise.
+ */
 export function archScales(
-  arch: GnnArch,
+  arch: ScaledArch,
   degree: Uint32Array,
 ): { alpha: Float32Array; beta: Float32Array } {
   const n = degree.length;
@@ -301,9 +360,13 @@ export class GnnTrainer {
   /** Layer widths: `[nFeat, hidden, …, hidden, nClasses]`. */
   readonly dims: number[];
 
+  /** One per layer; parameterless for every architecture but GAT. */
+  readonly propagators: Propagator[] = [];
+
   private readonly rand: () => number;
   private readonly mW: Moment[] = [];
   private readonly mB: Moment[] = [];
+  private readonly mP: Moment[][] = [];
   private adamStep = 0;
 
   // Activations kept from the last forward pass, for the backward pass.
@@ -335,6 +398,15 @@ export class GnnTrainer {
       this.biases.push(new Float32Array(fanOut));
       this.mW.push({ m: new Float32Array(w.length), v: new Float32Array(w.length) });
       this.mB.push({ m: new Float32Array(fanOut), v: new Float32Array(fanOut) });
+
+      const propagator = ops.propagator(fanOut);
+      this.propagators.push(propagator);
+      this.mP.push(
+        propagator.parameters().map((p) => ({
+          m: new Float32Array(p.value.length),
+          v: new Float32Array(p.value.length),
+        })),
+      );
     }
   }
 
@@ -385,7 +457,7 @@ export class GnnTrainer {
       // X·W before Â·(·): aggregating an nNodes×fanOut matrix instead of an
       // nNodes×1433 one is the difference between a responsive page and a stall.
       const s = await this.ops.matmul(h, this.weights[l], nNodes, fanIn, fanOut);
-      const z = await this.ops.aggregate(s, fanOut, false);
+      const z = await this.propagators[l].forward(s, fanOut);
 
       const bias = this.biases[l];
       for (let i = 0; i < nNodes; i++) {
@@ -423,6 +495,11 @@ export class GnnTrainer {
     const { nNodes, nClasses } = this.shape;
     const L = this.shape.layers;
 
+    // Propagator gradients accumulate across a pass, so they start at zero.
+    for (const propagator of this.propagators) {
+      for (const param of propagator.parameters()) param.grad.fill(0);
+    }
+
     const probs = softmaxRows(forward.logits, nNodes, nClasses);
     const loss = crossEntropyLoss(probs, labels, trainIdx, nClasses);
     const dOut = new Float32Array(nNodes * nClasses);
@@ -458,8 +535,10 @@ export class GnnTrainer {
       }
       db[l] = bias;
 
-      // Âᵀ · dZ — the same gather with the scales swapped.
-      const dS = await this.ops.aggregate(dZ, fanOut, true);
+      // For a scaled gather this is Âᵀ · dZ; for attention it also carries the
+      // gradient back through the per-edge softmax and into the layer's own
+      // attention vectors.
+      const dS = await this.propagators[l].backward(dZ, fanOut);
 
       const hIn = this.acts[l];
       const hInT =
@@ -557,6 +636,10 @@ export class GnnTrainer {
     for (let l = 0; l < this.shape.layers; l++) {
       step(this.weights[l], grads.dW[l], this.mW[l], hp.weightDecay);
       step(this.biases[l], grads.db[l], this.mB[l], 0);
+      // Attention vectors are weights too, and are decayed like them.
+      this.propagators[l].parameters().forEach((param, i) => {
+        step(param.value, param.grad, this.mP[l][i], hp.weightDecay);
+      });
     }
   }
 }
@@ -696,9 +779,13 @@ export function deadFraction(h: Float32Array, n: number, d: number): number {
 }
 
 export interface FitCallbacks {
-  onMetrics?: (metrics: GnnMetrics) => void;
-  /** Per-epoch snapshot of the predictions, for the canvas. */
-  onSnapshot?: (epoch: number, predictions: Uint8Array) => void;
+  /**
+   * Fired once per epoch with that epoch's metrics and the class each node is
+   * currently predicted to be — the two things the page draws, and always
+   * produced by the same forward pass, so they are handed over together rather
+   * than as two callbacks a caller has to correlate.
+   */
+  onEpoch?: (metrics: GnnMetrics, predictions: Uint8Array) => void;
   /** Polled between epochs; return true to stop early. */
   shouldStop?: () => boolean;
 }
@@ -746,8 +833,7 @@ export async function fitGnn(
         evalPass.embeddingDim,
       ),
     };
-    cb.onMetrics?.(last);
-    cb.onSnapshot?.(epoch, pred);
+    cb.onEpoch?.(last, pred);
   }
   return last;
 }

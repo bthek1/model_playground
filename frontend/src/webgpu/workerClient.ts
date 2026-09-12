@@ -3,6 +3,12 @@
 
 import { registerAllocationPort } from "./allocations";
 import type {
+  GraphSummary,
+  GraphTrainRequest,
+  GraphTrainResult,
+} from "./graphSession";
+import type { GnnMetrics } from "./gnn";
+import type {
   TrainMetrics,
   TrainRequest,
   TrainResult,
@@ -152,5 +158,64 @@ export function trainLinearInWorker(
   });
 
   const cancel = () => worker.postMessage({ type: "trainCancel", id });
+  return { promise, cancel };
+}
+
+
+/** Load the bundled graph, lay it out, and report what a run would compute on. */
+export function loadGraphInWorker(worker: Worker): Promise<GraphSummary> {
+  return call<GraphSummary>(worker, { type: "graphLoad" });
+}
+
+export interface GraphTrainingHandle {
+  /** Resolves when training finishes (or is cancelled); rejects on error. */
+  promise: Promise<GraphTrainResult>;
+  /** Ask the worker to stop after the current epoch. */
+  cancel: () => void;
+}
+
+/**
+ * Start a streaming GNN training run. `onEpoch` fires once per epoch with that
+ * epoch's metrics and the class each node is currently predicted to be — which
+ * is what makes the colours settle on screen while the model trains.
+ *
+ * Nothing is transferred on the way in: the worker already holds the dataset,
+ * and the request is a handful of hyperparameters.
+ */
+export function trainGraphInWorker(
+  worker: Worker,
+  req: GraphTrainRequest,
+  onEpoch: (metrics: GnnMetrics, predictions: Uint8Array) => void,
+): GraphTrainingHandle {
+  const id = ++nextRequestId;
+  const promise = new Promise<GraphTrainResult>((resolve, reject) => {
+    const handler = (
+      event: MessageEvent<{
+        id: number;
+        event?: "progress";
+        metrics?: GnnMetrics;
+        predictions?: Uint8Array;
+        ok?: boolean;
+        result?: GraphTrainResult;
+        error?: string;
+      }>,
+    ) => {
+      const data = event.data;
+      if (data?.id !== id) return;
+      if (data.event === "progress") {
+        if (data.metrics && data.predictions) {
+          onEpoch(data.metrics, data.predictions);
+        }
+        return;
+      }
+      worker.removeEventListener("message", handler);
+      if (data.ok) resolve(data.result as GraphTrainResult);
+      else reject(new Error(data.error ?? "Training failed"));
+    };
+    worker.addEventListener("message", handler);
+    worker.postMessage({ type: "graphTrain", id, req });
+  });
+
+  const cancel = () => worker.postMessage({ type: "graphCancel", id });
   return { promise, cancel };
 }

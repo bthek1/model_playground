@@ -74,6 +74,11 @@ const REAL_ROUTES: Record<string, string> = {
   // SD-derived and stays on a server. The route adds no new model — it is
   // /depth's checkpoint plus an unprojection.
   "image-to-3d": "/image-to-3d",
+  // The only route on the raw-WebGPU path outside Theory: no checkpoint exists,
+  // so the network is written as WGSL and trained in the tab. Covers node
+  // classification and the oversmoothing demonstration; link prediction and
+  // graph classification are still open on the roadmap.
+  "graph-machine-learning": "/graph",
 };
 
 function task(label: string): TaskItem {

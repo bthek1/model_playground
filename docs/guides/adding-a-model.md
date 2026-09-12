@@ -31,6 +31,40 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 ```
 
+### If the data is sparse, gather — don't densify
+
+Dense-over-contiguous-rows is one shape of kernel. The other one in this repo is a
+**scaled gather over compressed sparse rows**, which is what `gnn_aggregate.wgsl`
+does for the graph route: one invocation per row, each walking its own slice of a
+`colIdx` array.
+
+```wgsl
+let start = rowPtr[node];
+let end   = rowPtr[node + 1u];
+for (var f = 0u; f < dims.nFeat; f = f + 1u) {
+  var acc = selfScale * x[base + f];              // the +I term, never stored
+  for (var e = start; e < end; e = e + 1u) {
+    let j = colIdx[e];
+    acc = acc + beta[j] * x[j * dims.nFeat + f];
+  }
+  out[base + f] = outScale * acc;
+}
+```
+
+Three things this shape gets wrong quietly, all of them worth checking before you
+write any UI:
+
+- **Index arrays bind as `array<u32>`, and must be uploaded as u32.** Writing them
+  through a `Float32Array` view reinterprets each index as a float bit pattern; it
+  round-trips for small integers and silently does not for any value that lands on
+  a NaN encoding. `createStorageBuffer` takes either type for this reason.
+- **Decide once whether the diagonal is stored or added**, and make the data
+  enforce it. Cora's CSR holds no self-loops precisely so the kernel's `+I` cannot
+  double-count, and a test asserts that over the committed binary.
+- **Sparse or not, cross-check against a CPU reference** — and for a gather that is
+  also a *structural* check, because a transposed or mis-scaled gather still
+  produces well-formed output. See §7.
+
 ## 2. Wire it into the runtime (frontend)
 
 Import the shader as a string and drive it with the existing helpers. A new

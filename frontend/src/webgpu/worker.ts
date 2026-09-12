@@ -7,6 +7,7 @@
 
 import { attachAllocationPort } from "./allocations";
 import { detectWebGPU } from "./capabilities";
+import { GraphSession, type GraphTrainRequest } from "./graphSession";
 import { LinearTrainer, type MatmulFn, type TrainRequest } from "./linearModel";
 import { runMatmul } from "./runtime";
 import { runTensorOp } from "./tensorops";
@@ -18,7 +19,10 @@ type WorkerRequest =
   | { type: "matmul"; id: number; job: MatmulJob }
   | { type: "tensorOp"; id: number; job: TensorOpJob }
   | { type: "train"; id: number; req: TrainRequest }
-  | { type: "trainCancel"; id: number };
+  | { type: "trainCancel"; id: number }
+  | { type: "graphLoad"; id: number }
+  | { type: "graphTrain"; id: number; req: GraphTrainRequest }
+  | { type: "graphCancel"; id: number };
 
 const ctx = self as unknown as {
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
@@ -34,6 +38,10 @@ const gpuMatmul: MatmulFn = async (a, b, m, k, n) =>
 // at every awaited matmul, a `trainCancel` message is processed between steps.
 const cancelled = new Set<number>();
 
+// The /graph route's dataset and layout, loaded once and reused for every run in
+// this worker. See graphSession.ts for why neither ever crosses postMessage.
+const graph = new GraphSession();
+
 ctx.onmessage = async (event) => {
   const msg = event.data;
   if (msg.type === "telemetryPort") {
@@ -42,7 +50,7 @@ ctx.onmessage = async (event) => {
     if (port) attachAllocationPort(port);
     return;
   }
-  if (msg.type === "trainCancel") {
+  if (msg.type === "trainCancel" || msg.type === "graphCancel") {
     cancelled.add(msg.id);
     return;
   }
@@ -60,6 +68,38 @@ ctx.onmessage = async (event) => {
     if (msg.type === "tensorOp") {
       const result = await runTensorOp(msg.job);
       ctx.postMessage({ id: msg.id, ok: true, result }, [result.data.buffer]);
+      return;
+    }
+    if (msg.type === "graphLoad") {
+      const summary = await graph.load();
+      ctx.postMessage({ id: msg.id, ok: true, result: summary }, [
+        summary.rowPtr.buffer,
+        summary.colIdx.buffer,
+        summary.labels.buffer,
+        summary.trainMask.buffer,
+        summary.x.buffer,
+        summary.y.buffer,
+      ]);
+      return;
+    }
+    if (msg.type === "graphTrain") {
+      const result = await graph.train(
+        msg.req,
+        (metrics, predictions) => {
+          // A copy per epoch: `predictions` belongs to the training loop, which
+          // keeps using it, so transferring it would detach the buffer mid-run.
+          const snapshot = predictions.slice();
+          ctx.postMessage(
+            { id: msg.id, event: "progress", metrics, predictions: snapshot },
+            [snapshot.buffer],
+          );
+        },
+        () => cancelled.has(msg.id),
+      );
+      cancelled.delete(msg.id);
+      ctx.postMessage({ id: msg.id, ok: true, result }, [
+        result.predictions.buffer,
+      ]);
       return;
     }
     if (msg.type === "train") {

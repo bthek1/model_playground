@@ -79,7 +79,15 @@ just fe-e2e-vision    # all fourteen vision routes — tens of minutes on a cold
 just fe-e2e-vision-one /pose      # one vision route at a time
 just fe-e2e-zeroshot  # split-tower scoring parity against the full CLIP graph
 just fe-e2e-superres  # Swin2SR against a bicubic baseline, by PSNR
+just fe-e2e-graph     # a real GNN training run on Cora, pinned by an accuracy floor
 ```
+
+`fe-e2e-graph` is the odd one: it is `@slow` without downloading anything, because
+`/graph` has no checkpoint and its dataset is bundled. What makes it slow is 200
+epochs of real training — about 3 minutes on SwiftShader for one run, and the
+depth sweep does two. The fast half of that route (the page shell, and the WGSL
+aggregation kernel cross-checked against its CPU reference) is in the default
+`just fe-e2e-webgpu` run and takes seconds.
 
 `fe-e2e-vision` grew from "one MobileNetV4 load" into the whole category, and it is
 now the longest job in the repo: OWLv2 alone is 155 MB, and Florence-2 is 544 MB on
@@ -348,13 +356,26 @@ message never renders. happy-dom does no constraint validation, which is why the
 unit tests *do* see the Zod message. Assert on `validity.valid` in E2E and leave
 the Zod-message assertions to the unit tests.
 
-### WebGPU needs a real GPU, and often a real Chrome
+### WebGPU needs a real Chrome — and the probe needs a real origin
 
 Playwright's default headless build ships **no** `navigator.gpu` at all, so the
-`webgpu` project uses `channel: "chromium"`. Even then, a machine with no GPU
-device node (no `/dev/dri` — most containers and CI runners) reports `unsupported`.
+`webgpu` project uses `channel: "chromium"`. A machine with no GPU device node
+(no `/dev/dri` — most containers and CI runners) would then report `unsupported`,
+so the project also passes `--enable-unsafe-swiftshader`: Chromium falls back to a
+software rasteriser that is slow but **numerically real**, and a kernel that
+disagrees with its CPU reference fails there exactly as it would on a GPU. That is
+what lets `e2e/specs/webgpu/` run anywhere rather than only on a developer desktop.
 
-The GPU specs handle this by skipping themselves:
+**The probe must run on a served origin.** `navigator.gpu` is exposed only in a
+secure context, and `about:blank` has an opaque origin that does not qualify — so
+the `webgpuStatus` fixture used to probe there, always answer `unsupported`, and
+silently skip *every* WebGPU spec on *every* machine, working GPU or not. It now
+navigates to the app first. This is the same secure-context trap the app itself
+documents for plain-HTTP LAN origins; the harness had it too.
+
+If you add a WGSL kernel, this project is what will actually execute it. Check
+that your spec **runs** rather than trusting a green summary — a skip and a pass
+look alike at a glance:
 
 ```ts
 test.skip(webgpuStatus !== "ready", `No GPU device (status: ${webgpuStatus}).`)

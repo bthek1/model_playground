@@ -104,11 +104,20 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         // Playwright's default headless build ships no WebGPU at all, so these
-        // specs need real Chrome/Chromium. Even then a machine with no GPU
-        // device node (no /dev/dri) reports "unsupported" and the specs skip.
+        // specs need real Chrome/Chromium.
         channel: "chromium",
         launchOptions: {
-          args: ["--enable-unsafe-webgpu", "--enable-features=Vulkan"],
+          args: [
+            "--enable-unsafe-webgpu",
+            "--enable-features=Vulkan",
+            // Fall back to SwiftShader on a machine with no GPU device node
+            // (no /dev/dri) — a CI runner, or a container. Without this the
+            // kernel specs skip there, which means the WGSL in this repo would
+            // only ever be executed on a developer's own desktop. SwiftShader
+            // is a software rasteriser, so it is slow but numerically real:
+            // a kernel that disagrees with its CPU reference fails here too.
+            "--enable-unsafe-swiftshader",
+          ],
         },
       },
     },

@@ -25,10 +25,15 @@ export class TensorPage extends ModelPageObject {
     await this.page.goto("/tensor");
   }
 
-  /** Pick an operation from the operation selector row. */
+  /**
+   * Pick an operation from the operation selector row.
+   *
+   * Matched on the trailing label, not exactly: each button renders its symbol
+   * alongside its name, so the accessible name is "+ Add" rather than "Add".
+   */
   async selectOp(label: string): Promise<void> {
     await this.main
-      .getByRole("button", { name: label, exact: true })
+      .getByRole("button", { name: new RegExp(`${label}$`) })
       .first()
       .click();
   }

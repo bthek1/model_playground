@@ -10,10 +10,18 @@
 
 import { releaseBuffer, trackBuffer } from "./allocations";
 
-/** Create a STORAGE buffer initialised with `data`. */
+/**
+ * Create a STORAGE buffer initialised with `data`.
+ *
+ * Takes `Uint32Array` as well as `Float32Array` because index data — a graph's
+ * CSR arrays, say — binds as `array<u32>` in WGSL. Writing it through a
+ * `Float32Array` view instead would reinterpret each index as a float bit
+ * pattern, which round-trips for small integers and silently does not for any
+ * value that lands on a NaN encoding.
+ */
 export function createStorageBuffer(
   device: GPUDevice,
-  data: Float32Array,
+  data: Float32Array | Uint32Array,
   extraUsage: GPUBufferUsageFlags = 0,
 ): GPUBuffer {
   const buffer = device.createBuffer({
@@ -21,7 +29,9 @@ export function createStorageBuffer(
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | extraUsage,
     mappedAtCreation: true,
   });
-  new Float32Array(buffer.getMappedRange()).set(data);
+  const range = buffer.getMappedRange();
+  if (data instanceof Uint32Array) new Uint32Array(range).set(data);
+  else new Float32Array(range).set(data);
   buffer.unmap();
   return trackBuffer(buffer, data.byteLength);
 }
