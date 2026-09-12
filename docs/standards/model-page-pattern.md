@@ -236,38 +236,6 @@ surface above it** is not: the sample row, the upload button, the drop target, t
 and any parameter beside them all work in `idle`, because choosing what to run costs
 nothing and needing a model first inverts the order people actually work in.
 
-### 4b. The INPUT band holds the input, and holding it is the point
-
-The input is **state**, not an event that passes through on its way to the worker. Every
-route keeps the decoded thing — a `RawImage`, a `Float32Array`, a list of points — and
-hands the worker a copy or a downscale of it. Three things follow, and each of them was
-a bug before this was true:
-
-- **Re-running costs nothing extra.** Switch checkpoint, press GENERATE again, same
-  input. No re-fetch, no re-decode, no second recording. `fe-e2e-models`-cheap models
-  and 60-second clips are equally affected.
-- **A parameter is a reason to re-run, not a reason to re-capture.** CLAP's prompts,
-  zero-shot's template, the mode on `/image-to-text`: edit, press GENERATE, compare.
-  Editing the prompts used to mean recording again.
-- **An audio worker detaches the buffer it is given.** `useAudioPick`'s `take()` returns
-  `clip.audio.slice()` for exactly this reason — hand over the stored array itself and
-  the waveform goes blank and the second GENERATE has nothing to send. The vision side
-  has the same trap in `toPayload`'s `copy` flag.
-
-The shared input surfaces are [`useImagePick`](../../frontend/src/hooks/useImagePick.ts) with
-[`ImageSourcePanel`](../../frontend/src/components/vision/ImageSourcePanel.tsx), and
-[`useAudioPick`](../../frontend/src/hooks/useAudioPick.ts) with
-[`AudioSourcePanel`](../../frontend/src/components/audio/AudioSourcePanel.tsx).
-Neither pick hook takes a callback, and that is deliberate: `useImagePick` used to accept
-an `onPicked`, thirteen routes used it to fire an inference on decode, and the parameter
-is gone rather than merely unused so it cannot come back one route at a time.
-
-**The result belongs to the input that produced it, and they are separate state.** A
-route captures the frame or clip it actually ran on (`frame`, `source`, `scored`,
-`enhanced`) *inside* its run function, and OUTPUT renders that — not the input currently
-held. Otherwise picking a new clip redraws the waveform under the previous result's
-timeline, and the page shows a comparison that was never computed.
-
 ### 4a. Breakpoints
 
 | Width | Arrangement |
@@ -306,6 +274,39 @@ a scroll container.
   error in RUN, an inference error in OUTPUT.
 - The header's `aside` is for one-line answers that don't deserve a band — a backend
   chip, a device line. It is not a fifth stage.
+
+### 4b. The INPUT band holds the input, and holding it is the point
+
+The input is **state**, not an event that passes through on its way to the worker. Every
+route keeps the decoded thing — a `RawImage`, a `Float32Array`, a list of points — and
+hands the worker a copy or a downscale of it. Three things follow, and each of them was
+a bug before this was true:
+
+- **Re-running costs nothing extra.** Switch checkpoint, press GENERATE again, same
+  input. No re-fetch, no re-decode, no second recording — which matters most for the
+  inputs that are expensive to obtain: a 60-second clip, or a take the user recorded
+  once and cannot reproduce.
+- **A parameter is a reason to re-run, not a reason to re-capture.** CLAP's prompts,
+  zero-shot's template, the mode on `/image-to-text`: edit, press GENERATE, compare.
+  Editing the prompts used to mean recording again.
+- **An audio worker detaches the buffer it is given.** `useAudioPick`'s `take()` returns
+  `clip.audio.slice()` for exactly this reason — hand over the stored array itself and
+  the waveform goes blank and the second GENERATE has nothing to send. The vision side
+  has the same trap in `toPayload`'s `copy` flag.
+
+The shared input surfaces are [`useImagePick`](../../frontend/src/hooks/useImagePick.ts) with
+[`ImageSourcePanel`](../../frontend/src/components/vision/ImageSourcePanel.tsx), and
+[`useAudioPick`](../../frontend/src/hooks/useAudioPick.ts) with
+[`AudioSourcePanel`](../../frontend/src/components/audio/AudioSourcePanel.tsx).
+Neither pick hook takes a callback, and that is deliberate: `useImagePick` used to accept
+an `onPicked`, thirteen routes used it to fire an inference on decode, and the parameter
+is gone rather than merely unused so it cannot come back one route at a time.
+
+**The result belongs to the input that produced it, and they are separate state.** A
+route captures the frame or clip it actually ran on (`frame`, `source`, `scored`,
+`enhanced`) *inside* its run function, and OUTPUT renders that — not the input currently
+held. Otherwise picking a new clip redraws the waveform under the previous result's
+timeline, and the page shows a comparison that was never computed.
 
 ---
 

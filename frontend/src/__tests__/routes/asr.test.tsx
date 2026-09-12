@@ -126,16 +126,18 @@ describe("AsrPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("disables the listen/upload controls until the model is ready", () => {
+  // Both RUN triggers wait for a model; the input sources do not. Getting audio
+  // in is not running anything, and gating the upload forced a download before
+  // the user was allowed to say what to run it on.
+  it("gates both run triggers on the model, and neither input source", () => {
     renderPage();
     expect(
       screen.getByRole("button", { name: /start listening/i }),
     ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^transcribe$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /upload audio/i })).toBeEnabled();
     expect(
-      screen.getByRole("button", { name: /upload audio/i }),
-    ).toBeDisabled();
-    expect(
-      screen.getByText(/load a model to start transcribing/i),
+      screen.getByText(/load a model to transcribe/i),
     ).toBeInTheDocument();
   });
 
