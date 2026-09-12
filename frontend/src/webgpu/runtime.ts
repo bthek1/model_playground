@@ -1,3 +1,4 @@
+import { releaseBuffer } from "./allocations";
 import {
   createOutputBuffer,
   createStorageBuffer,
@@ -6,6 +7,7 @@ import {
 } from "./buffers";
 import { getGPUDevice } from "./device";
 import { createComputePipeline } from "./pipeline";
+import { createPassTimer } from "./timing";
 import matmulShader from "./shaders/matmul.wgsl?raw";
 import type { MatmulJob, MatmulResult } from "./types";
 
@@ -51,20 +53,31 @@ export async function runMatmul(
 
   const start = now();
 
+  // Null on a device without `timestamp-query`, which changes nothing here.
+  const timer = createPassTimer(device);
+
   const encoder = device.createCommandEncoder();
-  const pass = encoder.beginComputePass();
+  const pass = encoder.beginComputePass(
+    timer ? { timestampWrites: timer.timestampWrites } : undefined,
+  );
   pass.setPipeline(pipeline);
   pass.setBindGroup(0, bindGroup);
   pass.dispatchWorkgroups(Math.ceil(n / TILE), Math.ceil(m / TILE));
   pass.end();
+  timer?.resolve(encoder);
   device.queue.submit([encoder.finish()]);
   await device.queue.onSubmittedWorkDone();
 
   const data = await readBackFloat32(device, cBuffer, m * n * 4);
   const gpuTimeMs = now() - start;
 
+  // Records the GPU's own pass duration in the ledger for the system panel.
+  // Deliberately not awaited and never thrown: `gpuTimeMs` above is the
+  // number this function promises, and instrumentation must not gate a result.
+  void timer?.readMs();
+
   for (const buffer of [dimsBuffer, aBuffer, bBuffer, cBuffer]) {
-    buffer.destroy();
+    releaseBuffer(buffer);
   }
 
   const flops = 2 * m * k * n;

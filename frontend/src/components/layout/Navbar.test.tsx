@@ -90,3 +90,33 @@ describe("Navbar", () => {
     expect(screen.getByLabelText("Sign out")).toBeInTheDocument();
   });
 });
+
+describe("Navbar — system panel toggle", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useUIStore.setState({ rightPanelOpen: false });
+  });
+
+  it("reports the panel as collapsed by default", () => {
+    render(<Navbar />);
+    expect(screen.getByLabelText("Toggle system panel")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("opens the panel and reflects it in aria-expanded", async () => {
+    const user = userEvent.setup();
+    render(<Navbar />);
+
+    await user.click(screen.getByLabelText("Toggle system panel"));
+    expect(useUIStore.getState().rightPanelOpen).toBe(true);
+    expect(screen.getByLabelText("Toggle system panel")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    await user.click(screen.getByLabelText("Toggle system panel"));
+    expect(useUIStore.getState().rightPanelOpen).toBe(false);
+  });
+});

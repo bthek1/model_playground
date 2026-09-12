@@ -122,6 +122,8 @@ export function Sidebar() {
 
   return (
     <aside
+      data-testid="sidebar"
+      aria-label="Task navigation"
       className={cn(
         "hidden md:flex flex-col border-r bg-sidebar shrink-0 transition-[width] duration-300 ease-in-out overflow-hidden",
         sidebarOpen ? "w-64" : "w-16",

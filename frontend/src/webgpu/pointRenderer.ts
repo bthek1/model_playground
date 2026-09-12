@@ -18,6 +18,7 @@
 //     rather than raising, so the route can render the depth map and an
 //     explanation instead of an empty canvas.
 
+import { releaseBuffer, trackBuffer } from "./allocations";
 import { getGPUDevice } from "./device";
 import shaderCode from "./shaders/points.wgsl?raw";
 
@@ -122,10 +123,13 @@ export class PointRenderer {
       },
     });
 
-    const uniformBuffer = device.createBuffer({
-      size: UNIFORM_FLOATS * 4,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
+    const uniformBuffer = trackBuffer(
+      device.createBuffer({
+        size: UNIFORM_FLOATS * 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      }),
+      UNIFORM_FLOATS * 4,
+    );
     const bindGroup = device.createBindGroup({
       layout: pipeline.getBindGroupLayout(0),
       entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
@@ -143,7 +147,7 @@ export class PointRenderer {
 
   /** Upload a cloud. Called once per inference — never from the render loop. */
   upload({ data, count, center }: CloudUpload): void {
-    this.vertexBuffer?.destroy();
+    if (this.vertexBuffer) releaseBuffer(this.vertexBuffer);
     this.count = count;
     this.center = center;
 
@@ -159,7 +163,9 @@ export class PointRenderer {
     });
     new Float32Array(buffer.getMappedRange()).set(data);
     buffer.unmap();
-    this.vertexBuffer = buffer;
+    // A cloud is the largest thing this app keeps on the GPU for any length of
+    // time (a 200k-point scene is ~5 MB), and the only one the page realm holds.
+    this.vertexBuffer = trackBuffer(buffer, data.byteLength);
   }
 
   /** Draw one frame at the current canvas size. Cheap enough for a drag. */
@@ -227,11 +233,11 @@ export class PointRenderer {
 
   /** Release GPU memory. A cloud is megabytes — leaking one per visit adds up. */
   destroy(): void {
-    this.vertexBuffer?.destroy();
+    if (this.vertexBuffer) releaseBuffer(this.vertexBuffer);
     this.vertexBuffer = null;
     this.depthTexture?.destroy();
     this.depthTexture = null;
-    this.uniformBuffer.destroy();
+    releaseBuffer(this.uniformBuffer);
   }
 
   /** The canvas format in use, exposed for tests and diagnostics. */

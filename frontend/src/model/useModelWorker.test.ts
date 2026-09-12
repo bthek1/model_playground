@@ -1,5 +1,11 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+
+import {
+  activeDownload,
+  consumeBusyMs,
+  resetActivity,
+} from "@/telemetry/activity";
 
 import type { ModelResponse } from "./types";
 import { useModelWorker } from "./useModelWorker";
@@ -342,5 +348,82 @@ describe("useModelWorker — Machine B (inference)", () => {
     unmount();
 
     await expect(promise).rejects.toThrow("Worker terminated");
+  });
+});
+
+
+// The system panel cannot observe an inference from outside the hook that
+// started it, so this hook reports both facts to `telemetry/activity.ts`.
+// These tests are about the reporting, not the panel.
+describe("useModelWorker — what it reports to the system panel", () => {
+  beforeEach(() => resetActivity());
+
+  it("reports nothing while idle", () => {
+    const factory = workerFactory();
+    renderHook(() =>
+      useModelWorker<string>({
+        createWorker: factory.createWorker,
+        key: "model-a",
+        loadMessage: {},
+      }),
+    );
+    expect(consumeBusyMs(Date.now())).toBe(0);
+    expect(activeDownload()).toBeNull();
+  });
+
+  it("reports an inference as busy for as long as it is in flight", async () => {
+    const { result, factory } = setup();
+    factory.last.emit({ type: "ready", model: "m", backend: "webgpu" });
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    await act(async () => {
+      void result.current.run({});
+    });
+    const start = Date.now();
+    expect(consumeBusyMs(start + 100)).toBeGreaterThan(0);
+
+    await act(async () => {
+      factory.last.emit({ type: "result", id: 1, result: "done" });
+    });
+    consumeBusyMs(Date.now());
+    expect(consumeBusyMs(Date.now() + 100)).toBe(0);
+  });
+
+  it("reports download bytes from the aggregate, then clears on ready", async () => {
+    const { result, factory } = setup();
+
+    await act(async () => {
+      factory.last.emit({
+        type: "progress",
+        progress: {
+          status: "progress",
+          name: "org/model",
+          file: "onnx/model.onnx",
+          loaded: 400,
+          total: 1000,
+        },
+      });
+    });
+    expect(activeDownload()).toEqual({ loadedBytes: 400, totalBytes: 1000 });
+
+    await act(async () => {
+      factory.last.emit({ type: "ready", model: "m", backend: "wasm" });
+    });
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(activeDownload()).toBeNull();
+  });
+
+  it("stops reporting when the route unmounts mid-run", async () => {
+    const { result, factory, unmount } = setup();
+    factory.last.emit({ type: "ready", model: "m", backend: "webgpu" });
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await act(async () => {
+      void result.current.run({}).catch(() => {});
+    });
+
+    unmount();
+    consumeBusyMs(Date.now());
+    expect(consumeBusyMs(Date.now() + 500)).toBe(0);
+    expect(activeDownload()).toBeNull();
   });
 });

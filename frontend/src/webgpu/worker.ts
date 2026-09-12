@@ -5,6 +5,7 @@
 // We avoid `/// <reference lib="webworker" />` because it collides with the DOM
 // lib used by the rest of the app; instead we narrow `self` to just what we use.
 
+import { attachAllocationPort } from "./allocations";
 import { detectWebGPU } from "./capabilities";
 import { LinearTrainer, type MatmulFn, type TrainRequest } from "./linearModel";
 import { runMatmul } from "./runtime";
@@ -12,6 +13,7 @@ import { runTensorOp } from "./tensorops";
 import type { MatmulJob, TensorOpJob } from "./types";
 
 type WorkerRequest =
+  | { type: "telemetryPort" }
   | { type: "detect"; id: number }
   | { type: "matmul"; id: number; job: MatmulJob }
   | { type: "tensorOp"; id: number; job: TensorOpJob }
@@ -34,6 +36,12 @@ const cancelled = new Set<number>();
 
 ctx.onmessage = async (event) => {
   const msg = event.data;
+  if (msg.type === "telemetryPort") {
+    // The page's end of the allocation ledger. Publishes nothing until asked.
+    const port = event.ports?.[0];
+    if (port) attachAllocationPort(port);
+    return;
+  }
   if (msg.type === "trainCancel") {
     cancelled.add(msg.id);
     return;

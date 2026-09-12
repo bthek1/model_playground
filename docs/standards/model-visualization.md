@@ -290,6 +290,10 @@ distributions) and aggregate views over `InferenceRun` metrics.
 - Small, composable marks (a sparkline, a single bar in a card) are hand-written **inline SVG** —
   a second charting library is not worth its weight for a 40px sparkline. Recharts used to be
   listed here as that option and was never imported once; it has been removed.
+  [`components/telemetry/Sparkline.tsx`](../../frontend/src/components/telemetry/Sparkline.tsx)
+  is the reference caller: `var(--chart-N)` works directly in SVG, so it needs no `getCSSVar()`
+  round-trip and pulls in no chart chunk — which is the point in a panel whose design constraint
+  is costing nothing ([telemetry-panel.md](../explanations/telemetry-panel.md) §3).
 - Feed chart series from the **theme tokens** (`var(--chart-1)`…) so charts recolor with the
   theme; don't hard-code series colors. ECharts can't read CSS vars directly, so resolve them at
   runtime with `getCSSVar()` ([`lib/theme.ts`](../../frontend/src/lib/theme.ts)) keyed on the

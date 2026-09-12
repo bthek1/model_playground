@@ -8,6 +8,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { reportDownload, reportInflight } from "@/telemetry/activity";
+
 import {
   initialProgress,
   reduceProgress,
@@ -237,6 +239,28 @@ export function useModelWorker<TResult>({
     return () => clearInterval(id);
   }, [status]);
 
+  const loadProgress =
+    status === "loading" ? summarize(progressState, elapsedMs) : null;
+
+  // The system panel's two app-derived numbers. Machine B's in-flight count and
+  // the byte aggregate above are already here and nowhere else, so this hook
+  // reports them rather than the panel measuring them a second time (it
+  // couldn't: an inference is invisible from outside the hook that started it).
+  // Both clean up to "nothing happening" — a route unmounted mid-run must not
+  // leave the panel reading busy for the rest of the session.
+  const loadedBytes = loadProgress?.loaded ?? 0;
+  const totalBytes = loadProgress?.total ?? 0;
+
+  useEffect(() => {
+    reportInflight(key, inflight);
+    return () => reportInflight(key, 0);
+  }, [key, inflight]);
+
+  useEffect(() => {
+    reportDownload(key, totalBytes > 0 ? { loadedBytes, totalBytes } : null);
+    return () => reportDownload(key, null);
+  }, [key, loadedBytes, totalBytes]);
+
   const run = useCallback(
     (
       payload: Record<string, unknown>,
@@ -266,8 +290,7 @@ export function useModelWorker<TResult>({
     loading: status === "loading",
     ready: status === "ready",
     progress,
-    loadProgress:
-      status === "loading" ? summarize(progressState, elapsedMs) : null,
+    loadProgress,
     loadedInMs,
     backend,
     running: inflight > 0,

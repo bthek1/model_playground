@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { LogOut, Menu, User } from "lucide-react";
+import { Gauge, LogOut, Menu, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import {
@@ -11,11 +11,14 @@ import {
 } from "@/components/ui/sheet";
 import { useUIStore } from "@/store/ui";
 import { useMe, useLogout } from "@/hooks/useAuth";
+import { PANEL_SHORTCUT } from "./RightPanel";
 import { SidebarNav } from "./Sidebar";
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
+  const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
   const { data: me } = useMe();
   const logout = useLogout();
   const navigate = useNavigate();
@@ -64,6 +67,17 @@ export function Navbar() {
       <span className="hidden text-sm font-semibold md:block">Model Playground</span>
 
       <div className="flex-1" />
+
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={toggleRightPanel}
+        aria-label="Toggle system panel"
+        aria-expanded={rightPanelOpen}
+        title={`System panel (${PANEL_SHORTCUT})`}
+      >
+        <Gauge className="h-4 w-4" />
+      </Button>
 
       <ThemeToggle />
 

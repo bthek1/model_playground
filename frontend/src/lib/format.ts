@@ -31,3 +31,15 @@ export function formatBytes(bytes: number): string {
 export function titleCase(value: string): string {
   return value.replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+/**
+ * Format a duration for a readout: sub-millisecond work keeps two decimals (a
+ * GPU pass is often 0.42 ms and "0 ms" would be wrong), and anything past a
+ * second reads in seconds.
+ */
+export function formatMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return String(ms);
+  if (ms < 1) return `${ms.toFixed(2)} ms`;
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+}

@@ -1,6 +1,7 @@
 // Main-thread client for the WebGPU worker. Handles worker creation and
 // request/response correlation so callers get plain promises.
 
+import { registerAllocationPort } from "./allocations";
 import type {
   TrainMetrics,
   TrainRequest,
@@ -21,9 +22,21 @@ interface WorkerResponse<T> {
 }
 
 export function createWebGPUWorker(): Worker {
-  return new Worker(new URL("./worker.ts", import.meta.url), {
+  const worker = new Worker(new URL("./worker.ts", import.meta.url), {
     type: "module",
   });
+
+  // The worker owns its own GPUDevice, and therefore its own allocation ledger:
+  // every WGSL kernel in the app allocates in *that* realm, invisible from here.
+  // This port is how the system panel learns what the GPU is actually holding.
+  // It stays silent until the panel asks — see webgpu/allocations.ts.
+  if (typeof MessageChannel !== "undefined") {
+    const channel = new MessageChannel();
+    worker.postMessage({ type: "telemetryPort" }, [channel.port2]);
+    registerAllocationPort(channel.port1);
+  }
+
+  return worker;
 }
 
 let nextRequestId = 0;

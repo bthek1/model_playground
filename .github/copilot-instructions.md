@@ -244,6 +244,18 @@ export const Route = createFileRoute('/users/$userId')({
   via `getCSSVar()`, and lazy charts. The Training route (`components/training/`) and Tensor route
   (`routes/tensor.tsx`) are the reference callers. Reuse those primitives; render the real
   `ModelCard`/weight data, not stock diagrams; pass both themes and every WebGPU status.
+- **The system panel** (`src/telemetry/`, `components/telemetry/`, `components/layout/RightPanel.tsx`)
+  reports **load and capacity, never utilisation**: a browser exposes no host CPU percent, no GPU
+  utilisation and no VRAM. Every metric is `{ status: "ok", value }` or
+  `{ status: "unavailable", reason }` — never a zero for "unknown" — and each card states what its
+  number actually is. It samples nothing while closed or while the tab is hidden: one 1 Hz
+  interval, ring buffers behind refs (not Zustand, not TanStack Query), the Cache Storage walk
+  every 10th tick, a slow tick skipped rather than queued. Sparklines are inline SVG (§5), not
+  ECharts. GPU bytes are a ledger, not a probe (`webgpu/allocations.ts`): free with
+  `releaseBuffer()`, and the worker realm publishes its ledger over a `MessagePort` from
+  `createWebGPUWorker()` (a `BroadcastChannel` would include other tabs). `useModelWorker` reports
+  inflight + download bytes to `telemetry/activity.ts`; the worker envelope gains no telemetry
+  variant. Full detail: `docs/explanations/telemetry-panel.md`
 
 **Model pages (`src/model/`) — one pipeline, four slots:**
 - Every task page is SELECT → LOAD → RUN → OUTPUT, specified in
@@ -329,30 +341,50 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   `slot-1`…`slot-4`, `model-size-note`, `model-size-warning`, `model-ready`, `load-progress`,
   `load-cancel`, `model-cached-<id>`, `model-evict`, `device-ready`, `output-panel`, `output-empty`,
   `output-running`, `error-note`. Add to that table
-  (model-page-pattern.md §8), never invent an ad-hoc id. Each task page test covers: nothing
-  downloads on mount, `load`/`retry` fire from the LOAD slot, four slots render with an empty
-  OUTPUT, run controls gated on `ready`, and each error in its own slot. Playwright page objects
-  mirror this — `ModelPageObject` is the base, `AudioPage`/`TensorPage` extend it.
+  (model-page-pattern.md §8), never invent an ad-hoc id — `audio-input`/`audio-input-empty` are the
+  audio input surface's pair. Each task page test covers: nothing downloads on mount (the hook is
+  called with **no `autoLoad` argument**); a refresh leaves the page `idle` **even with the weights
+  cached**; **choosing an input runs nothing** (pick a sample while `ready`, assert `run` was not
+  called, then press the trigger and assert it was); **the input survives its run** (press twice —
+  one decode, two `run` calls); `load`/`retry` fire from the LOAD slot; four slots render with an
+  empty OUTPUT; the GENERATE trigger is gated on `ready` while the input sources are not; and each
+  error is in its own slot. Playwright page objects mirror this — `ModelPageObject` is the base
+  (its `run(name)` presses the RUN trigger), `AudioPage`/`TensorPage` extend it.
 - **Reference implementations:** `routes/text-to-speech.tsx` (downloads weights),
   `routes/tensor.tsx` (compile-only), `routes/tasks.$slug.tsx` (the empty case).
   `routes/training.tsx` is the one **documented exception** — a full-bleed canvas HUD that keeps its
   own layout; see model-page-pattern.md §7 before copying it.
-- **`idle` is the default — nothing downloads on mount.** Weights are the user's bandwidth and the
-  tab's memory. Show the size estimate and the large-model warning *first*, start the download on an
-  explicit action. Compile-only tasks (WGSL pipeline compile) may `autoLoad`.
-- **A refresh restores the decisions, not the session.** A Worker cannot outlive a page load, so
-  `store/models.ts` persists the selected model and the intent to load it, and
-  `model/useModelSelection.ts` auto-loads on mount **only when that intent meets a cache hit**
-  (`model/cache.ts` probes Cache Storage). An uncached model still stays `idle` and asks; a resume is
-  labelled "Restoring from cache…", never dressed up as a session that survived. Use the hook's
-  `autoLoad` for the task hook, and never widen the rule — a false cache hit spends bandwidth the
-  user did not agree to.
+- **Two buttons spend anything: LOAD and GENERATE.** SELECT and INPUT are choices — free,
+  reversible, committing to nothing. **Only LOAD loads** (`idle` is the default and `autoLoad`
+  defaults to `false` everywhere): not on arrival, not on a model change, not on a refresh, and
+  **not on a cache hit** — cached weights make the click cheap, not unnecessary, since they still
+  cost memory, a GPU device and a warm-up. Show the size estimate and the large-model warning
+  *first*. Compile-only tasks (a WGSL pipeline compile) are the one case that may pass
+  `autoLoad: true`.
+- **Only GENERATE runs.** Picking a sample, dropping a file, finishing a recording, placing a point
+  on a picture, or editing a prompt/label/template beside the input all land in INPUT and stop.
+  Thirteen vision routes used to run on decode, and the four audio routes had no input stage at all
+  — browsing five samples cost five inferences and there was no way to re-run the clip you had.
+  The **input sources are not gated on `ready`**; only the GENERATE trigger is. A control that
+  merely re-reads a result in hand still re-derives without a press, because it spends nothing.
+- **The input is held state.** `hooks/useImagePick.ts` / `hooks/useAudioPick.ts` with
+  `components/vision/ImageSourcePanel.tsx` / `components/audio/AudioSourcePanel.tsx` own the decode
+  and hand the run a **copy** — every audio worker detaches the buffer it is given, so
+  `useAudioPick.take()` is `clip.audio.slice()` and `toPayload` copies by default. Neither pick hook
+  takes an "on picked" callback; the parameter is gone, not merely unused. OUTPUT renders the
+  frame/clip captured **inside** the run, never the input currently held.
+- **A refresh restores the selection, not the session and not the load.** A Worker cannot outlive a
+  page load, so `store/models.ts` persists the selected model and *only* that — with `partialize`,
+  so a stale `autoResume` key from an older build cannot revive auto-resume. `model/cache.ts` still
+  probes Cache Storage, but only to say "Load model (cached)": an informed click, never an absent
+  one.
 - **The progress bar reports the aggregate** (`model/progress.ts`): monotonic percent by bytes over
   all files, indeterminate until a size is known (and then `aria-valuenow` is omitted), warm-up as
   its own phase, and no ETA. Never render a raw per-file `progress_callback` payload — it restarts at
   zero for each of a model's 4–8 files.
 - **Slot rules:** SELECT disabled while `loading`/`running`; LOAD is the only slot with a progress
-  bar; RUN controls are `disabled={!ready || running}`; OUTPUT always renders (empty / running /
+  bar; the GENERATE trigger is `disabled={!ready || running || <no input>}` while the input sources
+  above it are not gated at all; OUTPUT always renders (empty / running /
   result / error) so the page never jumps when a result lands.
 - **Errors render in the slot that produced them** — load error in LOAD, decode error in RUN,
   inference error in OUTPUT. A failed inference must leave the page usable.

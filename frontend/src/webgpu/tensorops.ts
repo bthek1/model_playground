@@ -3,6 +3,7 @@
 // scale each have a tiny dedicated kernel. Every op validates shapes on the CPU
 // before touching the GPU so the UI gets a clear error rather than a driver one.
 
+import { releaseBuffer } from "./allocations";
 import {
   createOutputBuffer,
   createStorageBuffer,
@@ -233,5 +234,5 @@ function dispatch1D(
 }
 
 function destroy(...buffers: GPUBuffer[]): void {
-  for (const buffer of buffers) buffer.destroy();
+  for (const buffer of buffers) releaseBuffer(buffer);
 }

@@ -5,7 +5,10 @@
 **Model Playground** runs machine-learning models — LLMs, computer vision, and
 custom networks — **directly in the browser on the user's GPU via raw WebGPU**.
 Inference never touches the server: weights are fetched to the client and all
-compute happens in WGSL shaders on the local device.
+compute happens in WGSL shaders on the local device. Because the machine doing
+the work is the user's, a hideable **system panel** reports what that work costs
+— see `docs/explanations/telemetry-panel.md`, which is also where the limits of
+what a browser can measure are written down.
 
 It is a **decoupled monorepo**: a Django REST Framework backend and a React SPA
 frontend, developed and deployed independently, communicating over HTTP.
@@ -107,6 +110,8 @@ frontend/
 │   │   ├── buffers.ts       Storage/uniform buffer + readback helpers
 │   │   ├── pipeline.ts      WGSL → GPUComputePipeline
 │   │   ├── runtime.ts       runMatmul() reference kernel + benchmark
+│   │   ├── allocations.ts   Per-realm GPU byte ledger (no API reports VRAM)
+│   │   ├── timing.ts        timestamp-query compute-pass timing (optional feature)
 │   │   ├── worker.ts        Web Worker that owns the device, runs jobs
 │   │   ├── workerClient.ts  Main-thread promise API over the worker
 │   │   └── shaders/         WGSL compute shaders (matmul, elementwise, scale, transpose)
@@ -119,6 +124,8 @@ frontend/
 │   │   └── classification.ts, samples.ts, types.ts, client.ts
 │   ├── model/             Shared across modalities: backend probe, size guardrail,
 │   │                        worker lifecycle, aggregate progress, weight cache
+│   ├── telemetry/         The system panel's samplers, ring buffer and 1 Hz loop
+│   │                        (load and capacity only — see telemetry-panel.md)
 │   ├── hooks/             Custom hooks encapsulating business logic
 │   │   ├── useAuth.ts     Auth state, login, logout
 │   │   ├── useWebGPU.ts   WebGPU capability probe (for the UI)
@@ -135,7 +142,7 @@ frontend/
 │   ├── schemas/           Zod validation schemas (one file per domain)
 │   │   └── auth.ts        Login and register schemas
 │   ├── store/             Zustand global state (one file per concern)
-│   │   ├── ui.ts          UI flags (sidebar, modals)
+│   │   ├── ui.ts          UI flags (sidebar, system panel, theme)
 │   │   └── auth.ts        Client-side auth flags
 │   ├── test/
 │   │   └── setup.ts       Vitest setup (imports @testing-library/jest-dom)

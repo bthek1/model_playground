@@ -33,3 +33,35 @@ describe("useUIStore — category expansion", () => {
     expect(result.current.expandedCategories.Audio).toBeUndefined();
   });
 });
+
+describe("useUIStore — the system panel", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useUIStore.setState({ rightPanelOpen: false });
+  });
+
+  it("starts closed — nothing is sampled until it is asked for", () => {
+    const { result } = renderHook(() => useUIStore());
+    expect(result.current.rightPanelOpen).toBe(false);
+  });
+
+  it("toggles open then closed", () => {
+    const { result } = renderHook(() => useUIStore());
+
+    act(() => result.current.toggleRightPanel());
+    expect(result.current.rightPanelOpen).toBe(true);
+
+    act(() => result.current.toggleRightPanel());
+    expect(result.current.rightPanelOpen).toBe(false);
+  });
+
+  it("remembers the choice across a reload", () => {
+    const { result } = renderHook(() => useUIStore());
+
+    act(() => result.current.setRightPanelOpen(true));
+    expect(localStorage.getItem("systemPanel")).toBe("open");
+
+    act(() => result.current.setRightPanelOpen(false));
+    expect(localStorage.getItem("systemPanel")).toBe("closed");
+  });
+});

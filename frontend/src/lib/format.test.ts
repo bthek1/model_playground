@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBytes, titleCase } from "./format";
+import { formatBytes, formatMs, titleCase } from "./format";
 
 describe("formatBytes", () => {
   it("keeps sub-KiB values in bytes", () => {
@@ -41,5 +41,27 @@ describe("titleCase", () => {
     expect(titleCase("turing")).toBe("Turing");
     expect(titleCase("apple m1")).toBe("Apple M1");
     expect(titleCase("")).toBe("");
+  });
+});
+
+describe("formatMs", () => {
+  it("keeps two decimals below a millisecond — a GPU pass is often 0.42 ms", () => {
+    expect(formatMs(0.42)).toBe("0.42 ms");
+    expect(formatMs(0)).toBe("0.00 ms");
+  });
+
+  it("rounds whole milliseconds", () => {
+    expect(formatMs(8.4)).toBe("8 ms");
+    expect(formatMs(999)).toBe("999 ms");
+  });
+
+  it("switches to seconds past a second", () => {
+    expect(formatMs(1500)).toBe("1.5 s");
+    expect(formatMs(42_000)).toBe("42 s");
+  });
+
+  it("returns nonsense input as-is rather than inventing a duration", () => {
+    expect(formatMs(NaN)).toBe("NaN");
+    expect(formatMs(-1)).toBe("-1");
   });
 });
