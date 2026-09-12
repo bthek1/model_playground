@@ -118,6 +118,10 @@ export function AudioSourcePanel({
                 key={sample.id}
                 size="sm"
                 variant={clip?.sample?.id === sample.id ? "secondary" : "ghost"}
+                // The row is a selection, not a set of independent actions, so
+                // it says which one is loaded rather than only looking it. The
+                // model picker does the same.
+                aria-pressed={clip?.sample?.id === sample.id}
                 className="h-7 border text-xs"
                 disabled={busy}
                 title={sample.hint}

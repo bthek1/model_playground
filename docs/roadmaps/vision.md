@@ -192,6 +192,17 @@ class masks — is a **result**, and results live in OUTPUT
 answer on top of the input would collapse the two slots into one, which is
 exactly the drift the four-slot shell exists to prevent.
 
+**And picking is not running.** `useImagePick` originally took an `onPicked`
+callback so a route could classify the picture the instant it decoded, which read
+as a convenience and was not one: thirteen routes used it, so a user comparing the
+sample row spent one GPU inference per click and the Classify button beside them
+did nothing they had not already been charged for. The callback is **gone** — not
+deprecated, not merely unused — so it cannot come back one route at a time, and
+[§1.6](../standards/model-page-pattern.md) is now the rule for both modalities.
+The corollary shows up in the panel too: its sources are **not** gated on `ready`,
+because choosing what to run before choosing what to run it with is a sensible
+order to work in.
+
 ---
 
 ## 3. Task by task

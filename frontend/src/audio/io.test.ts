@@ -119,19 +119,31 @@ describe("decodeToMono", () => {
 describe("play", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("copies samples into a mono AudioBuffer and starts playback", () => {
+  /** Records what `play()` did to a context, with a resume that can refuse. */
+  function installPlayMocks({ resumeRejects = false } = {}) {
     const channel = new Float32Array(3);
     const createBuffer = vi.fn(() => ({ getChannelData: () => channel }));
     const start = vi.fn();
     const connect = vi.fn();
+    const resume = vi.fn(() =>
+      resumeRejects
+        ? Promise.reject(new Error("blocked by autoplay policy"))
+        : Promise.resolve(),
+    );
     class FakeAudioContext {
       createBuffer = createBuffer;
+      resume = resume;
       destination = {};
       createBufferSource() {
         return { buffer: null, connect, start };
       }
     }
     vi.stubGlobal("AudioContext", FakeAudioContext);
+    return { channel, createBuffer, start, connect, resume };
+  }
+
+  it("copies samples into a mono AudioBuffer and starts playback", () => {
+    const { channel, createBuffer, start, connect } = installPlayMocks();
 
     const samples = new Float32Array([0.4, 0.5, 0.6]);
     play(samples, 22050);
@@ -144,6 +156,24 @@ describe("play", () => {
     ]);
     expect(connect).toHaveBeenCalledTimes(1);
     expect(start).toHaveBeenCalledTimes(1);
+  });
+
+  // Firefox and Safari hand back every context suspended, whatever gesture it
+  // was created in. Without the resume the source starts on a stopped clock:
+  // no sound, no error, and a Play button that looks broken.
+  it("resumes the context — constructing it is not enough outside Chrome", () => {
+    const { resume } = installPlayMocks();
+    play(new Float32Array([0.1, 0.2, 0.3]), 24000);
+    expect(resume).toHaveBeenCalledTimes(1);
+  });
+
+  it("survives a refused resume rather than rejecting into the caller", async () => {
+    const { resume, start } = installPlayMocks({ resumeRejects: true });
+    expect(() => play(new Float32Array([0.1, 0.2, 0.3]), 24000)).not.toThrow();
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(1);
+    // Let the rejection settle: an unhandled one would fail the run.
+    await Promise.resolve();
   });
 });
 

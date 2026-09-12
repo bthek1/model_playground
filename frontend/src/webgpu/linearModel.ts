@@ -5,6 +5,8 @@
 // reference in unit tests. Everything else (softmax, cross-entropy, gradients,
 // SGD update) is plain, verifiable arithmetic.
 
+import { mulberry32, shuffle } from "@/lib/random";
+
 /** Matrix multiply C(m×n) = A(m×k) · B(k×n), row-major flattened. */
 export type MatmulFn = (
   a: Float32Array,
@@ -84,17 +86,6 @@ export function cpuMatmul(
     }
   }
   return c;
-}
-
-/** Deterministic small-state PRNG so training/shuffling is reproducible. */
-function mulberry32(seed: number): () => number {
-  let s = seed >>> 0;
-  return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 export class LinearTrainer {
@@ -294,15 +285,5 @@ export class LinearTrainer {
         cb.onMetrics?.({ epoch, step, totalSteps, loss, trainAcc, testAcc });
       }
     }
-  }
-}
-
-/** In-place Fisher–Yates shuffle driven by a supplied RNG. */
-function shuffle(arr: Int32Array, rand: () => number): void {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    const tmp = arr[i];
-    arr[i] = arr[j];
-    arr[j] = tmp;
   }
 }

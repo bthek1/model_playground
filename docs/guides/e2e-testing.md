@@ -212,9 +212,13 @@ Every task route renders the same four slots
 ([`model-page-pattern.md`](../standards/model-page-pattern.md)), so
 `ModelPageObject` holds what is true of all of them — `slots`, `slot(n)`,
 `outputPanel`, `emptyOutput`, `runningOutput`, `error`, `button(name)`,
-`loadProgress`, `cancelLoad`, `cachedBadge(id)`, plus the LOAD-slot verbs every
-weight-downloading route shares: `load()`, `loadButton`, `retryButton`,
-`waitForReady()`, `backend()`, `sizeNote` and `blockModelDownloads()`. The
+`loadProgress`, `cancelLoad`, `cachedBadge(id)`, plus the verbs for the page's two
+buttons — `load()`, `loadButton`, `retryButton`, `waitForReady()`, `backend()`,
+`sizeNote`, `blockModelDownloads()`, and **`run(name)`** for the RUN slot's
+trigger. `run()` waits for *enabled* rather than merely present, because the
+trigger exists from the first render and only lights up once a model is ready and
+an input is held — a Playwright click on a disabled button times out with a far
+less useful message than "still disabled". The
 modality-specific objects extend it rather than repeating it: `AudioPage` adds
 only the audio status strings, `TensorPage` adds matrix operands and result-grid
 readback, and the vision specs use the base directly.
@@ -229,11 +233,13 @@ names collide with route buttons — "Computer Vision" matches a `/^Compute/` lo
 **So does anything the browser itself owns.** Cache Storage and `localStorage` are real
 here and stubbed in Vitest, which is why the refresh story
 ([`model-page-pattern.md` §5b](../standards/model-page-pattern.md)) is asserted in
-`model-page.spec.ts`: a reload keeps the selected model and downloads nothing; a seeded
-`transformers-cache` entry plus a stored intent resumes the load and says "Restoring from
-cache…"; the same intent *without* the cache entry does not; and cancelling a stalled
-download returns the page to `idle`. Route the Hub to a handler that never responds when a
-spec needs a load to stay in flight — aborting races it straight to an error state.
+`model-page.spec.ts`: a reload keeps the selected model and downloads nothing —
+**including when a `transformers-cache` entry is seeded**, which is the case that used
+to auto-load. That spec also seeds a stale `autoResume` key alongside it, because a real
+user's browser still has one from an older build and it must change nothing. Cancelling
+a stalled download returns the page to `idle`. Route the Hub to a handler that never
+responds when a spec needs a load to stay in flight — aborting races it straight to an
+error state.
 
 **Layout lives here, and only here.** Vitest runs in happy-dom, which has no layout
 engine — every `getBoundingClientRect()` is zeroes — so the *arrangement* half of the
@@ -244,13 +250,20 @@ the work columns at 1000×800, four bands stacking in increasing `y` at 375×812
 horizontal document overflow at either width, and no chasm between a short input and its
 transport row. A route test asserts presence and order; it must never assert pixels.
 
-**Two rules the migration to that pattern added:**
+**Three rules the migration to that pattern added:**
 
 1. **Nothing downloads on navigation.** Weight-loading routes start `idle`, so a spec
    that wants a model must press Load like a user: `await audio.load()`. A spec that
    only asserts the shell should *not* — and `model-page.spec.ts` asserts exactly
    that, with the Hub blocked and every request recorded.
-2. **Assert on a UI signal, not on the request list.** After `load()`, the worker
+2. **Nothing runs on an input either.** Clicking a sample, uploading a file or
+   finishing a recording fills the INPUT band and stops, so a spec that wants a
+   result presses the trigger: `await model.run(/^Classify$/)`. This is why the
+   `@slow` specs read *pick, then run* — they assert a known label on a known
+   input, and without the press they would assert it against no inference at all.
+   The mirror-image spec is worth writing too: pick an input with a model `ready`
+   and assert `emptyOutput` is **still** visible.
+3. **Assert on a UI signal, not on the request list.** After `load()`, the worker
    spawn and the first fetch are both async. Wait for the visible consequence — the
    error, or the ready line — then assert on what was requested.
 

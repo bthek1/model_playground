@@ -107,6 +107,22 @@ Float32; speech enhancement wants **48 kHz** and passes `SAMPLE_RATE` explicitly
 16 kHz assumption leaking into that route silently discards the band the model
 exists to repair (§3.5).
 
+**Routes do not call these directly any more — `useAudioPick` does.**
+[`hooks/useAudioPick.ts`](../../frontend/src/hooks/useAudioPick.ts), with
+[`AudioSourcePanel`](../../frontend/src/components/audio/AudioSourcePanel.tsx), is the
+audio counterpart of `useImagePick` / `ImageSourcePanel`, and it exists because all four
+audio routes had the same bug: `onFile` decoded **and ran the model** in one function, as
+did the record button and each sample clip. There was no INPUT stage at all, so browsing
+the samples cost an inference per click (one of them is 60 seconds long), and re-running
+the clip you already had meant uploading it again. The hook holds a decoded clip and
+nothing else; the route's GENERATE button is the only caller of `run`
+([model-page-pattern.md §1.6](../standards/model-page-pattern.md)). Pass `sampleRate` to
+it the same way you would to `decodeToMono` — `/audio-to-audio` passes 48 000.
+
+Its one non-obvious rule: **`take()` returns a copy.** Every audio worker receives the
+`Float32Array`'s buffer as a transfer and detaches it, so handing over the stored clip
+would blank the input waveform and leave the second GENERATE with nothing to send.
+
 Playback and WAV export for generated audio are in the same module (`play`,
 `toWavBlob`), and `audio/waveform.ts` reduces a `Float32Array` to the min/max
 envelope the output panels draw.

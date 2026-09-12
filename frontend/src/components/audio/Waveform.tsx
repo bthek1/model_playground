@@ -129,6 +129,11 @@ export function LiveWaveform({
       void ctx?.close();
       return; // stream already ended / env without real Web Audio
     }
+    // Same rule as `audio/io.ts`'s `play()`: Firefox and Safari hand back a
+    // suspended context, and a suspended context's clock never advances — the
+    // analyser would return the same silent frame forever and the live trace
+    // would be a flat line rather than a microphone.
+    void ctx.resume?.().catch(() => {});
     const audioCtx = ctx;
 
     const data = new Float32Array(analyser.fftSize);

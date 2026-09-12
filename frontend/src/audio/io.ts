@@ -63,6 +63,15 @@ export async function recordMic(
  * Play mono `Float32` samples through the speakers. Returns the `AudioContext`
  * so the caller can `suspend()` (pause) / `resume()` / `close()` (stop) it.
  * `onEnded` fires when the clip finishes on its own (not on `close()`).
+ *
+ * **A new `AudioContext` must be resumed, not merely constructed.** Firefox and
+ * Safari create every context `suspended` under their autoplay policies, and
+ * creating it inside a click handler is not enough — the context has to be
+ * resumed explicitly. Chrome starts one running, which is exactly why this was
+ * invisible: `src.start()` on a suspended context throws nothing, plays
+ * nothing, and leaves a Play button that does nothing at all. The context clock
+ * is stopped while suspended, so a source started before the resume still plays
+ * from its first sample.
  */
 export function play(
   samples: Float32Array,
@@ -77,6 +86,9 @@ export function play(
   src.connect(ctx.destination);
   if (onEnded) src.onended = () => onEnded();
   src.start();
+  // A refused resume leaves the context suspended and `ctx.state` says so —
+  // callers that want to tell the user can read it; nothing here can.
+  void ctx.resume?.().catch(() => {});
   return ctx;
 }
 
