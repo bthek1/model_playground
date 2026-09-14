@@ -15,9 +15,14 @@ import { expect, test } from "../../fixtures/base";
 /** Evaluate in the page so the kernel runs in the app's own module graph. */
 async function crossCheckKernel(page: import("@playwright/test").Page) {
   return page.evaluate(async () => {
-    const { GraphAggregator } = await import("/src/webgpu/gnnRuntime.ts");
-    const { makeCpuAggregate } = await import("/src/webgpu/gnn.ts");
-    const { mulberry32 } = await import("/src/lib/random.ts");
+    // These specifiers are dev-server URLs resolved by the *browser*, not module
+    // paths tsc can follow from this file. Going through a `string` variable is
+    // what stops `tsc -b` failing to resolve them (it breaks `npm run build`,
+    // which type-checks `e2e/` via tsconfig.e2e.json).
+    const load = (url: string) => import(/* @vite-ignore */ url);
+    const { GraphAggregator } = await load("/src/webgpu/gnnRuntime.ts");
+    const { makeCpuAggregate } = await load("/src/webgpu/gnn.ts");
+    const { mulberry32 } = await load("/src/lib/random.ts");
 
     const rand = mulberry32(7);
     const nNodes = 97;

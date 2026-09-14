@@ -1,9 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { LogoMark } from "@/components/layout/Logo";
 
 export function HeroBanner() {
   return (
     <section className="flex flex-col items-center justify-center gap-6 px-4 py-24 text-center">
+      <LogoMark className="h-16 w-16" />
       <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
         Welcome to <span className="text-primary">Model Playground</span>
       </h1>

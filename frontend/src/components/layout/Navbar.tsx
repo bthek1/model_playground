@@ -12,6 +12,7 @@ import {
 import { useUIStore } from "@/store/ui";
 import { useMe, useLogout } from "@/hooks/useAuth";
 import { PANEL_SHORTCUT } from "./RightPanel";
+import { Logo } from "./Logo";
 import { SidebarNav } from "./Sidebar";
 
 export function Navbar() {
@@ -47,7 +48,9 @@ export function Navbar() {
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-72 p-0">
           <SheetHeader className="flex h-14 flex-row items-center border-b px-4">
-            <SheetTitle className="text-base font-semibold">Model Playground</SheetTitle>
+            <SheetTitle className="text-base font-semibold">
+              <Logo markClassName="h-6 w-6" textClassName="text-base" />
+            </SheetTitle>
           </SheetHeader>
           <SidebarNav onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
@@ -64,7 +67,7 @@ export function Navbar() {
         <Menu className="h-5 w-5" />
       </Button>
 
-      <span className="hidden text-sm font-semibold md:block">Model Playground</span>
+      <Logo className="hidden md:flex" markClassName="h-7 w-7" textClassName="text-sm" />
 
       <div className="flex-1" />
 

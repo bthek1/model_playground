@@ -108,11 +108,15 @@ describe("Sidebar", () => {
     expect(screen.getByText("Model Playground")).toBeInTheDocument();
   });
 
-  it("renders the collapsed brand initials when closed", () => {
+  it("renders the mark alone when closed", () => {
     useUIStore.setState({ sidebarOpen: false });
     const { container } = render(<Sidebar />);
-    expect(screen.getByText("MP")).toBeInTheDocument();
+    // The collapsed rail used to spell "MP". It shows the logo mark now — a
+    // brand element, not two letters standing in for an icon.
     expect(screen.queryByText("Model Playground")).not.toBeInTheDocument();
+    expect(screen.queryByText("MP")).not.toBeInTheDocument();
+    const header = container.querySelector("aside > div");
+    expect(header?.querySelector("svg")).toBeInTheDocument();
     expect(container.querySelector("aside")?.className).toContain("w-16");
   });
 });

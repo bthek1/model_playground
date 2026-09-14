@@ -3,6 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronRight, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/ui";
+import { Logo, LogoMark } from "./Logo";
 import { categoryForPath, taskCategories } from "./taskTaxonomy";
 
 export function SidebarNav({
@@ -136,9 +137,15 @@ export function Sidebar() {
           sidebarOpen ? "px-4" : "justify-center",
         )}
       >
-        <span className="font-semibold text-sidebar-foreground truncate">
-          {sidebarOpen ? "Model Playground" : "MP"}
-        </span>
+        {sidebarOpen ? (
+          <Logo
+            className="min-w-0"
+            markClassName="h-7 w-7"
+            textClassName="truncate text-sidebar-foreground"
+          />
+        ) : (
+          <LogoMark className="h-8 w-8" />
+        )}
       </div>
 
       <SidebarNav collapsed={!sidebarOpen} />
