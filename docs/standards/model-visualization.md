@@ -167,6 +167,29 @@ but they share this grammar. Three rules carry over, and one is new:
   `post_process_pose_estimation` returns `labels: number[]` and nothing else names them.
   Domain drawing that carries a domain contract lives with the domain.
 
+### Node-link graph (graph ML)
+
+A graph drawn as dots and lines, repainted while a model trains over it —
+[`components/graph/GraphCanvas.tsx`](../../frontend/src/components/graph/GraphCanvas.tsx),
+the Graph ML route's whole OUTPUT slot. Four rules, and the last two are
+performance constraints that change the design rather than merely tune it:
+
+- **One canvas, not a node per node.** 2708 SVG circles will not animate, and
+  this surface is repainted every epoch. The same rule as the per-pixel imagery
+  in §7, arrived at from the other direction.
+- **Paint the static structure once and blit it.** Edges never move during
+  training; only the colours change. They are drawn into an offscreen canvas
+  keyed on the box size and `drawImage`d underneath each repaint, so a frame
+  costs 2708 arcs rather than 2708 arcs plus 5278 line segments.
+- **One `stroke()` for all the edges**, after one `beginPath()`. A stroke per
+  edge is the difference between a frame and a slideshow.
+- **The coordinate mapping is pure and exported**, because happy-dom gives a
+  canvas no 2D context and a unit test therefore cannot assert a single pixel.
+  `layoutToPixels` is where an off-centre drawing or a stretched aspect ratio
+  gets caught; what the canvas actually paints is asserted in a real browser by
+  the route's E2E spec. Any canvas whose geometry is worth getting right should
+  split the same way.
+
 ### Comparison, transparency, and 3-D (vision, Wave 3)
 
 Three surfaces arrived with the carve-out routes, and each answers a question the
@@ -245,6 +268,18 @@ Use the five chart tokens `--chart-1 … --chart-5` (exposed as `color-chart-1�
 `var(--chart-N)`). They form a blue-family ramp tuned for both themes. For **more than five
 categories**, don't invent ad-hoc hexes — cycle the ramp with varied lightness, or switch to a
 sequential encoding. Keep a category's color stable across every chart on the page.
+
+**The one exception, and its criterion.** When the category *is* the result the user is reading
+— not a series in a chart, but the value painted onto every mark of a dense plot — a
+blue-family ramp cycled by lightness stops being legible at exactly the moment it matters.
+Graph ML's node classification paints 2708 dots in seven classes and the whole point is
+watching communities separate, so `GraphCanvas.CLASS_COLORS` is a purpose-built qualitative
+palette of maximally separated hues. The criterion is **"is distinguishing the categories the
+task?"** — if the answer is no, cycle the ramp. A palette that takes this exception owes the
+other two rules in return: fixed values rather than theme tokens, so a class does not change
+identity when the theme flips (the same reason `paintDiverging` fixes its endpoints), and a
+legend naming every category, because §4's "never encode meaning in colour alone" is not what
+is being relaxed here.
 
 ### Sequential — a single magnitude (activations, attention, similarity, |weight|)
 A one-hued ramp from `--muted` (low) to `--primary` (high), or a perceptually-uniform OKLCH
@@ -341,6 +376,10 @@ and heavy per-pixel drawing goes to `<canvas>`, heavy compute goes to the Web Wo
   with CSS.
 - **Memoise normalization** (e.g. `maxAbs`) with `useMemo` keyed on the tensor — recompute only
   when weights change, not every render.
+- **Separate what moves from what doesn't.** On a surface repainted per epoch or per frame, the
+  static layer (a graph's edges, an axis, a backdrop) belongs in an offscreen canvas keyed on
+  the box size and blitted under each repaint. Redrawing it every frame is work spent producing
+  an identical picture.
 - Live weight/activation streams must arrive via the worker's transferred `ArrayBuffer`s
   (zero-copy); never round-trip large tensors through React state. The training path already
   does this — the worker streams a `WeightSnapshot` (`{ epoch, weights, bias }`, see

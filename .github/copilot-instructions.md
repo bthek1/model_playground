@@ -497,6 +497,15 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - **Oversmoothing needs a number, and the obvious one is wrong**: use similarity between *adjacent*
   nodes, not all pairs. **GIN's collapse is overflow, not oversmoothing** — `deadFraction` is
   reported separately so the page cannot conflate them.
+- **A gradient check does not pin a forward pass, and a canvas hides its geometry.** Two
+  gaps worth knowing before writing the next kernel or the next visualization: GAT's
+  finite-difference checks pass even if the softmax is normalised over the wrong set, so
+  `gat.test.ts` asserts the property (every output is a convex combination of its closed
+  neighbourhood) and calibrates it by zeroing the attention vectors, which must collapse the
+  layer to an exact mean. And happy-dom gives a canvas **no 2D context and no
+  `ResizeObserver`**, so a component test reaches only the guarded early-returns — pull the
+  geometry out as a pure function (`GraphCanvas.layoutToPixels`) or it is untested. Doing that
+  immediately surfaced a drawing centred and then shifted again by half the padding.
 - **`e2e/specs/webgpu/` used to skip on every machine**: the fixture probed `navigator.gpu` from
   `about:blank`, an opaque origin and therefore not a secure context. It now probes a served origin,
   and the webgpu project passes `--enable-unsafe-swiftshader` so a runner with no `/dev/dri` still

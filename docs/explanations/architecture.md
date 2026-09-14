@@ -209,7 +209,7 @@ its own dependencies, and lives in the per-modality folders `src/audio/` and
 
 | Runtime | Where | Used by |
 |---|---|---|
-| Hand-written WGSL | `src/webgpu/` | tensor arithmetic, linear/MNIST training, benchmarks |
+| Hand-written WGSL | `src/webgpu/` | tensor arithmetic, linear/MNIST training, **graph neural networks**, benchmarks |
 | Transformers.js (`@huggingface/transformers`, `kokoro-js`) | `src/audio/` | ASR, audio classification, TTS, text-to-audio |
 | Transformers.js | `src/vision/` | fourteen of the twenty Computer Vision tasks — classification, depth, detection, segmentation, both zero-shot tasks, embeddings, SAM, captioning/OCR, pose, a frame-level video baseline, background removal, super-resolution and depth-to-point-cloud |
 | `onnxruntime-web` **directly** | `src/audio/enhance/`, `src/audio/vad/` | speech enhancement (DeepFilterNet3), voice activity detection (Silero VAD) |
@@ -232,6 +232,15 @@ behind image-to-3D), `matte.ts` (alpha compositing for background removal) and
 `resample.ts` (the bicubic baseline). Every one of them fails by producing a
 *plausible picture* rather than an error, so an assertion over the arithmetic is
 the only thing that catches it — see `docs/roadmaps/vision.md` §3.13–§3.15.
+
+The same split holds outside vision, and for the same reason: `lib/cora.ts`
+(decoding a CSR graph), `lib/graphLayout.ts` (force-directed placement),
+`lib/random.ts` (the seeded streams every reproducible run depends on) and
+`components/graph/GraphCanvas.tsx`'s exported `layoutToPixels` are all pure, and
+all fail by drawing something that looks fine. **`/graph` is the one route with no
+checkpoint at all** — its model is WGSL written here and trained in the tab, which
+is why the hand-written row above now carries a neural network rather than only
+arithmetic. See `docs/roadmaps/graph.md`.
 
 **`/image-to-3d` is the one route where both client-side runtimes appear on the
 same page, and they still do not mix.** Inference is Transformers.js in

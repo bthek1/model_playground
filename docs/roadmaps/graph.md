@@ -267,6 +267,11 @@ are arranged around it.
 | [`lib/graphLayout.test.ts`](../../frontend/src/lib/graphLayout.test.ts) | non-determinism, NaN coordinates, a layout that collapses to a point |
 | [`webgpu/gnn.test.ts`](../../frontend/src/webgpu/gnn.test.ts) | **a wrong backward pass**, by finite differences, for every architecture at 1–3 layers, with dropout and without |
 | [`webgpu/gnnRuntime.test.ts`](../../frontend/src/webgpu/gnnRuntime.test.ts) | a malformed graph reaching the GPU, before any device work |
+| [`webgpu/gat.test.ts`](../../frontend/src/webgpu/gat.test.ts) | attention that is not attention — the gradient check pins the *derivative*, this pins the forward pass's convex-combination property |
+| [`webgpu/graphSession.test.ts`](../../frontend/src/webgpu/graphSession.test.ts) | a second layout on a second load, a cancel surfacing as a failure, the feature matrix escaping the worker |
+| [`lib/random.test.ts`](../../frontend/src/lib/random.test.ts) | a stream that moves between runs, and Box–Muller's `log(0)` |
+| [`hooks/useGraphTraining.test.ts`](../../frontend/src/hooks/useGraphTraining.test.ts) | a re-entrant load, a depth point stacking instead of replacing, a leaked worker |
+| [`components/graph/GraphCanvas.test.tsx`](../../frontend/src/components/graph/GraphCanvas.test.tsx) | an off-centre or stretched drawing, via the pure coordinate mapping |
 | [`__tests__/routes/graph.test.tsx`](../../frontend/src/__tests__/routes/graph.test.tsx) | the page contract: four slots, nothing runs on mount, a control that shouldn't run doesn't |
 | [`e2e/specs/webgpu/graph.spec.ts`](../../frontend/e2e/specs/webgpu/graph.spec.ts) | the WGSL kernel disagreeing with the CPU reference, and — `@slow` — a real training run pinned by an **accuracy floor** |
 
@@ -281,6 +286,20 @@ Three notes on the gradient check, because it is the load-bearing test:
   fails the six dropout cases and passes all the others.
 - **It has teeth.** Dropping the self-loop from the shader moves the kernel cross-check's
   worst-case error from under 1e-5 to 0.87.
+
+Two more, from the pass that filled the gaps above:
+
+- **A gradient check does not pin a forward pass.** A softmax normalised over the
+  wrong set still differentiates consistently, so GAT's finite-difference checks would
+  pass while its attention weights were not attention weights. `gat.test.ts` asserts the
+  property instead — every output is a convex combination of its closed neighbourhood —
+  and calibrates it by zeroing the attention vectors, which must collapse the layer to an
+  exact mean.
+- **Extract the geometry from a canvas.** happy-dom gives a canvas no 2D context and has
+  no `ResizeObserver`, so a component test of `GraphCanvas` reaches only the guarded
+  early-returns. Pulling `layoutToPixels` out as a pure function immediately surfaced an
+  off-centre drawing — the span was centred and then shifted again by half the padding,
+  giving a 12px gap on one side and 4px on the other.
 
 Unlike the audio and vision routes, the unit suite here **can** catch a broken model:
 there is no network and no ONNX session to mock away. The E2E specs still exist for the

@@ -239,6 +239,15 @@ and trained in the tab. `lib/cora.ts` + `lib/data/cora.bin` (the dataset),
   first so shrinkage is not mistaken for smoothing. **GIN's collapse is a different failure**
   — unnormalised sum overflows and ReLU zeroes everything — so `deadFraction` is reported
   separately and the page refuses to call it oversmoothing.
+- **A gradient check does not pin a forward pass, and a canvas hides its geometry.** Two
+  gaps worth knowing before writing the next kernel or the next visualization: GAT's
+  finite-difference checks pass even if the softmax is normalised over the wrong set, so
+  `gat.test.ts` asserts the property (every output is a convex combination of its closed
+  neighbourhood) and calibrates it by zeroing the attention vectors, which must collapse the
+  layer to an exact mean. And happy-dom gives a canvas **no 2D context and no
+  `ResizeObserver`**, so a component test reaches only the guarded early-returns — pull the
+  geometry out as a pure function (`GraphCanvas.layoutToPixels`) or it is untested. Doing that
+  immediately surfaced a drawing centred and then shifted again by half the padding.
 - **`e2e/specs/webgpu/` was skipping everywhere, on every machine.** The fixture probed
   `navigator.gpu` from `about:blank`, whose opaque origin is not a secure context, so the
   probe always said `unsupported`. It now probes from a served origin, and the webgpu

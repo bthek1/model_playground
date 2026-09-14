@@ -48,7 +48,45 @@ export interface GraphCanvasProps {
 }
 
 /** Padding inside the canvas, in CSS pixels, so ringed nodes are not clipped. */
-const PAD = 8;
+export const PAD = 8;
+
+export interface PixelLayout {
+  px: Float32Array;
+  py: Float32Array;
+  /** Side of the square the graph was drawn into, in CSS pixels. */
+  span: number;
+}
+
+/**
+ * Map unit-square layout coordinates onto the canvas box.
+ *
+ * Pure, and exported, because it is the only real arithmetic in this file and
+ * happy-dom gives a canvas no 2D context — the painting below cannot be asserted
+ * in a unit test, but this can. The graph is drawn into the largest centred
+ * square that fits, so the aspect ratio of the layout survives a column that is
+ * much wider than it is tall.
+ */
+export function layoutToPixels(
+  x: Float32Array,
+  y: Float32Array,
+  nNodes: number,
+  width: number,
+  height: number,
+): PixelLayout {
+  const span = Math.max(0, Math.min(width, height) - 2 * PAD);
+  // Centre the square in the box. Adding any further offset here shifts the
+  // drawing off-centre and makes the far padding smaller than the near one.
+  const offsetX = (width - span) / 2;
+  const offsetY = (height - span) / 2;
+
+  const px = new Float32Array(nNodes);
+  const py = new Float32Array(nNodes);
+  for (let i = 0; i < nNodes; i++) {
+    px[i] = offsetX + x[i] * span;
+    py[i] = offsetY + y[i] * span;
+  }
+  return { px, py, span };
+}
 
 export function GraphCanvas({
   nNodes,
@@ -83,19 +121,10 @@ export function GraphCanvas({
     typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
 
   // Pixel coordinates, recomputed only when the box or the layout changes.
-  const points = useMemo(() => {
-    const { width, height } = size;
-    const span = Math.max(0, Math.min(width, height) - 2 * PAD);
-    const offsetX = (width - span) / 2;
-    const offsetY = (height - span) / 2;
-    const px = new Float32Array(nNodes);
-    const py = new Float32Array(nNodes);
-    for (let i = 0; i < nNodes; i++) {
-      px[i] = offsetX + PAD / 2 + x[i] * span;
-      py[i] = offsetY + PAD / 2 + y[i] * span;
-    }
-    return { px, py, span };
-  }, [size, nNodes, x, y]);
+  const points = useMemo(
+    () => layoutToPixels(x, y, nNodes, size.width, size.height),
+    [size, nNodes, x, y],
+  );
 
   // --- the edge layer, painted once per size -------------------------------
   useEffect(() => {
