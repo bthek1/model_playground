@@ -751,39 +751,52 @@ Key commands:
 
 ---
 
-## Docker Compose (local dev)
+## Docker & deployment
 
-```yaml
-services:
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: appdb
-      POSTGRES_USER: appuser
-      POSTGRES_PASSWORD: apppassword
-    ports:
-      - "5432:5432"
+Two compose files, and they are not interchangeable:
 
-  backend:
-    build: ./backend
-    command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - ./backend:/app
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-    env_file:
-      - ./backend/.env
+| File | What it is |
+|---|---|
+| `docker-compose.yml` | **Development.** Bind-mounts source, runs the Vite dev server and `runserver`, throwaway credentials. Frontend on `5180` (HTTPS, self-signed), backend on `8006`. Never deploy it. |
+| `docker-compose.prod.yml` | **Production.** Built images, no bind mounts, secrets from a root `.env`, and only Caddy publishes a port. |
 
-  frontend:
-    build: ./frontend
-    command: npm run dev
-    volumes:
-      - ./frontend:/app
-    ports:
-      - "5173:5173"
-```
+Don't inline either file's contents into docs — read the file. An out-of-date
+copy in prose is worse than no copy.
+
+Images: `frontend/Dockerfile` is multi-stage (node build → nginx) and
+`frontend/Dockerfile.dev` is the dev server; `backend/Dockerfile` is multi-stage
+and runs gunicorn. The backend venv lives at **`/venv`, outside `/app`**, because
+the dev compose bind-mounts over `/app`.
+
+**The deployment is single-origin over HTTPS, and both halves are requirements,
+not preferences:**
+
+- `src/api/client.ts` ships an empty base URL, so the app calls `/api` on its own
+  origin. The Vite proxy does that in dev; **nginx does it in production**
+  (`frontend/docker/nginx.conf`). Without it the design inverts into cross-origin
+  calls that fail on mixed content, CORS and Local Network Access.
+- `navigator.gpu` only exists in a secure context. On plain HTTP every model page
+  reports `unsupported` on hardware that works — indistinguishable from an old
+  browser. Caddy terminates TLS and obtains certificates automatically.
+
+Consequences worth knowing before changing any of it:
+
+- **`SECURE_PROXY_SSL_HEADER` + `X-Forwarded-Proto` is a chain** (Caddy → nginx →
+  Django). Break it and `/admin/` rejects every POST on CSRF, or
+  `SECURE_SSL_REDIRECT` loops forever. The prod compose sets
+  `SECURE_SSL_REDIRECT=False` because Caddy already redirects at the edge.
+- **Migrations are opt-in** (`RUN_MIGRATIONS=1`), set on the `migrate` service
+  only — replicas racing `migrate` on boot is a real failure mode.
+- **WhiteNoise serves Django's static files** from inside the backend container,
+  collected at build time. Without it `/admin/` renders unstyled at `DEBUG=False`.
+- **nginx must serve `.wasm` as `application/wasm`** — ONNX Runtime's streaming
+  compilation refuses anything else — and must keep `index.html` `no-cache` while
+  `/assets/` is `immutable`, or a deploy strands browsers on chunk names that no
+  longer exist.
+- **Model weights never touch the server**; the browser fetches them from the HF
+  CDN. Any CSP you add must not block it.
+
+Full procedure, backups and troubleshooting: `docs/guides/deployment.md`.
 
 ---
 

@@ -8,7 +8,7 @@ from .tasks import process_data
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def health_check(request):
+def health_check(request):  # noqa: ARG001 - DRF passes it positionally
     return Response({"status": "ok"})
 
 
@@ -23,7 +23,7 @@ def task_trigger(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def task_status(request, task_id: str):
+def task_status(request, task_id: str):  # noqa: ARG001 - DRF passes it positionally
     """Return current status and result for task_id."""
     result = AsyncResult(task_id)
     data: dict = {

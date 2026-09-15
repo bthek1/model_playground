@@ -48,6 +48,52 @@ logs:
 logs-svc svc:
     docker compose logs -f {{ svc }}
 
+# ── Production ─────────────────────────────────────────────────────────────────
+# These drive docker-compose.prod.yml, which needs a `.env` beside it — copy
+# .env.example and fill it in. See docs/guides/deployment.md.
+
+# Build and start the production stack (Caddy + nginx + gunicorn + Celery)
+up-prod:
+    docker compose -f docker-compose.prod.yml up -d --build
+
+# Stop the production stack (volumes are kept)
+down-prod:
+    docker compose -f docker-compose.prod.yml down
+
+# Tail production logs
+logs-prod:
+    docker compose -f docker-compose.prod.yml logs -f
+
+# Pull code, rebuild and restart — the routine deploy
+deploy:
+    git pull --ff-only
+    docker compose -f docker-compose.prod.yml up -d --build
+    docker compose -f docker-compose.prod.yml ps
+
+# Check the production config without starting anything
+prod-config:
+    docker compose -f docker-compose.prod.yml config
+
+# Generate a value for SECRET_KEY
+secret-key:
+    @cd backend && uv run python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
+
+# Django's deployment checklist, under production settings
+be-check-deploy:
+    cd backend && uv run python manage.py check --deploy
+
+# Open a shell in the running production backend
+prod-shell:
+    docker compose -f docker-compose.prod.yml exec backend python manage.py shell
+
+# Back up the production database to ./backups/
+prod-backup:
+    mkdir -p backups
+    docker compose -f docker-compose.prod.yml exec -T db \
+        pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
+        | gzip > "backups/$(date +%Y%m%d-%H%M%S).sql.gz"
+    @ls -lh backups | tail -1
+
 # ── Backend ────────────────────────────────────────────────────────────────────
 
 # Install backend dependencies (uv)
@@ -120,6 +166,14 @@ fe-dev:
 # Build the frontend for production
 fe-build:
     cd frontend && npm run build
+
+# Check the entry chunk against its size budget (needs a build first)
+fe-check-bundle:
+    cd frontend && npm run check:bundle
+
+# Regenerate the raster brand assets from public/favicon.svg
+fe-icons:
+    cd frontend && npm run icons
 
 # Preview the production build
 fe-preview:

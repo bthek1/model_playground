@@ -81,7 +81,9 @@ test.describe("@smoke app shell", () => {
 
     await expect(shell.sidebar).toContainText("Model Playground");
     await shell.toggleSidebarButton.click();
-    // Collapsed rail shows the "MP" monogram instead of the full name.
-    await expect(shell.sidebar).toContainText("MP");
+    // The collapsed rail used to spell "MP". It shows the logo mark now — the
+    // wordmark goes, the brand does not.
+    await expect(shell.sidebar).not.toContainText("Model Playground");
+    await expect(shell.sidebar.locator("svg").first()).toBeVisible();
   });
 });

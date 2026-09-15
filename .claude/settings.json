@@ -23,6 +23,11 @@
       "Bash(docker compose down:*)",
       "Bash(just down-v:*)",
       "Bash(just db-reset:*)",
+      "Bash(just up-prod:*)",
+      "Bash(just down-prod:*)",
+      "Bash(just deploy:*)",
+      "Bash(just prod-backup:*)",
+      "Bash(docker compose -f docker-compose.prod.yml:*)",
       "Bash(rm -rf:*)"
     ],
     "deny": [

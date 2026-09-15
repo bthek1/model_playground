@@ -48,6 +48,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | Auth flow (JWT) | [`docs/explanations/auth-flow.md`](docs/explanations/auth-flow.md) |
 | API endpoints & request/response shapes | [`docs/standards/api-contracts.md`](docs/standards/api-contracts.md) |
 | Local dev setup | [`docs/guides/local-setup.md`](docs/guides/local-setup.md) |
+| **Deploying it** (single origin, TLS, compose stack) | [`docs/guides/deployment.md`](docs/guides/deployment.md) |
 | **Git guardrails & permission config** | [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md) |
 | **End-to-end tests (Playwright)** | [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md) |
 | **A model with no Transformers.js task (bare ONNX)** | [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §9 |
@@ -125,6 +126,39 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   `git reset --hard`, `git clean`, `git branch -D`, or `git checkout .` — those are denied outright
   in `.claude/settings.json`. See [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md) and
   the full list in the Copilot instructions.
+
+### Deployment essentials
+
+- **Two compose files.** `docker-compose.yml` is development (bind mounts, dev
+  servers, throwaway credentials — never deploy it); `docker-compose.prod.yml` is
+  production (built images, secrets from a root `.env`, only Caddy publishes a
+  port). `frontend/Dockerfile.dev` is the dev server; `frontend/Dockerfile` builds
+  and serves with nginx.
+- **The deployment is single-origin over HTTPS, and both halves are requirements.**
+  `src/api/client.ts` ships an empty base URL so the app calls `/api` on its own
+  origin — the Vite proxy does that in dev and **nginx does it in production**;
+  without it the design inverts into cross-origin calls that fail on mixed
+  content, CORS and Local Network Access. And `navigator.gpu` only exists in a
+  secure context, so an HTTP deploy makes every model page report `unsupported` on
+  hardware that works.
+- **`X-Forwarded-Proto` is a chain** — Caddy → nginx → `SECURE_PROXY_SSL_HEADER`.
+  Break it and `/admin/` rejects every POST on CSRF, or `SECURE_SSL_REDIRECT`
+  loops. The prod compose sets `SECURE_SSL_REDIRECT=False` because Caddy already
+  redirects at the edge.
+- **Migrations are opt-in** (`RUN_MIGRATIONS=1`, on the `migrate` service only) —
+  replicas racing `migrate` is a real failure mode. **WhiteNoise** serves Django's
+  static files from inside the backend container, collected at build time, or
+  `/admin/` renders unstyled at `DEBUG=False`.
+- **nginx serves `.wasm` as `application/wasm`** (ONNX Runtime's streaming
+  compilation refuses anything else) and keeps `index.html` `no-cache` while
+  `/assets/` is `immutable`. Model weights never touch the server — any CSP must
+  not block the HF CDN.
+- **`npm run check:bundle`** budgets the entry chunk and keeps `echarts` behind its
+  lazy wrapper; it runs inside the frontend image build, so a leak fails the image.
+- CI (`.github/workflows/ci.yml`) runs lint, tests, the build, the bundle budget,
+  the mocked Playwright suite and both image builds. It does **not** run the
+  `@slow` specs — those still need `just fe-e2e-slow` by hand.
+  See [`docs/guides/deployment.md`](docs/guides/deployment.md).
 
 ### Backend essentials
 

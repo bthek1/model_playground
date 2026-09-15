@@ -10,10 +10,10 @@ report "WebGPU unsupported" on hardware that supports it perfectly well.
 
 import environ
 
-from .base import *  # noqa: F403
+from .base import *
 
 env = environ.Env()
-environ.Env.read_env(BASE_DIR / ".env")  # noqa: F405
+environ.Env.read_env(BASE_DIR / ".env")
 
 DEBUG = False
 

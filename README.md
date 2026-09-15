@@ -1,4 +1,9 @@
-# model_playground
+<img src="frontend/public/icon-192.png" alt="" width="76" align="left" hspace="12" vspace="4" />
+
+# Model Playground
+
+<br clear="left" />
+
 
 Run machine-learning models — LLMs, computer vision, and custom networks —
 **directly in the browser on your GPU via raw WebGPU** (WGSL compute shaders, no
@@ -35,10 +40,14 @@ docker compose exec backend python manage.py migrate
 
 | Service | URL |
 |---------|-----|
-| Frontend | http://localhost:5173 |
-| Backend API | http://localhost:8000/api/ |
-| Django admin | http://localhost:8000/admin/ |
-| Health check | http://localhost:8000/api/health/ |
+| Frontend | https://localhost:5180 |
+| Backend API | http://localhost:8006/api/ |
+| Django admin | http://localhost:8006/admin/ |
+| Health check | http://localhost:8006/api/health/ |
+
+The dev server is HTTPS with a self-signed certificate (your browser will warn
+once): `navigator.gpu` is only exposed in a secure context, so plain HTTP hides
+WebGPU entirely.
 
 ---
 
@@ -50,6 +59,7 @@ docker compose exec backend python manage.py migrate
 | [docs/explanations/webgpu-inference.md](docs/explanations/webgpu-inference.md) | How in-browser inference works (raw WebGPU pipeline) |
 | [docs/guides/adding-a-model.md](docs/guides/adding-a-model.md) | Add a model: WGSL kernel + registry entry |
 | [docs/guides/local-setup.md](docs/guides/local-setup.md) | Full local dev setup (Docker + without Docker) |
+| [docs/guides/deployment.md](docs/guides/deployment.md) | **Putting it on the internet** — the single-origin/TLS requirement and why, compose stack, env vars, backups |
 | [docs/guides/onboarding.md](docs/guides/onboarding.md) | New developer orientation |
 | [docs/guides/ai-guardrails.md](docs/guides/ai-guardrails.md) | How AI assistants are fenced off: git guardrails first, `.claude/settings.json` second |
 | [docs/standards/api-contracts.md](docs/standards/api-contracts.md) | All API endpoints, request/response shapes |
@@ -66,6 +76,31 @@ docker compose exec backend python manage.py migrate
 | [GitHub issues → `roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) | Per-category research for the categories not yet built. A roadmap graduates to `docs/roadmaps/` once its first route ships — Audio and Computer Vision already have |
 
 **AI assistants:** [CLAUDE.md](CLAUDE.md) (Claude Code) and [.github/copilot-instructions.md](.github/copilot-instructions.md) (GitHub Copilot) describe the project conventions for AI tooling. Keep both in sync when conventions change.
+
+---
+
+## Deployment
+
+```bash
+cp .env.example .env     # DOMAIN, SECRET_KEY, ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS, …
+just secret-key          # generates a SECRET_KEY
+just up-prod             # Caddy (TLS) -> nginx (SPA + /api) -> gunicorn
+just deploy              # pull, rebuild, restart
+```
+
+Two things about this app in particular:
+
+- **It must be served over HTTPS from a single origin.** `navigator.gpu` only
+  exists in a secure context, so an HTTP deploy makes every model page report
+  "WebGPU unsupported" on hardware that supports it — and `src/api/client.ts`
+  deliberately calls `/api` on its own origin. Caddy handles certificates
+  automatically; nginx forwards `/api` to Django.
+- **Model weights never touch the server.** The browser fetches them from the
+  Hugging Face CDN, so there is no model hosting to arrange and traffic scales
+  with page views, not with model usage.
+
+Full detail, including backups and the `X-Forwarded-Proto` chain:
+[`docs/guides/deployment.md`](docs/guides/deployment.md).
 
 ---
 

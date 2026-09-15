@@ -29,7 +29,7 @@ class Command(BaseCommand):
             help="Password for the test user.",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args, **options):  # noqa: ARG002 - BaseCommand's signature
         if not settings.DEBUG:
             raise CommandError(
                 "seed_e2e_user refuses to run with DEBUG=False — it creates an "

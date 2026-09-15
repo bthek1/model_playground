@@ -1,0 +1,198 @@
+# Continuous integration.
+#
+# The repo had no CI at all, which is how `npm run build` came to fail outright
+# (a spec imported app modules by dev-server URL, and tsc type-checks e2e/) while
+# every local test stayed green.
+#
+# What deliberately does NOT run here: the `@slow` E2E specs and
+# `just fe-e2e-models`. Those reach Hugging Face and download real ONNX weights —
+# 80-220 MB a model — so they turn a two-minute job into a half-hour one and fail
+# on any network hiccup. They are the only tests that exercise a real ONNX
+# Runtime session, so they still have to be run by hand before shipping a model
+# change (`just fe-e2e-slow`). The `@backend` specs need Postgres and a seeded
+# user; they run in the backend job below, where both exist.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same branch cancels the previous run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  backend:
+    name: Backend (ruff + pytest)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: appdb
+          POSTGRES_USER: appuser
+          POSTGRES_PASSWORD: apppassword
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --frozen --group dev
+
+      # `just be-lint`. Note that ruff has `fix = true` in pyproject.toml, so
+      # this rewrites files locally — here it only reports, because a dirty
+      # checkout in CI changes nothing. `ruff format` is deliberately not run:
+      # the repo has never been held to it (`just be-fmt` is a manual tool) and
+      # six files would need reformatting.
+      - name: Lint
+        working-directory: backend
+        run: uv run ruff check --no-fix .
+
+      - name: Test
+        working-directory: backend
+        run: uv run pytest -q
+
+      # The settings module that actually ships. It requires SECRET_KEY,
+      # ALLOWED_HOSTS and CSRF_TRUSTED_ORIGINS, so a missing one fails here
+      # rather than on the server at boot.
+      - name: Deployment checklist
+        working-directory: backend
+        env:
+          DJANGO_SETTINGS_MODULE: core.settings.prod
+          ALLOWED_HOSTS: ci.example.com
+          CSRF_TRUSTED_ORIGINS: https://ci.example.com
+          DATABASE_URL: postgres://appuser:apppassword@localhost:5432/appdb
+        run: |
+          export SECRET_KEY="$(uv run python -c 'from django.core.management.utils import get_random_secret_key as k; print(k())')"
+          uv run python manage.py check --deploy --fail-level WARNING
+
+  frontend:
+    name: Frontend (eslint + vitest + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit and component tests
+        run: npm run test
+
+      # `tsc -b` covers src/, e2e/ and vite.config.ts.
+      - name: Build
+        run: npm run build
+
+      - name: Bundle budget
+        run: npm run check:bundle
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: frontend/dist
+          retention-days: 7
+
+  e2e:
+    name: E2E (Playwright, mocked API)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox
+
+      # No backend and no E2E_SLOW: the default run is fully mocked. The config
+      # starts the dev server itself via its `webServer` block.
+      - name: Run E2E
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 7
+
+  images:
+    name: Production images build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Build only — nothing is pushed. This is what catches a Dockerfile that
+      # references a file the .dockerignore excludes, or a collectstatic that
+      # fails because a setting became required.
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Validate the production compose file
+        run: docker compose -f docker-compose.prod.yml config --quiet
+        env:
+          DOMAIN: ci.example.com
+          ACME_EMAIL: ci@example.com
+          SECRET_KEY: ci-validation-only
+          ALLOWED_HOSTS: ci.example.com
+          CSRF_TRUSTED_ORIGINS: https://ci.example.com
+          POSTGRES_DB: appdb
+          POSTGRES_USER: appuser
+          POSTGRES_PASSWORD: ci-validation-only

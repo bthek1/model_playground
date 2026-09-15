@@ -106,9 +106,9 @@ class TestProcessDataTask:
             tasks_module.time, "sleep", side_effect=RuntimeError("boom")
         )
         # In eager mode, self.retry() raises celery.exceptions.Retry
-        with pytest.raises(Retry):
-            from apps.pages.tasks import process_data
+        from apps.pages.tasks import process_data
 
+        with pytest.raises(Retry):
             process_data.apply(args=[{"fail": True}], throw=True)
 
 
