@@ -1,7 +1,12 @@
 // An interactive canvas surface: drag to pan, wheel to scroll, ⌘/Ctrl-wheel (or
-// the buttons) to zoom, and "fit" to recenter. Used as the Training-page
+// the buttons) to zoom, and "fit" to recenter. The Training page uses it as its
 // background so the architecture schematic behaves like a zoomable diagram
-// instead of a plain scroll box.
+// instead of a plain scroll box; /graph uses it so a 2708-node citation graph
+// can be inspected community by community rather than only seen whole.
+//
+// It lives here rather than under components/training/ for exactly that reason:
+// it is a visualization primitive (model-visualization.md §5), not a piece of
+// one route.
 //
 // The content is wrapped in a single transformed layer (translate + scale,
 // top-left origin); all interactions just mutate {scale, x, y}. Zoom is anchored
@@ -37,9 +42,18 @@ interface Transform {
 export function PanZoom({
   children,
   className,
+  onScaleChange,
 }: {
   children: ReactNode;
   className?: string;
+  /**
+   * Reports the current zoom to a caller that has to draw at it. A canvas
+   * child is painted at its own fixed size and then scaled by CSS, so a 1.4 px
+   * dot drawn at 28 % fit arrives as half a pixel — the caller compensates,
+   * which it can only do if it knows the scale. Presentational callers ignore
+   * this.
+   */
+  onScaleChange?: (scale: number) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -66,6 +80,10 @@ export function PanZoom({
   useLayoutEffect(() => {
     fit();
   }, [fit]);
+
+  useEffect(() => {
+    onScaleChange?.(t.scale);
+  }, [t.scale, onScaleChange]);
 
   // Zoom anchored to a point (in container-local coords).
   const zoomAt = useCallback((factor: number, cx: number, cy: number) => {

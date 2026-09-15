@@ -190,6 +190,19 @@ describe("GraphPage", () => {
     expect(screen.getByText("0.947")).toBeInTheDocument();
   });
 
+  it("puts the graph on a pan/zoom surface, and inspecting it runs nothing", () => {
+    // 2708 nodes in one column is a picture of the whole graph and nothing
+    // else. The zoom controls are what make it inspectable — and like the
+    // colour switch, they only re-read a result already in hand.
+    ready();
+    Object.assign(hookState, { metrics: [metric()] });
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /zoom in/i }));
+    fireEvent.click(screen.getByRole("button", { name: /fit to view/i }));
+    expect(hookState.start).not.toHaveBeenCalled();
+  });
+
   it("switches the colouring without re-running the model", () => {
     ready();
     Object.assign(hookState, { metrics: [metric()] });

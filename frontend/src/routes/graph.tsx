@@ -13,6 +13,7 @@ import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelPage } from "@/components/model/ModelPage";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
+import { PanZoom } from "@/components/viz/PanZoom";
 import { CORA_CLASSES } from "@/lib/cora";
 import { cn } from "@/lib/utils";
 import { useGraphTraining } from "@/hooks/useGraphTraining";
@@ -31,6 +32,14 @@ const ARCHES: GnnArch[] = ["gcn", "sage", "gin", "gat"];
 const MIN_LAYERS = 2;
 const MAX_LAYERS = 8;
 
+/**
+ * Side of the square the graph is painted into, in CSS pixels, before PanZoom
+ * scales it. Larger than the column it is shown in, so the canvas is
+ * supersampled at rest and stays sharp out to roughly 2x zoom; every pixel of
+ * it is repainted per epoch, so this is also the per-frame cost.
+ */
+const GRAPH_RENDER_PX = 720;
+
 const DEFAULTS = {
   hidden: 16,
   learningRate: 0.01,
@@ -46,6 +55,10 @@ function GraphPage() {
   const [arch, setArch] = useState<GnnArch>("gcn");
   const [layers, setLayers] = useState(2);
   const [colorBy, setColorBy] = useState<ColorBy>("predicted");
+  // The scale PanZoom is showing the canvas at. The canvas paints at a fixed
+  // square, so it needs this to keep a dot the same size on screen whatever the
+  // zoom — see GraphCanvas's `zoom` prop.
+  const [zoom, setZoom] = useState(1);
 
   const { summary, status, training, metrics } = session;
   const ready = status === "ready" && summary != null;
@@ -156,17 +169,35 @@ function GraphPage() {
               (model-page-pattern.md §4). */}
           {ready && summary && latest && (
             <div className="flex min-h-0 flex-1 flex-col gap-3">
-              <GraphCanvas
-                nNodes={summary.nNodes}
-                rowPtr={summary.rowPtr}
-                colIdx={summary.colIdx}
-                x={summary.x}
-                y={summary.y}
-                labels={summary.labels}
-                predictions={session.predictions}
-                trainMask={summary.trainMask}
-                colorBy={colorBy}
-              />
+              {/* Drawn at a fixed square and then pan/zoomed, rather than
+                  redrawn to fit the column: 2708 dots in a ~480px box is a
+                  picture of the whole graph and nothing else, and the claim
+                  this page makes is that a browser beats a notebook because
+                  you can go and look. Painting larger than it is shown also
+                  supersamples at rest, so the dots are crisper than the
+                  fit-to-column canvas was. (model-visualization.md §5.) */}
+              <PanZoom
+                className="relative min-h-56 w-full flex-1 rounded-md border bg-background"
+                onScaleChange={setZoom}
+              >
+                <div
+                  className="flex"
+                  style={{ width: GRAPH_RENDER_PX, height: GRAPH_RENDER_PX }}
+                >
+                  <GraphCanvas
+                    nNodes={summary.nNodes}
+                    rowPtr={summary.rowPtr}
+                    colIdx={summary.colIdx}
+                    x={summary.x}
+                    y={summary.y}
+                    labels={summary.labels}
+                    predictions={session.predictions}
+                    trainMask={summary.trainMask}
+                    colorBy={colorBy}
+                    zoom={zoom}
+                  />
+                </div>
+              </PanZoom>
 
               <ColorLegend colorBy={colorBy} onChange={setColorBy} />
 

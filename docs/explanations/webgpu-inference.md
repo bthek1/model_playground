@@ -65,7 +65,7 @@ The trade-off: you write kernels yourself. Start from the reference kernels in
 > a real 28×28 input grid and every parameter: the 10 per-class weight templates
 > (`ModelWeights.tsx`, each a 28×28 image of all 784 weights, red = for the digit /
 > blue = against, plus the bias), which sharpen into digit shapes as training runs.
-> The schematic sits on a pan/zoom canvas (`components/training/PanZoom.tsx`) —
+> The schematic sits on a pan/zoom canvas (`components/viz/PanZoom.tsx`) —
 > drag to pan, wheel to scroll, ⌘/Ctrl-wheel or the buttons to zoom, double-click
 > to fit. Dataset and hyperparameter forms live in `dialog`/`popover` overlays; the
 > loss/accuracy charts are a collapsible HUD popover. The sidebar and navbar

@@ -14,7 +14,6 @@ import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { DatasetDialog } from "@/components/training/DatasetDialog";
 import { HyperparamsDialog } from "@/components/training/HyperparamsDialog";
 import { ModelArchitecture } from "@/components/training/ModelArchitecture";
-import { PanZoom } from "@/components/training/PanZoom";
 import { pct, Stat } from "@/components/training/controls";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +21,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { PanZoom } from "@/components/viz/PanZoom";
 import {
   type TrainingSettings,
   useLinearTraining,

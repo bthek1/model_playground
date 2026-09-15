@@ -348,12 +348,19 @@ Three composition patterns, in increasing ambition:
 1. **Card** — the default. A `card.tsx` with header (identity), body (schematic or chart),
    footer (metrics). Use for registry listings, a single metric, a compact model summary.
 2. **Schematic-as-stage** — the model *is* the page. A full-bleed background schematic on a
-   pan/zoom canvas ([`training/PanZoom.tsx`](../../frontend/src/components/training/PanZoom.tsx):
+   pan/zoom canvas ([`viz/PanZoom.tsx`](../../frontend/src/components/viz/PanZoom.tsx):
    drag to pan, wheel to scroll, ⌘/Ctrl-wheel to zoom, double-click to fit), with controls and
    readouts floating in `dialog`/`popover`/`sheet` overlays and the loss/accuracy charts in a
    collapsible HUD. Use for the "explore this model" experience. This is the Training route.
 3. **Split inspect** — schematic on one side, live runtime detail (inputs/outputs/activations)
    on the other. Use for interactive inference (LLM chat + token view, vision + camera).
+
+`PanZoom` is a shared primitive, not a Training-page part — it transforms whatever children it
+is given and never inspects them. `/graph` is its second caller: the Cora canvas is painted at a
+**fixed 720 px square** and pan/zoomed inside the OUTPUT band rather than redrawn to fit the
+column, so 2708 nodes can be read community by community instead of only as a whole. Painting
+larger than the box it is shown in also supersamples at rest. Frame the *viewport*, not the
+content — a canvas that carries its own border draws a second frame that pans away.
 
 Whichever pattern: the `AppLayout` sidebar/navbar stays untouched, overlays use the shadcn/ui
 Base UI primitives (remember: `render` prop, no `asChild`; `ref` is a plain prop — see CLAUDE.md),

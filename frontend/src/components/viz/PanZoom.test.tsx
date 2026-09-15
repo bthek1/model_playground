@@ -49,4 +49,20 @@ describe("PanZoom", () => {
       fireEvent.click(screen.getByRole("button", { name: /zoom in/i })),
     ).not.toThrow();
   });
+
+  it("reports its scale, for a child that has to draw at it", () => {
+    // A canvas child paints at a fixed size and is then scaled by CSS, so a
+    // 1.4px dot at 28% fit arrives as half a pixel. It can only compensate if
+    // it is told the scale.
+    const seen: number[] = [];
+    render(
+      <PanZoom onScaleChange={(s) => seen.push(s)}>
+        <div>diagram</div>
+      </PanZoom>,
+    );
+    expect(seen).toEqual([1]); // happy-dom has no layout, so fit() no-ops
+
+    fireEvent.click(screen.getByRole("button", { name: /zoom in/i }));
+    expect(seen[seen.length - 1]).toBeCloseTo(1.2, 5);
+  });
 });

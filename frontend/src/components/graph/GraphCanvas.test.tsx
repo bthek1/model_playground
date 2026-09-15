@@ -1,7 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { CLASS_COLORS, GraphCanvas, layoutToPixels, PAD } from "./GraphCanvas";
+import {
+  CLASS_COLORS,
+  GraphCanvas,
+  layoutToPixels,
+  PAD,
+  strokeScale,
+} from "./GraphCanvas";
 
 // happy-dom gives a canvas no 2D context and has no ResizeObserver, so both
 // draw effects take their guarded early-return paths. These tests cover the two
@@ -63,6 +69,30 @@ describe("layoutToPixels", () => {
     expect(px).toHaveLength(0);
     expect(py).toHaveLength(0);
     expect(span).toBe(0);
+  });
+});
+
+describe("strokeScale", () => {
+  it("is 1 when the canvas is shown at its own size", () => {
+    expect(strokeScale(1)).toBe(1);
+  });
+
+  it("grows the drawn stroke as the canvas is scaled down", () => {
+    // The canvas paints at a fixed 720px square and PanZoom fits it into a
+    // much shorter column — around 28%. Dividing by that is what keeps a 1.4px
+    // dot from arriving as 0.4 of a pixel.
+    expect(1.4 / strokeScale(0.28)).toBeCloseTo(1.4 / 0.3, 5);
+    expect(1.4 / strokeScale(0.28)).toBeGreaterThan(4);
+  });
+
+  it("quantises, so a wheel drag does not repaint the edges every frame", () => {
+    expect(strokeScale(0.281)).toBe(strokeScale(0.289));
+    expect(strokeScale(0.28)).not.toBe(strokeScale(0.36));
+  });
+
+  it("never divides by zero, however far out the view is zoomed", () => {
+    expect(strokeScale(0)).toBeGreaterThan(0);
+    expect(strokeScale(-1)).toBeGreaterThan(0);
   });
 });
 

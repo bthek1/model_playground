@@ -45,6 +45,13 @@ export interface GraphCanvasProps {
   /** The 20-per-class labelled nodes, ringed so the supervision is visible. */
   trainMask: Uint8Array;
   colorBy: ColorBy;
+  /**
+   * The scale this canvas is being displayed at, when a pan/zoom surface is
+   * scaling it. Strokes are divided by it so a dot stays the same size on
+   * screen at every zoom — which is what you want of a node-link view: zooming
+   * in should pull overlapping nodes apart, not grow them into blobs.
+   */
+  zoom?: number;
 }
 
 /** Padding inside the canvas, in CSS pixels, so ringed nodes are not clipped. */
@@ -88,6 +95,18 @@ export function layoutToPixels(
   return { px, py, span };
 }
 
+/**
+ * How much to divide a stroke width by so it holds its size on screen.
+ *
+ * Pure and exported for the same reason `layoutToPixels` is: happy-dom gives a
+ * canvas no 2D context, so anything left inside the paint effect is untested.
+ * Quantised to 5 % steps because the edge layer is repainted whenever this
+ * changes and a wheel drag reports a new scale every frame.
+ */
+export function strokeScale(zoom: number): number {
+  return Math.max(0.05, Math.round(zoom * 20) / 20);
+}
+
 export function GraphCanvas({
   nNodes,
   rowPtr,
@@ -98,6 +117,7 @@ export function GraphCanvas({
   predictions,
   trainMask,
   colorBy,
+  zoom = 1,
 }: GraphCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -120,6 +140,8 @@ export function GraphCanvas({
   const dpr =
     typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
 
+  const q = strokeScale(zoom);
+
   // Pixel coordinates, recomputed only when the box or the layout changes.
   const points = useMemo(
     () => layoutToPixels(x, y, nNodes, size.width, size.height),
@@ -139,7 +161,7 @@ export function GraphCanvas({
 
     const { px, py } = points;
     ctx.strokeStyle = "rgba(128,128,128,0.28)";
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 0.5 / q;
     ctx.beginPath();
     for (let i = 0; i < nNodes; i++) {
       for (let e = rowPtr[i]; e < rowPtr[i + 1]; e++) {
@@ -153,7 +175,7 @@ export function GraphCanvas({
     // between a frame and a slideshow.
     ctx.stroke();
     edgeLayer.current = layer;
-  }, [size, dpr, points, nNodes, rowPtr, colIdx]);
+  }, [size, dpr, q, points, nNodes, rowPtr, colIdx]);
 
   // --- nodes, repainted per epoch ------------------------------------------
   useEffect(() => {
@@ -173,7 +195,7 @@ export function GraphCanvas({
 
     const { px, py } = points;
     const classOf = colorBy === "true" ? labels : predictions;
-    const radius = Math.max(1.4, points.span / 420);
+    const radius = Math.max(1.4, points.span / 420) / q;
 
     for (let i = 0; i < nNodes; i++) {
       // Before the first epoch there is no prediction; a neutral dot says so
@@ -190,17 +212,20 @@ export function GraphCanvas({
       if (trainMask[i]) {
         // The 140 nodes the model was actually told about.
         ctx.strokeStyle = "rgba(255,255,255,0.9)";
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1 / q;
         ctx.stroke();
       }
     }
-  }, [size, dpr, points, nNodes, labels, predictions, trainMask, colorBy]);
+  }, [size, dpr, q, points, nNodes, labels, predictions, trainMask, colorBy]);
 
   return (
     <div
       ref={hostRef}
       data-testid="graph-canvas"
-      className="relative min-h-56 w-full flex-1 overflow-hidden rounded-md border bg-background"
+      // A drawing surface, not a framed card: the caller owns the frame,
+      // because on /graph the frame is the pan/zoom viewport and this box is
+      // the thing that moves inside it.
+      className="relative min-h-56 w-full flex-1 overflow-hidden"
     >
       <canvas
         ref={canvasRef}

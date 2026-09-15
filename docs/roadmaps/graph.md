@@ -249,6 +249,12 @@ arithmetic, more slowly. The page says which one a run will use before it starts
 - **Render with a single canvas draw**, not a DOM node per graph node: 2708 SVG circles
   will not animate. The edges are painted once into an offscreen layer and blitted,
   because they never change — only the colours do.
+- **Draw at a fixed square and pan/zoom it**, rather than redrawing to fit the column.
+  2708 dots in a ~480 px box is a picture of the whole graph and nothing else, and the
+  claim this page makes is that you can go and look at a community. The canvas is painted
+  at 720 px inside [`viz/PanZoom.tsx`](../../frontend/src/components/viz/PanZoom.tsx)
+  (shared with `/training`), which also supersamples it at rest. The *viewport* carries
+  the frame: a canvas with its own border draws a second frame that pans away.
 - **Nothing to dispose but buffers.** No downloaded weights and no pretrained session. The
   GPU device is memoised and shared, exactly as `/tensor` and `/training` already use it,
   and every buffer is freed with `releaseBuffer` so the system panel's ledger stays honest.
