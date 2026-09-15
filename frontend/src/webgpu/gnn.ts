@@ -162,6 +162,11 @@ export interface GnnInput {
 export interface GnnShape {
   nNodes: number;
   nFeat: number;
+  /**
+   * The width of the network's **output**, which for node classification is the
+   * number of classes. `/link-prediction` trains the same encoder with a decoder
+   * instead of a classifier, and passes its embedding width here.
+   */
   nClasses: number;
   /** Width of every hidden layer. */
   hidden: number;
@@ -493,12 +498,6 @@ export class GnnTrainer {
     forward: GnnForward,
   ): Promise<GnnGradients> {
     const { nNodes, nClasses } = this.shape;
-    const L = this.shape.layers;
-
-    // Propagator gradients accumulate across a pass, so they start at zero.
-    for (const propagator of this.propagators) {
-      for (const param of propagator.parameters()) param.grad.fill(0);
-    }
 
     const probs = softmaxRows(forward.logits, nNodes, nClasses);
     const loss = crossEntropyLoss(probs, labels, trainIdx, nClasses);
@@ -510,6 +509,40 @@ export class GnnTrainer {
       for (let c = 0; c < nClasses; c++) {
         dOut[row + c] = (probs[row + c] - (c === label ? 1 : 0)) * scale;
       }
+    }
+
+    return this.backwardFrom(dOut, loss);
+  }
+
+  /**
+   * The encoder's backward pass, given the loss gradient with respect to its
+   * **output** — `nNodes × dims[L]`, row-major.
+   *
+   * Everything from the last layer back is a property of the network, not of
+   * what it is being asked: `backward()` above is the node-classification head
+   * (softmax cross-entropy over the labelled nodes) and `/link-prediction`'s
+   * decoder is another (a dot product per edge, through a sigmoid). Only the
+   * head differs, so only the head lives outside this method.
+   *
+   * `loss` is passed through rather than computed here for the same reason — the
+   * number belongs to the head, and the chain has no way to know what it means.
+   */
+  async backwardFrom(
+    dOut: Float32Array,
+    loss: number,
+  ): Promise<GnnGradients> {
+    const { nNodes } = this.shape;
+    const L = this.shape.layers;
+    const expected = nNodes * this.dims[L];
+    if (dOut.length !== expected) {
+      throw new Error(
+        `dOut must be nNodes × ${this.dims[L]} = ${expected}, got ${dOut.length}`,
+      );
+    }
+
+    // Propagator gradients accumulate across a pass, so they start at zero.
+    for (const propagator of this.propagators) {
+      for (const param of propagator.parameters()) param.grad.fill(0);
     }
 
     const dW: Float32Array[] = new Array(L);
