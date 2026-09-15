@@ -1,3 +1,7 @@
+# Development stack. Bind-mounts source, runs dev servers, and uses throwaway
+# credentials — never deploy this file. Production is docker-compose.prod.yml
+# (see docs/guides/deployment.md).
+
 services:
   redis:
     image: redis:7-alpine
@@ -70,7 +74,12 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
 
   frontend:
-    build: ./frontend
+    # The development image (Vite dev server, hot reload). The production image
+    # is frontend/Dockerfile — it builds the app and serves it with nginx. See
+    # docker-compose.prod.yml.
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
     command: npm run dev -- --host
     volumes:
       - ./frontend:/app

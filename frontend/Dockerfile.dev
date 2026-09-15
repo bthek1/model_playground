@@ -1,0 +1,19 @@
+# Development image: the Vite dev server with hot reload, used by
+# docker-compose.yml. The production image is `Dockerfile` — it builds the app
+# and serves it with nginx.
+FROM node:20-slim
+
+ENV NODE_ENV=development
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+
+RUN npm install
+
+COPY . /app
+
+# The dev server's port, and the one vite.config.ts is pinned to.
+EXPOSE 5180
+
+CMD ["npm", "run", "dev", "--", "--host"]

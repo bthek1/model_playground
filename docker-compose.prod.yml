@@ -1,0 +1,128 @@
+# Production stack: Caddy (TLS) -> nginx (SPA + /api forwarding) -> gunicorn.
+#
+#     docker compose -f docker-compose.prod.yml up -d --build     (just up-prod)
+#
+# Differences from docker-compose.yml that matter: no bind mounts, no dev
+# servers, no hard-coded passwords, and only Caddy publishes a port — Postgres,
+# Redis, gunicorn and nginx are reachable only on the compose network.
+#
+# Every value below comes from a `.env` beside this file; see .env.example and
+# docs/guides/deployment.md. `${VAR:?}` makes compose refuse to start rather
+# than silently substituting an empty string.
+
+name: model-playground
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  backend: &backend
+    build:
+      context: ./backend
+    image: model-playground-backend:latest
+    environment: &backend_env
+      DJANGO_SETTINGS_MODULE: core.settings.prod
+      SECRET_KEY: ${SECRET_KEY:?}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:?}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@example.com}
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-25}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-False}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Caddy terminates TLS and nginx forwards X-Forwarded-Proto, so Django's
+      # own redirect would be redundant at best and a loop at worst. Caddy
+      # already redirects http -> https at the edge.
+      SECURE_SSL_REDIRECT: "False"
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+
+  # The only service that migrates. Two replicas racing `migrate` is the reason
+  # this is opt-in per service rather than baked into the image's entrypoint.
+  migrate:
+    <<: *backend
+    environment:
+      <<: *backend_env
+      RUN_MIGRATIONS: "1"
+    command: ["python", "-c", "print('migrations applied')"]
+    restart: "no"
+
+  celery_worker:
+    <<: *backend
+    command:
+      ["celery", "-A", "core", "worker", "--loglevel=info", "--concurrency=2"]
+
+  celery_beat:
+    <<: *backend
+    command:
+      - celery
+      - -A
+      - core
+      - beat
+      - --loglevel=info
+      - --scheduler
+      - django_celery_beat.schedulers:DatabaseScheduler
+
+  frontend:
+    build:
+      context: ./frontend
+    image: model-playground-frontend:latest
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # TLS terminator and the only service with a published port. Caddy obtains and
+  # renews certificates automatically, which is not a convenience here:
+  # `navigator.gpu` is undefined outside a secure context, so an HTTP deploy
+  # makes every model page report "WebGPU unsupported".
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?}
+      ACME_EMAIL: ${ACME_EMAIL:?}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

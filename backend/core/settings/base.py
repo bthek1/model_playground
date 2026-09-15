@@ -32,6 +32,11 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves everything under STATIC_ROOT with far-future caching headers, so a
+    # DEBUG=False deployment does not need nginx in front of Django just to make
+    # /admin/ and the DRF browsable API render. It must sit directly after
+    # SecurityMiddleware and before everything else.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -76,6 +81,16 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Hashed filenames + a manifest, so collected static can be cached forever.
+# WhiteNoise only compresses and hashes what `collectstatic` has written; in dev
+# `runserver` keeps serving from the apps themselves.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
