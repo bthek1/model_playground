@@ -146,7 +146,8 @@ Restore:
 
 ```bash
 gunzip -c backups/<file>.sql.gz \
-  | docker compose -f docker-compose.prod.yml exec -T db psql -U "$POSTGRES_USER" "$POSTGRES_DB"
+  | docker compose -f docker-compose.prod.yml exec -T db \
+      sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"'
 ```
 
 Copy the dumps off the host. A backup on the same disk as the database is not a

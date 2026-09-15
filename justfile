@@ -89,8 +89,11 @@ prod-shell:
 # Back up the production database to ./backups/
 prod-backup:
     mkdir -p backups
+    # Single quotes on purpose: POSTGRES_USER/DB are expanded by the shell
+    # *inside* the db container (the postgres image sets both). This justfile
+    # sets `dotenv-load := false`, so on the host they would be empty.
     docker compose -f docker-compose.prod.yml exec -T db \
-        pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
+        sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
         | gzip > "backups/$(date +%Y%m%d-%H%M%S).sql.gz"
     @ls -lh backups | tail -1
 
