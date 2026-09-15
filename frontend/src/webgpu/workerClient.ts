@@ -7,6 +7,13 @@ import type {
   GraphTrainRequest,
   GraphTrainResult,
 } from "./graphSession";
+import type {
+  LinkLoadOptions,
+  LinkSummary,
+  LinkTrainRequest,
+  LinkTrainResult,
+} from "./linkSession";
+import type { LinkMetrics } from "./linkPredictor";
 import type { GnnMetrics } from "./gnn";
 import type {
   TrainMetrics,
@@ -217,5 +224,61 @@ export function trainGraphInWorker(
   });
 
   const cancel = () => worker.postMessage({ type: "graphCancel", id });
+  return { promise, cancel };
+}
+
+export function loadLinkGraphInWorker(
+  worker: Worker,
+  options: LinkLoadOptions = {},
+): Promise<LinkSummary> {
+  return call<LinkSummary>(worker, { type: "linkLoad", options });
+}
+
+export interface LinkTrainingHandle {
+  /** Resolves when training finishes (or is cancelled); rejects on error. */
+  promise: Promise<LinkTrainResult>;
+  /** Ask the worker to stop after the current epoch. */
+  cancel: () => void;
+}
+
+/**
+ * Start a streaming link-prediction run. `onEpoch` fires with that epoch's
+ * metrics only — unlike `/graph`, there is no per-epoch picture to send. The
+ * candidates and the embeddings are computed once, after the last epoch, because
+ * scoring 3.7 M pairs per epoch would be work done against a drawing nobody is
+ * reading yet.
+ */
+export function trainLinkInWorker(
+  worker: Worker,
+  req: LinkTrainRequest,
+  onEpoch: (metrics: LinkMetrics) => void,
+): LinkTrainingHandle {
+  const id = ++nextRequestId;
+  const promise = new Promise<LinkTrainResult>((resolve, reject) => {
+    const handler = (
+      event: MessageEvent<{
+        id: number;
+        event?: "progress";
+        metrics?: LinkMetrics;
+        ok?: boolean;
+        result?: LinkTrainResult;
+        error?: string;
+      }>,
+    ) => {
+      const data = event.data;
+      if (data?.id !== id) return;
+      if (data.event === "progress") {
+        if (data.metrics) onEpoch(data.metrics);
+        return;
+      }
+      worker.removeEventListener("message", handler);
+      if (data.ok) resolve(data.result as LinkTrainResult);
+      else reject(new Error(data.error ?? "Training failed"));
+    };
+    worker.addEventListener("message", handler);
+    worker.postMessage({ type: "linkTrain", id, req });
+  });
+
+  const cancel = () => worker.postMessage({ type: "linkCancel", id });
   return { promise, cancel };
 }

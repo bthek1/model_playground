@@ -8,6 +8,11 @@
 import { attachAllocationPort } from "./allocations";
 import { detectWebGPU } from "./capabilities";
 import { GraphSession, type GraphTrainRequest } from "./graphSession";
+import {
+  LinkSession,
+  type LinkLoadOptions,
+  type LinkTrainRequest,
+} from "./linkSession";
 import { LinearTrainer, type MatmulFn, type TrainRequest } from "./linearModel";
 import { runMatmul } from "./runtime";
 import { runTensorOp } from "./tensorops";
@@ -22,7 +27,10 @@ type WorkerRequest =
   | { type: "trainCancel"; id: number }
   | { type: "graphLoad"; id: number }
   | { type: "graphTrain"; id: number; req: GraphTrainRequest }
-  | { type: "graphCancel"; id: number };
+  | { type: "graphCancel"; id: number }
+  | { type: "linkLoad"; id: number; options: LinkLoadOptions }
+  | { type: "linkTrain"; id: number; req: LinkTrainRequest }
+  | { type: "linkCancel"; id: number };
 
 const ctx = self as unknown as {
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
@@ -42,6 +50,10 @@ const cancelled = new Set<number>();
 // this worker. See graphSession.ts for why neither ever crosses postMessage.
 const graph = new GraphSession();
 
+// /link-prediction's graph is a *different* graph: the same Cora with 15 % of
+// its citations held out. Its own session, for that reason — see linkSession.ts.
+const link = new LinkSession();
+
 ctx.onmessage = async (event) => {
   const msg = event.data;
   if (msg.type === "telemetryPort") {
@@ -50,7 +62,11 @@ ctx.onmessage = async (event) => {
     if (port) attachAllocationPort(port);
     return;
   }
-  if (msg.type === "trainCancel" || msg.type === "graphCancel") {
+  if (
+    msg.type === "trainCancel" ||
+    msg.type === "graphCancel" ||
+    msg.type === "linkCancel"
+  ) {
     cancelled.add(msg.id);
     return;
   }
@@ -99,6 +115,35 @@ ctx.onmessage = async (event) => {
       cancelled.delete(msg.id);
       ctx.postMessage({ id: msg.id, ok: true, result }, [
         result.predictions.buffer,
+      ]);
+      return;
+    }
+    if (msg.type === "linkLoad") {
+      const summary = await link.load(msg.options);
+      ctx.postMessage({ id: msg.id, ok: true, result: summary }, [
+        summary.rowPtr.buffer,
+        summary.colIdx.buffer,
+        summary.labels.buffer,
+        summary.x.buffer,
+        summary.y.buffer,
+      ]);
+      return;
+    }
+    if (msg.type === "linkTrain") {
+      const result = await link.train(
+        msg.req,
+        (metrics) => {
+          // Metrics only: the candidates and the embeddings are computed once,
+          // after the last epoch, so there is nothing per-epoch to transfer.
+          ctx.postMessage({ id: msg.id, event: "progress", metrics });
+        },
+        () => cancelled.has(msg.id),
+      );
+      cancelled.delete(msg.id);
+      ctx.postMessage({ id: msg.id, ok: true, result }, [
+        result.candidates.buffer,
+        result.candidateScores.buffer,
+        result.embedding.buffer,
       ]);
       return;
     }
