@@ -121,9 +121,14 @@ just deploy     # git pull --ff-only, rebuild, restart
 ```
 
 Migrations run automatically, but only in one place. The `migrate` service sets
-`RUN_MIGRATIONS=1` and exits; `backend`, `celery_worker` and `celery_beat` share
-the same image with it unset. That is deliberate — two replicas racing `migrate`
-on boot is a real failure mode, so the entrypoint never migrates unless asked.
+`RUN_MIGRATIONS=1`, applies them and exits; `backend`, `celery_worker` and
+`celery_beat` run the same image with it `0` and wait on
+`service_completed_successfully` before starting.
+
+Both halves of that matter. Migrating from one service only means replicas never
+race each other on boot — the entrypoint does nothing unless asked. Gating the
+others on it means a first deploy, or any schema change, never has gunicorn
+serving 500s and Celery hitting tables that do not exist yet.
 
 ```bash
 just logs-prod          # tail everything

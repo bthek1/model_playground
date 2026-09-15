@@ -39,7 +39,14 @@ services:
       retries: 5
     restart: unless-stopped
 
-  backend: &backend
+  # Runs migrations and exits. Everything that talks to the database waits for
+  # it to finish, so a first deploy (or any schema change) never has gunicorn
+  # serving 500s and Celery hitting tables that do not exist yet.
+  #
+  # It is also the *only* service that migrates: the image's entrypoint does
+  # nothing unless RUN_MIGRATIONS=1, because replicas racing `migrate` on boot
+  # is a real failure mode.
+  migrate:
     build:
       context: ./backend
     image: model-playground-backend:latest
@@ -61,28 +68,37 @@ services:
       # own redirect would be redundant at best and a loop at worst. Caddy
       # already redirects http -> https at the edge.
       SECURE_SSL_REDIRECT: "False"
+      RUN_MIGRATIONS: "1"
     depends_on:
       db: {condition: service_healthy}
       redis: {condition: service_healthy}
-    restart: unless-stopped
-
-  # The only service that migrates. Two replicas racing `migrate` is the reason
-  # this is opt-in per service rather than baked into the image's entrypoint.
-  migrate:
-    <<: *backend
-    environment:
-      <<: *backend_env
-      RUN_MIGRATIONS: "1"
+    # The entrypoint migrates, then execs this and the container exits 0.
     command: ["python", "-c", "print('migrations applied')"]
     restart: "no"
 
+  backend: &app
+    build:
+      context: ./backend
+    image: model-playground-backend:latest
+    environment:
+      <<: *backend_env
+      # Unset for every long-running service — only `migrate` above migrates.
+      RUN_MIGRATIONS: "0"
+    depends_on: &app_deps
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
   celery_worker:
-    <<: *backend
+    <<: *app
+    depends_on: *app_deps
     command:
       ["celery", "-A", "core", "worker", "--loglevel=info", "--concurrency=2"]
 
   celery_beat:
-    <<: *backend
+    <<: *app
+    depends_on: *app_deps
     command:
       - celery
       - -A
