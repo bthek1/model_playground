@@ -16,7 +16,7 @@
 |---|---|---|
 | Node classification on Cora (§3.1) | [`/graph`](../../frontend/src/routes/graph.tsx) | **Shipped** — GCN, GraphSAGE, GIN, GAT |
 | Oversmoothing (§3.2) | [`/graph`](../../frontend/src/routes/graph.tsx) | **Shipped** — the depth slider, and a number behind it |
-| Link prediction (§3.3) | — | Not built; needs no new kernel |
+| Link prediction (§3.3) | [`/link-prediction`](../../frontend/src/routes/link-prediction.tsx) | **Shipped** — 0.925 test AUC on Cora |
 | Graph classification (§3.4) | — | Not built; needs pooling and a runtime dataset fetch |
 
 **This category is the strongest case in the repo for the raw-WebGPU path**, and the
@@ -194,11 +194,63 @@ four or five layers it overflows and ReLU zeroes everything: at 8 layers test ac
 directions left to compare — so `GnnMetrics.deadFraction` is reported separately and the
 page names the failure when more than half the representations are gone.
 
-### 3.3 Link prediction — not built
+### 3.3 Link prediction — **shipped**
 
-Score node pairs by the dot product of their embeddings and draw the top predicted edges
-that are not in the graph as dashed lines. Needs **no new kernel** — the embeddings are
-already computed by 3.1 — and no new dataset. This is the cheapest remaining page here.
+[`/link-prediction`](../../frontend/src/routes/link-prediction.tsx). The roadmap was right
+that this needs no new kernel and no new dataset: the encoder is §3.1's `GnnTrainer`, the
+decoder is `score(u,v) = z_u · z_v` through a sigmoid, and the expensive half of the
+arithmetic was already written. What it does need is a **split**, and that is where the
+whole correctness surface turned out to live.
+
+- **The held-out citations leave the graph, not just the loss** — and this is the one
+  failure mode on the page, because it fails **upward**. An encoder still allowed to
+  aggregate over an edge it is later asked to predict has already averaged the two
+  endpoints together, so it scores the pair from memory: test AUC goes to ~0.99 and the
+  page looks like it works *better*. [`lib/edgeSplit.ts`](../../frontend/src/lib/edgeSplit.ts)
+  rebuilds the CSR without them, and three things follow that are silent on their own:
+  both directed copies go (the backward pass's `Âᵀ` needs symmetry), the **degrees are
+  recomputed** (`archScales` reads them to build `D^-1/2`, so a stale degree leaks the
+  edge's existence into the normalisation), and an edge whose removal would isolate an
+  endpoint is kept instead — on Cora that would otherwise strand up to 485 degree-1 nodes.
+- **Negatives are rejected against the full graph.** A sampled pair that is really a
+  held-out citation is not a negative example, it is a mislabelled one, and it would be
+  scored against the model twice — once in each direction.
+- **The layout is computed from the *training* graph.** A layout is a drawing, not a model
+  input, so either choice would have leaked nothing; but one laid out from the full graph
+  pulls the endpoints of every held-out citation together, and then a correct prediction
+  and a flattering picture are indistinguishable.
+- **The metric is AUC, and reported beside AP.** The decoder produces a ranking; any
+  accuracy would need a threshold, and the positive/negative balance here is a sampling
+  choice rather than a property of the data, so a threshold would be measuring the
+  sampler. At the 1:1 sampling the page uses, AUC is exactly "the probability a real
+  citation outranks a pair that is not one", which is the sentence it prints.
+- **`/graph`'s hyperparameters cost 0.19 of AUC here, and that is a measurement.** Node
+  classification regularises hard because it fits 1433 features from 140 labelled papers;
+  this page has ~4500 supervised citations and the same settings starve it. On one split
+  and seed:
+
+  | Recipe | Test AUC |
+  |---|---|
+  | `/graph`'s (dropout 0.5, decay 5e-4, 32-wide, 150 epochs) | 0.737 |
+  | GAE's (no dropout, no decay, 32→16, 150 epochs) | 0.879 |
+  | …at 250 epochs | 0.906 |
+  | …plus light dropout of 0.2 — **what ships** | **0.925** |
+
+  Kipf's published GAE result on Cora is 0.910. Reusing a sibling page's defaults is the
+  kind of thing that looks like a decision and is really an inheritance; the only way to
+  tell was to run it.
+- **The E2E assertion is a band, not a floor** (`just fe-e2e-link`). Above 0.85 because a
+  working encoder measures 0.92 and a broken one sits at chance; **below 0.985 because
+  that is what leakage looks like**. A floor alone would pass with the bug in place, and
+  pass more comfortably than without it.
+- The candidates are scored once, after the last epoch: `topCandidates` walks all 3.7 M
+  non-pairs keeping `k` in an insertion-sorted list, because materialising every score to
+  sort it would cost 30 MB to throw away all but 50. Pairs that are already citations are
+  skipped rather than scored and filtered — a working model ranks real edges highly, so
+  leaving them in fills the list with edges already on screen.
+- The **embeddings** cross `postMessage` (346 KB) even though the features never do, so
+  clicking two papers scores them with a local dot product instead of a round trip through
+  a worker that may be mid-run.
 
 ### 3.4 Graph classification — not built
 
@@ -217,7 +269,7 @@ category with a real LOAD state even though there are still no weights.
 | **GCN, GraphSAGE, GIN** | **Shipped** | one WGSL scaled-gather shader for all three | WebGPU |
 | **GAT** | **Shipped** | attention in TS, projections on the GPU | WebGPU + CPU |
 | **Oversmoothing** | **Shipped**, and the best page here | a depth slider over the same model | WebGPU |
-| **Link prediction** | Yes | dot products over the node embeddings | WebGPU |
+| **Link prediction** | **Shipped** | dot products over the node embeddings | WebGPU |
 | **Graph classification** | Yes | pooling plus a small dataset fetch | WebGPU |
 | Large-graph training (millions of nodes) | No | sampling and partitioning are a different system | server |
 
@@ -278,6 +330,8 @@ are arranged around it.
 | [`lib/random.test.ts`](../../frontend/src/lib/random.test.ts) | a stream that moves between runs, and Box–Muller's `log(0)` |
 | [`hooks/useGraphTraining.test.ts`](../../frontend/src/hooks/useGraphTraining.test.ts) | a re-entrant load, a depth point stacking instead of replacing, a leaked worker |
 | [`components/graph/GraphCanvas.test.tsx`](../../frontend/src/components/graph/GraphCanvas.test.tsx) | an off-centre or stretched drawing, via the pure coordinate mapping |
+| [`lib/edgeSplit.test.ts`](../../frontend/src/lib/edgeSplit.test.ts) | **leakage** — a held-out citation left in the training CSR, an asymmetric rebuild, a stale degree, a "negative" that is really an edge |
+| [`webgpu/linkPredictor.test.ts`](../../frontend/src/webgpu/linkPredictor.test.ts) | a **half-right decoder gradient** — a pair scatters into both endpoints, and updating only one still trains — plus an AUC that is not an AUC |
 | [`__tests__/routes/graph.test.tsx`](../../frontend/src/__tests__/routes/graph.test.tsx) | the page contract: four slots, nothing runs on mount, a control that shouldn't run doesn't |
 | [`e2e/specs/webgpu/graph.spec.ts`](../../frontend/e2e/specs/webgpu/graph.spec.ts) | the WGSL kernel disagreeing with the CPU reference, and — `@slow` — a real training run pinned by an **accuracy floor** |
 

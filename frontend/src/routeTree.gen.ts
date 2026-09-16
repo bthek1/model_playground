@@ -25,6 +25,7 @@ import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as ObjectDetectionRouteImport } from './routes/object-detection'
 import { Route as MaskGenerationRouteImport } from './routes/mask-generation'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LinkPredictionRouteImport } from './routes/link-prediction'
 import { Route as ImageToTextRouteImport } from './routes/image-to-text'
 import { Route as ImageTo3dRouteImport } from './routes/image-to-3d'
 import { Route as ImageFeaturesRouteImport } from './routes/image-features'
@@ -120,6 +121,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LinkPredictionRoute = LinkPredictionRouteImport.update({
+  id: '/link-prediction',
+  path: '/link-prediction',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ImageToTextRoute = ImageToTextRouteImport.update({
   id: '/image-to-text',
   path: '/image-to-text',
@@ -199,6 +205,7 @@ export interface FileRoutesByFullPath {
   '/image-features': typeof ImageFeaturesRoute
   '/image-to-3d': typeof ImageTo3dRoute
   '/image-to-text': typeof ImageToTextRoute
+  '/link-prediction': typeof LinkPredictionRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
   '/object-detection': typeof ObjectDetectionRoute
@@ -230,6 +237,7 @@ export interface FileRoutesByTo {
   '/image-features': typeof ImageFeaturesRoute
   '/image-to-3d': typeof ImageTo3dRoute
   '/image-to-text': typeof ImageToTextRoute
+  '/link-prediction': typeof LinkPredictionRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
   '/object-detection': typeof ObjectDetectionRoute
@@ -262,6 +270,7 @@ export interface FileRoutesById {
   '/image-features': typeof ImageFeaturesRoute
   '/image-to-3d': typeof ImageTo3dRoute
   '/image-to-text': typeof ImageToTextRoute
+  '/link-prediction': typeof LinkPredictionRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
   '/object-detection': typeof ObjectDetectionRoute
@@ -295,6 +304,7 @@ export interface FileRouteTypes {
     | '/image-features'
     | '/image-to-3d'
     | '/image-to-text'
+    | '/link-prediction'
     | '/login'
     | '/mask-generation'
     | '/object-detection'
@@ -326,6 +336,7 @@ export interface FileRouteTypes {
     | '/image-features'
     | '/image-to-3d'
     | '/image-to-text'
+    | '/link-prediction'
     | '/login'
     | '/mask-generation'
     | '/object-detection'
@@ -357,6 +368,7 @@ export interface FileRouteTypes {
     | '/image-features'
     | '/image-to-3d'
     | '/image-to-text'
+    | '/link-prediction'
     | '/login'
     | '/mask-generation'
     | '/object-detection'
@@ -389,6 +401,7 @@ export interface RootRouteChildren {
   ImageFeaturesRoute: typeof ImageFeaturesRoute
   ImageTo3dRoute: typeof ImageTo3dRoute
   ImageToTextRoute: typeof ImageToTextRoute
+  LinkPredictionRoute: typeof LinkPredictionRoute
   LoginRoute: typeof LoginRoute
   MaskGenerationRoute: typeof MaskGenerationRoute
   ObjectDetectionRoute: typeof ObjectDetectionRoute
@@ -522,6 +535,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/link-prediction': {
+      id: '/link-prediction'
+      path: '/link-prediction'
+      fullPath: '/link-prediction'
+      preLoaderRoute: typeof LinkPredictionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/image-to-text': {
       id: '/image-to-text'
       path: '/image-to-text'
@@ -629,6 +649,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImageFeaturesRoute: ImageFeaturesRoute,
   ImageTo3dRoute: ImageTo3dRoute,
   ImageToTextRoute: ImageToTextRoute,
+  LinkPredictionRoute: LinkPredictionRoute,
   LoginRoute: LoginRoute,
   MaskGenerationRoute: MaskGenerationRoute,
   ObjectDetectionRoute: ObjectDetectionRoute,

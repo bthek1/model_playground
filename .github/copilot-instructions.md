@@ -469,7 +469,7 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   See `docs/guides/adding-a-model.md` §8 (Transformers.js) or §9 (a bare ONNX graph — DFN3 is the
   reference, `src/audio/vad/` the smaller one to read first).
 
-**Graph machine learning (`/graph`) — the opposite carve-out: no checkpoint at all.**
+**Graph machine learning (`/graph`, `/link-prediction`) — the opposite carve-out: no checkpoint at all.**
 
 - A GNN is one sparse gather repeated a few times, so the model is **written as WGSL and trained in
   the tab**. `lib/cora.ts` + `lib/data/cora.bin`, `lib/graphLayout.ts`, `webgpu/gnn.ts` +
@@ -497,6 +497,27 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - **Oversmoothing needs a number, and the obvious one is wrong**: use similarity between *adjacent*
   nodes, not all pairs. **GIN's collapse is overflow, not oversmoothing** — `deadFraction` is
   reported separately so the page cannot conflate them.
+- **Link prediction (`/link-prediction`) is the second page on this path, and its one bug fails
+  *upward*.** Same Cora, same kernels, a decoder instead of a classifier
+  (`score(u,v) = z_u · z_v` through a sigmoid) — but the supervision is on **edges**, so the
+  held-out citations must leave the **graph**, not just the loss. An encoder still allowed to
+  aggregate over an edge it is later scored on has already averaged the endpoints together and
+  answers from memory: test AUC goes to ~0.99 and the page looks *better*. `lib/edgeSplit.ts` owns
+  that, and three consequences are silent on their own — **both directed copies** go (the backward
+  pass's `Âᵀ` needs symmetry), the **degrees are recomputed** (`archScales` builds `D^-1/2` from
+  them, so a stale degree leaks the edge's existence into the normalisation), and an edge whose
+  removal would **isolate** an endpoint is kept instead. Negatives are rejected against the **full**
+  graph: a pair that is really a held-out citation is mislabelled, not negative.
+- **The decoder's gradient is the half-right kind.** A pair scatters into **both** endpoints' rows;
+  updating only one still produces a falling loss and a rising AUC. `linkPredictor.test.ts` pins it
+  with finite differences over encoder *and* decoder, per architecture.
+- **The metric is AUC (with AP beside it), and the E2E assertion is a band, not a floor** —
+  above 0.85, below 0.985, because leakage is the failure and a floor would pass more comfortably
+  *with* the bug (`just fe-e2e-link`).
+- **Do not inherit a sibling page's hyperparameters.** `/graph` regularises hard for 140 labelled
+  nodes; this page has ~4500 supervised edges and the same settings cost it 0.19 of AUC —
+  measured 0.737 against 0.925 on the same split. Reuse that looks like a decision is often an
+  inheritance; run it.
 - **A gradient check does not pin a forward pass, and a canvas hides its geometry.** Two
   gaps worth knowing before writing the next kernel or the next visualization: GAT's
   finite-difference checks pass even if the softmax is normalised over the wrong set, so

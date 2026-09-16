@@ -264,6 +264,12 @@ fe-e2e-vision-one route:
 fe-e2e-zeroshot:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 zero-shot-parity.spec.ts
 
+# Run the @slow link-prediction spec: a real GCN encoder trained on a Cora with
+# 10% of its citations removed, pinned by an AUC **band**. A floor alone would
+# pass with the bug this page can actually have — leakage makes the number go up.
+fe-e2e-link:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 link-prediction.spec.ts
+
 # Check every model id (audio + vision) still resolves on the Hugging Face Hub,
 # and that each vision entry publishes the dtypes both backends ask for (seconds)
 fe-e2e-models:

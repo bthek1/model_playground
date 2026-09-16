@@ -418,6 +418,7 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Tensor Arithmetic | the operation | WGSL pipeline compile (fast, auto) | operand matrices | heatmap + numeric grid |
 | Linear Training | architecture + hyperparams | dataset fetch + kernel compile | train loop | live weights + loss curve |
 | Graph ML | the GNN architecture | **a GPU probe and a bundled dataset**, neither of them a download | Train / Stop, and a **depth slider that re-trains** | the graph repainted per epoch, plus accuracy against depth |
+| Link Prediction | the GNN architecture | a GPU probe, and **the split** — the held-out fraction lives here because changing it rebuilds the graph and its layout | Train / Stop | the graph with predicted non-edges dashed over it, an AUC, and a **top-k slider that only re-draws** |
 | Mask Generation | model catalogue | weight download, **then a per-image encode** | click a point on the picture | the mask, its candidates, its decode time |
 | Keypoint Detection | **a pair** of checkpoints | both downloads, one aggregate bar | image / camera, threshold, people cap | skeletons over the frame |
 | Video Classification | CLIP catalogue, reused | weight download | a clip, labels, a sample rate | scores over time + a filmstrip |
@@ -500,6 +501,13 @@ non-commercial only — the constraint is a property of the *choice*, so it rend
 the picker at the moment the choice is made, in the same amber as the size guardrail.
 The permissively licensed model is the default. A restriction discovered after the
 download is a restriction discovered too late.
+
+**A control that changes the *data* belongs in LOAD, and re-loads.** `/link-prediction`'s
+held-out fraction is the case: a different fraction is a different split, which is a
+different graph and a different force-directed layout, so it cannot be a hyperparameter
+passed to the next run. It sits in LOAD with the device probe, and the page says that
+moving it costs a reload. The rule generalises — ask which stage's *output* the control
+invalidates, and put it there.
 
 **A control that changes the model's *shape* belongs in RUN, and re-runs.** `/graph`'s
 depth slider is the case that makes the §7 rule concrete in both directions at once: on

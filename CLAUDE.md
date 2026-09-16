@@ -57,7 +57,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | Feature plans (phased) | **GitHub issues**, label [`plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) — open = active, closed = done |
 | **Audio category roadmap** (complete, 6 of 6) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
 | **Computer Vision roadmap** (14 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
-| **Graph ML roadmap** (node classification + oversmoothing shipped; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
+| **Graph ML roadmap** (node classification, oversmoothing + link prediction shipped; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -231,7 +231,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - To add a model: write the kernel + register a `ModelCard`. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md).
 
 
-### In-browser graph learning (`/graph`)
+### In-browser graph learning (`/graph`, `/link-prediction`)
 
 The other carve-out, and the opposite one: there is **no checkpoint at all**. A graph
 neural network is one sparse gather repeated a few times, so the model is written as WGSL
@@ -287,6 +287,27 @@ and trained in the tab. `lib/cora.ts` + `lib/data/cora.bin` (the dataset),
   probe always said `unsupported`. It now probes from a served origin, and the webgpu
   project passes `--enable-unsafe-swiftshader` so a runner with no `/dev/dri` still executes
   real WGSL. If you add a kernel, that is what will check it.
+- **Link prediction (`/link-prediction`) is the second page on this path, and its one bug fails
+  *upward*.** Same Cora, same kernels, a decoder instead of a classifier
+  (`score(u,v) = z_u · z_v` through a sigmoid) — but the supervision is on **edges**, so the
+  held-out citations must leave the **graph**, not just the loss. An encoder still allowed to
+  aggregate over an edge it is later scored on has already averaged the endpoints together and
+  answers from memory: test AUC goes to ~0.99 and the page looks *better*. `lib/edgeSplit.ts` owns
+  that, and three consequences are silent on their own — **both directed copies** go (the backward
+  pass's `Âᵀ` needs symmetry), the **degrees are recomputed** (`archScales` builds `D^-1/2` from
+  them, so a stale degree leaks the edge's existence into the normalisation), and an edge whose
+  removal would **isolate** an endpoint is kept instead. Negatives are rejected against the **full**
+  graph: a pair that is really a held-out citation is mislabelled, not negative.
+- **The decoder's gradient is the half-right kind.** A pair scatters into **both** endpoints' rows;
+  updating only one still produces a falling loss and a rising AUC. `linkPredictor.test.ts` pins it
+  with finite differences over encoder *and* decoder, per architecture.
+- **The metric is AUC (with AP beside it), and the E2E assertion is a band, not a floor** —
+  above 0.85, below 0.985, because leakage is the failure and a floor would pass more comfortably
+  *with* the bug (`just fe-e2e-link`).
+- **Do not inherit a sibling page's hyperparameters.** `/graph` regularises hard for 140 labelled
+  nodes; this page has ~4500 supervised edges and the same settings cost it 0.19 of AUC —
+  measured 0.737 against 0.925 on the same split. Reuse that looks like a decision is often an
+  inheritance; run it.
 
 ### In-browser pretrained models (`src/audio/`, `src/vision/`)
 

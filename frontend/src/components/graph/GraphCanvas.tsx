@@ -11,7 +11,13 @@
 // epoch alongside them would triple the per-frame cost to redraw an identical
 // picture.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 /**
  * Seven categorical colours, one per Cora topic, chosen to stay distinguishable
@@ -45,6 +51,16 @@ export interface GraphCanvasProps {
   /** The 20-per-class labelled nodes, ringed so the supervision is visible. */
   trainMask: Uint8Array;
   colorBy: ColorBy;
+  /**
+   * Pairs to draw as dashed lines over the graph — `/link-prediction`'s
+   * candidates. These are **predictions, not data**, which is why they are drawn
+   * in a different style from the citations underneath them.
+   */
+  predicted?: Uint32Array;
+  /** Two nodes to ring and join, when the viewer has picked a pair. */
+  selected?: readonly [number, number] | null;
+  /** Called with the node under a click, or null when the click missed one. */
+  onPickNode?: (node: number | null) => void;
   /**
    * The scale this canvas is being displayed at, when a pan/zoom surface is
    * scaling it. Strokes are divided by it so a dot stays the same size on
@@ -96,6 +112,41 @@ export function layoutToPixels(
 }
 
 /**
+ * The node nearest a point, or null if nothing is near enough.
+ *
+ * The inverse of `layoutToPixels`, and pure for the same reason plus a sharper
+ * one: a mis-mapped click returns a *plausible* node — a real index, in the
+ * right part of the picture — so no count-based assertion downstream can catch
+ * it. This is the same trap `/mask-generation`'s click and `/pose`'s keypoints
+ * fell into, and the fix is the same: make the arithmetic testable and test it.
+ *
+ * `tolerance` is in the same CSS pixels as the layout, so a caller that is being
+ * scaled by a pan/zoom surface should divide by the scale to keep the target the
+ * same size under the pointer.
+ */
+export function pixelsToNode(
+  points: PixelLayout,
+  px: number,
+  py: number,
+  tolerance: number,
+): number | null {
+  let best: number | null = null;
+  let bestDist = tolerance * tolerance;
+  for (let i = 0; i < points.px.length; i++) {
+    const dx = points.px[i] - px;
+    const dy = points.py[i] - py;
+    const dist = dx * dx + dy * dy;
+    // `<=` so a click exactly on a node at exactly the tolerance still lands,
+    // and so the first of two coincident nodes wins rather than neither.
+    if (dist <= bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
  * How much to divide a stroke width by so it holds its size on screen.
  *
  * Pure and exported for the same reason `layoutToPixels` is: happy-dom gives a
@@ -117,6 +168,9 @@ export function GraphCanvas({
   predictions,
   trainMask,
   colorBy,
+  predicted,
+  selected = null,
+  onPickNode,
   zoom = 1,
 }: GraphCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -216,7 +270,93 @@ export function GraphCanvas({
         ctx.stroke();
       }
     }
-  }, [size, dpr, q, points, nNodes, labels, predictions, trainMask, colorBy]);
+
+    // Predictions last, so they sit above the graph they are claims about.
+    //
+    // Both endpoints are ringed as well as joined, and that is not decoration.
+    // The pairs a link predictor scores highest are the ones that already share
+    // neighbours, so the layout has put them next to each other and the line
+    // between them is a few pixels long — drawn but unfindable among 2708 dots.
+    // The rings are what make a prediction locatable at the zoom the whole
+    // graph fits in.
+    if (predicted && predicted.length > 0) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(244,63,94,0.9)"; // rose-500
+      ctx.lineWidth = 1.5 / q;
+      ctx.setLineDash([5 / q, 3 / q]);
+      ctx.beginPath();
+      for (let i = 0; i < predicted.length; i += 2) {
+        const a = predicted[i];
+        const b = predicted[i + 1];
+        if (a >= nNodes || b >= nNodes) continue;
+        ctx.moveTo(px[a], py[a]);
+        ctx.lineTo(px[b], py[b]);
+      }
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      for (let i = 0; i < predicted.length; i++) {
+        const node = predicted[i];
+        if (node >= nNodes) continue;
+        const ring = Math.max(radius * 2.5, 4 / q);
+        ctx.moveTo(px[node] + ring, py[node]);
+        ctx.arc(px[node], py[node], ring, 0, Math.PI * 2);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (selected) {
+      const [a, b] = selected;
+      ctx.save();
+      ctx.strokeStyle = "rgba(14,165,233,0.95)"; // sky-500
+      ctx.lineWidth = 2 / q;
+      if (a < nNodes && b < nNodes && a !== b) {
+        ctx.beginPath();
+        ctx.moveTo(px[a], py[a]);
+        ctx.lineTo(px[b], py[b]);
+        ctx.stroke();
+      }
+      for (const node of [a, b]) {
+        if (node >= nNodes) continue;
+        ctx.beginPath();
+        ctx.arc(px[node], py[node], (radius + 3) / q, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }, [
+    size,
+    dpr,
+    q,
+    points,
+    nNodes,
+    labels,
+    predictions,
+    trainMask,
+    colorBy,
+    predicted,
+    selected,
+  ]);
+
+  // A click is in CSS pixels of the *displayed* canvas, and the canvas is
+  // measured in the layout's own pixels — the two differ by whatever a pan/zoom
+  // surface is doing to it. Reading the element's own client rect is what keeps
+  // that conversion correct without the canvas having to know it is being
+  // scaled: the rect is already post-transform.
+  const handleClick = (event: ReactMouseEvent<HTMLCanvasElement>) => {
+    if (!onPickNode) return;
+    const canvas = event.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const scale = rect.width / size.width;
+    const x = (event.clientX - rect.left) / scale;
+    const y = (event.clientY - rect.top) / scale;
+    // A generous target in layout pixels, shrunk by however much the view is
+    // magnified, so the node under the pointer stays the same size to click.
+    onPickNode(pixelsToNode(points, x, y, Math.max(6, 10 / q)));
+  };
 
   return (
     <div
@@ -229,6 +369,7 @@ export function GraphCanvas({
     >
       <canvas
         ref={canvasRef}
+        onClick={handleClick}
         role="img"
         aria-label={`Cora citation graph: ${nNodes} papers, coloured by ${
           colorBy === "true" ? "their true topic" : "the model's predicted topic"

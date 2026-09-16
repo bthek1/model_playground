@@ -6,6 +6,7 @@ import {
   GraphCanvas,
   layoutToPixels,
   PAD,
+  pixelsToNode,
   strokeScale,
 } from "./GraphCanvas";
 
@@ -93,6 +94,50 @@ describe("strokeScale", () => {
   it("never divides by zero, however far out the view is zoomed", () => {
     expect(strokeScale(0)).toBeGreaterThan(0);
     expect(strokeScale(-1)).toBeGreaterThan(0);
+  });
+});
+
+describe("pixelsToNode", () => {
+  // A mis-mapped click returns a *plausible* node — a real index, in roughly the
+  // right place — so nothing downstream can catch it. Same trap /mask-generation
+  // and /pose hit, and the same fix: make the arithmetic pure and test it.
+  const points = layoutToPixels(
+    unit([0, 0.5, 1]),
+    unit([0, 0.5, 1]),
+    3,
+    200,
+    200,
+  );
+
+  it("finds the node directly under the pointer", () => {
+    expect(pixelsToNode(points, points.px[1], points.py[1], 8)).toBe(1);
+  });
+
+  it("is the inverse of layoutToPixels for every node", () => {
+    for (let i = 0; i < 3; i++) {
+      expect(pixelsToNode(points, points.px[i], points.py[i], 1)).toBe(i);
+    }
+  });
+
+  it("returns null when the click missed everything", () => {
+    // The midpoint between two nodes, far outside the tolerance of either.
+    const midX = (points.px[0] + points.px[1]) / 2;
+    const midY = (points.py[0] + points.py[1]) / 2;
+    expect(pixelsToNode(points, midX, midY, 2)).toBeNull();
+  });
+
+  it("prefers the nearer of two candidates in range", () => {
+    // Nudged toward node 1: a tolerance wide enough to cover both must still
+    // pick the closer, or clicking a dense region picks whichever was indexed
+    // first.
+    const x = points.px[1] + (points.px[0] - points.px[1]) * 0.2;
+    const y = points.py[1] + (points.py[0] - points.py[1]) * 0.2;
+    expect(pixelsToNode(points, x, y, 1000)).toBe(1);
+  });
+
+  it("finds nothing in an empty layout", () => {
+    const empty = layoutToPixels(unit([]), unit([]), 0, 100, 100);
+    expect(pixelsToNode(empty, 0, 0, 10)).toBeNull();
   });
 });
 

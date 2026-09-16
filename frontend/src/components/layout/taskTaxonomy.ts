@@ -79,6 +79,12 @@ const REAL_ROUTES: Record<string, string> = {
   // classification and the oversmoothing demonstration; link prediction and
   // graph classification are still open on the roadmap.
   "graph-machine-learning": "/graph",
+  // The other half of the Graph ML roadmap's shipped work: the same Cora and
+  // the same kernels, trained on a graph with 15% of its citations removed and
+  // asked to score the pairs it never saw. Separate from /graph because it is a
+  // different question — a different split, loss, metric and picture — and one
+  // page per question is worth more than the reuse.
+  "link-prediction": "/link-prediction",
 };
 
 function task(label: string): TaskItem {
@@ -171,7 +177,11 @@ export const taskCategories: TaskCategory[] = [
   {
     label: "Other",
     icon: Shapes,
-    tasks: tasks(["Graph Machine Learning"]),
+    // "Link Prediction" is a row the Hub does not have — its taxonomy stops at
+    // graph-ml — added for the same reason Computer Vision has a
+    // Background Removal row: a shipped route that answers its own question
+    // deserves its own entry rather than being buried inside a neighbour's.
+    tasks: tasks(["Graph Machine Learning", "Link Prediction"]),
   },
   {
     label: "Reinforcement Learning",
