@@ -83,23 +83,28 @@ describe("proteinsCache validation", () => {
         open: () =>
           request(() => ({
             objectStoreNames: { contains: () => true },
-            transaction: () => ({
-              objectStore: () => ({
-                get: () => request(() => stored),
-                put: (value: unknown) => {
-                  stored = value;
-                  return request(() => undefined);
-                },
-                delete: () => {
-                  stored = undefined;
-                  return request(() => undefined);
-                },
-              }),
-              oncomplete: null,
-              set oncomplete(fn: () => void) {
-                queueMicrotask(fn);
-              },
-            }),
+            transaction: () => {
+              // `oncomplete` is assigned by the code under test, so it has to be
+              // a setter that fires rather than a field that is merely stored.
+              const tx = {
+                objectStore: () => ({
+                  get: () => request(() => stored),
+                  put: (value: unknown) => {
+                    stored = value;
+                    return request(() => undefined);
+                  },
+                  delete: () => {
+                    stored = undefined;
+                    return request(() => undefined);
+                  },
+                }),
+              };
+              Object.defineProperty(tx, "oncomplete", {
+                set: (fn: () => void) => queueMicrotask(fn),
+                configurable: true,
+              });
+              return tx;
+            },
             close: () => {},
           })),
       },
