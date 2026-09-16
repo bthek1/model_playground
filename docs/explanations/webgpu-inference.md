@@ -39,10 +39,14 @@ The trade-off: you write kernels yourself. Start from the reference kernels in
 | `runtime.ts` | `runMatmul()` — the reference end-to-end kernel + benchmark. |
 | `tensorops.ts` | `runTensorOp()` — dispatch table for basic matrix arithmetic (add/sub/mul/div/matmul/transpose/scale), backing the Tensor Arithmetic page. |
 | `linearModel.ts` | `LinearTrainer` — mini-batch SGD training of a softmax classifier; the heavy matmuls use an injected `MatmulFn` (GPU in the worker, CPU in tests). Backs the Training page. |
-| `gnn.ts` | `GnnTrainer` — an L-layer graph neural network and its backward pass, over injected `matmul` and `Propagator` ops (GPU in the worker, CPU reference in tests). Backs the Graph ML page. |
+| `gnn.ts` | `GnnTrainer` — an L-layer graph neural network and its backward pass, over injected `matmul` and `Propagator` ops (GPU in the worker, CPU reference in tests). One **encoder** for all three graph pages: `backward()` is node classification's softmax head, and `backwardFrom(dOut, loss)` is the seam the other two heads push their own gradient through. |
 | `gat.ts` | `AttentionPropagator` — GAT's per-edge attention. The one architecture that is **not** a scaled gather, and the one that does not use the aggregation shader. |
 | `gnnRuntime.ts` | `GraphAggregator` — the aggregation kernel's device buffers and dispatch. The graph is uploaded **once** and left on the device for the whole training run. |
 | `graphSession.ts` | Worker-side owner of the Cora dataset, its layout and a streaming training run. Neither the 15.5 MB feature matrix nor the layout ever crosses `postMessage`. |
+| `linkPredictor.ts` | The **link-prediction head**: `score(u,v) = z_u · z_v`, BCE computed from the logit, its gradient scattered into *both* endpoints, and `auc`/`averagePrecision`. Backs `/link-prediction`. |
+| `linkSession.ts` | Worker-side owner of `/link-prediction`'s graph — Cora with 15 % of its citations **removed** (`lib/edgeSplit.ts`) — its training-graph layout, and `topCandidates`. Unlike the feature matrix, the final embeddings *do* cross `postMessage`, so a clicked pair is scored locally. |
+| `graphPool.ts` | The **graph-classification head**: a sum/mean readout over each graph's nodes and its adjoint. No parameters — pooling and a linear layer commute, so the logits are pooled directly. Backs `/graph-classification`. |
+| `proteinSession.ts` | Worker-side owner of PROTEINS: 1113 graphs fetched (or read from IndexedDB) and joined into **one disjoint-union CSR**, so the same kernel trains them full-batch. Lays graphs out one at a time, on request, for the gallery. |
 | `shaders/*.wgsl` | The compute kernels (imported as strings via Vite `?raw`). |
 | `worker.ts` | Web Worker that owns the device and runs jobs off the main thread. |
 | `workerClient.ts` | Main-thread promise API over the worker (request correlation). |
@@ -57,6 +61,14 @@ The trade-off: you write kernels yourself. Start from the reference kernels in
 > scale vectors swapped, and the projection must happen before the gather. CSR and
 > not a dense adjacency matrix: Cora dense is 29 MB of mostly zeros against ~40 KB.
 > See [`../roadmaps/graph.md`](../roadmaps/graph.md).
+>
+> **Three pages, one kernel, three heads.** `/graph`, `/link-prediction` and
+> `/graph-classification` all dispatch this same shader over one uploaded CSR.
+> What differs is the graph handed to it — the full Cora, Cora with its held-out
+> citations removed, and the disjoint union of 1113 proteins — and the head on top.
+> Each of those two differences is where its page's correctness lives, and both
+> fail without an error: a held-out edge left in the CSR makes link-prediction AUC go
+> *up*, and an edge leaking across two graphs in a union trains perfectly happily.
 
 > **Training-page visualization.** The Training route is a full-bleed **stage**
 > whose background *is* the model's architecture schematic

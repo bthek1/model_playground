@@ -80,6 +80,8 @@ just fe-e2e-vision-one /pose      # one vision route at a time
 just fe-e2e-zeroshot  # split-tower scoring parity against the full CLIP graph
 just fe-e2e-superres  # Swin2SR against a bicubic baseline, by PSNR
 just fe-e2e-graph     # a real GNN training run on Cora, pinned by an accuracy floor
+just fe-e2e-link      # link prediction on Cora, pinned by an AUC band
+just fe-e2e-graphcls  # graph classification on PROTEINS, pinned above its baseline
 ```
 
 `fe-e2e-graph` is the odd one: it is `@slow` without downloading anything, because
@@ -88,6 +90,28 @@ epochs of real training — about 3 minutes on SwiftShader for one run, and the
 depth sweep does two. The fast half of that route (the page shell, and the WGSL
 aggregation kernel cross-checked against its CPU reference) is in the default
 `just fe-e2e-webgpu` run and takes seconds.
+
+The two later graph routes each needed a different *shape* of assertion from
+`/graph`'s floor, and the reasons are worth copying the next time a spec is
+written for a metric:
+
+- **`fe-e2e-link` asserts a band — above 0.85, below 0.985.** The one real bug
+  `/link-prediction` can have is leakage: an encoder that can still aggregate over
+  a held-out citation scores it from memory, and AUC goes to ~0.99. That bug makes
+  the number go **up**, so a floor would pass with it in place — and pass more
+  comfortably than without it. The ceiling is the assertion that catches it.
+- **`fe-e2e-graphcls` asserts above the *majority baseline*, not above chance.**
+  PROTEINS is 663/450, so a model that ignores its input scores 0.598, and the
+  class prior is the easiest thing in the dataset to learn — which makes it
+  exactly what a broken readout produces. The spec reads *both* numbers off the
+  page rather than remembering a constant, so it also proves the baseline is on
+  screen. It is the only `@slow` graph spec that touches the network (2 MB from the
+  Hub), and its fast half asserts nothing reaches `huggingface.co` before the
+  button is pressed.
+
+**Ask which direction the silent failure moves the number.** A floor catches a
+model that got worse; only a ceiling catches one that got suspiciously better; and
+neither means anything unless the null model is known.
 
 `fe-e2e-vision` grew from "one MobileNetV4 load" into the whole category, and it is
 now the longest job in the repo: OWLv2 alone is 155 MB, and Florence-2 is 544 MB on

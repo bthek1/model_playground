@@ -317,6 +317,78 @@ describe("GnnTrainer gradients", () => {
   });
 });
 
+describe("GnnTrainer.backwardFrom — the seam the other two heads use", () => {
+  // /link-prediction and /graph-classification both push their own head's
+  // gradient through this. The refactor that introduced it must not have moved
+  // /graph by a single bit, and the only way to know that is to compare.
+
+  it("is exactly what backward() computes, given backward()'s own dOut", async () => {
+    const trainer = makeTrainer("gcn", 2);
+    offsetBiases(trainer);
+    trainer.setInput(input());
+    const forward = await trainer.forward(0, false);
+    const viaHead = await trainer.backward(LABELS, TRAIN, forward);
+
+    // Rebuild the softmax head's dOut by hand and push it through the seam.
+    const probs = softmaxRows(forward.logits, N, NCLASSES);
+    const dOut = new Float32Array(N * NCLASSES);
+    for (const i of TRAIN) {
+      for (let c = 0; c < NCLASSES; c++) {
+        dOut[i * NCLASSES + c] =
+          (probs[i * NCLASSES + c] - (c === LABELS[i] ? 1 : 0)) / TRAIN.length;
+      }
+    }
+    const viaSeam = await trainer.backwardFrom(dOut, viaHead.loss);
+
+    for (let l = 0; l < 2; l++) {
+      expect(Array.from(viaSeam.dW[l])).toEqual(Array.from(viaHead.dW[l]));
+      expect(Array.from(viaSeam.db[l])).toEqual(Array.from(viaHead.db[l]));
+    }
+  });
+
+  it("passes the head's loss through rather than computing its own", async () => {
+    // The number belongs to the head; the chain has no way to know what it means.
+    const trainer = makeTrainer("sage", 2);
+    trainer.setInput(input());
+    await trainer.forward(0, false);
+    const grads = await trainer.backwardFrom(
+      new Float32Array(N * NCLASSES),
+      12.5,
+    );
+    expect(grads.loss).toBe(12.5);
+  });
+
+  it("refuses a gradient of the wrong shape instead of reading past it", async () => {
+    // A head that hands back nNodes × hidden where nNodes × out is expected would
+    // otherwise be read as the wrong rows — a silently wrong gradient.
+    const trainer = makeTrainer("gcn", 2);
+    trainer.setInput(input());
+    await trainer.forward(0, false);
+    await expect(
+      trainer.backwardFrom(new Float32Array(N * NCLASSES + 1), 0),
+    ).rejects.toThrow(/dOut must be nNodes/);
+  });
+
+  it("zeroes the attention gradients before accumulating, on every call", async () => {
+    // GAT's propagator accumulates across a pass. Two backward passes through the
+    // seam with the same input must give the same gradient, not double it.
+    const trainer = makeTrainer("gat", 2);
+    offsetBiases(trainer);
+    trainer.setInput(input());
+    // The pass stores the activations the backward pass reads.
+    await trainer.forward(0, false);
+    const dOut = new Float32Array(N * NCLASSES).fill(0.1);
+
+    await trainer.backwardFrom(dOut, 0);
+    const first = trainer.propagators[0].parameters().map((p) => p.grad.slice());
+    await trainer.backwardFrom(dOut, 0);
+    const second = trainer.propagators[0].parameters().map((p) => p.grad);
+
+    expect(first.length).toBeGreaterThan(0);
+    first.forEach((g, i) => expect(Array.from(second[i])).toEqual(Array.from(g)));
+  });
+});
+
 describe("fitGnn", () => {
   it("drives the loss down and fits the toy graph", async () => {
     const trainer = makeTrainer("gcn", 2);

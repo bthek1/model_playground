@@ -240,7 +240,9 @@ export const Route = createFileRoute('/users/$userId')({
   `docs/standards/model-visualization.md` — a shared grammar of left-to-right stage/arrow
   schematics (`Stage`/`Arrow`/`ParamChip` in `components/viz/schematic.tsx`), canvas
   weight/activation heatmaps (diverging red=+ / blue=−, alpha=magnitude; `HeatmapTile` +
-  `DivergingLegend` in `components/viz/heatmap.tsx`), theme-token (`--chart-1…5`) colors resolved
+  `DivergingLegend` in `components/viz/heatmap.tsx`), a pan/zoom surface (`PanZoom` in
+  `components/viz/PanZoom.tsx`, whose optional `onScaleChange` lets a canvas keep its strokes a
+  constant size on screen), theme-token (`--chart-1…5`) colors resolved
   via `getCSSVar()`, and lazy charts. The Training route (`components/training/`) and Tensor route
   (`routes/tensor.tsx`) are the reference callers. Reuse those primitives; render the real
   `ModelCard`/weight data, not stock diagrams; pass both themes and every WebGPU status.
@@ -697,7 +699,8 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`;
   vision only: `just fe-e2e-vision` (tens of minutes cold — one route at a time with
   `just fe-e2e-vision-one /pose`); zero-shot scoring parity: `just fe-e2e-zeroshot`;
-  super-resolution vs bicubic by PSNR: `just fe-e2e-superres`
+  super-resolution vs bicubic by PSNR: `just fe-e2e-superres`; link prediction by AUC band:
+  `just fe-e2e-link`; graph classification above its baseline: `just fe-e2e-graphcls`
 - Install deps: `just fe-install`
 
 ---
@@ -728,6 +731,8 @@ Key commands:
 | `just fe-e2e-vision` | Run the @slow vision specs: real loads across all 14 routes (tens of minutes cold) |
 | `just fe-e2e-superres` | Run the @slow super-resolution spec: Swin2SR vs a bicubic baseline, by PSNR |
 | `just fe-e2e-vision-one <route>` | One @slow vision route at a time |
+| `just fe-e2e-link` | @slow link prediction, pinned by an AUC **band** — leakage pushes it up, so a floor would pass with the bug |
+| `just fe-e2e-graphcls` | @slow graph classification, pinned **above its majority baseline**, not above chance |
 | `just fe-e2e-models` | Check every model id (audio + vision) resolves on the HF Hub (seconds) |
 | `just be-seed-e2e` | Create/reset the E2E test user (dev only) |
 | `just be-startapp name` | Scaffold a new Django app |

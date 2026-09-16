@@ -190,6 +190,50 @@ performance constraints that change the design rather than merely tune it:
   the route's E2E spec. Any canvas whose geometry is worth getting right should
   split the same way.
 
+Two extensions, both from `/link-prediction`, and both general:
+
+- **A prediction drawn over data must look different from the data.** Predicted
+  links are **dashed** over the solid citations, and the page says so twice — the
+  header and beside the drawing. A dashed line across a gap is a claim; a solid
+  one reads as a fact.
+- **A drawing can be correct and unreadable, and then it needs a text form.** The
+  pairs a link predictor ranks highest already share neighbours, so the layout has
+  put them on top of each other and the line between them is a few pixels long —
+  drawn, and unfindable among 2708 dots. Endpoints are ringed, and the top pairs
+  are listed as text; clicking a row rings the pair on the canvas. The list turned
+  out to carry the page's best evidence (every top pair is same-topic), which the
+  drawing never could. `pixelsToNode` — the click's inverse of `layoutToPixels` —
+  is pure and exported for the reason §3's SAM note gives: a mis-mapped click
+  returns a *plausible* node.
+
+### Small multiples (graph ML)
+
+`/graph-classification` has one label per graph, so the roadmap fairly called it
+"a much smaller visual payoff" than a colour per node. The payoff it does have is
+**comparison** —
+[`components/graph/ProteinGallery.tsx`](../../frontend/src/components/graph/ProteinGallery.tsx)
+draws forty-eight held-out molecules as a grid of small canvases, each outlined by
+whether the model got it right. Three rules:
+
+- **Colour what the model answered about, and nothing else.** The class belongs to
+  the *graph*, so the border carries right-or-wrong and every node is one neutral
+  colour. Colouring the dots would imply a per-node answer the model never gave.
+- **Fit each tile to its own extent**, not the unit square its layout was
+  normalised in, or a four-node chain draws as a dot in one corner. `tilePixels` is
+  pure and exported, and writing it that way immediately forced the case that
+  matters: a **single-node graph**, which the dataset really contains and which
+  divides by zero if scaled by its extent.
+- **Lay out on demand.** A tile asks for its own layout; laying out all 1113 up
+  front would be a second of work for pictures nobody has asked for. Requests are
+  de-duplicated while in flight, and a failed one leaves a placeholder rather than
+  failing the page — a tile is a picture, not a result.
+
+And one rule that is not about drawing at all: **a metric shown beside the
+pictures owes its null model on screen.** PROTEINS is 663/450, so 60 % accuracy is
+what a model that ignores the molecule scores; the gallery page renders that
+baseline beside every accuracy and as a line across the chart. See
+[`model-page-pattern.md`](model-page-pattern.md).
+
 ### Comparison, transparency, and 3-D (vision, Wave 3)
 
 Three surfaces arrived with the carve-out routes, and each answers a question the

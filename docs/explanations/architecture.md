@@ -242,6 +242,16 @@ checkpoint at all** — its model is WGSL written here and trained in the tab, w
 is why the hand-written row above now carries a neural network rather than only
 arithmetic. See `docs/roadmaps/graph.md`.
 
+Two siblings share that encoder and add one pure module each, with the same
+property: `lib/edgeSplit.ts` (`/link-prediction` — which citations the model may
+aggregate over) and `lib/proteins.ts` (`/graph-classification` — 1113 graphs joined
+into one disjoint union). Both fail silently and in a flattering direction: a
+held-out edge left in the graph pushes AUC *up*, and an edge leaking between two
+proteins trains without complaint. **`/graph-classification` is also the one route
+in the repo that downloads a dataset rather than a checkpoint** — 2 MB from the
+Hub, cached in its own IndexedDB database so it cannot collide with the Training
+page's.
+
 **`/image-to-3d` is the one route where both client-side runtimes appear on the
 same page, and they still do not mix.** Inference is Transformers.js in
 `src/vision/`; the render pass is hand-written WGSL in `src/webgpu/`
