@@ -39,7 +39,7 @@ vi.mock("@/lib/proteins", async (importOriginal) => {
 });
 
 const loadCachedUnion = vi.fn(async () => null);
-const saveCachedUnion = vi.fn(async (_union: unknown) => {});
+const saveCachedUnion = vi.fn((union: unknown) => Promise.resolve(union && undefined));
 vi.mock("@/lib/proteinsCache", () => ({
   loadCachedUnion: () => loadCachedUnion(),
   saveCachedUnion: (u: unknown) => saveCachedUnion(u),

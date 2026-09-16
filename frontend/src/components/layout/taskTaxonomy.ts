@@ -85,6 +85,10 @@ const REAL_ROUTES: Record<string, string> = {
   // different question — a different split, loss, metric and picture — and one
   // page per question is worth more than the reuse.
   "link-prediction": "/link-prediction",
+  // The last of the Graph ML roadmap's four sections, and the only page in the
+  // repo that downloads a *dataset* rather than a checkpoint: 1113 protein
+  // graphs from the Hub, one label each.
+  "graph-classification": "/graph-classification",
 };
 
 function task(label: string): TaskItem {
@@ -181,7 +185,11 @@ export const taskCategories: TaskCategory[] = [
     // graph-ml — added for the same reason Computer Vision has a
     // Background Removal row: a shipped route that answers its own question
     // deserves its own entry rather than being buried inside a neighbour's.
-    tasks: tasks(["Graph Machine Learning", "Link Prediction"]),
+    tasks: tasks([
+      "Graph Machine Learning",
+      "Link Prediction",
+      "Graph Classification",
+    ]),
   },
   {
     label: "Reinforcement Learning",

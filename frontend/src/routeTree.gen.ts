@@ -31,6 +31,7 @@ import { Route as ImageTo3dRouteImport } from './routes/image-to-3d'
 import { Route as ImageFeaturesRouteImport } from './routes/image-features'
 import { Route as ImageClassificationRouteImport } from './routes/image-classification'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as GraphClassificationRouteImport } from './routes/graph-classification'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as DepthRouteImport } from './routes/depth'
 import { Route as BackgroundRemovalRouteImport } from './routes/background-removal'
@@ -151,6 +152,11 @@ const HomeRoute = HomeRouteImport.update({
   path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GraphClassificationRoute = GraphClassificationRouteImport.update({
+  id: '/graph-classification',
+  path: '/graph-classification',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GraphRoute = GraphRouteImport.update({
   id: '/graph',
   path: '/graph',
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
   '/graph': typeof GraphRoute
+  '/graph-classification': typeof GraphClassificationRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
@@ -232,6 +239,7 @@ export interface FileRoutesByTo {
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
   '/graph': typeof GraphRoute
+  '/graph-classification': typeof GraphClassificationRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
@@ -265,6 +273,7 @@ export interface FileRoutesById {
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
   '/graph': typeof GraphRoute
+  '/graph-classification': typeof GraphClassificationRoute
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
@@ -299,6 +308,7 @@ export interface FileRouteTypes {
     | '/background-removal'
     | '/depth'
     | '/graph'
+    | '/graph-classification'
     | '/home'
     | '/image-classification'
     | '/image-features'
@@ -331,6 +341,7 @@ export interface FileRouteTypes {
     | '/background-removal'
     | '/depth'
     | '/graph'
+    | '/graph-classification'
     | '/home'
     | '/image-classification'
     | '/image-features'
@@ -363,6 +374,7 @@ export interface FileRouteTypes {
     | '/background-removal'
     | '/depth'
     | '/graph'
+    | '/graph-classification'
     | '/home'
     | '/image-classification'
     | '/image-features'
@@ -396,6 +408,7 @@ export interface RootRouteChildren {
   BackgroundRemovalRoute: typeof BackgroundRemovalRoute
   DepthRoute: typeof DepthRoute
   GraphRoute: typeof GraphRoute
+  GraphClassificationRoute: typeof GraphClassificationRoute
   HomeRoute: typeof HomeRoute
   ImageClassificationRoute: typeof ImageClassificationRoute
   ImageFeaturesRoute: typeof ImageFeaturesRoute
@@ -577,6 +590,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/graph-classification': {
+      id: '/graph-classification'
+      path: '/graph-classification'
+      fullPath: '/graph-classification'
+      preLoaderRoute: typeof GraphClassificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/graph': {
       id: '/graph'
       path: '/graph'
@@ -644,6 +664,7 @@ const rootRouteChildren: RootRouteChildren = {
   BackgroundRemovalRoute: BackgroundRemovalRoute,
   DepthRoute: DepthRoute,
   GraphRoute: GraphRoute,
+  GraphClassificationRoute: GraphClassificationRoute,
   HomeRoute: HomeRoute,
   ImageClassificationRoute: ImageClassificationRoute,
   ImageFeaturesRoute: ImageFeaturesRoute,
