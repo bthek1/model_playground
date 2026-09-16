@@ -13,6 +13,7 @@ import {
   type LinkLoadOptions,
   type LinkTrainRequest,
 } from "./linkSession";
+import { ProteinSession, type ProteinTrainRequest } from "./proteinSession";
 import { LinearTrainer, type MatmulFn, type TrainRequest } from "./linearModel";
 import { runMatmul } from "./runtime";
 import { runTensorOp } from "./tensorops";
@@ -30,7 +31,11 @@ type WorkerRequest =
   | { type: "graphCancel"; id: number }
   | { type: "linkLoad"; id: number; options: LinkLoadOptions }
   | { type: "linkTrain"; id: number; req: LinkTrainRequest }
-  | { type: "linkCancel"; id: number };
+  | { type: "linkCancel"; id: number }
+  | { type: "proteinLoad"; id: number }
+  | { type: "proteinLayout"; id: number; graph: number }
+  | { type: "proteinTrain"; id: number; req: ProteinTrainRequest }
+  | { type: "proteinCancel"; id: number };
 
 const ctx = self as unknown as {
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
@@ -54,6 +59,10 @@ const graph = new GraphSession();
 // its citations held out. Its own session, for that reason — see linkSession.ts.
 const link = new LinkSession();
 
+// /graph-classification's dataset: 1113 protein graphs as one disjoint union.
+// The only one of the three that is fetched rather than bundled.
+const proteins = new ProteinSession();
+
 ctx.onmessage = async (event) => {
   const msg = event.data;
   if (msg.type === "telemetryPort") {
@@ -65,7 +74,8 @@ ctx.onmessage = async (event) => {
   if (
     msg.type === "trainCancel" ||
     msg.type === "graphCancel" ||
-    msg.type === "linkCancel"
+    msg.type === "linkCancel" ||
+    msg.type === "proteinCancel"
   ) {
     cancelled.add(msg.id);
     return;
@@ -144,6 +154,59 @@ ctx.onmessage = async (event) => {
         result.candidates.buffer,
         result.candidateScores.buffer,
         result.embedding.buffer,
+      ]);
+      return;
+    }
+    if (msg.type === "proteinLoad") {
+      const summary = await proteins.load();
+      ctx.postMessage({ id: msg.id, ok: true, result: summary }, [
+        summary.labels.buffer,
+        summary.graphPtr.buffer,
+        summary.testIdx.buffer,
+      ]);
+      return;
+    }
+    if (msg.type === "proteinLayout") {
+      // One graph's drawable form, laid out on demand: the gallery shows a few
+      // dozen of 1113, and laying out the rest would be work for pictures
+      // nobody has asked for.
+      const layout = proteins.layoutFor(msg.graph);
+      // Copies, not the session's own arrays: `layoutFor` remembers what it
+      // computed, and transferring its buffers would detach them — the second
+      // request for the same graph would get a zero-length layout back.
+      const snapshot = {
+        index: layout.index,
+        nNodes: layout.nNodes,
+        rowPtr: layout.rowPtr.slice(),
+        colIdx: layout.colIdx.slice(),
+        x: layout.x.slice(),
+        y: layout.y.slice(),
+      };
+      ctx.postMessage({ id: msg.id, ok: true, result: snapshot }, [
+        snapshot.rowPtr.buffer,
+        snapshot.colIdx.buffer,
+        snapshot.x.buffer,
+        snapshot.y.buffer,
+      ]);
+      return;
+    }
+    if (msg.type === "proteinTrain") {
+      const result = await proteins.train(
+        msg.req,
+        (metrics, predicted) => {
+          // A copy per epoch: `predicted` belongs to the training loop, which
+          // keeps using it, so transferring it would detach the buffer mid-run.
+          const snapshot = predicted.slice();
+          ctx.postMessage(
+            { id: msg.id, event: "progress", metrics, predicted: snapshot },
+            [snapshot.buffer],
+          );
+        },
+        () => cancelled.has(msg.id),
+      );
+      cancelled.delete(msg.id);
+      ctx.postMessage({ id: msg.id, ok: true, result }, [
+        result.predicted.buffer,
       ]);
       return;
     }

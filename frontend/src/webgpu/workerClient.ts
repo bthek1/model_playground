@@ -14,6 +14,13 @@ import type {
   LinkTrainResult,
 } from "./linkSession";
 import type { LinkMetrics } from "./linkPredictor";
+import type { GraphClassMetrics } from "./graphPool";
+import type {
+  GraphLayoutPayload,
+  ProteinSummary,
+  ProteinTrainRequest,
+  ProteinTrainResult,
+} from "./proteinSession";
 import type { GnnMetrics } from "./gnn";
 import type {
   TrainMetrics,
@@ -280,5 +287,65 @@ export function trainLinkInWorker(
   });
 
   const cancel = () => worker.postMessage({ type: "linkCancel", id });
+  return { promise, cancel };
+}
+
+export function loadProteinsInWorker(worker: Worker): Promise<ProteinSummary> {
+  return call<ProteinSummary>(worker, { type: "proteinLoad" });
+}
+
+/** One graph's drawable form. The gallery asks for the tiles it is showing. */
+export function layoutProteinInWorker(
+  worker: Worker,
+  graph: number,
+): Promise<GraphLayoutPayload> {
+  return call<GraphLayoutPayload>(worker, { type: "proteinLayout", graph });
+}
+
+export interface ProteinTrainingHandle {
+  /** Resolves when training finishes (or is cancelled); rejects on error. */
+  promise: Promise<ProteinTrainResult>;
+  /** Ask the worker to stop after the current epoch. */
+  cancel: () => void;
+}
+
+/**
+ * Start a streaming graph-classification run. `onEpoch` fires with that epoch's
+ * metrics and the class each of the 1113 graphs is currently predicted to be —
+ * which is what repaints the gallery while the model trains.
+ */
+export function trainProteinsInWorker(
+  worker: Worker,
+  req: ProteinTrainRequest,
+  onEpoch: (metrics: GraphClassMetrics, predicted: Uint8Array) => void,
+): ProteinTrainingHandle {
+  const id = ++nextRequestId;
+  const promise = new Promise<ProteinTrainResult>((resolve, reject) => {
+    const handler = (
+      event: MessageEvent<{
+        id: number;
+        event?: "progress";
+        metrics?: GraphClassMetrics;
+        predicted?: Uint8Array;
+        ok?: boolean;
+        result?: ProteinTrainResult;
+        error?: string;
+      }>,
+    ) => {
+      const data = event.data;
+      if (data?.id !== id) return;
+      if (data.event === "progress") {
+        if (data.metrics && data.predicted) onEpoch(data.metrics, data.predicted);
+        return;
+      }
+      worker.removeEventListener("message", handler);
+      if (data.ok) resolve(data.result as ProteinTrainResult);
+      else reject(new Error(data.error ?? "Training failed"));
+    };
+    worker.addEventListener("message", handler);
+    worker.postMessage({ type: "proteinTrain", id, req });
+  });
+
+  const cancel = () => worker.postMessage({ type: "proteinCancel", id });
   return { promise, cancel };
 }
