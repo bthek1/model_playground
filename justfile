@@ -270,6 +270,12 @@ fe-e2e-zeroshot:
 fe-e2e-link:
     cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 link-prediction.spec.ts
 
+# Run the @slow graph-classification spec: a real GCN over 1113 protein graphs,
+# pinned **above the majority baseline**. PROTEINS is 663/450, so a model that
+# ignores the molecule scores 0.598 — "above chance" would pass with it broken.
+fe-e2e-graphcls:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 graph-classification.spec.ts
+
 # Check every model id (audio + vision) still resolves on the Hugging Face Hub,
 # and that each vision entry publishes the dtypes both backends ask for (seconds)
 fe-e2e-models:

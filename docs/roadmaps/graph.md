@@ -17,7 +17,12 @@
 | Node classification on Cora (§3.1) | [`/graph`](../../frontend/src/routes/graph.tsx) | **Shipped** — GCN, GraphSAGE, GIN, GAT |
 | Oversmoothing (§3.2) | [`/graph`](../../frontend/src/routes/graph.tsx) | **Shipped** — the depth slider, and a number behind it |
 | Link prediction (§3.3) | [`/link-prediction`](../../frontend/src/routes/link-prediction.tsx) | **Shipped** — 0.925 test AUC on Cora |
-| Graph classification (§3.4) | — | Not built; needs pooling and a runtime dataset fetch |
+| Graph classification (§3.4) | [`/graph-classification`](../../frontend/src/routes/graph-classification.tsx) | **Shipped** — PROTEINS, scored against its majority baseline |
+
+**The category is complete: 4 of 4.** The build-out is recorded in the closed plan issues
+[#26](https://github.com/bthek1/model_playground/issues/26) (§3.1 + §3.2),
+[#28](https://github.com/bthek1/model_playground/issues/28) (§3.3) and
+[#29](https://github.com/bthek1/model_playground/issues/29) (§3.4).
 
 **This category is the strongest case in the repo for the raw-WebGPU path**, and the
 reason is that a graph neural network is one sparse gather repeated a few times. There is
@@ -252,12 +257,62 @@ whole correctness surface turned out to live.
   clicking two papers scores them with a local dot product instead of a round trip through
   a worker that may be mid-run.
 
-### 3.4 Graph classification — not built
+### 3.4 Graph classification — **shipped**
 
-Over `graphs-datasets/PROTEINS`: a different pooling step, a different dataset, and a much
-smaller visual payoff (one label per molecule rather than a colour per node). The dataset
-is small enough to fetch from the Hub at runtime as JSON, so this is the one page in the
-category with a real LOAD state even though there are still no weights.
+[`/graph-classification`](../../frontend/src/routes/graph-classification.tsx), over
+`graphs-datasets/PROTEINS`: 1113 protein structures, one label each — enzyme or not. The
+roadmap was right that this is the one page in the category with a real LOAD state; it is
+the only route in the repo that downloads a **dataset** rather than a checkpoint.
+
+- **The majority baseline is rendered beside every accuracy, and it is a correctness
+  requirement rather than a courtesy.** PROTEINS is 663 enzymes to 450 non-enzymes, so a
+  classifier that ignores the molecule entirely scores **0.598**; published GNNs score
+  0.73-0.76. An accuracy printed on its own cannot be told apart from a model that learned
+  the class prior — and the prior is the easiest thing in the dataset to learn, so that is
+  exactly what a broken readout or a mis-built union produces. `baselineAcc` is computed at
+  load and travels *inside* the metrics, so the two numbers can never come from different
+  splits; the scoreboard shows it as a column, a note states the margin in points and says
+  plainly when there is not one, and the chart draws it as a line the accuracy has to climb
+  above.
+- **The whole dataset is one graph.** Batching graph classification means a block-diagonal
+  disjoint union plus a node→graph vector, which is what PyG builds per mini-batch. The
+  union of all 1113 is 43 471 nodes and 162 088 directed entries — smaller in every
+  dimension than the Cora matmul `/graph` already runs — so there is no mini-batching here
+  and no second code path. The bug a union can have is an edge leaking from one graph's node
+  range into the next one's: two proteins then share a message-passing neighbourhood, the
+  model trains happily, and no loss, accuracy or drawing can notice. It is asserted directly.
+- **PROTEINS already satisfies both kernel invariants** — every graph is symmetric and none
+  stores a self-loop — which is why it fits the machinery unchanged. `buildUnion` **checks**
+  per graph and names the offender rather than assuming, because an asymmetric edge breaks
+  the backward pass's `Âᵀ` and a stored self-loop is double-counted by a kernel that adds `I`
+  itself.
+- **The readout needs no parameters at all.** Mean pooling and a linear layer commute
+  (`mean(W·h) = W·mean(h)`), so a final GNN layer of width `nClasses` followed by a pool over
+  each graph's nodes is the same function as pooling into a hidden vector and classifying it.
+  §3.4's entire new arithmetic is one reduction and its adjoint — no second weight matrix, no
+  second Adam state, no new kernel. The page says it is a single linear readout, because the
+  honest difference from GIN's paper (an MLP over summed per-layer representations) is worth
+  a sentence rather than a silent approximation.
+- **Sum and mean are both exposed**, and it is the same kind of choice as GIN-versus-GCN:
+  mean is invariant to graph size, sum is not, and on PROTEINS size is itself signal because
+  enzymes are bigger. Their gradients differ by exactly the `1/n_g` that makes one invariant
+  — a factor invisible in a loss curve, since dropping it merely gives each graph a learning
+  rate proportional to its size. So the finite-difference check runs over four architectures
+  × both modes, plus a model-free adjoint identity (`⟨pool(h), d⟩ = ⟨h, poolᵀ(d)⟩`).
+- **CORS on the Hub looks like a blocker and is not.** `curl -I` without an `Origin` header
+  answers `access-control-allow-origin: https://huggingface.co`; send the header and it
+  echoes the caller's origin. Worth knowing before designing around a CDN that appears to
+  refuse you.
+- The gallery is this page's answer to "a much smaller visual payoff": forty-eight held-out
+  molecules side by side, outlined green or red, is a picture of what the model finds hard.
+  Layouts are computed **one per tile on demand** — laying out all 1113 up front would be a
+  second of work for pictures nobody asked for — and the tile geometry is a pure function,
+  which immediately forced the two cases that matter: a graph re-fitted to its own extent
+  rather than the unit square it was normalised in (otherwise a four-residue chain draws as a
+  dot in the corner), and the single-node proteins the dataset really contains, which divide
+  by zero if you scale by their extent.
+- **The E2E assertion is above the *baseline*, not above chance** (`just fe-e2e-graphcls`),
+  and it reads both numbers off the page rather than remembering a constant.
 
 ---
 
@@ -270,7 +325,7 @@ category with a real LOAD state even though there are still no weights.
 | **GAT** | **Shipped** | attention in TS, projections on the GPU | WebGPU + CPU |
 | **Oversmoothing** | **Shipped**, and the best page here | a depth slider over the same model | WebGPU |
 | **Link prediction** | **Shipped** | dot products over the node embeddings | WebGPU |
-| **Graph classification** | Yes | pooling plus a small dataset fetch | WebGPU |
+| **Graph classification** | **Shipped** | pooling plus a runtime dataset fetch | WebGPU |
 | Large-graph training (millions of nodes) | No | sampling and partitioning are a different system | server |
 
 There is no "if not" column, because unusually there is no server fallback to recommend.
@@ -332,6 +387,8 @@ are arranged around it.
 | [`components/graph/GraphCanvas.test.tsx`](../../frontend/src/components/graph/GraphCanvas.test.tsx) | an off-centre or stretched drawing, via the pure coordinate mapping |
 | [`lib/edgeSplit.test.ts`](../../frontend/src/lib/edgeSplit.test.ts) | **leakage** — a held-out citation left in the training CSR, an asymmetric rebuild, a stale degree, a "negative" that is really an edge |
 | [`webgpu/linkPredictor.test.ts`](../../frontend/src/webgpu/linkPredictor.test.ts) | a **half-right decoder gradient** — a pair scatters into both endpoints, and updating only one still trains — plus an AUC that is not an AUC |
+| [`lib/proteins.test.ts`](../../frontend/src/lib/proteins.test.ts) | a mis-built **disjoint union** — an edge crossing into the next graph's nodes, which trains perfectly happily — an asymmetric or self-looped input graph, an unstratified split, a baseline read off the wrong split |
+| [`webgpu/graphPool.test.ts`](../../frontend/src/webgpu/graphPool.test.ts) | **a wrong pooling adjoint**, via finite differences per architecture × readout, plus the model-free adjoint identity |
 | [`__tests__/routes/graph.test.tsx`](../../frontend/src/__tests__/routes/graph.test.tsx) | the page contract: four slots, nothing runs on mount, a control that shouldn't run doesn't |
 | [`e2e/specs/webgpu/graph.spec.ts`](../../frontend/e2e/specs/webgpu/graph.spec.ts) | the WGSL kernel disagreeing with the CPU reference, and — `@slow` — a real training run pinned by an **accuracy floor** |
 

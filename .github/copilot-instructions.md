@@ -469,7 +469,7 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   See `docs/guides/adding-a-model.md` §8 (Transformers.js) or §9 (a bare ONNX graph — DFN3 is the
   reference, `src/audio/vad/` the smaller one to read first).
 
-**Graph machine learning (`/graph`, `/link-prediction`) — the opposite carve-out: no checkpoint at all.**
+**Graph machine learning (`/graph`, `/link-prediction`, `/graph-classification`) — the opposite carve-out: no checkpoint at all.**
 
 - A GNN is one sparse gather repeated a few times, so the model is **written as WGSL and trained in
   the tab**. `lib/cora.ts` + `lib/data/cora.bin`, `lib/graphLayout.ts`, `webgpu/gnn.ts` +
@@ -518,6 +518,29 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   nodes; this page has ~4500 supervised edges and the same settings cost it 0.19 of AUC —
   measured 0.737 against 0.925 on the same split. Reuse that looks like a decision is often an
   inheritance; run it.
+- **Graph classification (`/graph-classification`) completes the category, and its lesson is a
+  *number*, not a kernel.** 1113 PROTEINS graphs, one label each. PROTEINS is 663/450, so a
+  classifier that ignores the molecule scores **0.598** — and the class prior is the easiest
+  thing in the dataset to learn, so that is precisely what a broken readout or a mis-built
+  union produces. The **majority baseline is rendered beside every accuracy**, travels *inside*
+  the metrics so the two can never come from different splits, and the E2E assertion is
+  "above the baseline", not above chance (`just fe-e2e-graphcls`). A metric owes its null
+  model on screen wherever one exists.
+- **The whole dataset is one graph.** Batching graph classification is a block-diagonal
+  **disjoint union** plus a node→graph vector — 43 471 nodes, smaller than the Cora matmul
+  `/graph` already runs — so there is no mini-batching and no second code path. The bug a
+  union can have is an edge leaking into the next graph's node range: two proteins share a
+  neighbourhood, the model trains happily, nothing downstream notices. `lib/proteins.test.ts`
+  asserts it directly, and `buildUnion` **checks** symmetry and self-loop-freedom per graph
+  rather than assuming them.
+- **The readout needs no parameters**, because mean pooling and a linear layer commute
+  (`mean(W·h) = W·mean(h)`): read out the *logits* and §3.4's entire new arithmetic is one
+  reduction and its adjoint. Sum and mean differ by the `1/n_g` that makes one size-invariant
+  — invisible in a loss curve — so the finite-difference check runs over four architectures ×
+  both modes, plus a model-free adjoint identity.
+- **It is the only route in the repo that downloads a *dataset*** (2.06 MB from the Hub,
+  cached in IndexedDB). A `curl -I` with no `Origin` header makes huggingface.co look like it
+  refuses cross-origin reads; send the header and it echoes the caller's origin.
 - **A gradient check does not pin a forward pass, and a canvas hides its geometry.** Two
   gaps worth knowing before writing the next kernel or the next visualization: GAT's
   finite-difference checks pass even if the softmax is normalised over the wrong set, so

@@ -419,6 +419,7 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Linear Training | architecture + hyperparams | dataset fetch + kernel compile | train loop | live weights + loss curve |
 | Graph ML | the GNN architecture | **a GPU probe and a bundled dataset**, neither of them a download | Train / Stop, and a **depth slider that re-trains** | the graph repainted per epoch, plus accuracy against depth |
 | Link Prediction | the GNN architecture | a GPU probe, and **the split** — the held-out fraction lives here because changing it rebuilds the graph and its layout | Train / Stop | the graph with predicted non-edges dashed over it, an AUC, and a **top-k slider that only re-draws** |
+| Graph Classification | the GNN architecture **and the readout** (sum or mean) | a GPU probe, and the **one real download in the category** — 2 MB of dataset, cached after the first visit | Train / Stop | a gallery of held-out molecules outlined right/wrong, and an accuracy **never shown without its baseline** |
 | Mask Generation | model catalogue | weight download, **then a per-image encode** | click a point on the picture | the mask, its candidates, its decode time |
 | Keypoint Detection | **a pair** of checkpoints | both downloads, one aggregate bar | image / camera, threshold, people cap | skeletons over the frame |
 | Video Classification | CLIP catalogue, reused | weight download | a clip, labels, a sample rate | scores over time + a filmstrip |
@@ -501,6 +502,16 @@ non-commercial only — the constraint is a property of the *choice*, so it rend
 the picker at the moment the choice is made, in the same amber as the size guardrail.
 The permissively licensed model is the default. A restriction discovered after the
 download is a restriction discovered too late.
+
+**A number the reader cannot calibrate is not a result.** `/graph-classification` is the
+case that names it: PROTEINS is 663/450, so a model that ignores its input entirely scores
+59.8 %, and an accuracy of 72 % printed on its own is indistinguishable from one that
+learned the class prior. The page renders the **majority baseline** beside every accuracy,
+states the margin in points, and says plainly when there is no margin. The general rule is
+that a metric owes its null model on screen wherever one exists — chance for a balanced
+classifier, the majority class for an unbalanced one, a bicubic upscale for
+`/super-resolution`, an energy threshold for `/vad`. Carry it *with* the metric rather than
+recomputing it in the view, or the two can be derived from different data.
 
 **A control that changes the *data* belongs in LOAD, and re-loads.** `/link-prediction`'s
 held-out fraction is the case: a different fraction is a different split, which is a
