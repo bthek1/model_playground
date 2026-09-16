@@ -14,6 +14,19 @@ and let the assistant do the rest without interruption.
 
 - **Work on a feature branch, never `main`.** Branch names follow
   [`onboarding.md`](onboarding.md) — `feat/<topic>`, `fix/<topic>`, `chore/<topic>`.
+- **Branch from `main`, not from whatever is checked out.** An agent that runs
+  `git switch -c` while still on last task's branch stacks the new branch on top of it, and
+  the unmerged commits ride along into the next PR. The procedure:
+
+  ```bash
+  git branch --show-current          # not main? commit or stash first
+  git switch main
+  git pull --ff-only                 # when a remote exists
+  git switch -c feat/<topic> main
+  ```
+
+  Staying on the current feature branch is right when the work is the same task. Stacking a
+  branch on another is allowed only when the user asks for it.
 - **Enable branch protection on `main`** in GitHub so even a stray push can't land
   unreviewed. This is a repo-settings change, not something in this file:
 

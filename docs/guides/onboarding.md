@@ -106,6 +106,8 @@ Any change to request/response shapes must be reflected in `docs/standards/api-c
 ## Commit and Branch Conventions
 
 - Branch names: `feat/<topic>`, `fix/<topic>`, `chore/<topic>`
+- Branch from an up-to-date `main` (`git switch -c feat/<topic> main`), never from another
+  feature branch — stacked branches carry unmerged work into each other's PRs
 - Commit messages: imperative present tense — "Add user registration endpoint"
 - Docs changes travel with code changes in the same commit
 - Never work directly on `main` — this holds double for an AI assistant, whose git fence is

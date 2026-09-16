@@ -952,6 +952,13 @@ These actions must **never** be performed without explicit user confirmation:
 `git checkout -b`, `git switch`, `git stash` — **on a feature branch, never on `main`.** The
 assistant commits because it was asked to; the permission only removes the prompt.
 
+*Branch from `main`, never from another feature branch.* Stacked branches drag unmerged work
+into each other's PRs and turn every merge into a rebase. Before `git switch -c`, check
+`git branch --show-current`; if it isn't `main`, commit (or stash) there, `git switch main`,
+`git pull --ff-only` if a remote exists, then `git switch -c <type>/<topic> main`. Stay on the
+current feature branch only when the new work belongs to that same task; stack a branch on
+another only when the user explicitly asks.
+
 *Never run autonomously — confirm first:*
 - `git push` — do not push to any remote
 - `git rebase` / `git merge`

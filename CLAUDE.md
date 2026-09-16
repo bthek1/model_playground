@@ -126,6 +126,12 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   `git reset --hard`, `git clean`, `git branch -D`, or `git checkout .` — those are denied outright
   in `.claude/settings.json`. See [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md) and
   the full list in the Copilot instructions.
+- **Every new branch starts from `main`, never from the branch you happen to be on.** Stacked
+  branches drag unmerged work into each other's PRs and turn every merge into a rebase. Before
+  `git switch -c`, check `git branch --show-current`; if it isn't `main`, commit (or stash) there,
+  `git switch main`, `git pull --ff-only` if a remote exists, and branch from that —
+  `git switch -c <type>/<topic> main`. Continue on the current feature branch only when the new
+  work belongs to that same task. Stack a branch on another only when the user asks for it.
 
 ### Deployment essentials
 
