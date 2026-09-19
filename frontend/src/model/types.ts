@@ -63,10 +63,33 @@ export type ModelRequest<TLoad, TRun> =
  * `id` on an error is the discriminator between the two machines: `id != null`
  * is a request failure (Machine B, status stays `ready`), `id == null` is a load
  * failure (Machine A).
+ *
+ * **`partial` is progress *within one run*, and it is not a fifth status.** A
+ * generative decoder produces its answer over seconds — a VLM encodes the image
+ * before a single token exists — so a page that can only render the finished
+ * result shows an unlabelled multi-second pause, which is indistinguishable from
+ * a hang. The worker reports the intermediate state against the request `id`
+ * that will eventually carry the result.
+ *
+ * Three things it deliberately is not:
+ *
+ *   not a `ModelStatus`   Machine A is untouched. `ready` means the weights are
+ *                         loaded; a run in progress does not move it.
+ *   not `progress`        that variant is Machine A's download/warm-up self-loop
+ *                         and carries no `id`. Overloading it would make
+ *                         "downloading" and "generating" the same event.
+ *   not a running flag    `running` stays an inflight *count*. A partial does
+ *                         not open or close a request; only `run`, `result` and
+ *                         `error` do.
+ *
+ * `TPartial` defaults to `never`, which is what keeps this change free for every
+ * worker that does not stream: the arm is uninhabited, so existing exhaustive
+ * switches stay exhaustive and no current engine or test is touched.
  */
-export type ModelResponse<TResult> =
+export type ModelResponse<TResult, TPartial = never> =
   | { type: "progress"; progress: ModelProgress }
   | { type: "ready"; model: string; backend: LoadOpts["device"] }
+  | { type: "partial"; id: number; partial: TPartial }
   | { type: "result"; id: number; result: TResult }
   | { type: "error"; id?: number; error: string };
 
@@ -78,7 +101,7 @@ export type ModelResponse<TResult> =
  * task. Hooks that predate this contract expose a task-named alias for `run`
  * (`transcribe`, `synthesize`) — those are being migrated route by route.
  */
-export interface ModelTask<TInput, TOutput, TOpts = void> {
+export interface ModelTask<TInput, TOutput, TOpts = void, TPartial = never> {
   // Machine A — load
   status: ModelStatus;
   idle: boolean;
@@ -106,6 +129,13 @@ export interface ModelTask<TInput, TOutput, TOpts = void> {
   running: boolean;
   /** Latest successful output, for pages that show one result at a time. */
   result: TOutput | null;
+  /**
+   * Latest in-run progress from a streaming worker: partial text, an encode/generate
+   * stage, whatever the task reports. Null unless a run is in flight, and cleared the
+   * moment its result lands so OUTPUT never renders a half-finished answer beside the
+   * finished one. Optional because most tasks are single-shot and never post one.
+   */
+  partial?: TPartial | null;
 
   /** Load error (`status === "error"`) or the most recent run error. */
   error: string | null;

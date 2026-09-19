@@ -11,7 +11,24 @@
 
 import type { Dtype } from "./backend";
 
-const BYTES_PER_PARAM: Record<Dtype, number> = { fp32: 4, fp16: 2, q8: 1 };
+// `Record<Dtype, …>` on purpose: widening `Dtype` without adding an entry here yields
+// `undefined * 1e6` — a size label reading "NaN MB" on a real page, with nothing failing
+// on the way there. The type is what makes that a build error instead.
+//
+// The 4-bit entries are **0.55 rather than 0.5**: a q4 export quantizes the big matmul
+// weights and leaves embeddings, layer norms and biases at higher precision, so the
+// blocks alone under-count. They are a floor for a model with no measurement, and for
+// this family that is every model — both VLM catalogue entries carry measured `bytes`,
+// because at q4f16 the mixed precision is not a rounding error. SmolVLM-256M's
+// `embed_tokens_q4f16.onnx` is 56.8 MB, the same size as its fp16 build: the embedding
+// table is not 4-bit quantized at all, and it is 30% of the download.
+const BYTES_PER_PARAM: Record<Dtype, number> = {
+  fp32: 4,
+  fp16: 2,
+  q8: 1,
+  q4: 0.55,
+  q4f16: 0.55,
+};
 
 /**
  * Warn past this download size. 200 MB is deliberately below the heaviest models

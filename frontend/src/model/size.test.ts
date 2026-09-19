@@ -10,6 +10,7 @@ import {
 } from "./size";
 import { TTS_MODELS } from "@/audio/tts";
 import { ASR_MODELS } from "@/audio/types";
+import { VLM_MODELS } from "@/multimodal/types";
 
 describe("estimateBytes", () => {
   it("uses 2 bytes per parameter for fp16 and 1 for q8", () => {
@@ -92,5 +93,50 @@ describe("model catalogues", () => {
         "Xenova/clap-htsat-unfused",
       ]),
     );
+  });
+});
+
+describe("q4 precision", () => {
+  it("gives the 4-bit dtypes a bytes-per-param rather than yielding NaN", () => {
+    // `BYTES_PER_PARAM` is keyed by `Dtype`, so widening the type without an
+    // entry here would render "NaN MB" on a real page with nothing failing on
+    // the way there.
+    expect(estimateBytes(256, "q4f16")).toBeGreaterThan(0);
+    expect(estimateBytes(256, "q4")).toBeGreaterThan(0);
+    expect(Number.isNaN(estimateBytes(256, "q4f16"))).toBe(false);
+  });
+
+  it("estimates 4-bit above a naive half-byte, and below q8", () => {
+    // A q4 export leaves embeddings, norms and biases at higher precision, so
+    // the 4-bit blocks alone under-count.
+    expect(estimateBytes(256, "q4f16")).toBeGreaterThan(estimateBytes(256, "q8") / 2);
+    expect(estimateBytes(256, "q4f16")).toBeLessThan(estimateBytes(256, "q8"));
+  });
+});
+
+describe("the VLM catalogue", () => {
+  it("quotes measured bytes, because a q4f16 estimate is wrong by 30% on the small one", () => {
+    // SmolVLM-256M's `embed_tokens_q4f16.onnx` is 56.8 MB — the same size as
+    // its fp16 build, because the embedding table is not 4-bit quantized at
+    // all. An estimate that assumes one precision across the model halves it.
+    for (const m of VLM_MODELS) {
+      expect(m.bytes.webgpu, m.id).toBeGreaterThan(0);
+      expect(m.bytes.wasm, m.id).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps both entries inside the browser budget the guide sets", () => {
+    // ~1 GB, per docs/guides/adding-a-task-page.md §0. Qwen3-VL-2B is 1373 MB
+    // at q4f16 and is deliberately absent for exactly this reason.
+    for (const m of VLM_MODELS) {
+      const s = sizeEstimate(m.params, m.bytes);
+      expect(Math.max(s.fp16, s.q8), m.id).toBeLessThan(1024 ** 3);
+    }
+  });
+
+  it("trips the large-model warning on both, so the gate is never dead code", () => {
+    for (const m of VLM_MODELS) {
+      expect(sizeEstimate(m.params, m.bytes).large, m.id).toBe(true);
+    }
   });
 });

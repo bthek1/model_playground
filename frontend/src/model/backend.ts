@@ -33,8 +33,10 @@ export async function pickBackend(): Promise<Backend> {
 /**
  * Weight precision: fp16 on GPU (matches the notebooks), quantized on CPU.
  * `fp32` is the escape hatch for modules that can't be quantized — see `asrLoadOpts`.
+ * `q4f16` / `q4` are the 4-bit weight formats a generative decoder needs to fit in a
+ * tab at all — see `vlmLoadOpts`.
  */
-export type Dtype = "fp16" | "q8" | "fp32";
+export type Dtype = "fp16" | "q8" | "fp32" | "q4f16" | "q4";
 
 /**
  * A precision for the whole model, or one per ONNX module (`encoder_model`,
@@ -79,4 +81,32 @@ export function asrLoadOpts(backend: Backend): LoadOpts {
   return backend === "webgpu"
     ? { device: "webgpu", dtype: "fp16" }
     : { device: "wasm", dtype: { encoder_model: "q8", decoder_model_merged: "fp32" } };
+}
+
+/**
+ * Load options for a **vision-language model** — a generative decoder with an image
+ * encoder bolted on. 4-bit weights, because `loadOpts()`'s fp16 is not a viable
+ * download for this family and the gap is not marginal:
+ *
+ *   SmolVLM-256M   189 MB at q4f16  ·  514 MB at fp16   (2.7x)
+ *   Qwen3-VL-2B   1373 MB at q4f16  · 3380 MB at fp16   (2.5x)
+ *
+ * (Summed over every ONNX graph each repo publishes, read off the Hub. Qwen3-VL keeps
+ * its weights in external `.onnx_data` files, so summing only the `.onnx` stubs
+ * measures it at 1.2 **MB**.)
+ *
+ * On WASM the `f16` half is dropped: fp16 activations are a GPU format, so the CPU
+ * path takes plain `q4`. It is a fallback that exists to be *typed*, not one to
+ * recommend — an autoregressive decoder on WASM is seconds per token, which is why
+ * every VLM catalogue entry declares `backends: ["webgpu"]` and lets `useBackendProbe`
+ * disable the row rather than offering a page that looks broken.
+ *
+ * The per-family override lives here beside `asrLoadOpts` rather than as a literal in
+ * the worker, for the same reason that one does: two copies of a precision decision
+ * drift, and the drift is silent.
+ */
+export function vlmLoadOpts(backend: Backend): LoadOpts {
+  return backend === "webgpu"
+    ? { device: "webgpu", dtype: "q4f16" }
+    : { device: "wasm", dtype: "q4" };
 }
