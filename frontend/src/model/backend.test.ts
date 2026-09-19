@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { asrLoadOpts, loadOpts, pickBackend } from "./backend";
+import { asrLoadOpts, loadOpts, pickBackend, vlmLoadOpts } from "./backend";
 
 /** Install (or remove) a fake `navigator.gpu` for the duration of a test. */
 function setGpu(gpu: unknown) {
@@ -54,5 +54,22 @@ describe("asrLoadOpts", () => {
       dtype: { encoder_model: "q8", decoder_model_merged: "fp32" },
     });
     expect(asrLoadOpts("webgpu")).toEqual({ device: "webgpu", dtype: "fp16" });
+  });
+});
+
+describe("vlmLoadOpts", () => {
+  it("uses 4-bit weights on both backends, with fp16 activations only on the GPU", () => {
+    // A VLM is a generative decoder: `loadOpts()`'s fp16 is a 514 MB download
+    // for SmolVLM-256M against 189 MB at q4f16, and 3.4 GB against 1.4 GB for
+    // a 2B. The `f16` half is dropped on WASM because fp16 activations are a
+    // GPU format.
+    expect(vlmLoadOpts("webgpu")).toEqual({ device: "webgpu", dtype: "q4f16" });
+    expect(vlmLoadOpts("wasm")).toEqual({ device: "wasm", dtype: "q4" });
+  });
+
+  it("is not the shared default — a VLM page must ask for it", () => {
+    // The whole reason it exists as a named export rather than a literal in the
+    // worker: two copies of a precision decision drift silently.
+    expect(vlmLoadOpts("webgpu")).not.toEqual(loadOpts("webgpu"));
   });
 });

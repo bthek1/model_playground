@@ -28,6 +28,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as LinkPredictionRouteImport } from './routes/link-prediction'
 import { Route as ImageToTextRouteImport } from './routes/image-to-text'
 import { Route as ImageTo3dRouteImport } from './routes/image-to-3d'
+import { Route as ImageTextToTextRouteImport } from './routes/image-text-to-text'
 import { Route as ImageFeaturesRouteImport } from './routes/image-features'
 import { Route as ImageClassificationRouteImport } from './routes/image-classification'
 import { Route as HomeRouteImport } from './routes/home'
@@ -137,6 +138,11 @@ const ImageTo3dRoute = ImageTo3dRouteImport.update({
   path: '/image-to-3d',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImageTextToTextRoute = ImageTextToTextRouteImport.update({
+  id: '/image-text-to-text',
+  path: '/image-text-to-text',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ImageFeaturesRoute = ImageFeaturesRouteImport.update({
   id: '/image-features',
   path: '/image-features',
@@ -210,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
+  '/image-text-to-text': typeof ImageTextToTextRoute
   '/image-to-3d': typeof ImageTo3dRoute
   '/image-to-text': typeof ImageToTextRoute
   '/link-prediction': typeof LinkPredictionRoute
@@ -243,6 +250,7 @@ export interface FileRoutesByTo {
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
+  '/image-text-to-text': typeof ImageTextToTextRoute
   '/image-to-3d': typeof ImageTo3dRoute
   '/image-to-text': typeof ImageToTextRoute
   '/link-prediction': typeof LinkPredictionRoute
@@ -277,6 +285,7 @@ export interface FileRoutesById {
   '/home': typeof HomeRoute
   '/image-classification': typeof ImageClassificationRoute
   '/image-features': typeof ImageFeaturesRoute
+  '/image-text-to-text': typeof ImageTextToTextRoute
   '/image-to-3d': typeof ImageTo3dRoute
   '/image-to-text': typeof ImageToTextRoute
   '/link-prediction': typeof LinkPredictionRoute
@@ -312,6 +321,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/image-classification'
     | '/image-features'
+    | '/image-text-to-text'
     | '/image-to-3d'
     | '/image-to-text'
     | '/link-prediction'
@@ -345,6 +355,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/image-classification'
     | '/image-features'
+    | '/image-text-to-text'
     | '/image-to-3d'
     | '/image-to-text'
     | '/link-prediction'
@@ -378,6 +389,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/image-classification'
     | '/image-features'
+    | '/image-text-to-text'
     | '/image-to-3d'
     | '/image-to-text'
     | '/link-prediction'
@@ -412,6 +424,7 @@ export interface RootRouteChildren {
   HomeRoute: typeof HomeRoute
   ImageClassificationRoute: typeof ImageClassificationRoute
   ImageFeaturesRoute: typeof ImageFeaturesRoute
+  ImageTextToTextRoute: typeof ImageTextToTextRoute
   ImageTo3dRoute: typeof ImageTo3dRoute
   ImageToTextRoute: typeof ImageToTextRoute
   LinkPredictionRoute: typeof LinkPredictionRoute
@@ -569,6 +582,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImageTo3dRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/image-text-to-text': {
+      id: '/image-text-to-text'
+      path: '/image-text-to-text'
+      fullPath: '/image-text-to-text'
+      preLoaderRoute: typeof ImageTextToTextRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/image-features': {
       id: '/image-features'
       path: '/image-features'
@@ -668,6 +688,7 @@ const rootRouteChildren: RootRouteChildren = {
   HomeRoute: HomeRoute,
   ImageClassificationRoute: ImageClassificationRoute,
   ImageFeaturesRoute: ImageFeaturesRoute,
+  ImageTextToTextRoute: ImageTextToTextRoute,
   ImageTo3dRoute: ImageTo3dRoute,
   ImageToTextRoute: ImageToTextRoute,
   LinkPredictionRoute: LinkPredictionRoute,

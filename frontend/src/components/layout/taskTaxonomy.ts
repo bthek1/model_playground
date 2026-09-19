@@ -89,6 +89,12 @@ const REAL_ROUTES: Record<string, string> = {
   // repo that downloads a *dataset* rather than a checkpoint: 1113 protein
   // graphs from the Hub, one label each.
   "graph-classification": "/graph-classification",
+  // The Multimodal category's first route, and the app's first vision-language
+  // model. Unlike the two subset routes above, this one covers its slug whole:
+  // an image and a question in, prose out. Visual Question Answering (§3.2) will
+  // share this engine behind its own route rather than folding into this one —
+  // a user looking for VQA does not think to click "image-text-to-text".
+  "image-text-to-text": "/image-text-to-text",
 };
 
 function task(label: string): TaskItem {

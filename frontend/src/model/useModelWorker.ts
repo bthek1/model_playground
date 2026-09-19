@@ -41,7 +41,7 @@ export interface UseModelWorkerOptions {
   notReadyMessage?: string;
 }
 
-export interface UseModelWorkerResult<TResult> {
+export interface UseModelWorkerResult<TResult, TPartial = never> {
   status: ModelStatus;
   idle: boolean;
   loading: boolean;
@@ -55,6 +55,19 @@ export interface UseModelWorkerResult<TResult> {
   backend: string | null;
   running: boolean;
   result: TResult | null;
+  /**
+   * Latest `partial` posted by the run in flight — streaming tokens, an encode/generate
+   * stage. Set to `null` when a run starts and again when its result or error lands, so
+   * a page can render `partial ?? result` without ever showing both.
+   *
+   * Only the **most recent** run's partials are kept. That is a deliberate narrowing of
+   * the id-correlated table below: `run()` still resolves every overlapping request
+   * correctly, but one `partial` field cannot represent two streams at once, and a page
+   * that genuinely interleaved two generations would need to say which one it is
+   * drawing. No task does, and inventing the map before there is a caller would be
+   * plumbing with no reader.
+   */
+  partial: TPartial | null;
   error: string | null;
   load: () => void;
   /**
@@ -81,13 +94,13 @@ interface Pending<TResult> {
   reject: (e: Error) => void;
 }
 
-export function useModelWorker<TResult>({
+export function useModelWorker<TResult, TPartial = never>({
   createWorker,
   key,
   loadMessage,
   autoLoad = false,
   notReadyMessage = "Model worker not ready",
-}: UseModelWorkerOptions): UseModelWorkerResult<TResult> {
+}: UseModelWorkerOptions): UseModelWorkerResult<TResult, TPartial> {
   const workerRef = useRef<Worker | null>(null);
   const nextId = useRef(0);
   const pending = useRef(new Map<number, Pending<TResult>>());
@@ -106,6 +119,7 @@ export function useModelWorker<TResult>({
   const startedAt = useRef<number | null>(null);
   const [backend, setBackend] = useState<string | null>(null);
   const [result, setResult] = useState<TResult | null>(null);
+  const [partial, setPartial] = useState<TPartial | null>(null);
   // A count, not a boolean: with two overlapping requests a boolean reports idle
   // as soon as the first returns, while the second is still running.
   const [inflight, setInflight] = useState(0);
@@ -125,7 +139,7 @@ export function useModelWorker<TResult>({
     workerRef.current = worker;
     const table = pending.current;
 
-    worker.onmessage = (event: MessageEvent<ModelResponse<TResult>>) => {
+    worker.onmessage = (event: MessageEvent<ModelResponse<TResult, TPartial>>) => {
       const data = event.data;
       switch (data.type) {
         case "progress":
@@ -139,8 +153,16 @@ export function useModelWorker<TResult>({
             startedAt.current == null ? null : Date.now() - startedAt.current,
           );
           break;
+        case "partial":
+          // Progress inside a run. Machine A is untouched and the inflight count
+          // does not move — a partial neither opens nor closes a request. Dropped
+          // if its request is already settled, so a late-arriving chunk cannot
+          // repaint OUTPUT after the finished answer is on screen.
+          if (table.has(data.id)) setPartial(data.partial);
+          break;
         case "result":
           setResult(data.result);
+          setPartial(null);
           setInflight((n) => Math.max(0, n - 1));
           table.get(data.id)?.resolve(data.result);
           table.delete(data.id);
@@ -148,6 +170,7 @@ export function useModelWorker<TResult>({
         case "error":
           if (data.id != null) {
             // Machine B: one request failed; the model is still loaded.
+            setPartial(null);
             setInflight((n) => Math.max(0, n - 1));
             table.get(data.id)?.reject(new Error(data.error));
             table.delete(data.id);
@@ -187,6 +210,7 @@ export function useModelWorker<TResult>({
       table.forEach(({ reject }) => reject(new Error("Worker terminated")));
       table.clear();
       setInflight(0);
+      setPartial(null);
     };
   }, [key, autoLoad, start]);
 
@@ -224,6 +248,7 @@ export function useModelWorker<TResult>({
     pending.current.forEach(({ reject }) => reject(new Error("Load cancelled")));
     pending.current.clear();
     setInflight(0);
+    setPartial(null);
     startedAt.current = null;
     setProgress(null);
     setProgressState(initialProgress);
@@ -273,6 +298,7 @@ export function useModelWorker<TResult>({
       const id = ++nextId.current;
       setInflight((n) => n + 1);
       setError(null);
+      setPartial(null);
       return new Promise<TResult>((resolve, reject) => {
         pending.current.set(id, { resolve, reject });
         const message = { type: "run", id, ...payload };
@@ -295,6 +321,7 @@ export function useModelWorker<TResult>({
     backend,
     running: inflight > 0,
     result,
+    partial,
     error,
     load,
     retry,

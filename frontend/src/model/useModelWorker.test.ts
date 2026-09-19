@@ -427,3 +427,137 @@ describe("useModelWorker — what it reports to the system panel", () => {
     expect(activeDownload()).toBeNull();
   });
 });
+
+// --- The `partial` variant -------------------------------------------------
+//
+// In-run progress for a streaming worker (a VLM's encode, then its tokens). The
+// contract that matters is what it must NOT disturb: Machine A, the inflight
+// count, and the id-correlated promise.
+
+type Stage = { stage: "encoding" } | { stage: "generating"; text: string };
+
+function streamingSetup() {
+  const factory = workerFactory();
+  const view = renderHook(() =>
+    useModelWorker<string, Stage>({
+      createWorker: factory.createWorker,
+      key: "streamer",
+      loadMessage: { model: "streamer" },
+      autoLoad: true,
+    }),
+  );
+  const emit = (data: ModelResponse<string, Stage>) =>
+    factory.last.emit(data as ModelResponse<string>);
+  act(() => emit({ type: "ready", model: "m", backend: "webgpu" }));
+  return { ...view, factory, emit };
+}
+
+describe("useModelWorker — partial (progress inside one run)", () => {
+  it("is null until a partial arrives, and carries the latest one after", async () => {
+    const { result, emit } = streamingSetup();
+    expect(result.current.partial).toBeNull();
+
+    let pending!: Promise<string>;
+    act(() => {
+      pending = result.current.run({ prompt: "hi" });
+    });
+
+    act(() => emit({ type: "partial", id: 1, partial: { stage: "encoding" } }));
+    await waitFor(() =>
+      expect(result.current.partial).toEqual({ stage: "encoding" }),
+    );
+
+    act(() =>
+      emit({
+        type: "partial",
+        id: 1,
+        partial: { stage: "generating", text: "a ca" },
+      }),
+    );
+    await waitFor(() =>
+      expect(result.current.partial).toEqual({
+        stage: "generating",
+        text: "a ca",
+      }),
+    );
+
+    act(() => emit({ type: "result", id: 1, result: "a cat" }));
+    await expect(pending).resolves.toBe("a cat");
+  });
+
+  it("never moves Machine A or the inflight count", async () => {
+    const { result, emit } = streamingSetup();
+    act(() => {
+      void result.current.run({ prompt: "hi" });
+    });
+    await waitFor(() => expect(result.current.running).toBe(true));
+
+    act(() => emit({ type: "partial", id: 1, partial: { stage: "encoding" } }));
+
+    // A partial is neither a load event nor a request boundary: it opens
+    // nothing and closes nothing.
+    expect(result.current.status).toBe("ready");
+    expect(result.current.ready).toBe(true);
+    expect(result.current.running).toBe(true);
+  });
+
+  it("clears on the result, so a half-finished answer never sits beside the finished one", async () => {
+    const { result, emit } = streamingSetup();
+    act(() => {
+      void result.current.run({ prompt: "hi" });
+    });
+    act(() =>
+      emit({ type: "partial", id: 1, partial: { stage: "generating", text: "a ca" } }),
+    );
+    await waitFor(() => expect(result.current.partial).not.toBeNull());
+
+    act(() => emit({ type: "result", id: 1, result: "a cat" }));
+    await waitFor(() => expect(result.current.partial).toBeNull());
+    expect(result.current.result).toBe("a cat");
+  });
+
+  it("clears on a run error too", async () => {
+    const { result, emit } = streamingSetup();
+    act(() => {
+      result.current.run({ prompt: "hi" }).catch(() => {});
+    });
+    act(() => emit({ type: "partial", id: 1, partial: { stage: "encoding" } }));
+    await waitFor(() => expect(result.current.partial).not.toBeNull());
+
+    act(() => emit({ type: "error", id: 1, error: "OOM" }));
+    await waitFor(() => expect(result.current.partial).toBeNull());
+    // Machine B failed; the model is still loaded.
+    expect(result.current.ready).toBe(true);
+  });
+
+  it("drops a partial whose request already settled", async () => {
+    // A late chunk must not repaint OUTPUT after the finished answer is up.
+    const { result, emit } = streamingSetup();
+    act(() => {
+      void result.current.run({ prompt: "hi" });
+    });
+    act(() => emit({ type: "result", id: 1, result: "a cat" }));
+    await waitFor(() => expect(result.current.result).toBe("a cat"));
+
+    act(() =>
+      emit({ type: "partial", id: 1, partial: { stage: "generating", text: "stale" } }),
+    );
+    expect(result.current.partial).toBeNull();
+  });
+
+  it("clears the previous run's stream when the next run starts", async () => {
+    const { result, emit } = streamingSetup();
+    act(() => {
+      void result.current.run({ prompt: "one" });
+    });
+    act(() =>
+      emit({ type: "partial", id: 1, partial: { stage: "generating", text: "first" } }),
+    );
+    await waitFor(() => expect(result.current.partial).not.toBeNull());
+
+    act(() => {
+      void result.current.run({ prompt: "two" });
+    });
+    expect(result.current.partial).toBeNull();
+  });
+});
