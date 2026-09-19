@@ -686,6 +686,66 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   ship as long as it says so and names the spec that would settle it. Either way the entry
   then owes **measured** `bytes`.
 
+**In-browser vision-language models (`src/multimodal/`, `/image-text-to-text`) — the third modality, and the first streaming one:**
+
+- **There is no `image-text-to-text` pipeline in transformers.js 4.2.0.** `SUPPORTED_TASKS` has 25
+  entries and that is not one, so the worker drives `AutoModelForImageTextToText` + `AutoProcessor`
+  directly. This is the **third** page planned around a pipeline that could not carry it (MusicGen
+  needed `MusicgenForConditionalGeneration`; Florence-2 needed `Florence2ForConditionalGeneration`
+  because `image-to-text` resolves via `AutoModelForVision2Seq`, whose registry has no `florence2`).
+  **Check `SUPPORTED_TASKS` before planning around a pipeline.** Full write-up in
+  `docs/roadmaps/multimodal.md`.
+- **`q4f16` via `vlmLoadOpts()`, never a literal in a worker** — `asrLoadOpts` is the precedent.
+  `loadOpts()`'s fp16 is 514 MB for SmolVLM-256M against 189 MB at q4f16. `Dtype` gained `q4f16`/`q4`
+  and `BYTES_PER_PARAM` gained entries for both: a widened `Dtype` without them renders **"NaN MB"**
+  on a real page with nothing failing on the way there.
+- **A q4f16 size estimate is wrong, and worse the smaller the model is.** SmolVLM-256M's
+  `embed_tokens_q4f16.onnx` is 56.8 MB — the *same size as its fp16 build*, because the embedding
+  table is not 4-bit quantized at all, which is 30% of the download. Every VLM entry carries
+  **measured `bytes`**, and `just fe-e2e-models` re-checks them against the Hub. Two related traps:
+  Qwen3-VL keeps its weights in external `.onnx_data` files (summing only the `.onnx` stubs measures
+  a 1373 MB model at 1.2 **MB**), and the roadmap's Qwen2-VL-2B is 2668 MB at q4f16, not ~1.1 GB.
+- **`ModelResponse<TResult, TPartial = never>` gained a `partial` variant** — progress *inside* one
+  run, correlated to the request id. Machine A stays `ready`, `running` stays an inflight count, and
+  a partial whose request already settled is **dropped** so a late chunk cannot repaint a finished
+  answer. The default generic is what made it free: the arm is uninhabited for every non-streaming
+  worker, so no existing engine, switch or test changed. NLP text-generation needs the same thing,
+  which is why it is in the shared envelope rather than a private protocol.
+- **`apply_chat_template` is not decoration, and getting it wrong has no error attached.** Each
+  checkpoint has its own image placeholder and turn markers; a hand-built prompt produces a fluent,
+  confident sentence that does not answer the question. Three silent traps: `{ type: "image" }` is a
+  **slot** filled positionally from the image list, `add_generation_prompt` is what makes the model
+  *answer* rather than continue the question, and `generate` returns **prompt + answer** so the
+  prompt's tokens must be sliced off before decoding.
+- **512 is SmolVLM's own tile size, not a round number.** Its `preprocessor_config.json` has
+  `do_image_splitting: true` with `max_image_size.longest_edge: 512`, so a 2048px input is cut into
+  up to a 4x4 grid **plus a global view** — seventeen encodes for one question. Downscaling the
+  source to 512 produces one tile: ~64 image tokens instead of over a thousand. §3.3's DocVQA page
+  must set its **own** number (a document needs pixels), not inherit this one.
+- **The encode gets its own state in OUTPUT.** The pause before the first token is seconds, and an
+  unlabelled pause is indistinguishable from a hang. The question is held INPUT — typing it, tapping
+  a preset and picking an image all run nothing; only GENERATE spends. The answer is labelled with
+  the question it was **actually** asked, captured inside the run so editing the box afterwards
+  cannot relabel a result on screen.
+- **One VLM live at a time, no exception** — these are the largest downloads in the app and a leaked
+  session ends the tab. Null the reference *first*, then dispose.
+- **"Has a GPU" is not the gate — `shader-f16` is.** An adapter without it loads `q4f16` weights
+  happily, reports `ready`, then fails on the **first operator** of every run (`Program Gather
+  requires f16 but the device does not support it`) — the worst outcome available, because the
+  download is already paid for. `supportsShaderF16()` is the real probe;
+  `useBackendProbe({ requireShaderF16: true })` folds it into the answer so the picker disables the
+  row *before* anything is fetched, and the page names the missing feature rather than saying
+  "resolved to wasm" on a machine that plainly has a GPU.
+- **Two of the repo's own documents disagreed about Qwen3-VL-2B**, and the ceiling won: 1373 MB is
+  past `adding-a-task-page.md` §0's ~1 GB line and past `size.test.ts`'s budget, so it is absent and
+  gets its own plan. SmolVLM-500M (358 MB) is the second rung.
+- **`components/Markdown.tsx` silently drops every prop but `{children, className}`** — a
+  `data-testid` passed to it never reaches the DOM (`/image-to-text` passes one that has never
+  resolved). Put the testid on a wrapper.
+- **`just fe-e2e-vlm` is the only test that can catch a broken chat template** and it needs a real
+  GPU — the models are WebGPU-only by catalogue declaration. It asserts a **known answer on a known
+  image**; "some text appeared" would pass straight through the failure.
+
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
 **Commands:**

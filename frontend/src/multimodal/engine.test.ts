@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createVlmHandler, type Vlm, type VlmOutput } from "./engine";
+import {
+  createVlmHandler,
+  type Vlm,
+  type VlmOpts,
+  type VlmOutput,
+} from "./engine";
 import type { VlmPartial, VlmResponse } from "./types";
+
+/** `src` targets ES2020, which has no `Array.prototype.at`. */
+const last = <T,>(items: T[]): T | undefined => items[items.length - 1];
 
 const pickBackend = vi.fn(async () => "webgpu" as const);
 vi.mock("@/model/backend", async (importOriginal) => {
@@ -17,13 +25,11 @@ const image = {
 } as const;
 
 function fakeVlm(overrides: Partial<Vlm> = {}) {
-  const generate = vi.fn(
-    async (): Promise<VlmOutput> => ({
-      text: "a cat",
-      encodeMs: 120,
-      tokens: 3,
-    }),
-  );
+  const generate = vi.fn<Vlm["generate"]>(async () => ({
+    text: "a cat",
+    encodeMs: 120,
+    tokens: 3,
+  }));
   const dispose = vi.fn(async () => {});
   return { generate, dispose, ...overrides } as Vlm & {
     generate: typeof generate;
@@ -37,7 +43,8 @@ function harness(
 ) {
   const posted: VlmResponse[] = [];
   const models: Array<ReturnType<typeof fakeVlm>> = [];
-  const factory = vi.fn(async (model: string) => {
+  const factory = vi.fn(async (model: string, opts: VlmOpts) => {
+    void opts;
     if (factoryImpl) return factoryImpl(model);
     const m = fakeVlm();
     models.push(m);
@@ -45,6 +52,10 @@ function harness(
   });
   const handle = createVlmHandler((m) => posted.push(m), factory, opts);
   return { handle, posted, factory, models };
+}
+
+function lastCall(fn: { mock: { calls: unknown[][] } }): unknown[] {
+  return fn.mock.calls[fn.mock.calls.length - 1];
 }
 
 const load = { type: "load" as const, model: "smol", family: "idefics3" as const };
@@ -63,7 +74,7 @@ describe("createVlmHandler — load", () => {
       "smol",
       expect.objectContaining({ device: "webgpu", dtype: "q4f16" }),
     );
-    expect(posted.at(-1)).toEqual({
+    expect(last(posted)).toEqual({
       type: "ready",
       model: "smol",
       backend: "webgpu",
@@ -108,7 +119,7 @@ describe("createVlmHandler — load", () => {
     const { handle, posted } = harness(async () => broken);
     await handle(load);
     // The first real run pays the compile cost instead.
-    expect(posted.at(-1)).toMatchObject({ type: "ready" });
+    expect(last(posted)).toMatchObject({ type: "ready" });
   });
 
   it("reports a load failure with no id, so it reaches Machine A", async () => {
@@ -116,8 +127,8 @@ describe("createVlmHandler — load", () => {
       throw new Error("404 not found");
     });
     await handle(load);
-    expect(posted.at(-1)).toEqual({ type: "error", error: "404 not found" });
-    expect(posted.at(-1)).not.toHaveProperty("id");
+    expect(last(posted)).toEqual({ type: "error", error: "404 not found" });
+    expect(last(posted)).not.toHaveProperty("id");
   });
 
   it("keeps one model live: the previous one is disposed on the next load", async () => {
@@ -144,7 +155,7 @@ describe("createVlmHandler — load", () => {
     await handle(load);
     await handle({ ...load, model: "smol-500" });
     // The second load still succeeded despite the first's dispose throwing.
-    expect(posted.at(-1)).toMatchObject({ type: "ready", model: "smol-500" });
+    expect(last(posted)).toMatchObject({ type: "ready", model: "smol-500" });
   });
 });
 
@@ -162,7 +173,7 @@ describe("createVlmHandler — run", () => {
     await handle(load);
     await handle(run);
 
-    expect(posted.at(-1)).toMatchObject({
+    expect(last(posted)).toMatchObject({
       type: "result",
       id: 7,
       result: { text: "a cat", encodeMs: 120, tokens: 3 },
@@ -173,8 +184,8 @@ describe("createVlmHandler — run", () => {
     const { handle, posted } = harness(undefined, { warmup: false });
     await handle(load);
     await handle(run);
-    const last = posted.at(-1);
-    expect(last?.type === "result" && last.result.ms).toBeGreaterThanOrEqual(0);
+    const done = last(posted);
+    expect(done?.type === "result" && done.result.ms).toBeGreaterThanOrEqual(0);
   });
 
   it("forwards the model's in-run progress as partials against the same id", async () => {
@@ -206,13 +217,13 @@ describe("createVlmHandler — run", () => {
       { type: "partial", id: 7, partial: { stage: "generating", text: "a cat" } },
     ]);
     // And the result still arrives after them.
-    expect(posted.at(-1)).toMatchObject({ type: "result", id: 7 });
+    expect(last(posted)).toMatchObject({ type: "result", id: 7 });
   });
 
   it("rejects a run with no model loaded, carrying the id", async () => {
     const { handle, posted } = harness(undefined, { warmup: false });
     await handle(run);
-    expect(posted.at(-1)).toEqual({
+    expect(last(posted)).toEqual({
       type: "error",
       id: 7,
       error: "No model loaded",
@@ -232,7 +243,7 @@ describe("createVlmHandler — run", () => {
     await handle(run);
 
     // `id` present → Machine B. The page stays `ready`.
-    expect(posted.at(-1)).toEqual({
+    expect(last(posted)).toEqual({
       type: "error",
       id: 7,
       error: "Non-zero status code",
@@ -243,7 +254,7 @@ describe("createVlmHandler — run", () => {
     const { handle, models } = harness(undefined, { warmup: false });
     await handle(load);
     await handle(run);
-    const [, prompt, maxNewTokens] = models[0].generate.mock.calls.at(-1)!;
+    const [, prompt, maxNewTokens] = lastCall(models[0].generate);
     expect(prompt).toBe("What is this?");
     expect(maxNewTokens).toBe(64);
   });

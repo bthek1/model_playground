@@ -14,8 +14,8 @@ update both.
 networks) **directly in the browser on the user's GPU/CPU**. Two client-side inference
 paths coexist: (1) a **raw-WebGPU runtime** (`src/webgpu/`, hand-written WGSL compute
 shaders) for custom kernels and teaching demos, and (2) **Transformers.js / ONNX Runtime
-Web** for running *pretrained* models (the audio and vision tasks) in the UI. It is a decoupled
-monorepo:
+Web** for running *pretrained* models (the audio, vision and multimodal tasks) in the UI.
+It is a decoupled monorepo:
 
 - **`backend/`** — Django REST Framework API (Python 3.13, PostgreSQL, Celery). Acts as a
   **model registry**: catalog metadata + inference-run records. It does **not** run inference.
@@ -52,12 +52,14 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Git guardrails & permission config** | [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md) |
 | **End-to-end tests (Playwright)** | [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md) |
 | **A model with no Transformers.js task (bare ONNX)** | [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §9 |
+| **When `pipeline()` is the wrong abstraction** (incl. chat-templated VLMs) | [`docs/guides/adding-a-model.md`](docs/guides/adding-a-model.md) §10 |
 | Celery / async tasks | [`docs/guides/celery_setup.md`](docs/guides/celery_setup.md) |
 | **Adding a task page (end-to-end procedure)** | [`docs/guides/adding-a-task-page.md`](docs/guides/adding-a-task-page.md) |
 | Feature plans (phased) | **GitHub issues**, label [`plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) — open = active, closed = done |
 | **Audio category roadmap** (complete, 6 of 6) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
 | **Computer Vision roadmap** (14 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | **Graph ML roadmap** (**complete, 4 of 4**; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
+| **Multimodal roadmap** (1 of 9; VLMs, `q4f16`, streaming) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -91,7 +93,8 @@ just fe-e2e-superres # @slow: Swin2SR vs a bicubic baseline, by PSNR
 just fe-e2e-vision-one /pose   # one @slow vision route at a time
 just fe-e2e-link    # @slow: link prediction, pinned by an AUC *band* (leakage pushes it up)
 just fe-e2e-graphcls # @slow: graph classification, pinned above its majority baseline
-just fe-e2e-models  # check every model id (audio + vision) resolves on the HF Hub (seconds)
+just fe-e2e-vlm     # @slow: a real SmolVLM load + generation — the only chat-template guard (needs a GPU)
+just fe-e2e-models  # check every model id (audio + vision + multimodal) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
 just fe-lint        # eslint
@@ -568,6 +571,79 @@ The rest of the category stays on a server, with a reason per task — see
   arbitrary scale, and without it the canvas is uniformly black or white. Say so in the UI too — the
   values are not metres — and read the ramp's direction from the catalogue entry, because Depth
   Anything emits inverse depth (big = near) while Depth Pro emits metres (big = far).
+
+### In-browser vision-language models (`src/multimodal/`, `/image-text-to-text`)
+
+The third modality on the Transformers.js path, and the first **streaming** one. Same
+shape as `src/audio/` and `src/vision/` — a pure `engine.ts` owing the same three
+behaviours, a thin `vlm.worker.ts` around it, a `client.ts`, and `useVlm` over
+`useModelWorker`. See [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md).
+
+- **There is no `image-text-to-text` pipeline in 4.2.0.** `SUPPORTED_TASKS` has 25 entries
+  and that is not one, so the worker drives `AutoModelForImageTextToText` + `AutoProcessor`
+  directly. This is the **third** page planned around a pipeline that could not carry it —
+  MusicGen needed `MusicgenForConditionalGeneration`, Florence-2 needed
+  `Florence2ForConditionalGeneration` because `image-to-text` resolves via
+  `AutoModelForVision2Seq`, whose registry has no `florence2`. **Check `SUPPORTED_TASKS`
+  before planning a page around a pipeline**, not after.
+- **`q4f16` via `vlmLoadOpts()`, never a literal in a worker** (`asrLoadOpts` is the
+  precedent). `loadOpts()`'s fp16 is 514 MB for SmolVLM-256M against 189 MB at q4f16.
+  `Dtype` gained `q4f16`/`q4` and `BYTES_PER_PARAM` gained an entry for each — a widened
+  `Dtype` without them renders **"NaN MB"** on a real page with nothing failing on the way
+  there.
+- **A q4f16 size estimate is wrong, and worse the smaller the model is.** SmolVLM-256M's
+  `embed_tokens_q4f16.onnx` is 56.8 MB — *the same size as its fp16 build*, because the
+  embedding table is not 4-bit quantized at all, and that is 30% of the download. Every VLM
+  entry carries **measured `bytes`**, re-checked against the Hub by `just fe-e2e-models`.
+  Two related traps: Qwen3-VL keeps its weights in external `.onnx_data` files (summing
+  only the `.onnx` stubs measures a 1373 MB model at 1.2 **MB**), and the roadmap's
+  Qwen2-VL-2B is 2668 MB at q4f16, not the ~1.1 GB it quoted.
+- **`ModelResponse<TResult, TPartial = never>` gained a `partial` variant** — progress
+  *inside* one run, correlated to the request id. Machine A stays `ready`, `running` stays
+  an inflight count, and a partial whose request already settled is **dropped** so a late
+  chunk cannot repaint a finished answer. The defaulted generic is what made it free: the
+  arm is uninhabited for every non-streaming worker, so no existing engine, switch or test
+  changed. It is in the shared envelope rather than a private protocol because NLP
+  text-generation will need exactly the same thing.
+- **`apply_chat_template` is not decoration, and getting it wrong has no error attached** —
+  the output is a fluent, confident sentence that does not answer the question. Three
+  silent traps: `{ type: "image" }` is a **slot** filled positionally from the image list;
+  `add_generation_prompt` is what makes the model *answer* rather than continue the
+  question; and `generate` returns **prompt + answer**, so the prompt's tokens are sliced
+  off before decoding or the user gets their own question back.
+- **512 is SmolVLM's own tile size, not a round number.** Its `preprocessor_config.json`
+  sets `do_image_splitting: true` with `max_image_size.longest_edge: 512`, so a 2048px
+  input is cut into up to a 4x4 grid **plus a global view** — seventeen encodes for one
+  question. Downscaling the source to 512 produces one tile: ~64 image tokens instead of
+  over a thousand. The DocVQA page must set its **own** number (a document needs pixels)
+  rather than inherit this one — the `/link-prediction` lesson again.
+- **The encode gets its own state in OUTPUT**, because the pause before the first token is
+  seconds and an unlabelled pause is indistinguishable from a hang. The question is held
+  INPUT: typing it, tapping a preset and picking an image all run nothing, and only
+  GENERATE spends. The answer is labelled with the question it was **actually** asked,
+  captured inside the run so editing the box afterwards cannot relabel a result on screen.
+- **One VLM live at a time, no exception** — these are the largest downloads in the app and
+  a leaked session ends the tab. Null the reference *first*, then dispose.
+- **"Has a GPU" is not the gate — `shader-f16` is.** An adapter without that feature loads
+  `q4f16` weights happily, reports `ready`, and then fails on the **first operator** of
+  every run (`Program Gather requires f16 but the device does not support it`) — the worst
+  outcome available, because the user pays for the download first. `supportsShaderF16()`
+  is the real probe and `useBackendProbe({ requireShaderF16: true })` folds it in, so the
+  picker disables the row *before* anything is fetched; the page then names the missing
+  feature, because "resolved to wasm" is misleading on a machine that plainly has a GPU.
+  Found by `just fe-e2e-vlm` on SwiftShader, which is what a runner with no `/dev/dri` gets.
+- **Qwen3-VL-2B is deliberately absent, and two of this repo's own documents disagreed
+  about it.** At 1373 MB it is past `adding-a-task-page.md` §0's ~1 GB ceiling and past
+  `size.test.ts`'s budget, while the roadmap wanted it shipped. The ceiling won; it gets
+  its own plan rather than arriving as a side effect. SmolVLM-500M (358 MB) is the second
+  rung.
+- **`components/Markdown.tsx` silently drops every prop but `{children, className}`**, so a
+  `data-testid` handed to it never reaches the DOM — `/image-to-text` passes one that has
+  never resolved. Put the testid on a wrapper.
+- **`just fe-e2e-vlm` is the only test that can catch a broken chat template**, and it needs
+  a real GPU (the models are WebGPU-only by catalogue declaration). It asserts a **known
+  answer on a known image**; "some text appeared" would pass straight through the failure
+  this page actually has.
 
 **Two Base UI gotchas (carried over from the Radix → Base UI migration):**
 

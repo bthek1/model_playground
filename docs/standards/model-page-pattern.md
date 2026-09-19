@@ -113,8 +113,10 @@ one enum.
                   pending.set(id, {resolve, reject})
                   inflight += 1
                        │
-                       ├── {result, id} ──▶ resolve · inflight -= 1
-                       ├── {error, id}  ──▶ reject  · inflight -= 1 · status stays "ready"
+                       ├── {partial, id} ─▶ partial = p  ↺  (inflight unchanged)
+                       ├── {result, id} ──▶ resolve · inflight -= 1 · partial = null
+                       ├── {error, id}  ──▶ reject  · inflight -= 1 · partial = null
+                       │                    status stays "ready"
                        └── teardown     ──▶ reject all pending · clear
 ```
 
@@ -125,6 +127,44 @@ still in flight).
 The `id` on an error message is the discriminator: `id != null` is a request failure
 (Machine B), `id == null` is a load failure (Machine A).
 
+### `partial` — progress inside one run
+
+A generative decoder produces its answer over seconds; a VLM encodes the image before a
+single token exists. A page that can only render the finished result therefore shows an
+unlabelled multi-second pause, which is indistinguishable from a hang. So the worker may
+report intermediate state against the request `id` that will eventually carry the result:
+
+```ts
+export type ModelResponse<TResult, TPartial = never> =
+  | { type: "progress"; progress: ModelProgress }   // Machine A, no id
+  | { type: "ready"; model: string; backend: Backend }
+  | { type: "partial"; id: number; partial: TPartial }   // Machine B, in-run
+  | { type: "result"; id: number; result: TResult }
+  | { type: "error"; id?: number; error: string };
+```
+
+Three things it deliberately is **not**:
+
+| | |
+|---|---|
+| not a `ModelStatus` | Machine A is untouched. `ready` means the weights are loaded; a run in progress does not move it, and there is no fifth state. |
+| not `progress` | that variant is Machine A's download/warm-up self-loop and carries no `id`. Overloading it makes "downloading" and "generating" the same event. |
+| not a running flag | `running` stays an inflight **count**. A partial neither opens nor closes a request. |
+
+`TPartial` defaults to `never`, which is what makes the variant free for every worker
+that does not stream: the arm is uninhabited, so existing exhaustive switches stay
+exhaustive and no non-streaming engine or test changes.
+
+`useModelWorker` surfaces it as `partial`, cleared when a run starts and again when its
+result or error lands — and **dropped if its request has already settled**, so a late
+chunk cannot repaint OUTPUT after the finished answer is on screen. A page renders
+`partial ?? result`, never both.
+
+Only the most recent run's partials are kept. That is a deliberate narrowing: `run()`
+still resolves every overlapping request correctly, but one field cannot represent two
+streams, and a page that genuinely interleaved two generations would have to say which
+one it is drawing. `/image-text-to-text` is the reference caller.
+
 ---
 
 ## 3. The hook contract
@@ -133,7 +173,7 @@ Every task hook returns this shape. Extra task-specific fields are additive; not
 here is optional or renamed per task.
 
 ```ts
-export interface ModelTask<TInput, TOutput, TOpts = void> {
+export interface ModelTask<TInput, TOutput, TOpts = void, TPartial = never> {
   // --- Machine A: load ---
   status: "idle" | "loading" | "ready" | "error";
   idle: boolean;
@@ -160,6 +200,12 @@ export interface ModelTask<TInput, TOutput, TOpts = void> {
   running: boolean;
   /** Latest successful output, for pages that display one result at a time. */
   result: TOutput | null;
+  /**
+   * Latest in-run progress from a streaming worker — partial text, an
+   * encode/generate stage. Null unless a run is in flight, and cleared the moment
+   * its result lands. Optional: most tasks are single-shot and never post one.
+   */
+  partial?: TPartial | null;
 
   /** Load error (status === "error") or the most recent run error. */
   error: string | null;
@@ -685,5 +731,6 @@ That ambiguity is one reason §4's band labels stay generic.
 | A page with a second, named wait | [`routes/mask-generation.tsx`](../../frontend/src/routes/mask-generation.tsx) — LOAD is the download, `encoding` is the per-image pass |
 | A page that holds two models | [`routes/pose.tsx`](../../frontend/src/routes/pose.tsx) — one combined size, one aggregate bar, controls that re-run on purpose |
 | A page whose framing is a requirement | [`routes/video-classification.tsx`](../../frontend/src/routes/video-classification.tsx) — a frame-level baseline, said so in copy an E2E spec asserts |
+| A page whose answer streams | [`routes/image-text-to-text.tsx`](../../frontend/src/routes/image-text-to-text.tsx) — the encode is named, the tokens arrive over seconds, and `partial` carries both |
 | The empty case | [`routes/tasks.$slug.tsx`](../../frontend/src/routes/tasks.$slug.tsx) |
 | The contract, asserted | [`frontend/e2e/specs/model-page.spec.ts`](../../frontend/e2e/specs/model-page.spec.ts) |

@@ -276,8 +276,25 @@ fe-e2e-link:
 fe-e2e-graphcls:
     cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 graph-classification.spec.ts
 
-# Check every model id (audio + vision) still resolves on the Hugging Face Hub,
-# and that each vision entry publishes the dtypes both backends ask for (seconds)
+# Run the @slow VLM spec: a real SmolVLM-256M load (~189 MB at q4f16) and a real
+# generation, asserting a **known answer on a known image**.
+#
+# This is the only test that can catch a broken chat template, which is this
+# page's characteristic failure — the unit suite mocks the worker away and a
+# mocked E2E run never loads weights, so both stay green while the model is
+# prompted with a string it has never seen. The symptom is not an error: it is a
+# fluent, confident sentence that does not answer the question. "Some text
+# appeared" would pass straight through it.
+#
+# WebGPU only, by catalogue declaration — an autoregressive decoder on WASM is
+# seconds per token, so the picker disables the row and there is nothing to run.
+fe-e2e-vlm:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/vlm.spec.ts
+
+# Check every model id (audio + vision + multimodal) still resolves on the
+# Hugging Face Hub, that each vision entry publishes the dtypes both backends ask
+# for, and that the VLM entries publish their three q4f16 graphs and still match
+# the download sizes the catalogue quotes (seconds)
 fe-e2e-models:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium model-ids.spec.ts
 

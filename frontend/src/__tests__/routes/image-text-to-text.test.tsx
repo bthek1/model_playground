@@ -24,9 +24,14 @@ vi.mock("@/vision/image", async (importOriginal) => {
 });
 
 const pickBackend = vi.fn(async () => "webgpu");
+const supportsShaderF16 = vi.fn(async () => true);
 vi.mock("@/model/backend", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
-  return { ...actual, pickBackend: () => pickBackend() };
+  return {
+    ...actual,
+    pickBackend: () => pickBackend(),
+    supportsShaderF16: () => supportsShaderF16(),
+  };
 });
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -109,6 +114,7 @@ beforeEach(() => {
     tokens: 7,
   });
   pickBackend.mockResolvedValue("webgpu");
+  supportsShaderF16.mockResolvedValue(true);
   URL.createObjectURL = vi.fn(() => "blob:preview");
   URL.revokeObjectURL = vi.fn();
 });
@@ -343,6 +349,27 @@ describe("ImageTextToTextPage — backend gating and errors", () => {
     );
     expect(screen.getByRole("button", { name: /smolvlm 256m/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /smolvlm 500m/i })).toBeDisabled();
+  });
+
+  it("explains a missing shader-f16 rather than just saying 'resolved to wasm'", async () => {
+    // The adapter exists and works; it just cannot do half-precision in
+    // shaders, which is what q4f16 needs. Measured on SwiftShader: the weights
+    // load and then every run fails on the first Gather. A machine with a real
+    // GPU deserves to be told what it is actually missing.
+    supportsShaderF16.mockResolvedValue(false);
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("f16-note")).toHaveTextContent(/shader-f16/),
+    );
+    expect(screen.getByRole("button", { name: /smolvlm 256m/i })).toBeDisabled();
+  });
+
+  it("shows no f16 note on a machine that supports it", async () => {
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /smolvlm 256m/i })).toBeEnabled(),
+    );
+    expect(screen.queryByTestId("f16-note")).not.toBeInTheDocument();
   });
 
   it("gates nothing while the probe is still undecided", () => {

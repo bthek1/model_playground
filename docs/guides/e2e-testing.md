@@ -82,6 +82,7 @@ just fe-e2e-superres  # Swin2SR against a bicubic baseline, by PSNR
 just fe-e2e-graph     # a real GNN training run on Cora, pinned by an accuracy floor
 just fe-e2e-link      # link prediction on Cora, pinned by an AUC band
 just fe-e2e-graphcls  # graph classification on PROTEINS, pinned above its baseline
+just fe-e2e-vlm       # a real SmolVLM load + generation — needs a real GPU
 ```
 
 `fe-e2e-graph` is the odd one: it is `@slow` without downloading anything, because
@@ -112,6 +113,22 @@ written for a metric:
 **Ask which direction the silent failure moves the number.** A floor catches a
 model that got worse; only a ceiling catches one that got suspiciously better; and
 neither means anything unless the null model is known.
+
+`fe-e2e-vlm` is the odd one in the other direction: **its failure has no number at
+all.** `/image-text-to-text` is driven by `apply_chat_template`, and a prompt built
+wrongly — a missing image slot, a missing generation prompt, a hand-rolled string —
+does not error and does not produce nonsense. It produces a fluent, confident
+sentence that is not an answer to the question. There is nothing to bound, so the
+spec asserts a **known answer on a known image** ("tiger" for the tiger sample) and
+then asserts that changing the *question* changes the answer, which is the sharpest
+available evidence that the prompt reaches the model at all.
+
+It lives in `e2e/specs/webgpu/` rather than beside the other model specs because
+both catalogue entries declare `backends: ["webgpu"]` — on a machine the probe
+resolves to WASM the picker disables every row and there is nothing to run. Note
+that SwiftShader, which lets the WGSL kernel specs run on a machine with no
+`/dev/dri`, is **not** a usable substitute here: it is a software rasteriser, and a
+256M autoregressive decoder on it is not a test anyone will wait for.
 
 `fe-e2e-vision` grew from "one MobileNetV4 load" into the whole category, and it is
 now the longest job in the repo: OWLv2 alone is 155 MB, and Florence-2 is 544 MB on
@@ -232,7 +249,8 @@ frontend/
       audio-models.spec.ts # @slow: real weights, real ONNX sessions
       vision.spec.ts       # /image-classification, weights blocked — default run
       vision-models.spec.ts# @slow: real loads across all fourteen vision routes
-      model-ids.spec.ts    # @slow, seconds: every catalogue id + vision dtypes
+      model-ids.spec.ts    # @slow, seconds: every catalogue id + vision/VLM dtypes
+      multimodal.spec.ts   # /image-text-to-text with weights blocked — default run
       webgpu/              # the GPU-only project
     utils/
       enhance.ts           # in-page enhancement run + SDR measurement
