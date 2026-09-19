@@ -692,7 +692,7 @@ milliseconds, and there is deliberately no live camera mode.
 |---|---|---|
 | `onnx-community/Florence-2-base-ft` | caption · detailed caption · OCR · grounding | 544 MB fp16 · 275 MB q8 — the default, **WebGPU only** |
 | `Xenova/vit-gpt2-image-captioning` | caption | 482 MB fp16 · 246 MB q8 |
-| `HuggingFaceTB/SmolVLM-256M-Instruct` | - | needs a chat template; that is Image-Text-to-Text, not this row |
+| `HuggingFaceTB/SmolVLM-256M-Instruct` | - | needs a chat template; that is Image-Text-to-Text, not this row — and it [shipped there](multimodal.md#31-image-text-to-text--shipped) |
 | `Salesforce/blip-*` | - | the only mirror ships `split_0/1.onnx`, not the transformers.js layout |
 | `stepfun-ai/GOT-OCR-2.0-hf` | - | no export; Florence-2 covers OCR instead |
 
@@ -1106,7 +1106,7 @@ asserts that path in a real Chromium with no GPU.
 | **Image Classification** | **Shipped** — `/image-classification` | `Xenova/vit-base-patch16-224` | WebGPU / WASM | - |
 | **Object Detection** | **Shipped** — `/object-detection` | `onnx-community/dfine_n_coco-ONNX` | WebGPU | RF-DETR to server |
 | **Image Segmentation** | **Shipped** — `/segmentation` (semantic) | `Xenova/segformer-b0-finetuned-ade-512-512` | WebGPU | Mask2Former / OneFormer to server |
-| **Image to Text** | **Shipped** — `/image-to-text` | `onnx-community/Florence-2-base-ft` | WebGPU | GOT-OCR to server; SmolVLM is Image-Text-to-Text |
+| **Image to Text** | **Shipped** — `/image-to-text` | `onnx-community/Florence-2-base-ft` | WebGPU | GOT-OCR to server; SmolVLM is [Image-Text-to-Text](multimodal.md) |
 | **Video Classification** | **Shipped** — `/video-classification`, frame-level baseline | CLIP over sampled frames | WebGPU / WASM | real video transformers to server |
 | **Zero Shot Image Classification** | **Shipped** — `/zero-shot-image-classification` | `Xenova/clip-vit-base-patch32` | WebGPU / WASM | - |
 | **Mask Generation** | **Shipped** — `/mask-generation` | `Xenova/slimsam-77-uniform` | WebGPU / WASM | SAM-HQ, SAM 3, Grounded SAM to server |

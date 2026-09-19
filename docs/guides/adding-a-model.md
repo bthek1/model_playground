@@ -498,14 +498,14 @@ it is the only test in the suite that would have caught a 512-sample window.
 
 ## 10. When the pipeline is the wrong abstraction
 
-§8 assumes `pipeline(task, model)` fits. Four vision routes found it did not, and
-they all failed the same test: **is this a plain `pipeline()` call?** If the
-answer is no, the task owns an engine — `engine.ts` (pure, testable with fakes),
+§8 assumes `pipeline(task, model)` fits. Four vision routes and one multimodal one
+found it did not, and they all failed the same test: **is this a plain
+`pipeline()` call?** If the answer is no, the task owns an engine — `engine.ts` (pure, testable with fakes),
 `*.worker.ts` (the only file that imports the runtime), `client.ts` (so the hook
 can mock worker creation). The plumbing above it does not change: `useModelWorker`,
 the three engine duties, `ModelPicker`, `ModelStatus`, the four slots.
 
-The four reasons, each a different shape:
+The five reasons, each a different shape:
 
 **a. The pipeline throws away work you want to keep.**
 `/zero-shot-image-classification` — the pipeline re-encodes the labels on every
@@ -553,9 +553,52 @@ quotes the **combined** download, both models are loaded together so their
 progress events interleave into one bar, and both are disposed with
 `Promise.allSettled` so a teardown that throws does not skip the larger one.
 
+**e. The pipeline does not exist.**
+`/image-text-to-text` — the roadmap planned it around
+`pipeline("image-text-to-text")`, and 4.2.0 has no such task.
+`SUPPORTED_TASKS` has 25 entries; `image-to-text` and
+`document-question-answering` are there and this one is not. `src/multimodal/`
+drives `AutoModelForImageTextToText` + `AutoProcessor` directly.
+
+Check the task list the same way you check the model registry — **before**
+writing the hook:
+
+```bash
+node -e "const s=require('fs').readFileSync(
+  'frontend/node_modules/@huggingface/transformers/dist/transformers.js','utf8');
+  const i=s.indexOf('var SUPPORTED_TASKS');
+  console.log([...s.slice(i,i+120000).matchAll(/^\s{2}\"?([a-z0-9-]+)\"?:\s*\{/gm)]
+    .map(m=>m[1]).join(', '))"
+```
+
+This is the **third** page in the repo planned around a pipeline that could not
+carry it — MusicGen (§3.4 of the audio roadmap) and Florence-2 (reason **c**
+above) were the first two. Three is enough to make it a step rather than a
+lesson.
+
+Driving the model directly means owning the prompt, and for a VLM that is
+`apply_chat_template`. It is not decoration: each checkpoint has its own image
+placeholder token and its own turn markers, and a hand-built prompt string
+produces output that is **subtly degraded rather than obviously broken**. Three
+traps behind it, all silent — `{ type: "image" }` is a *slot* filled
+positionally from the image list, so the content array and the list must line
+up; `add_generation_prompt: true` is what makes the model answer rather than
+continue the question; and `generate` returns **prompt + answer**, so the
+prompt's tokens are sliced off before decoding or the user gets their own
+question handed back.
+
+It is also the route that added **streaming** to the shared envelope. A
+generative decoder encodes the image to completion before a single token exists,
+so `ModelResponse` gained a `partial` variant (`TPartial` defaults to `never`, so
+nothing else changed) carrying `{ stage: "encoding" } | { stage: "generating",
+text }`. That is progress *inside* one run: Machine A stays `ready` and `running`
+stays an inflight count. A page that shows a spinner for four seconds and then
+streams text reads as broken; one that says "encoding image" and then generates
+reads as working.
+
 ### The rule these share
 
-Every one of the four introduced a failure that **produces plausible output**
+Every one of the five introduced a failure that **produces plausible output**
 rather than an error — a cached embedding that is silently recomputed, a scale
 that leaves the ranking intact, a task token a model has never seen answered with
 a fluent unrelated sentence, a skeleton offset by a crop's origin. So each one
@@ -572,6 +615,7 @@ owes a `@slow` spec that measures a **property**, never a count:
 | `/background-removal` | the matte's **coverage band** — 0% and 100% both render beautifully |
 | `/super-resolution` | **PSNR against a ground truth**, beating a bicubic resize |
 | `/image-to-3d` | the point count tracks the stride, and sliders re-derive without a run |
+| `/image-text-to-text` | a **known answer on a known image** — a broken chat template returns fluent, confident, unrelated prose |
 
 "Five rows appeared" passes for all of them.
 

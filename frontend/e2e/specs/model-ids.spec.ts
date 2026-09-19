@@ -39,6 +39,7 @@ test.describe("@slow model catalogue", () => {
       "../../src/vision/backgroundRemoval"
     );
     const { SUPER_RES_MODELS } = await import("../../src/vision/superRes");
+    const { VLM_MODELS } = await import("../../src/multimodal/types");
 
     const ids = [
       ...ASR_MODELS,
@@ -60,6 +61,7 @@ test.describe("@slow model catalogue", () => {
       ...CAPTION_MODELS,
       ...MATTE_MODELS,
       ...SUPER_RES_MODELS,
+      ...VLM_MODELS,
       // A pose entry is a *pair*, so its own `id` is a composite that resolves
       // to nothing on the Hub — the two halves are what get downloaded.
       ...POSE_MODELS.flatMap((m) => [m.detector, m.pose]),
@@ -213,5 +215,81 @@ test.describe("@slow model catalogue", () => {
       if (!res.ok()) bad.push(`${url} -> ${res.status()}`);
     }
     expect(bad, "sample images that do not resolve").toEqual([]);
+  });
+
+  test("every multimodal catalogue entry publishes the 4-bit graphs it asks for", async ({
+    request,
+  }) => {
+    // The VLM catalogue does NOT take `loadOpts()`'s fp16/q8 — it takes
+    // `vlmLoadOpts()`, which is q4f16 on WebGPU and q4 on WASM. Folding these
+    // entries into the vision check above would ask the Hub for the wrong files
+    // and pass or fail for the wrong reason, so they get their own defaults.
+    //
+    // Each entry loads three graphs, and all three must exist at the requested
+    // precision: a repo that publishes `decoder_model_merged_q4f16.onnx` but not
+    // `vision_encoder_q4f16.onnx` resolves fine on the API and then 404s
+    // halfway through a 189 MB load.
+    const { VLM_MODELS } = await import("../../src/multimodal/types");
+
+    const SUFFIX: Record<string, string> = { q4f16: "_q4f16", q4: "_q4" };
+    const DEFAULT_DTYPE: Record<string, string> = {
+      webgpu: "q4f16",
+      wasm: "q4",
+    };
+
+    const missing: string[] = [];
+    for (const model of VLM_MODELS) {
+      const res = await request.get(
+        `https://huggingface.co/api/models/${model.id}`,
+      );
+      const files: string[] = ((await res.json()).siblings ?? []).map(
+        (f: { rfilename: string }) => f.rfilename,
+      );
+      const backends = model.backends ?? (["webgpu", "wasm"] as const);
+      for (const backend of backends) {
+        const dtype = model.dtypes?.[backend] ?? DEFAULT_DTYPE[backend];
+        const suffix = SUFFIX[String(dtype)];
+        if (suffix === undefined) continue;
+        for (const graph of model.graphs) {
+          const file = `onnx/${graph}${suffix}.onnx`;
+          if (!files.includes(file)) {
+            missing.push(`${model.id} (${backend}) -> ${file}`);
+          }
+        }
+      }
+    }
+    expect(missing, "VLM graphs missing at the requested precision").toEqual([]);
+  });
+
+  test("the VLM catalogue quotes its real download size", async ({ request }) => {
+    // These entries carry *measured* bytes rather than a params estimate,
+    // because at q4f16 the precision is mixed: SmolVLM-256M's embedding table is
+    // not 4-bit quantized at all, so an estimate is out by 30%. A measurement
+    // that has drifted from the Hub is worse than an estimate, because the page
+    // presents it as fact — so check it.
+    const { VLM_MODELS } = await import("../../src/multimodal/types");
+
+    const wrong: string[] = [];
+    for (const model of VLM_MODELS) {
+      const res = await request.get(
+        `https://huggingface.co/api/models/${model.id}/tree/main/onnx`,
+      );
+      const files: Array<{ path: string; size?: number; lfs?: { size?: number } }> =
+        await res.json();
+      const total = model.graphs.reduce((sum, graph) => {
+        const entry = files.find(
+          (f) => f.path === `onnx/${graph}_q4f16.onnx`,
+        );
+        return sum + (entry?.lfs?.size ?? entry?.size ?? 0);
+      }, 0);
+      const quoted = model.bytes.webgpu ?? 0;
+      // 2% tolerance: the quoted figure is the sum of the graph files, and a
+      // re-export that changes it by more than that is a real change the
+      // catalogue should record.
+      if (Math.abs(total - quoted) / quoted > 0.02) {
+        wrong.push(`${model.id}: quoted ${quoted}, Hub says ${total}`);
+      }
+    }
+    expect(wrong, "VLM sizes that have drifted from the Hub").toEqual([]);
   });
 });

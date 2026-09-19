@@ -29,7 +29,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
 import { Loader2, MessagesSquare, Sparkles } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Markdown } from "@/components/Markdown";
 import { InputPanel } from "@/components/model/InputPanel";
@@ -41,6 +41,7 @@ import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
 import { Button } from "@/components/ui/button";
 import { useImagePick } from "@/hooks/useImagePick";
 import { useVlm } from "@/hooks/useVlm";
+import { supportsShaderF16 } from "@/model/backend";
 import { useBackendProbe } from "@/model/useBackendProbe";
 import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
 import {
@@ -75,7 +76,11 @@ export const Route = createFileRoute("/image-text-to-text")({
 });
 
 function ImageTextToTextPage() {
-  const backendProbe = useBackendProbe();
+  // `requireShaderF16` because every model here loads `q4f16`. An adapter
+  // without that feature loads the weights and then fails on the *first*
+  // operator, so gating on "is there a GPU" alone would charge the user 189 MB
+  // before the page turned out to be dead. See `supportsShaderF16`.
+  const backendProbe = useBackendProbe({ requireShaderF16: true });
   const session = useModelSelection({
     routeKey: "image-text-to-text",
     models: VLM_MODELS,
@@ -109,6 +114,19 @@ function ImageTextToTextPage() {
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
     useImagePick();
+
+  // The probe folds "no GPU" and "a GPU without f16" into the same answer, which
+  // is right for gating and wrong for explaining: a machine with a working
+  // adapter deserves to be told what it is actually missing.
+  const [hasF16, setHasF16] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    void supportsShaderF16().then((ok) => live && setHasF16(ok));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const f16Missing = backendProbe === "wasm" && hasF16 === false;
 
   const busy = running || preparing !== null;
   const loadError = status === "error" ? error : null;
@@ -154,15 +172,32 @@ function ImageTextToTextPage() {
         ) : undefined
       }
       select={
-        <ModelPicker
-          models={VLM_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-          backend={backendProbe}
-        />
+        <div className="space-y-3">
+          <ModelPicker
+            models={VLM_MODELS}
+            value={model}
+            onChange={session.setModel}
+            disabled={loading || busy}
+            cached={session.cached}
+            onEvict={(m) => void session.evict(m.id)}
+            backend={backendProbe}
+          />
+          {/* The probe folds "no GPU" and "a GPU without f16" into one answer,
+              which is right for gating and wrong for explaining. A machine with a
+              working adapter deserves to be told what it is actually missing. */}
+          {f16Missing && (
+            <p
+              data-testid="f16-note"
+              className="text-xs leading-snug text-amber-600 dark:text-amber-500"
+            >
+              This browser has a GPU, but its adapter does not support
+              half-precision (<code>shader-f16</code>) in shaders. These models are
+              4-bit with f16 activations, so they would download and then fail on
+              the first operator — the page disables them rather than charging you
+              for that.
+            </p>
+          )}
+        </div>
       }
       load={
         <ModelStatus

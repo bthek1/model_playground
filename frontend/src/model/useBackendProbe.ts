@@ -13,21 +13,44 @@
 
 import { useEffect, useState } from "react";
 
-import { pickBackend, type Backend } from "./backend";
+import { pickBackend, supportsShaderF16, type Backend } from "./backend";
+
+export interface BackendProbeOptions {
+  /**
+   * Treat a GPU without the `shader-f16` feature as unusable, reporting `"wasm"`.
+   *
+   * For a model whose weights are `q4f16` this is the honest answer to "what
+   * would this load on": such an adapter loads the weights and then fails on the
+   * **first operator** ("Program Gather requires f16 but the device does not
+   * support it"), so the WebGPU path does not exist for it — and without this the
+   * user pays for the whole download before finding out. See
+   * `supportsShaderF16`.
+   */
+  requireShaderF16?: boolean;
+}
 
 /** The backend a load would resolve to, or `null` until the probe answers. */
-export function useBackendProbe(): Backend | null {
+export function useBackendProbe({
+  requireShaderF16 = false,
+}: BackendProbeOptions = {}): Backend | null {
   const [backend, setBackend] = useState<Backend | null>(null);
 
   useEffect(() => {
     let live = true;
-    void pickBackend().then((next) => {
-      if (live) setBackend(next);
-    });
+    void (async () => {
+      const next = await pickBackend();
+      const usable =
+        next === "webgpu" && requireShaderF16
+          ? (await supportsShaderF16())
+            ? "webgpu"
+            : "wasm"
+          : next;
+      if (live) setBackend(usable);
+    })();
     return () => {
       live = false;
     };
-  }, []);
+  }, [requireShaderF16]);
 
   return backend;
 }

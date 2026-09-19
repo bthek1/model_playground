@@ -2,9 +2,14 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const pickBackend = vi.fn();
+const supportsShaderF16 = vi.fn();
 vi.mock("./backend", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
-  return { ...actual, pickBackend: () => pickBackend() };
+  return {
+    ...actual,
+    pickBackend: () => pickBackend(),
+    supportsShaderF16: () => supportsShaderF16(),
+  };
 });
 
 const { useBackendProbe } = await import("./useBackendProbe");
@@ -12,6 +17,7 @@ const { useBackendProbe } = await import("./useBackendProbe");
 beforeEach(() => {
   vi.clearAllMocks();
   pickBackend.mockResolvedValue("webgpu");
+  supportsShaderF16.mockResolvedValue(true);
 });
 
 describe("useBackendProbe", () => {
@@ -64,5 +70,44 @@ describe("useBackendProbe", () => {
     await Promise.resolve();
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe("useBackendProbe — requireShaderF16", () => {
+  it("reports wasm when the GPU cannot do f16 in shaders", async () => {
+    // Not pedantry: such an adapter loads q4f16 weights and then fails on the
+    // first operator, so for a q4f16 model the WebGPU path does not exist. The
+    // honest answer to "what would this load on" is therefore wasm — and the
+    // catalogue's `backends: ["webgpu"]` then disables the row *before* the
+    // download rather than after it.
+    supportsShaderF16.mockResolvedValue(false);
+    const { result } = renderHook(() =>
+      useBackendProbe({ requireShaderF16: true }),
+    );
+    await waitFor(() => expect(result.current).toBe("wasm"));
+  });
+
+  it("reports webgpu when the GPU can", async () => {
+    supportsShaderF16.mockResolvedValue(true);
+    const { result } = renderHook(() =>
+      useBackendProbe({ requireShaderF16: true }),
+    );
+    await waitFor(() => expect(result.current).toBe("webgpu"));
+  });
+
+  it("does not ask about f16 unless a caller needs it", async () => {
+    const { result } = renderHook(() => useBackendProbe());
+    await waitFor(() => expect(result.current).toBe("webgpu"));
+    expect(supportsShaderF16).not.toHaveBeenCalled();
+  });
+
+  it("does not ask about f16 on a machine with no GPU at all", async () => {
+    // There is nothing to refine: wasm is already the answer.
+    pickBackend.mockResolvedValue("wasm");
+    const { result } = renderHook(() =>
+      useBackendProbe({ requireShaderF16: true }),
+    );
+    await waitFor(() => expect(result.current).toBe("wasm"));
+    expect(supportsShaderF16).not.toHaveBeenCalled();
   });
 });

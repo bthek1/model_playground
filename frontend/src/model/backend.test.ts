@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { asrLoadOpts, loadOpts, pickBackend, vlmLoadOpts } from "./backend";
+import {
+  asrLoadOpts,
+  loadOpts,
+  pickBackend,
+  supportsShaderF16,
+  vlmLoadOpts,
+} from "./backend";
 
 /** Install (or remove) a fake `navigator.gpu` for the duration of a test. */
 function setGpu(gpu: unknown) {
@@ -71,5 +77,38 @@ describe("vlmLoadOpts", () => {
     // The whole reason it exists as a named export rather than a literal in the
     // worker: two copies of a precision decision drift silently.
     expect(vlmLoadOpts("webgpu")).not.toEqual(loadOpts("webgpu"));
+  });
+});
+
+describe("supportsShaderF16", () => {
+  it("is true only when the adapter advertises the feature", async () => {
+    setGpu({
+      requestAdapter: vi.fn().mockResolvedValue({
+        features: new Set(["shader-f16"]),
+      }),
+    });
+    expect(await supportsShaderF16()).toBe(true);
+  });
+
+  it("is false on an adapter without it — the SwiftShader case", async () => {
+    // Measured: such an adapter loads q4f16 weights happily and then fails on
+    // the first operator with "Program Gather requires f16 but the device does
+    // not support it". Gating on `pickBackend()` alone charges the user the
+    // whole download before the page turns out to be dead.
+    setGpu({
+      requestAdapter: vi.fn().mockResolvedValue({ features: new Set() }),
+    });
+    expect(await supportsShaderF16()).toBe(false);
+  });
+
+  it("is false, not throwing, when there is no adapter or no WebGPU at all", async () => {
+    setGpu({ requestAdapter: vi.fn().mockResolvedValue(null) });
+    expect(await supportsShaderF16()).toBe(false);
+
+    setGpu({ requestAdapter: vi.fn().mockRejectedValue(new Error("blocked")) });
+    expect(await supportsShaderF16()).toBe(false);
+
+    setGpu(undefined);
+    expect(await supportsShaderF16()).toBe(false);
   });
 });

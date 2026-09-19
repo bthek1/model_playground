@@ -110,3 +110,35 @@ export function vlmLoadOpts(backend: Backend): LoadOpts {
     ? { device: "webgpu", dtype: "q4f16" }
     : { device: "wasm", dtype: "q4" };
 }
+
+/**
+ * Does this machine's GPU adapter support **f16 in shaders** (`shader-f16`)?
+ *
+ * A separate question from "is there an adapter", and the gap between them is not
+ * hypothetical: an adapter without this feature loads `q4f16` weights perfectly
+ * happily and then fails on the **first operator**, with
+ *
+ *   Non-zero status code returned while running Gather node …
+ *   Program Gather requires f16 but the device does not support it.
+ *
+ * So a page that gates on `pickBackend()` alone downloads its weights, reports
+ * `ready`, and then fails every single run — which is the worst of the three
+ * possible outcomes, because the user paid for the download first. Measured on
+ * Chromium's SwiftShader fallback (`--enable-unsafe-swiftshader`), which is
+ * exactly what a CI runner with no `/dev/dri` gets.
+ *
+ * Never throws; a machine we cannot ask about is reported as not supporting it,
+ * because the failure mode of a false positive is a wasted download and a dead
+ * page, and of a false negative is a model that is merely unavailable.
+ */
+export async function supportsShaderF16(): Promise<boolean> {
+  if (typeof navigator === "undefined" || !("gpu" in navigator) || !navigator.gpu) {
+    return false;
+  }
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    return adapter?.features.has("shader-f16") ?? false;
+  } catch {
+    return false;
+  }
+}
