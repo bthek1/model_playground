@@ -68,8 +68,24 @@ jobs:
         working-directory: backend
         run: uv run ruff check --no-fix .
 
+      # `SETTINGS` and `SECRET_KEY` are both required, and neither is optional
+      # for a reason that is easy to miss:
+      #
+      #   SETTINGS     pytest sets `DJANGO_SETTINGS_MODULE=core.settings.test`
+      #                (pyproject.toml), but importing that submodule runs the
+      #                *package* `__init__.py` first, and that dispatches on
+      #                `SETTINGS`, defaulting to `dev`. So without this, CI loads
+      #                the dev settings no matter what pytest was told.
+      #   SECRET_KEY   `base.py` reads it with no default. Locally it comes from
+      #                `backend/.env`, which is correctly never committed — so
+      #                this step is the only place CI can supply one. The value
+      #                is throwaway: `core.settings.test` uses sqlite and signs
+      #                nothing that outlives the run.
       - name: Test
         working-directory: backend
+        env:
+          SETTINGS: test
+          SECRET_KEY: ci-test-only-not-a-real-key
         run: uv run pytest -q
 
       # The settings module that actually ships. It requires SECRET_KEY,
