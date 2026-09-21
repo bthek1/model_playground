@@ -436,6 +436,10 @@ describe("useModelWorker — what it reports to the system panel", () => {
 
 type Stage = { stage: "encoding" } | { stage: "generating"; text: string };
 
+// Every `run()` below that the test does not settle is rejected by teardown with
+// "Worker terminated" — designed behaviour, pinned by its own test above. Unhandled,
+// it fails the suite on a slower machine (CI caught exactly this), so the rejection is
+// swallowed at the call site, the same way the transfer-list and telemetry tests do.
 function streamingSetup() {
   const factory = workerFactory();
   const view = renderHook(() =>
@@ -488,7 +492,7 @@ describe("useModelWorker — partial (progress inside one run)", () => {
   it("never moves Machine A or the inflight count", async () => {
     const { result, emit } = streamingSetup();
     act(() => {
-      void result.current.run({ prompt: "hi" });
+      void result.current.run({ prompt: "hi" }).catch(() => {});
     });
     await waitFor(() => expect(result.current.running).toBe(true));
 
@@ -504,7 +508,7 @@ describe("useModelWorker — partial (progress inside one run)", () => {
   it("clears on the result, so a half-finished answer never sits beside the finished one", async () => {
     const { result, emit } = streamingSetup();
     act(() => {
-      void result.current.run({ prompt: "hi" });
+      void result.current.run({ prompt: "hi" }).catch(() => {});
     });
     act(() =>
       emit({ type: "partial", id: 1, partial: { stage: "generating", text: "a ca" } }),
@@ -534,7 +538,7 @@ describe("useModelWorker — partial (progress inside one run)", () => {
     // A late chunk must not repaint OUTPUT after the finished answer is up.
     const { result, emit } = streamingSetup();
     act(() => {
-      void result.current.run({ prompt: "hi" });
+      void result.current.run({ prompt: "hi" }).catch(() => {});
     });
     act(() => emit({ type: "result", id: 1, result: "a cat" }));
     await waitFor(() => expect(result.current.result).toBe("a cat"));
@@ -548,7 +552,7 @@ describe("useModelWorker — partial (progress inside one run)", () => {
   it("clears the previous run's stream when the next run starts", async () => {
     const { result, emit } = streamingSetup();
     act(() => {
-      void result.current.run({ prompt: "one" });
+      void result.current.run({ prompt: "one" }).catch(() => {});
     });
     act(() =>
       emit({ type: "partial", id: 1, partial: { stage: "generating", text: "first" } }),
@@ -556,7 +560,7 @@ describe("useModelWorker — partial (progress inside one run)", () => {
     await waitFor(() => expect(result.current.partial).not.toBeNull());
 
     act(() => {
-      void result.current.run({ prompt: "two" });
+      void result.current.run({ prompt: "two" }).catch(() => {});
     });
     expect(result.current.partial).toBeNull();
   });
