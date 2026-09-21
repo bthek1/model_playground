@@ -14,15 +14,19 @@
 | Roadmap section | Route | Status |
 |---|---|---|
 | Image-Text-to-Text (§3.1) | [`/image-text-to-text`](../../frontend/src/routes/image-text-to-text.tsx) | **Shipped** — SmolVLM 256M / 500M, streaming |
-| Visual Question Answering (§3.2) | — | Planned — same engine, its own route |
-| Document Question Answering (§3.3) | — | Planned — Donut, and a resolution control |
-| Video-Text-to-Text (§3.4) | — | Planned — a frame sampler over §3.1 |
-| Audio-Text-to-Text (§3.5) | — | **Blocked** on NLP ([#5](https://github.com/bthek1/model_playground/issues/5)) |
-| Visual Document Retrieval (§3.6) | — | Planned — ColSmol, late interaction |
-| the four that stay on a server (§3.7) | — | Documented, with a reason each |
+| Visual Question Answering (§3.2) | — | Planned — [#31](https://github.com/bthek1/model_playground/issues/31): same engine, its own route |
+| Document Question Answering (§3.3) | — | Planned — [#32](https://github.com/bthek1/model_playground/issues/32): Donut, and a resolution control |
+| Video-Text-to-Text (§3.4) | — | Planned — [#33](https://github.com/bthek1/model_playground/issues/33): a frame sampler over §3.1 |
+| Audio-Text-to-Text (§3.5) | — | [#34](https://github.com/bthek1/model_playground/issues/34) — **blocked** on NLP ([#5](https://github.com/bthek1/model_playground/issues/5)) |
+| Visual Document Retrieval (§3.6) | — | [#35](https://github.com/bthek1/model_playground/issues/35) — **starts with a spike that may end it** |
+| the four that stay on a server (§3.7) | — | **Done** — documented, with a reason each |
 
-**One of nine is built.** The build-out is recorded in plan issue
-[#30](https://github.com/bthek1/model_playground/issues/30).
+**One of nine is built**, and every remaining section has a plan issue. The build-out so far
+is recorded in [#30](https://github.com/bthek1/model_playground/issues/30); the category
+closes when the last route ships, the way
+[#1](https://github.com/bthek1/model_playground/issues/1),
+[#2](https://github.com/bthek1/model_playground/issues/2) and
+[#3](https://github.com/bthek1/model_playground/issues/3) did.
 
 Multimodal is where the browser budget bites hardest. A vision-language model is an image
 encoder bolted to a language decoder, so it pays both costs: hundreds of image tokens per
@@ -294,12 +298,23 @@ the transcript and the answer side by side. Two models are live at once here —
 exception to the one-model rule, affordable only because both are small, and one to note in
 the code.
 
-### 3.6 Visual Document Retrieval — planned
+### 3.6 Visual Document Retrieval — planned, and less certain than the roadmap implied
 
-`onnx-community/colSmol-256M-ONNX` makes late-interaction retrieval buildable in a tab,
-against a `Xenova/clip-vit-base-patch32` single-vector control and an OCR+BM25 baseline —
-all three stages in the browser over a handful of dropped-in page images. Budget for the
-scoring: MaxSim over patch vectors is real algorithm work, not a dot product.
+[#35](https://github.com/bthek1/model_playground/issues/35). The comparison is the page:
+`onnx-community/colSmol-256M-ONNX` for late interaction, `Xenova/clip-vit-base-patch32` as
+the single-vector control, and Florence-2 `<OCR>` + BM25 as the lexical baseline — all
+three in the browser over dropped-in page images. MaxSim over patch vectors is real
+algorithm work, not a dot product, and a wrong reduction axis still ranks plausibly.
+
+**But "an export exists, which makes this buildable" does not survive the repo contents.**
+`colSmol-256M-ONNX` ships one `onnx/model.onnx` at **fp32 only, 953.5 MB**, a tokenizer, a
+preprocessor config and a chat template — and **no `config.json`**. Every `Auto*` class
+resolves the architecture from that file, so Transformers.js cannot load this repo at all.
+Three consequences: it is a **bare-ONNX route** (§9, like `audio/vad/` and
+`audio/enhance/`), `vlmLoadOpts()` does not apply because there is nothing but fp32, and
+driving it bare means reading its input contract off the graph itself. #35 therefore opens
+with a **spike that is allowed to end the plan** — a documented "server-side, and here is
+why" is a finished piece of work.
 
 ### 3.7 The four that stay on a server
 
@@ -326,10 +341,10 @@ or audio, there is not.**
 |---|---|---|---|---|
 | **Image Text to Text** | **Shipped** | SmolVLM-256M / 500M | WebGPU only | Qwen3-VL-2B past the size ceiling |
 | **Visual Question Answering** | Yes, via a VLM | the §3.1 engine | WebGPU only | ViLT and BLIP-VQA have no export |
-| **Document Question Answering** | Yes | `Xenova/donut-base-finetuned-docvqa` | WebGPU | LayoutLM, GOT-OCR to server |
+| **Document Question Answering** | Yes | `Xenova/donut-base-finetuned-docvqa` (241 MB q4f16) | WebGPU or WASM | LayoutLM, GOT-OCR to server |
 | **Video Text to Text** | Yes, sampled frames | `HuggingFaceTB/SmolVLM2-256M-Video-Instruct` | WebGPU only | long-video understanding to server |
 | **Audio Text to Text** | Yes, as a cascade | Whisper-base + a small LLM | WebGPU | native audio LLMs to server |
-| **Visual Document Retrieval** | Yes, all three stages | `onnx-community/colSmol-256M-ONNX` | WebGPU | full ColQwen2 to server |
+| **Visual Document Retrieval** | **Unproven** — bare ONNX, fp32 only, 953 MB, no `config.json` | `onnx-community/colSmol-256M-ONNX` | WebGPU | full ColQwen2 to server |
 | **Any-to-Any** | Understanding half only | `onnx-community/Janus-Pro-1B-ONNX` | WebGPU | generation half to server |
 | **Image Text to Image** | No | — | — | server API |
 | **Image Text to Video** | No | — | — | server API |
