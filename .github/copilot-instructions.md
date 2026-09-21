@@ -945,11 +945,15 @@ folder; do not recreate one.
 |---|---|---|
 | Open, `plan` label | Draft or in progress | `gh issue create --label plan --title "Plan: <Feature>" --body-file <file>` |
 | Phase checkboxes ticked | Progress is visible on the issue itself | `gh issue edit <n> --body-file <file>` |
+| Merged | Every phase ticked, tests green — `develop` merges into `main` | `git switch main && git merge --no-ff develop` |
 | Closed | Complete — the closed issue is the permanent record | `gh issue close <n> --comment "<what landed>"` |
 
 - Write the plan body to a scratch file first, then pass it with `--body-file` — it keeps long
   markdown intact. The scratch file is temporary; **never commit it**.
 - Reference the issue from the work: `Closes #<n>` in the commit message or PR body.
+- **An issue is a unit of merging, not of branching.** Its commits accumulate on `develop`; the
+  merge into `main` is what completes it, and the issue is closed after that merge — not when the
+  last commit is written. See the git section under "Absolute Don'ts".
 - Roadmap/research issues (label `roadmap`) are **not plans** — they are the per-category research a
   plan gets written from, and they stay open **while the category is still unbuilt**.
 - **A roadmap graduates to a file once its first route ships.** At that point it stops being
@@ -1014,15 +1018,22 @@ These actions must **never** be performed without explicit user confirmation:
 **Git operations — the fence is graded, because commits and pushes are not the same risk.**
 
 *Unattended (reversible, and the reflog recovers them):* `git add`, `git commit`,
-`git checkout -b`, `git switch`, `git stash` — **on a feature branch, never on `main`.** The
-assistant commits because it was asked to; the permission only removes the prompt.
+`git switch`, `git stash` — **on `develop`, never on `main`.** The assistant commits because
+it was asked to; the permission only removes the prompt.
 
-*Branch from `main`, never from another feature branch.* Stacked branches drag unmerged work
-into each other's PRs and turn every merge into a rebase. Before `git switch -c`, check
-`git branch --show-current`; if it isn't `main`, commit (or stash) there, `git switch main`,
-`git pull --ff-only` if a remote exists, then `git switch -c <type>/<topic> main`. Stay on the
-current feature branch only when the new work belongs to that same task; stack a branch on
-another only when the user explicitly asks.
+*Work lands on `develop`; do not open a branch per issue.* `develop` is the integration
+branch and the issues in this repo are phased plans that touch the same files days apart, so
+a branch per issue produces branches that conflict with each other rather than with `main`.
+Before committing, check `git branch --show-current`; if it isn't `develop`, `git switch
+develop` — switch, don't branch. A `<type>/<topic>` branch (`feat/`, `fix/`, `chore/`) is for
+when the **user asks** for one — a throwaway spike, or work that must be reviewed as its own
+PR — and it branches from `develop`.
+
+*Merging `develop` into `main` is how an issue finishes.* When every phase of the issue is
+ticked and its tests are green: `git switch main`, `git merge --no-ff develop` (so the
+issue's commits land as one legible unit), push, then `gh issue close <n>`. Merge whole
+issues only — half an issue sitting on `develop` is why the merge waits, not a reason to
+cherry-pick — and never commit directly on `main`. Both the merge and the push prompt.
 
 *Never run autonomously — confirm first:*
 - `git push` — do not push to any remote
@@ -1036,8 +1047,8 @@ another only when the user explicitly asks.
 - `git checkout .` — discards the working tree wholesale
 
 A pattern deny is not a security boundary (`git push origin +main` force-pushes without the
-string `--force`). The real protection is branch protection on `main` plus working on a feature
-branch — see [`docs/guides/ai-guardrails.md`](../docs/guides/ai-guardrails.md).
+string `--force`). The real protection is branch protection on `main` plus working on `develop`
+— see [`docs/guides/ai-guardrails.md`](../docs/guides/ai-guardrails.md).
 
 **GitHub (remote) — never run autonomously:**
 - `gh issue create` / `gh issue edit` / `gh issue close` — plans live here, but creating or closing

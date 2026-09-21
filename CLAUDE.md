@@ -119,24 +119,32 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   first — phased, with a Testing section — opened as an issue with `gh issue create --label plan`
   (the plan is the issue body; see the template in the Copilot instructions). **Never add a plan
   markdown file to the repo.** Tick the phase checkboxes as work progresses, and **close the issue
-  when the work lands** (`gh issue close <n> --comment "..."`) — the closed issue is the record.
-  Reference the issue number in the commit message (`Closes #12`).
+  once its work has been merged into `main`** (`gh issue close <n> --comment "..."`) — the closed
+  issue is the record. Reference the issue number in the commit message (`Closes #12`).
 - **Never commit `.env` files.** `.env.example` is the source of truth for required vars.
 - **Backend ↔ frontend communicate only via the API contract** — never mix their concerns.
-- **Commits are cheap; pushes are not.** Work on a feature branch, never `main`. Committing and
-  branching run unattended — they are reversible, and `git reflog` recovers almost anything local.
-  **Ask before anything outward-facing or unrecoverable:** `git push`, `git rebase`/`git merge`,
-  `gh pr create`/`gh pr merge`, create/edit/close a GitHub issue (`gh issue …`), `docker compose
-  down -v`, deleting migrations, or modifying shared `.env` files. **Never** force-push,
-  `git reset --hard`, `git clean`, `git branch -D`, or `git checkout .` — those are denied outright
-  in `.claude/settings.json`. See [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md) and
-  the full list in the Copilot instructions.
-- **Every new branch starts from `main`, never from the branch you happen to be on.** Stacked
-  branches drag unmerged work into each other's PRs and turn every merge into a rebase. Before
-  `git switch -c`, check `git branch --show-current`; if it isn't `main`, commit (or stash) there,
-  `git switch main`, `git pull --ff-only` if a remote exists, and branch from that —
-  `git switch -c <type>/<topic> main`. Continue on the current feature branch only when the new
-  work belongs to that same task. Stack a branch on another only when the user asks for it.
+- **All work lands on `develop`; `main` is what has shipped.** `develop` is the integration
+  branch — commit the issue's work straight onto it. **Do not open a branch per issue**: a branch
+  per issue means a merge per issue, and the issues in this repo are phased plans that touch the
+  same files (the taxonomy, the model catalogue, the page-pattern shell) days apart, so the
+  branches conflict with each other rather than with `main`. Check `git branch --show-current`
+  before committing; if it isn't `develop`, switch (`git switch develop`) rather than branching.
+  Create a `<type>/<topic>` branch **only when the user asks for one** — a spike to be thrown
+  away, or work that has to be reviewed as a PR in its own right — and branch it from `develop`.
+- **Merging into `main` is the completion step of an issue, not a step inside it.** When an
+  issue's phases are all ticked and its tests are green: `git switch main`, merge `develop`
+  (`git merge --no-ff develop`, so the issue's commits stay legible as one landing), push, then
+  `gh issue close <n>`. Merge only whole issues — `develop` holding half an issue is why the
+  merge waits, not a reason to cherry-pick. Never commit directly on `main`.
+- **Commits are cheap; pushes are not.** Committing and switching run unattended — they are
+  reversible, and `git reflog` recovers almost anything local. **Ask before anything
+  outward-facing or unrecoverable:** `git push`, `git rebase`/`git merge` (the merge into `main`
+  included), `gh pr create`/`gh pr merge`, create/edit/close a GitHub issue (`gh issue …`),
+  `docker compose down -v`, deleting migrations, or modifying shared `.env` files. **Never**
+  force-push, `git reset --hard`, `git clean`, `git branch -D`, or `git checkout .` — those are
+  denied outright in `.claude/settings.json`. See
+  [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md) and the full list in the Copilot
+  instructions.
 
 ### Deployment essentials
 
@@ -662,12 +670,13 @@ deny beats ask beats allow:
 - **ask** — `git push`, `git rebase`, `git merge`, `gh pr create|merge`,
   `gh issue create|edit|close`, `docker compose down`, `rm -rf`, plus the two `just` recipes that
   wrap `docker compose down -v` (`just down-v`, `just db-reset`) — a wrapper is a different
-  command string, so it needs its own rule.
+  command string, so it needs its own rule. `git merge` prompting is deliberate and is the
+  point at which `develop` lands on `main`: it is a release, so it is confirmed each time.
 - **deny** — `git push --force`/`-f`, `git reset --hard`, `git clean`, `git branch -D`,
   `git checkout .`.
 
 Pattern denies stop accidents, not a determined command line (`git push origin +main` is a
-force-push with no `--force` in it), so the real protection is the git setup: a feature branch,
-branch protection on `main`, and the reflog. The "Absolute Don'ts" above still apply — the
-allowlist removes prompts, not judgement. Full rationale in
+force-push with no `--force` in it), so the real protection is the git setup: work on
+`develop`, branch protection on `main`, and the reflog. The "Absolute Don'ts" above still
+apply — the allowlist removes prompts, not judgement. Full rationale in
 [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md).

@@ -105,9 +105,15 @@ Any change to request/response shapes must be reflected in `docs/standards/api-c
 
 ## Commit and Branch Conventions
 
-- Branch names: `feat/<topic>`, `fix/<topic>`, `chore/<topic>`
-- Branch from an up-to-date `main` (`git switch -c feat/<topic> main`), never from another
-  feature branch — stacked branches carry unmerged work into each other's PRs
+- **`develop` is where code is written; `main` is what has shipped.** Commit the work for an
+  issue straight onto `develop` — there is no branch per issue, because the issues here are
+  phased plans that touch the same files days apart and the per-issue branches ended up
+  conflicting with each other rather than with `main`
+- **Finishing an issue means merging**: every phase ticked and the tests green, then
+  `git switch main && git merge --no-ff develop`, push, and close the issue
+- Branch names, for the times a branch *is* wanted (a throwaway spike, or work that must be
+  reviewed as its own PR): `feat/<topic>`, `fix/<topic>`, `chore/<topic>`, branched from
+  `develop` and merged back into it
 - Commit messages: imperative present tense — "Add user registration endpoint"
 - Docs changes travel with code changes in the same commit
 - Never work directly on `main` — this holds double for an AI assistant, whose git fence is
