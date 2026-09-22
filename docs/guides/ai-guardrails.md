@@ -12,21 +12,37 @@ and let the assistant do the rest without interruption.
 
 ## 1. Git-side guardrails (these are the real protection)
 
-- **Work on a feature branch, never `main`.** Branch names follow
-  [`onboarding.md`](onboarding.md) — `feat/<topic>`, `fix/<topic>`, `chore/<topic>`.
-- **Branch from `main`, not from whatever is checked out.** An agent that runs
-  `git switch -c` while still on last task's branch stacks the new branch on top of it, and
-  the unmerged commits ride along into the next PR. The procedure:
+- **Work on `develop`, never on `main`.** `develop` is the integration branch: every change,
+  whoever writes it, is committed there. `main` is what has shipped.
+- **Do not create a branch per issue.** This was the previous rule and it did not survive
+  contact with the work. The issues here are phased plans — a category roadmap, a task page,
+  a runtime change — and they touch the same handful of files (the sidebar taxonomy, the model
+  catalogue, `useModelWorker`, the page-pattern shell) days apart. Branch per issue and the
+  branches conflict with *each other*, not with `main`, so every merge became a rebase of
+  work that was never in dispute. One integration branch removes the whole class of conflict.
 
   ```bash
-  git branch --show-current          # not main? commit or stash first
-  git switch main
+  git branch --show-current          # not develop? switch — don't branch
+  git switch develop
   git pull --ff-only                 # when a remote exists
-  git switch -c feat/<topic> main
   ```
 
-  Staying on the current feature branch is right when the work is the same task. Stacking a
-  branch on another is allowed only when the user asks for it.
+  A `feat/<topic>` / `fix/<topic>` / `chore/<topic>` branch is still the right shape when you
+  **ask** for one: a spike you expect to throw away, or work that has to be reviewed as a pull
+  request on its own. It branches from `develop`, and merges back into it.
+- **Merging `develop` into `main` is the completion step of an issue.** Every phase ticked,
+  tests green, then:
+
+  ```bash
+  git switch main
+  git merge --no-ff develop          # prompts — this is a release
+  git push                           # prompts
+  gh issue close <n> --comment "..."
+  ```
+
+  `--no-ff` keeps the issue's commits legible as one landing. Merge whole issues only: half an
+  issue sitting on `develop` is a reason for the merge to wait, not a reason to cherry-pick.
+  Nothing is ever committed directly on `main`.
 - **Enable branch protection on `main`** in GitHub so even a stray push can't land
   unreviewed. This is a repo-settings change, not something in this file:
 
@@ -39,8 +55,9 @@ and let the assistant do the rest without interruption.
   ```
 
   > **Status:** not yet enabled on `bthek1/model_playground` — `main` has no branch
-  > protection and no rulesets. Until it is, step 2 is the only thing standing between an
-  > agent and `origin/main`.
+  > protection and no rulesets. Until it is, §2 is the only thing standing between an
+  > agent and `origin/main`, and the `develop`-only rule above is a convention rather than
+  > something the remote enforces.
 - **Nothing is lost while it's in the reflog.** `git reflog` recovers from almost any local
   mistake — a bad rebase, a lost commit, a clobbered branch. The exceptions are
   `git clean -f` (untracked files were never in the object store) and a force-push that
@@ -74,9 +91,12 @@ Notes on the shape:
   `allow` are redundant under `Bash(*)` — they are there so the intent survives if anyone
   later narrows the wildcard. If you want to try allow-list-only for a week, delete
   `Bash(*)` and add rules back as you notice yourself approving the same prompt repeatedly.
-- **Committing is unattended, pushing is not.** A commit on a feature branch is recoverable;
-  a push is outward-facing. The assistant still commits because you asked it to — the
-  permission only removes the prompt.
+- **Committing is unattended, pushing is not.** A commit on `develop` is recoverable; a push
+  is outward-facing. The assistant still commits because you asked it to — the permission only
+  removes the prompt.
+- **`git merge` prompts, and that prompt is the release gate.** Under this workflow the merge
+  the assistant reaches for is `develop` → `main`, which is the moment an issue's work becomes
+  what has shipped. It is confirmed every time, deliberately.
 - **Use the `prefix:*` form.** `Bash(git push:*)` is the syntax that has worked in every
   version. `*` matching any text (`Bash(git *)`) works in current builds, but `:*` is the
   safer bet.
@@ -93,8 +113,8 @@ Notes on the shape:
 **Pattern denies are bypassable in principle.** `git push origin +main` is a force-push
 without the string `--force`, and `git commit -m "..." --no-verify` doesn't prefix-match a
 `git commit --no-verify` rule. Rules stop accidents, not a determined command line — which
-is exactly why §1 (branch protection, feature branches, reflog) is the real protection and
-this section is the convenience layer. Prose rules for things a pattern cannot express are
+is exactly why §1 (branch protection, working on `develop`, the reflog) is the real
+protection and this section is the convenience layer. Prose rules for things a pattern cannot express are
 in the "Absolute Don'ts" of [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md).
 
 ### Attribution

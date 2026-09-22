@@ -16,7 +16,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
 
 # A new push to the same branch cancels the previous run.

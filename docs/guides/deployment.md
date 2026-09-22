@@ -120,6 +120,12 @@ Then in a browser:
 just deploy     # git pull --ff-only, rebuild, restart
 ```
 
+**The server tracks `main`, and that is what makes `main` meaningful.** Work is
+written on `develop` and merged into `main` when an issue completes (see
+[`onboarding.md`](onboarding.md)), so `git pull --ff-only` here is the only place
+the distinction is cashed in. Check out anything else on the host and `just
+deploy` quietly ships unfinished work.
+
 Migrations run automatically, but only in one place. The `migrate` service sets
 `RUN_MIGRATIONS=1`, applies them and exits; `backend`, `celery_worker` and
 `celery_beat` run the same image with it `0` and wait on

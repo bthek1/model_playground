@@ -713,9 +713,11 @@ Docs travel with code. A new page touches these, and none of them is optional:
 
 Anything touching more than one file also gets a **plan first**, phased, with a
 Testing section, opened as a **GitHub issue** (`gh issue create`). Tick the
-issue's phase checkboxes as you go and **close the issue** when the work lands —
-the closed issue is the record. The roadmap issues are not plans; they are the
-research a plan gets written from.
+issue's phase checkboxes as you go. The work is committed on `develop` — a task
+page is not worth a branch of its own — and when every phase is ticked and the
+tests are green, `develop` merges into `main` and the issue is **closed after
+that merge**; the closed issue is the record. The roadmap issues are not plans;
+they are the research a plan gets written from.
 
 ---
 
