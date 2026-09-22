@@ -271,7 +271,7 @@ planning rather than after a failed load — the step §3.1 above exists to teac
 
 | | |
 |---|---|
-| download | **410.7 MB fp16** (WebGPU) · **218.7 MB q8** (WASM), measured |
+| download | **410.7 MB fp16** (WebGPU) · **596.7 MB** (WASM), measured |
 | graphs | `encoder_model` + `decoder_model_merged` |
 | backends | **both**, ungated |
 
@@ -280,9 +280,36 @@ planning rather than after a failed load — the step §3.1 above exists to teac
 `decoder_model_merged`) and only the merged one is ever loaded. Sum the graphs the entry
 declares, not the repo.
 
-**No dtype pin.** `q4f16` would cut WebGPU to 241.0 MB, but that would be a *precaution,
-not a measurement*, and document QA is where quantization error lands directly on small
-print. Left for the `@slow` spec to settle, as `/super-resolution`'s pin was.
+#### The WASM decoder must stay fp32, and the ORT bug is not ASR-specific
+
+A uniform q8 cannot open a session in the browser at all:
+
+```
+Can't create a session. ERROR_CODE: 1, ERROR_MESSAGE: qdq_actions.cc:137
+TransposeDQWeightsForMatMulNBits Missing required scale:
+decoder.model.decoder.embed_tokens.weight_merged_0_scale
+```
+
+That is **the same ONNX Runtime bug `asrLoadOpts` was written for**, and finding it here is
+the news. Its note says the fault "reproduces on every ASR repo tried" — but Donut is not
+an ASR model, so it is not ASR-specific. Read it as: **any encoder-decoder whose decoder is
+quantized** fails to open a session on the WASM provider bundled with
+`@huggingface/transformers` 4.2.0. The encoder quantizes fine; only the decoder pays full
+precision, expressed per entry as
+`dtypes: { wasm: { encoder_model: "q8", decoder_model_merged: "fp32" } }`.
+
+Cost: **596.7 MB on WASM instead of 218.7 MB** — the same ~3x the ASR catalogue pays, and
+justified the same way: the alternative is not a cheaper CPU path but *no CPU path at all*.
+
+**Nothing but a real browser load catches it.** The unit suite mocks the runtime away, the
+mocked E2E run never loads weights, `just fe-e2e-models` confirms the files exist (they
+do), and the identical call loads cleanly under `onnxruntime-node` — the fault is specific
+to the WASM provider in the browser. `just fe-e2e-docvqa` is what found it.
+
+**WebGPU keeps fp16, unpinned.** `q4f16` would cut it to 241.0 MB, but that would be a
+*precaution, not a measurement*, and document QA is where quantization error lands directly
+on small print. The machine that found the WASM bug had no adapter, so pinning the GPU path
+either way would still be a guess.
 
 **Both backends are offered, deliberately.** Unlike every model in §3.1 this is not an
 autoregressive chat decoder but an encoder plus a short extractive decode, so the CPU path
@@ -451,7 +478,11 @@ accept.
 - `just fe-e2e-docvqa` — a real Donut load and a real extraction, pinned by a **known
   answer on a known document**: `invoice.png` is the Transformers.js docs' own DocVQA
   example and its invoice number is `us-001`. Needs **no GPU** — the WASM path is real
-  here — so unlike the VLM spec it runs anywhere.
+  here — so unlike the VLM spec it runs anywhere. It is deliberately **one test**: a fresh
+  context per test re-downloads 597 MB, which turned an 8-minute file into a 25-minute one.
+  It also waits for the **trigger** to come back rather than for the answer text to change,
+  because the previous answer stays on screen during a re-run and polling it cannot tell
+  "still running" from "same answer".
 
 ---
 

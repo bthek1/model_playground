@@ -33,7 +33,14 @@ const handle = createDocVqaHandler(
   async (model, opts) => {
     const pipe = (await pipeline("document-question-answering", model, {
       device: opts.device as "webgpu" | "wasm",
-      dtype: opts.dtype as "fp16" | "q8" | "fp32",
+      // A `DtypeSpec`, which may be a single precision *or* one per ONNX module.
+      // This entry uses the second form on WASM — see `dtypes` in `types.ts`:
+      // the decoder cannot be quantized there without failing to open a session.
+      dtype: opts.dtype as
+        | "fp16"
+        | "q8"
+        | "fp32"
+        | Record<string, "fp16" | "q8" | "fp32">,
       progress_callback: opts.progress_callback,
     })) as DocumentQuestionAnsweringPipeline;
 

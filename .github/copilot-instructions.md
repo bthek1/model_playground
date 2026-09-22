@@ -765,9 +765,15 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - **`answer` can be `null` and nothing errors** — the pipeline's `<s_answer>` regex missed. Pass it
   through rather than flattening to `""`, and render it explicitly; it arrives on exactly the
   documents the model found hardest.
-- **Both backends, ungated**: an encoder plus a short extractive decode is a real CPU path
-  (218.7 MB q8), unlike the chat decoders in `src/multimodal/`. **No dtype pin** — `q4f16` would
-  save 170 MB but would be a *precaution, not a measurement*.
+- **The WASM decoder must stay fp32, and the ORT bug is NOT ASR-specific.** A uniform q8 cannot
+  open a session in the browser (`qdq_actions.cc:137 … Missing required scale`) — the same bug
+  `asrLoadOpts` was written for, on a model that is not ASR. Read it as *any encoder-decoder with a
+  quantized decoder* on 4.2.0's WASM provider; pinned per entry via `dtypes`. Costs 596.7 MB instead
+  of 218.7, the same ~3x ASR pays. **Only a real browser load catches it** — `onnxruntime-node`
+  loads the identical call fine.
+- **Both backends, ungated**: an encoder plus a short extractive decode is a real CPU path, unlike
+  the chat decoders in `src/multimodal/`. **WebGPU stays fp16, unpinned** — `q4f16` would save
+  170 MB but would be a *precaution, not a measurement*.
 - **The repo publishes three alternative decoders**, so a naive sum quotes 4 GB. Sum the declared
   graphs (`encoder_model` + `decoder_model_merged`).
 - **The page owes two sentences** — the privacy argument, and that the answer is *extracted, not

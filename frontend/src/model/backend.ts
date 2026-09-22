@@ -64,6 +64,16 @@ export function loadOpts(backend: Backend): LoadOpts {
  * Load options for the **ASR** models specifically. Identical to `loadOpts`
  * except on WASM, where the decoder must stay **fp32**.
  *
+ * **The bug below is not ASR-specific, despite this function's name.** It was
+ * characterised here first because ASR hit it first, but
+ * `/document-question-answering` reproduced it exactly — same error, same
+ * missing `embed_tokens.weight_merged_0_scale` — on Donut, which is not an ASR
+ * model. Read it as: *any encoder-decoder whose decoder is quantized* fails to
+ * open a session on the bundled WASM provider. That catalogue expresses the fix
+ * per entry (`dtypes: { wasm: { encoder_model: "q8", decoder_model_merged:
+ * "fp32" } }`) rather than through a second named helper; if a third family
+ * arrives, generalise this function rather than copying it again.
+ *
  * Why: the quantized (q8) Whisper/Moonshine decoders fail to even open a session
  * on the WASM execution provider bundled with `@huggingface/transformers` 4.2.0 —
  * ONNX Runtime throws `qdq_actions.cc:137 TransposeDQWeightsForMatMulNBits

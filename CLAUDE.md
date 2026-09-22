@@ -684,12 +684,23 @@ The category's second route, and the one that is **not** like the others: it rid
   misses — an ordinary outcome, arriving on exactly the documents the model found hardest.
   The engine passes `null` through rather than flattening it to `""`, and OUTPUT renders it
   explicitly instead of showing a blank panel.
+- **The WASM decoder must stay fp32, and the ORT bug is not ASR-specific.** A uniform q8
+  cannot open a session in the browser at all (`qdq_actions.cc:137 … Missing required
+  scale: …embed_tokens.weight_merged_0_scale`) — **the same bug `asrLoadOpts` was written
+  for**, on a model that is not ASR. Read that note as *any encoder-decoder whose decoder is
+  quantized*, on the WASM provider bundled with 4.2.0. Expressed per entry as
+  `dtypes: { wasm: { encoder_model: "q8", decoder_model_merged: "fp32" } }`; if a third
+  family hits it, generalise `asrLoadOpts` rather than copying it again. Cost: **596.7 MB
+  on WASM instead of 218.7**, the same ~3x ASR pays, and worth it for the same reason —
+  the alternative is *no* CPU path.
+- **Only a real browser load catches that.** Unit tests mock the runtime, the mocked E2E run
+  never loads weights, `fe-e2e-models` confirms the files exist (they do), and the identical
+  call loads cleanly under `onnxruntime-node`. `just fe-e2e-docvqa` found it.
 - **Both backends, ungated, deliberately.** An encoder plus a short extractive decode is a
-  real CPU path (218.7 MB at q8), unlike the chat decoders in `src/multimodal/`. Declaring
-  `backends` without measuring would be the guess this catalogue avoids.
-- **No dtype pin.** `q4f16` would cut WebGPU from 410.7 MB to 241.0 MB, but that would be a
-  **precaution, not a measurement** — and document QA is where quantization error lands
-  straight on small print. Left for `just fe-e2e-docvqa` to settle.
+  real CPU path, unlike the chat decoders in `src/multimodal/` — merely an expensive one.
+- **WebGPU keeps fp16, unpinned.** `q4f16` would cut it to 241.0 MB, but that would be a
+  **precaution, not a measurement**, and document QA is where quantization error lands
+  straight on small print.
 - **The repo publishes three *alternative* decoders**, so a naive sum quotes a 4 GB model.
   Sum the graphs the entry declares (`encoder_model` + `decoder_model_merged`), and carry
   measured `bytes`.

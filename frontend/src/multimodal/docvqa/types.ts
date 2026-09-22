@@ -56,19 +56,40 @@ export interface DocVqaModelEntry {
  *   ----------------------------------------------------------------
  *   total                  410.7 MB fp16 · 218.7 MB q8 · 241.0 MB q4f16
  *
- * **No dtype pin.** `q4f16` would cut the WebGPU download from 410.7 MB to
- * 241.0 MB, which is tempting — but pinning it would be a *precaution, not a
- * measurement*, and this repo requires that distinction to be stated rather than
- * blurred. Document QA is the task where quantization error lands directly on
- * small printed characters, so it is exactly the wrong place to guess. The
- * `@slow` spec is what would settle it, the way `/super-resolution`'s PSNR
- * measurement settled its own pin.
+ * **The WASM decoder must stay fp32, and this is a measurement.** A uniform q8
+ * cannot open a session at all in the browser:
+ *
+ *   Can't create a session. ERROR_CODE: 1, ERROR_MESSAGE: qdq_actions.cc:137
+ *   TransposeDQWeightsForMatMulNBits Missing required scale:
+ *   decoder.model.decoder.embed_tokens.weight_merged_0_scale
+ *
+ * That is **the same ONNX Runtime bug `asrLoadOpts` was written for**, and
+ * finding it here is the news: its note says it "reproduces on every ASR repo
+ * tried", but Donut is not an ASR model, so the fault is not ASR-specific. It is
+ * **any encoder-decoder whose decoder is quantized**, on the WASM execution
+ * provider bundled with `@huggingface/transformers` 4.2.0. The encoder quantizes
+ * fine; only the decoder pays full precision.
+ *
+ * Cost: 596.7 MB on WASM instead of 218.7 MB — the same ~3x the ASR catalogue
+ * pays, and worth it for the same reason. The alternative is not a cheaper CPU
+ * path but **no CPU path at all**. Revisit when the bundled ORT updates; the
+ * check is `just fe-e2e-docvqa`, which is how this was found.
+ *
+ * It also reproduces in the browser only: the identical call loads cleanly under
+ * `onnxruntime-node`, so a Node-side sanity check cannot catch it.
+ *
+ * **WebGPU keeps fp16 and is left alone.** The ASR precedent confines the bug to
+ * WASM, and no adapter was available on the machine that found this, so pinning
+ * the GPU path either way would be a guess rather than a measurement.
+ *
+ * **`q4f16` is still not pinned** for WebGPU. It would cut 410.7 MB to 241.0 MB,
+ * but that would be a *precaution, not a measurement*, and document QA is where
+ * quantization error lands directly on small printed characters.
  *
  * **Both backends are offered.** Unlike every model in `multimodal/types.ts`
  * this one is not an autoregressive chat decoder: it is an encoder plus a short
- * extractive decode, so the CPU path is real rather than theoretical. No
- * `backends` gate is declared, because declaring one without measuring is the
- * guess this catalogue avoids elsewhere.
+ * extractive decode, so the CPU path is real rather than theoretical — it is
+ * merely expensive.
  */
 export const DOCVQA_MODELS: DocVqaModelEntry[] = [
   {
@@ -77,7 +98,10 @@ export const DOCVQA_MODELS: DocVqaModelEntry[] = [
     hint: "OCR-free: it reads the page and answers in one pass, with no text-detection step in between.",
     params: 200,
     graphs: ["encoder_model", "decoder_model_merged"],
-    bytes: { webgpu: 410_700_000, wasm: 218_700_000 },
+    // Per-module precision, exactly as `asrLoadOpts` does it — the decoder
+    // cannot be quantized on WASM without failing to open a session at all.
+    dtypes: { wasm: { encoder_model: "q8", decoder_model_merged: "fp32" } },
+    bytes: { webgpu: 410_768_162, wasm: 596_678_834 },
   },
 ];
 
