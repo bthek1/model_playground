@@ -34,6 +34,7 @@ import { Route as ImageClassificationRouteImport } from './routes/image-classifi
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as GraphClassificationRouteImport } from './routes/graph-classification'
 import { Route as GraphRouteImport } from './routes/graph'
+import { Route as DocumentQuestionAnsweringRouteImport } from './routes/document-question-answering'
 import { Route as DepthRouteImport } from './routes/depth'
 import { Route as BackgroundRemovalRouteImport } from './routes/background-removal'
 import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
@@ -168,6 +169,12 @@ const GraphRoute = GraphRouteImport.update({
   path: '/graph',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocumentQuestionAnsweringRoute =
+  DocumentQuestionAnsweringRouteImport.update({
+    id: '/document-question-answering',
+    path: '/document-question-answering',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DepthRoute = DepthRouteImport.update({
   id: '/depth',
   path: '/depth',
@@ -211,6 +218,7 @@ export interface FileRoutesByFullPath {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/document-question-answering': typeof DocumentQuestionAnsweringRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
   '/home': typeof HomeRoute
@@ -245,6 +253,7 @@ export interface FileRoutesByTo {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/document-question-answering': typeof DocumentQuestionAnsweringRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
   '/home': typeof HomeRoute
@@ -280,6 +289,7 @@ export interface FileRoutesById {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/document-question-answering': typeof DocumentQuestionAnsweringRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
   '/home': typeof HomeRoute
@@ -316,6 +326,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/document-question-answering'
     | '/graph'
     | '/graph-classification'
     | '/home'
@@ -350,6 +361,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/document-question-answering'
     | '/graph'
     | '/graph-classification'
     | '/home'
@@ -384,6 +396,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/document-question-answering'
     | '/graph'
     | '/graph-classification'
     | '/home'
@@ -419,6 +432,7 @@ export interface RootRouteChildren {
   AudioToAudioRoute: typeof AudioToAudioRoute
   BackgroundRemovalRoute: typeof BackgroundRemovalRoute
   DepthRoute: typeof DepthRoute
+  DocumentQuestionAnsweringRoute: typeof DocumentQuestionAnsweringRoute
   GraphRoute: typeof GraphRoute
   GraphClassificationRoute: typeof GraphClassificationRoute
   HomeRoute: typeof HomeRoute
@@ -624,6 +638,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GraphRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/document-question-answering': {
+      id: '/document-question-answering'
+      path: '/document-question-answering'
+      fullPath: '/document-question-answering'
+      preLoaderRoute: typeof DocumentQuestionAnsweringRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/depth': {
       id: '/depth'
       path: '/depth'
@@ -683,6 +704,7 @@ const rootRouteChildren: RootRouteChildren = {
   AudioToAudioRoute: AudioToAudioRoute,
   BackgroundRemovalRoute: BackgroundRemovalRoute,
   DepthRoute: DepthRoute,
+  DocumentQuestionAnsweringRoute: DocumentQuestionAnsweringRoute,
   GraphRoute: GraphRoute,
   GraphClassificationRoute: GraphClassificationRoute,
   HomeRoute: HomeRoute,

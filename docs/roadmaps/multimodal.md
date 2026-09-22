@@ -15,13 +15,13 @@
 |---|---|---|
 | Image-Text-to-Text (§3.1) | [`/image-text-to-text`](../../frontend/src/routes/image-text-to-text.tsx) | **Shipped** — SmolVLM 256M / 500M, streaming |
 | Visual Question Answering (§3.2) | — | Planned — [#31](https://github.com/bthek1/model_playground/issues/31): same engine, its own route |
-| Document Question Answering (§3.3) | — | Planned — [#32](https://github.com/bthek1/model_playground/issues/32): Donut, and a resolution control |
+| Document Question Answering (§3.3) | [`/document-question-answering`](../../frontend/src/routes/document-question-answering.tsx) | **Shipped** — Donut, extractive, either backend |
 | Video-Text-to-Text (§3.4) | — | Planned — [#33](https://github.com/bthek1/model_playground/issues/33): a frame sampler over §3.1 |
 | Audio-Text-to-Text (§3.5) | — | [#34](https://github.com/bthek1/model_playground/issues/34) — **blocked** on NLP ([#5](https://github.com/bthek1/model_playground/issues/5)) |
 | Visual Document Retrieval (§3.6) | — | [#35](https://github.com/bthek1/model_playground/issues/35) — **starts with a spike that may end it** |
 | the four that stay on a server (§3.7) | — | **Done** — documented, with a reason each |
 
-**One of nine is built**, and every remaining section has a plan issue. The build-out so far
+**Two of nine are built**, and every remaining section has a plan issue. The build-out so far
 is recorded in [#30](https://github.com/bthek1/model_playground/issues/30); the category
 closes when the last route ships, the way
 [#1](https://github.com/bthek1/model_playground/issues/1),
@@ -258,22 +258,84 @@ ONNX). So this is §3.1's engine behind a **distinct route** — a user looking 
 not think to click "image-text-to-text" — with a question box, a short `max_new_tokens`,
 and the "answer in one word" toggle that makes what a prompt is worth visible.
 
-### 3.3 Document Question Answering — planned
+### 3.3 Document Question Answering — **shipped**
 
-`Xenova/donut-base-finetuned-docvqa` (~500 MB, OCR-free) has a real export, and 4.2.0 does
-carry a `document-question-answering` pipeline. `impira/layoutlm-document-qa` needs OCR
-boxes the browser would have to produce; `stepfun-ai/GOT-OCR-2.0-hf` has no export and
-Florence-2 covers plain OCR already.
+[`/document-question-answering`](../../frontend/src/routes/document-question-answering.tsx) ·
+[`src/multimodal/docvqa/`](../../frontend/src/multimodal/docvqa/) · [#32](https://github.com/bthek1/model_playground/issues/32)
 
-**This page must set its own resolution, not inherit §3.1's 512.** A document needs more
-pixels than a photo before its text is legible to the encoder, so the usual downscale
-advice is backwards here — expose resolution as a control and let the user trade speed for
-legibility. Inheriting a sibling page's hyperparameter is a mistake this repo has already
-made once, on `/link-prediction`.
+**The one route in this category that rides a real pipeline.** 4.2.0 carries
+`document-question-answering`; its registry maps exactly one entry,
+`vision-encoder-decoder → VisionEncoderDecoderModel`, which is Donut's model type; and
+`Xenova/donut-base-finetuned-docvqa` is the pipeline's *own default model*. Checked before
+planning rather than after a failed load — the step §3.1 above exists to teach.
 
-It also has the strongest privacy argument in the app: people photograph payslips, medical
-letters and bank statements, and this answers questions about them without the image
-leaving the device. Say so on the page.
+| | |
+|---|---|
+| download | **410.7 MB fp16** (WebGPU) · **218.7 MB q8** (WASM), measured |
+| graphs | `encoder_model` + `decoder_model_merged` |
+| backends | **both**, ungated |
+
+**The repo totals ~4 GB at fp32, and that number is a trap**: it publishes three
+*alternative* decoders (`decoder_model`, `decoder_with_past_model`,
+`decoder_model_merged`) and only the merged one is ever loaded. Sum the graphs the entry
+declares, not the repo.
+
+**No dtype pin.** `q4f16` would cut WebGPU to 241.0 MB, but that would be a *precaution,
+not a measurement*, and document QA is where quantization error lands directly on small
+print. Left for the `@slow` spec to settle, as `/super-resolution`'s pin was.
+
+**Both backends are offered, deliberately.** Unlike every model in §3.1 this is not an
+autoregressive chat decoder but an encoder plus a short extractive decode, so the CPU path
+is real. Declaring `backends: ["webgpu"]` without measuring would be the guess this
+catalogue avoids elsewhere.
+
+#### The resolution control was wrong, and the opposite is right
+
+The plan for this page proposed exposing resolution as a slider, on the reasoning that a
+document needs more pixels than a photo. The reasoning was right; the mechanism was not.
+
+`preprocessor_config.json` is `do_resize` + `do_thumbnail` + `do_pad` at a fixed
+`{ height: 2560, width: 1920 }`, and `thumbnail()` in 4.2.0 **never upscales** — it shrinks
+to fit preserving aspect, then pads to exactly 2560x1920. So **the encoder always sees a
+2560x1920 tensor**, and two things follow:
+
+- **Inference cost is constant.** A slider would save nothing at the model.
+- **A smaller source is padded, not enlarged.** Fewer real pixels of print at identical
+  compute — legibility given away for no return.
+
+So there is no slider. The correct expression is the repo's standing rule stated plainly:
+**never resize for the model** — `AutoProcessor` reads the model's own config and that file
+*is* the input contract. This is the one vision-family route that does not cap its source,
+and the page says so, because an unexplained inconsistency with a dozen sibling routes
+reads as an oversight. The `MAX_SOURCE_SIDE = 2560` that remains is a **memory bound at the
+processor's own dimension** — lossless with respect to what the model sees, and there only
+to keep a 12-megapixel phone photo out of a structured clone.
+
+That is the same lesson `/link-prediction` records: reuse that looks like a decision is
+often an inheritance, so run it.
+
+#### `answer` can be null, and nothing errors
+
+The pipeline extracts with `decoded.match(/<s_answer>(.*?)<\/s_answer>/)` and returns
+`[{ answer: null }]` when that misses. So "the model found nothing" is an ordinary, silent
+outcome, and it arrives on precisely the documents the model found hardest. The engine
+passes `null` through rather than flattening it to `""` — "found nothing" and "found an
+empty span" are different things to say — and OUTPUT renders it explicitly instead of
+showing a blank panel.
+
+#### Two things the page has to say
+
+**The privacy argument**, because this is the one page where a user can feel why the whole
+architecture was chosen: people photograph payslips, medical letters and bank statements,
+and this answers questions about them without the image leaving the device.
+
+**That the answer is extracted, not reasoned.** Donut copies a span off the page; it cannot
+add up a column or compare two figures. Framing that is a correctness requirement, not
+decoration — the `/video-classification` precedent — and an E2E spec asserts the copy.
+
+The alternatives remain unbuildable: `impira/layoutlm-document-qa` needs OCR boxes as
+*input*, which the browser would have to produce first, and `stepfun-ai/GOT-OCR-2.0-hf` has
+no export (Florence-2 on `/image-to-text` already covers plain OCR).
 
 ### 3.4 Video-Text-to-Text — planned
 
@@ -341,7 +403,7 @@ or audio, there is not.**
 |---|---|---|---|---|
 | **Image Text to Text** | **Shipped** | SmolVLM-256M / 500M | WebGPU only | Qwen3-VL-2B past the size ceiling |
 | **Visual Question Answering** | Yes, via a VLM | the §3.1 engine | WebGPU only | ViLT and BLIP-VQA have no export |
-| **Document Question Answering** | Yes | `Xenova/donut-base-finetuned-docvqa` (241 MB q4f16) | WebGPU or WASM | LayoutLM, GOT-OCR to server |
+| **Document Question Answering** | **Shipped** | `Xenova/donut-base-finetuned-docvqa` | WebGPU **or** WASM | LayoutLM, GOT-OCR to server |
 | **Video Text to Text** | Yes, sampled frames | `HuggingFaceTB/SmolVLM2-256M-Video-Instruct` | WebGPU only | long-video understanding to server |
 | **Audio Text to Text** | Yes, as a cascade | Whisper-base + a small LLM | WebGPU | native audio LLMs to server |
 | **Visual Document Retrieval** | **Unproven** — bare ONNX, fp32 only, 953 MB, no `config.json` | `onnx-community/colSmol-256M-ONNX` | WebGPU | full ColQwen2 to server |
@@ -386,6 +448,10 @@ accept.
   answer on a known image**. Needs a real GPU with `shader-f16`: on SwiftShader the model
   loads in 29 s and then every run fails on the first Gather, which is how that gate was
   found in the first place.
+- `just fe-e2e-docvqa` — a real Donut load and a real extraction, pinned by a **known
+  answer on a known document**: `invoice.png` is the Transformers.js docs' own DocVQA
+  example and its invoice number is `us-001`. Needs **no GPU** — the WASM path is real
+  here — so unlike the VLM spec it runs anywhere.
 
 ---
 
