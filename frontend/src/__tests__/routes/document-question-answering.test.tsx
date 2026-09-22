@@ -261,6 +261,29 @@ describe("DocumentQuestionAnsweringPage — what the page claims", () => {
     );
   });
 
+  it("warns that the CPU path is slow, before anything is downloaded", async () => {
+    // Measured: one question on the fp32 WASM decoder did not finish inside six
+    // minutes, while the same question answers in ~8s where the decoder can be
+    // quantized. Keyed off the probe rather than the resolved backend so it
+    // lands before the 597 MB, not after.
+    pickBackend.mockResolvedValue("wasm");
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("cpu-speed-note")).toHaveTextContent(
+        /minutes.*per question/i,
+      ),
+    );
+  });
+
+  it("shows no CPU warning on a machine with a GPU", async () => {
+    pickBackend.mockResolvedValue("webgpu");
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /donut base/i })).toBeEnabled(),
+    );
+    expect(screen.queryByTestId("cpu-speed-note")).not.toBeInTheDocument();
+  });
+
   it("says the answer is extracted, not reasoned", () => {
     mockState = ready({
       result: { answer: "us-001", question: "What is the invoice number?", ms: 2400 },

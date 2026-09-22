@@ -251,6 +251,28 @@ function DocumentQuestionAnsweringPage() {
                 this tab and the page is read here — which is the point on a
                 payslip, a medical letter or a bank statement.
               </p>
+              {/* Keyed off the *probe*, not the resolved backend: the probe
+                  answers before anything is downloaded, and a user about to
+                  spend 597 MB and then minutes per question should know first.
+                  `backend` is only set once the model is already loaded. */}
+              {backendProbe === "wasm" && (
+                <p
+                  className="text-xs text-amber-600 dark:text-amber-500"
+                  data-testid="cpu-speed-note"
+                >
+                  {/* Measured, not a hedge: one question on the CPU path did not
+                      finish inside six minutes, while the same question answers
+                      in ~8s where the decoder can be quantized. The cause is the
+                      fp32 decoder this backend is pinned to — see `dtypes` in
+                      multimodal/docvqa/types.ts — and a user about to wait that
+                      long should be told before pressing, not after. */}
+                  This machine has no GPU, so it will run on CPU — expect{" "}
+                  <strong>minutes</strong> per question. The CPU build has to keep
+                  the decoder at full precision to load at all, which is what
+                  makes it both larger and slower. A machine with WebGPU answers
+                  far faster.
+                </p>
+              )}
               <p className="text-xs text-muted-foreground" data-testid="resolution-note">
                 {/* Every other vision route in this repo caps its source. This
                     one must not, and the reason is worth stating rather than
