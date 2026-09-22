@@ -91,6 +91,36 @@ export const TEXT_SAMPLES: ImageSample[] = [
 ];
 
 /**
+ * Photographed **documents**, for `/document-question-answering`.
+ *
+ * Kept separate from `TEXT_SAMPLES` because the two answer different questions.
+ * Those are pictures that happen to contain type — an advertisement, a book
+ * cover — and they are there to exercise OCR. These are documents with
+ * *structure*: fields, labels and values, which is what a document-QA model is
+ * asked about ("what is the invoice number", not "what does this say").
+ *
+ * `invoice.png` is the Transformers.js docs' own DocVQA example, which makes it
+ * the natural fixture for the `@slow` spec: its invoice number is a known answer
+ * on a known input, and "some text appeared" would pass without it.
+ */
+export const DOCUMENT_SAMPLES: ImageSample[] = [
+  {
+    id: "invoice",
+    label: "Invoice",
+    url: `${BASE}/invoice.png`,
+    hint: "Fields and values — ask for the invoice number, a date, or the total",
+    expect: "the exact field you asked for, copied from the page",
+  },
+  {
+    id: "receipt",
+    label: "Receipt",
+    url: `${BASE}/receipt.png`,
+    hint: "Denser and less regular than the invoice — the harder of the two",
+    expect: "a line item or a total, when the print is legible enough",
+  },
+];
+
+/**
  * Pictures whose subject is **a person**, for `/background-removal`.
  *
  * Kept separate from `IMAGE_SAMPLES` for a reason that is a fact about the

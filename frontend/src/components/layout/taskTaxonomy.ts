@@ -95,6 +95,12 @@ const REAL_ROUTES: Record<string, string> = {
   // share this engine behind its own route rather than folding into this one —
   // a user looking for VQA does not think to click "image-text-to-text".
   "image-text-to-text": "/image-text-to-text",
+  // The category's second route, and the only one in it that rides a real
+  // pipeline: 4.2.0 carries `document-question-answering`, and Donut is that
+  // pipeline's own default model. Distinct from Image-Text-to-Text because the
+  // question is different in kind — a field lookup on a page, answered by
+  // extraction rather than prose.
+  "document-question-answering": "/document-question-answering",
 };
 
 function task(label: string): TaskItem {

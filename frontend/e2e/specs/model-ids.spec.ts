@@ -40,6 +40,9 @@ test.describe("@slow model catalogue", () => {
     );
     const { SUPER_RES_MODELS } = await import("../../src/vision/superRes");
     const { VLM_MODELS } = await import("../../src/multimodal/types");
+    const { DOCVQA_MODELS } = await import(
+      "../../src/multimodal/docvqa/types"
+    );
 
     const ids = [
       ...ASR_MODELS,
@@ -62,6 +65,7 @@ test.describe("@slow model catalogue", () => {
       ...MATTE_MODELS,
       ...SUPER_RES_MODELS,
       ...VLM_MODELS,
+      ...DOCVQA_MODELS,
       // A pose entry is a *pair*, so its own `id` is a composite that resolves
       // to nothing on the Hub — the two halves are what get downloaded.
       ...POSE_MODELS.flatMap((m) => [m.detector, m.pose]),
@@ -104,6 +108,11 @@ test.describe("@slow model catalogue", () => {
       "../../src/vision/backgroundRemoval"
     );
     const { SUPER_RES_MODELS } = await import("../../src/vision/superRes");
+    // Document QA takes the *shared* `loadOpts()` (fp16 / q8), not the 4-bit VLM
+    // override, so it belongs in this check rather than the multimodal one.
+    const { DOCVQA_MODELS } = await import(
+      "../../src/multimodal/docvqa/types"
+    );
 
     // Suffix per precision, applied to each of the entry's graph base names.
     // Not every repo publishes one `model.onnx`: CLIP as a feature extractor
@@ -130,6 +139,7 @@ test.describe("@slow model catalogue", () => {
       ...CAPTION_MODELS,
       ...MATTE_MODELS,
       ...SUPER_RES_MODELS,
+      ...DOCVQA_MODELS,
       // Each half separately: the pair's `backends` gate applies to both, so it
       // is carried down here rather than declared twice in the catalogue.
       ...POSE_MODELS.flatMap((m) =>

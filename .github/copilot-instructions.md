@@ -746,6 +746,41 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   GPU — the models are WebGPU-only by catalogue declaration. It asserts a **known answer on a known
   image**; "some text appeared" would pass straight through the failure.
 
+**In-browser document QA (`src/multimodal/docvqa/`, `/document-question-answering`) — the one that rides a real pipeline:**
+
+- **Both `SUPPORTED_TASKS` and the registry pass here.** 4.2.0 carries
+  `document-question-answering`, its registry maps exactly `vision-encoder-decoder →
+  VisionEncoderDecoderModel` (Donut's type), and `Xenova/donut-base-finetuned-docvqa` is the
+  pipeline's own default. So §8 applies unchanged and the route owns no engine. Full write-up in
+  `docs/roadmaps/multimodal.md` §3.3.
+- **One checkpoint, by the pipeline's doing.** It hardcodes Donut's prompt
+  (`<s_docvqa><s_question>…</s_question><s_answer>`); another architecture would be prompted with
+  tokens it has never seen.
+- **The only route that must NOT downscale.** `preprocessor_config.json` is `do_resize` +
+  `do_thumbnail` + `do_pad` at a fixed 2560x1920, and `thumbnail()` **never upscales** — it shrinks
+  to fit then pads. The encoder always sees 2560x1920, so **inference cost is constant** and a
+  smaller source is *padded*, not enlarged: a resolution slider would trade legibility for no speed.
+  The plan proposed one and it was wrong. `MAX_SOURCE_SIDE = 2560` is a **memory bound at the
+  processor's own dimension**, not preprocessing, and the page says why it differs from its siblings.
+- **`answer` can be `null` and nothing errors** — the pipeline's `<s_answer>` regex missed. Pass it
+  through rather than flattening to `""`, and render it explicitly; it arrives on exactly the
+  documents the model found hardest.
+- **The WASM decoder must stay fp32, and the ORT bug is NOT ASR-specific.** A uniform q8 cannot
+  open a session in the browser (`qdq_actions.cc:137 … Missing required scale`) — the same bug
+  `asrLoadOpts` was written for, on a model that is not ASR. Read it as *any encoder-decoder with a
+  quantized decoder* on 4.2.0's WASM provider; pinned per entry via `dtypes`. Costs 596.7 MB instead
+  of 218.7, the same ~3x ASR pays. **Only a real browser load catches it** — `onnxruntime-node`
+  loads the identical call fine.
+- **Both backends, ungated**: an encoder plus a short extractive decode is a real CPU path, unlike
+  the chat decoders in `src/multimodal/`. **WebGPU stays fp16, unpinned** — `q4f16` would save
+  170 MB but would be a *precaution, not a measurement*.
+- **The repo publishes three alternative decoders**, so a naive sum quotes 4 GB. Sum the declared
+  graphs (`encoder_model` + `decoder_model_merged`).
+- **The page owes two sentences** — the privacy argument, and that the answer is *extracted, not
+  reasoned* (Donut copies a span; it cannot add up a column). Both E2E-asserted.
+- **`just fe-e2e-docvqa` needs no GPU** and pins a known answer: `invoice.png`, invoice number
+  `us-001`.
+
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
 **Commands:**

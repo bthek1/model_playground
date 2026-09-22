@@ -59,7 +59,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Audio category roadmap** (complete, 6 of 6) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
 | **Computer Vision roadmap** (14 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | **Graph ML roadmap** (**complete, 4 of 4**; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
-| **Multimodal roadmap** (1 of 9; VLMs, `q4f16`, streaming) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
+| **Multimodal roadmap** (2 of 9; VLMs, `q4f16`, streaming, document QA) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -94,6 +94,7 @@ just fe-e2e-vision-one /pose   # one @slow vision route at a time
 just fe-e2e-link    # @slow: link prediction, pinned by an AUC *band* (leakage pushes it up)
 just fe-e2e-graphcls # @slow: graph classification, pinned above its majority baseline
 just fe-e2e-vlm     # @slow: a real SmolVLM load + generation — the only chat-template guard (needs a GPU)
+just fe-e2e-docvqa  # @slow: a real Donut load, pinned by a known answer on a known invoice (no GPU needed)
 just fe-e2e-models  # check every model id (audio + vision + multimodal) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -652,6 +653,63 @@ behaviours, a thin `vlm.worker.ts` around it, a `client.ts`, and `useVlm` over
   a real GPU (the models are WebGPU-only by catalogue declaration). It asserts a **known
   answer on a known image**; "some text appeared" would pass straight through the failure
   this page actually has.
+
+### In-browser document QA (`src/multimodal/docvqa/`, `/document-question-answering`)
+
+The category's second route, and the one that is **not** like the others: it rides a real
+`pipeline()` call, needs no GPU, and does not stream. See
+[`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) §3.3.
+
+- **Check `SUPPORTED_TASKS` *and* the registry — here both pass.** 4.2.0 carries
+  `document-question-answering`, its registry maps exactly `vision-encoder-decoder →
+  VisionEncoderDecoderModel` (Donut's model type), and `Xenova/donut-base-finetuned-docvqa`
+  is the pipeline's own default model. This is the rare case where
+  [`adding-a-model.md`](docs/guides/adding-a-model.md) §8 applies unchanged, so the route
+  owns no engine beyond the generic one.
+- **It is one checkpoint, and that is the pipeline's doing, not a shortage of models.**
+  `DocumentQuestionAnsweringPipeline` hardcodes Donut's prompt
+  (`<s_docvqa><s_question>…</s_question><s_answer>`), so another architecture would be
+  prompted with tokens it has never seen — fluent and unrelated, the Florence-2 failure.
+- **This route does not downscale, and it is the only one that must not.**
+  `preprocessor_config.json` is `do_resize` + `do_thumbnail` + `do_pad` at a fixed
+  2560x1920, and `thumbnail()` **never upscales** — it shrinks to fit, then pads. So the
+  encoder always sees a 2560x1920 tensor: **inference cost is constant**, and a smaller
+  source is *padded*, not enlarged. A resolution slider would therefore trade legibility
+  away for no speed at all — the plan proposed one and it was wrong. `MAX_SOURCE_SIDE =
+  2560` is a **memory bound at the processor's own dimension**, not preprocessing. The page
+  says why it differs from every sibling route, because an unexplained inconsistency reads
+  as an oversight.
+- **`answer` can be `null`, and nothing errors.** The pipeline extracts with
+  `decoded.match(/<s_answer>(.*?)<\/s_answer>/)` and returns `[{ answer: null }]` when that
+  misses — an ordinary outcome, arriving on exactly the documents the model found hardest.
+  The engine passes `null` through rather than flattening it to `""`, and OUTPUT renders it
+  explicitly instead of showing a blank panel.
+- **The WASM decoder must stay fp32, and the ORT bug is not ASR-specific.** A uniform q8
+  cannot open a session in the browser at all (`qdq_actions.cc:137 … Missing required
+  scale: …embed_tokens.weight_merged_0_scale`) — **the same bug `asrLoadOpts` was written
+  for**, on a model that is not ASR. Read that note as *any encoder-decoder whose decoder is
+  quantized*, on the WASM provider bundled with 4.2.0. Expressed per entry as
+  `dtypes: { wasm: { encoder_model: "q8", decoder_model_merged: "fp32" } }`; if a third
+  family hits it, generalise `asrLoadOpts` rather than copying it again. Cost: **596.7 MB
+  on WASM instead of 218.7**, the same ~3x ASR pays, and worth it for the same reason —
+  the alternative is *no* CPU path.
+- **Only a real browser load catches that.** Unit tests mock the runtime, the mocked E2E run
+  never loads weights, `fe-e2e-models` confirms the files exist (they do), and the identical
+  call loads cleanly under `onnxruntime-node`. `just fe-e2e-docvqa` found it.
+- **Both backends, ungated, deliberately.** An encoder plus a short extractive decode is a
+  real CPU path, unlike the chat decoders in `src/multimodal/` — merely an expensive one.
+- **WebGPU keeps fp16, unpinned.** `q4f16` would cut it to 241.0 MB, but that would be a
+  **precaution, not a measurement**, and document QA is where quantization error lands
+  straight on small print.
+- **The repo publishes three *alternative* decoders**, so a naive sum quotes a 4 GB model.
+  Sum the graphs the entry declares (`encoder_model` + `decoder_model_merged`), and carry
+  measured `bytes`.
+- **The page owes two sentences**: the privacy argument (the one page where a user feels
+  why the architecture was chosen) and that the answer is **extracted, not reasoned** —
+  Donut copies a span and cannot add up a column. Both asserted by an E2E spec, the
+  `/video-classification` precedent.
+- **`just fe-e2e-docvqa` needs no GPU** and pins a known answer on a known document —
+  `invoice.png` is the Transformers.js docs' own DocVQA example, invoice number `us-001`.
 
 **Two Base UI gotchas (carried over from the Radix → Base UI migration):**
 
