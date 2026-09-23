@@ -27,7 +27,28 @@ import type { MeasuredBytes } from "@/model/size";
  * engine's per-task warm-up and result handling have to be written against a
  * real pipeline's output anyway.
  */
-export type TextTask = "text-classification";
+export type TextTask =
+  | "text-classification"
+  | "token-classification"
+  | "zero-shot-classification"
+  | "fill-mask";
+
+/**
+ * Every task in the NLP category, whether or not it rides the generic worker.
+ *
+ * `question-answering` is the first that does not, for the repo's standing
+ * reason: it is not a plain `pipeline()` call. `QuestionAnsweringPipeline`
+ * returns `{ answer, score }` and discards the token indices it chose, so a
+ * page that marks the answer **in the passage** cannot use it — `text/qa/`
+ * drives `AutoTokenizer` + `AutoModelForQuestionAnswering` directly and keeps
+ * them. The same criterion put `vision/zeroshot/`, `vision/sam/` and
+ * `audio/vad/` in modules of their own.
+ *
+ * It is deliberately *not* folded into `TextTask` above: that union is the
+ * contract of `pipeline.worker.ts`, and widening it would add an arm to the
+ * engine's per-task switches that no caller could ever reach.
+ */
+export type TextCategoryTask = TextTask | "question-answering";
 
 /** Load/warm-up progress. Alias of the shared `ModelProgress`. */
 export type TextProgress = ModelProgress;
@@ -52,7 +73,7 @@ export interface TextModel {
    * move a page across the feasibility bar.
    */
   bytes: MeasuredBytes;
-  task: TextTask;
+  task: TextCategoryTask;
   /**
    * Backends this model is known to run on. Omitted means both. List one when
    * the other is a known failure rather than merely slower, so `ModelPicker`
@@ -100,8 +121,52 @@ export type TextRequest = ModelRequest<
     /** Per-backend precision override; see `TextModel.dtypes`. */
     dtypes?: Partial<Record<Backend, DtypeSpec>>;
   },
-  { input: TextInput; args?: unknown[] }
+  {
+    input: TextInput;
+    args?: unknown[];
+    /**
+     * The mask literal the caller put in `input`, for `fill-mask` only.
+     *
+     * It rides here rather than inside `args` because it is **not a pipeline
+     * option** — the pipeline never sees it. The engine rewrites it to the
+     * *loaded tokenizer's* own `mask_token` before the call, so a catalogue
+     * entry that has drifted from its repo cannot turn into a failed run: the
+     * page shows the declared token, the tokenizer decides what is sent. See
+     * `text/mask.ts`.
+     */
+    mask?: string;
+  }
 >;
+
+/** One candidate filling, as `FillMaskPipeline` returns it. */
+export interface RawFilling {
+  /** The predicted token. Byte-level BPE leaves its leading space on: ` Paris`. */
+  token_str: string;
+  score: number;
+  token?: number;
+  /**
+   * The decoded sentence with the token substituted.
+   *
+   * Present, and deliberately unused by the page: it is `tokenizer.decode(…)`
+   * output, so an uncased model hands back "the capital of france is paris."
+   * The route splices the *user's own string* instead (`text/mask.ts`).
+   */
+  sequence?: string;
+}
+
+/**
+ * What the engine returns for a `fill-mask` run.
+ *
+ * The resolved mask travels with the result because it is a fact about the
+ * **loaded tokenizer**, and the page has no other way to learn it — the
+ * catalogue's declaration is what it shows before a model exists, and the two
+ * disagreeing is something the page states rather than hides.
+ */
+export interface FillMaskResult {
+  mask: string | null;
+  /** One ranked list per prompt: nested when the input was an array. */
+  fills: RawFilling[] | RawFilling[][];
+}
 
 /** Worker → main thread. */
 export type TextResponse = ModelResponse<unknown>;

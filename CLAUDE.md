@@ -60,7 +60,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Computer Vision roadmap** (13 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | **Graph ML roadmap** (**complete, 4 of 4**; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
 | **Multimodal roadmap** (**complete as scoped, 3 of 3**; VLMs, `q4f16`, streaming, video frames) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
-| **NLP roadmap** (1 of 11 shipped; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
+| **NLP roadmap** (3 of 11 shipped; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -97,6 +97,7 @@ just fe-e2e-graphcls # @slow: graph classification, pinned above its majority ba
 just fe-e2e-vlm     # @slow: a real SmolVLM load + generation — the only chat-template guard (needs a GPU)
 just fe-e2e-videovlm # @slow: a real SmolVLM2-Video load — the only *multi-image* template guard (needs a GPU)
 just fe-e2e-text    # @slow: text classification, pinned by a known label on a known sentence
+just fe-e2e-zeroshot-text # @slow: zero-shot text — a known ranking, and a template proven to reach the model
 just fe-e2e-models  # check every model id (audio + vision + multimodal + text) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -740,7 +741,7 @@ behaviours, a thin `vlm.worker.ts` around it, a `client.ts`, and `useVlm` over
   produces a fluent answer about the wrong pictures, with no error anywhere. Both
   need a real GPU with `shader-f16`.
 
-### In-browser NLP (`src/text/` — `/text-classification`)
+### In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`)
 
 The fourth modality on the Transformers.js path, and **the cheapest module in the
 app, for a reason worth knowing before planning a page**: there is no text
@@ -779,11 +780,30 @@ thin task hooks over `useTextPipeline`. See [`docs/roadmaps/nlp.md`](docs/roadma
 - **`ScoreList` refuses to render a single row**, and that is its whole design: a
   classifier's argmax is the least informative thing it produces, because
   "POSITIVE" looks identical at 0.99 and at 0.51. Callers pass the full label set,
-  and a near-tie is stated in words. `SpanOverlay` + `highlight()` is the other
-  shared component; it is built by `/token-classification`, against a real model's
-  character offsets — and its rule is **slice the original string by character
-  offset, never rebuild the text from tokens**, or the highlight lands a character
-  or two off and reads as a styling problem.
+  and a near-tie is stated in words.
+- **`SpanOverlay` + `highlight()` slice the original string by character offset,
+  and never rebuild the text from tokens.** Concatenated subwords lose the
+  whitespace between them, so the highlight lands a character or two off — a wrong
+  answer that reads as a styling problem. The assertion that pins it is that the
+  concatenation of every slice equals the input **exactly**. Overlapping spans are
+  **reported, not interleaved** (two spans claiming the same characters cannot both
+  be drawn, and picking one quietly shows a confident highlight over a range no
+  model proposed), and every span carries its **type as visible text, not colour
+  alone** — the four validated `--entity-*` hues sit in the colour-vision band that
+  is legal only with a secondary encoding, and no 5-hue subset passes at all, which
+  is why `MISC` and `DATE` share a slot (different models, never on screen
+  together).
+- **`aggregation_strategy: "simple"` is pinned in the engine, not passed by the
+  hook.** Without it `token-classification` returns one result per *subword token*,
+  so "Wellington" comes back as `Well`/`##ing`/`##ton` and the page paints three
+  highlights across one word — a rendering bug rather than an error, and one
+  forgetful call site away at every future caller. `pinnedArgs()` is the single
+  call site.
+- **`/token-classification` is where "it runs in your browser" stops being a
+  performance claim**: redacting a document you may not upload is a real reason to
+  want the model on this side of the wire. Redaction is a pure derivation over
+  spans in hand, so toggling it — or changing which types it removes — runs
+  nothing.
 - **Nothing in this category is debounced.** The roadmap wants live classification
   on a 200–300 ms pause; the page-pattern rule wins and is absolute. Typing is
   INPUT, and only GENERATE spends — a debounced auto-run is the
@@ -798,6 +818,49 @@ thin task hooks over `useTextPipeline`. See [`docs/roadmaps/nlp.md`](docs/roadma
   produces. It pins the head-to-head *structurally* (SST-2 has two classes,
   FinBERT three), because asserting that the two rankings differ would pin a
   property neither model promises.
+- **`/zero-shot-classification` is the first page whose *label set* is the user's,
+  and its cost model has to be said out loud.** An NLI model runs **once per
+  label** — a `for` loop over the hypotheses with `await this.model(inputs)`
+  inside it, no batching anywhere — so ten labels is ten inferences on one press.
+  The pass count sits beside GENERATE and is **derived from the label list as it
+  is edited**, so editing labels still spends nothing. `text/zeroShot.ts` owns
+  that derivation, plus label parsing (bare nouns, deduped case-insensitively —
+  a repeated label is a second forward pass returning the same logits).
+- **The hypothesis template is INPUT, so it is on screen and editable**, and a
+  template **without `{}` is refused**. This is the `hypothesis_template` finding
+  from `/zero-shot-image-classification` transplanted: the text pipeline applies
+  `"This example is {}."` unless told otherwise, so the route sends the template
+  explicitly on every run, shows the composed hypothesis for the first label, and
+  carries the template into OUTPUT with the result. Without the placeholder every
+  label composes to the *same* hypothesis, so every label gets the same logits and
+  the ranking is arbitrary — with nothing throwing and an ordinary-looking bar
+  chart on screen.
+- **`multi_label` changes the arithmetic, not the model, and cannot re-derive** —
+  single-label is one softmax across the labels' entailment logits, multi-label is
+  entailment-against-contradiction per label. So flipping it runs nothing and the
+  next GENERATE is a real second inference, exactly as `/video-text-to-text`'s
+  reverse toggle. **One label is always scored independently**
+  (`softmaxEach = multi_label || labels.length === 1`) whatever the toggle says,
+  and the page says so rather than rendering a lone 1.00 as certainty.
+- **An NLI head that does not declare `entailment` is scored on the wrong logit,
+  silently.** The pipeline looks the index up by name in `config.label2id` and
+  falls back to `2` with a console warning — and the right index is 1 for
+  DeBERTa-xsmall, 0 for MobileBERT and DistilBERT, 2 for BART. The output of that
+  mistake is a full, confident, wrongly-ordered list, so `just fe-e2e-models`
+  checks the mapping on the Hub. Check it before writing a zero-shot entry.
+- **`isHeavyDownload` lives in `model/size.ts`, not beside the page that needed it
+  first.** BART-large-MNLI is 816 MB on WebGPU (the roadmap's 411 MB is its q8
+  size), so it gets `/depth`'s second opt-in — and the gate *moved* rather than
+  being copied, the same move `backend.ts` and `size.ts` made out of `audio/`. It
+  is still a **size predicate, never a model id**, which is what let it survive
+  Depth Pro being cut. A page whose floor is a 26 MB model may ship an 816 MB
+  entry; §0's bar is about the floor.
+- **`just fe-e2e-zeroshot-text` is the only guard on the template.** It asserts a
+  known ranking on a known sentence, then re-runs the same premise under a bare
+  `{}` and asserts the **scores move** — two templates producing identical numbers
+  is precisely what a page that lets the pipeline apply its own default looks like.
+  It asserts movement rather than a flipped ranking, which would pin a property the
+  model does not promise.
 
 ### Three routes were built and then cut for size — read this before adding one
 

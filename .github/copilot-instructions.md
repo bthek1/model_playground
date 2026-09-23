@@ -850,7 +850,7 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   `data-testid` on a wrapper.
 - **OCR now has no page**, and **metric depth has no path** (ZoeDepth has no export).
 
-**In-browser NLP (`src/text/` — `/text-classification`) — the fourth modality, and the cheapest module in the app:**
+**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`) — the fourth modality, and the cheapest module in the app:**
 
 - **There is no decode step, and that is the point.** No text equivalent of `audio/io.ts`
   or `vision/image.ts` exists: the input is already a string, so there is no
@@ -879,10 +879,21 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   entry.
 - **`ScoreList` refuses to render a single row.** A classifier's argmax is its least
   informative output — "POSITIVE" looks identical at 0.99 and at 0.51 — so callers pass
-  the full label set and a near-tie is stated in words. `SpanOverlay` + `highlight()` is
-  the other shared component, built by `/token-classification` against a real model's
-  offsets: **slice the original string by character offset, never rebuild from tokens**,
-  or the highlight lands a character off and reads as a styling problem.
+  the full label set and a near-tie is stated in words.
+- **`SpanOverlay` + `highlight()`: slice the original string by character offset, never
+  rebuild from tokens**, or the highlight lands a character off and reads as a styling
+  problem. Pinned by asserting the slices concatenate to the input exactly. Overlapping
+  spans are **reported, not interleaved**, and every span carries its **type as visible
+  text, not colour alone** — the four validated `--entity-*` hues sit in the colour-vision
+  band that is legal only with a secondary encoding, and no 5-hue subset passes, which is
+  why MISC and DATE share a slot (different models, never on screen together).
+- **`aggregation_strategy: "simple"` is pinned in the engine** (`pinnedArgs()`), not
+  passed by the hook: without it `token-classification` returns one result per subword
+  token and paints three highlights across "Wellington" — a rendering bug rather than an
+  error, one forgetful call site away at every future caller.
+- **`/token-classification` is where "in your browser" stops being a performance claim**:
+  redacting a document you may not upload is a real reason to want the model here.
+  Redaction is a pure derivation over spans in hand, so it runs nothing.
 - **Nothing here is debounced.** The roadmap wants live classification on a 200–300 ms
   pause; the page-pattern rule wins. Typing is INPUT, only GENERATE spends — a debounced
   auto-run is the five-samples-five-inferences failure with a timer in front of it.
@@ -890,6 +901,33 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   three models **disagree**. `just fe-e2e-text` asserts a known label on a known sentence
   and pins the comparison *structurally* (SST-2 has two classes, FinBERT three) — asserting
   the rankings differ would pin a property neither model promises.
+- **`/zero-shot-classification`: N labels cost N forward passes.** The NLI pipeline is a
+  `for` loop over the hypotheses with `await this.model(inputs)` inside it — no batching
+  anywhere — so the pass count sits beside GENERATE, **derived from the label list as it
+  is edited** (`text/zeroShot.ts`). Labels are bare nouns, deduped case-insensitively: a
+  repeated label is a second forward pass returning the same logits.
+- **The hypothesis template is INPUT — on screen, editable, and sent explicitly.** The
+  pipeline applies `"This example is {}."` unless told otherwise, so a page that templates
+  silently compares a prompt the user cannot read (the `/zero-shot-image-classification`
+  finding). A template **without `{}` is refused**: every label would compose to the same
+  hypothesis, get the same logits, and rank arbitrarily — with nothing throwing.
+- **`multi_label` changes the arithmetic and cannot re-derive**, so flipping it runs
+  nothing and the next GENERATE is a real second inference. **One label is always scored
+  independently** (`softmaxEach = multi_label || labels.length === 1`) whatever the toggle
+  says, and the page states that rather than rendering a lone 1.00 as certainty.
+- **An NLI head that does not declare `entailment` is scored on the wrong logit**: the
+  pipeline looks the index up by name and falls back to `2` with a console warning, and
+  the right index is 1 for DeBERTa-xsmall, 0 for MobileBERT and DistilBERT, 2 for BART.
+  The result is a confident, wrongly-ordered list, so `just fe-e2e-models` checks the
+  mapping on the Hub.
+- **`isHeavyDownload` lives in `model/size.ts`** — `/depth`'s gate *moved* rather than
+  being copied, and is still a **size predicate, never a model id**. BART-large-MNLI is
+  816 MB on WebGPU (the roadmap's 411 MB is its q8 size) and gets the second opt-in; a
+  page whose floor is a 26 MB model may ship it, because §0's bar is about the floor.
+- **`just fe-e2e-zeroshot-text` is the only guard on the template**: a known ranking on a
+  known sentence, then the same premise under a bare `{}` asserting the **scores move**.
+  Identical numbers under two templates is exactly what a page letting the pipeline apply
+  its own default looks like.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
@@ -906,7 +944,8 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   `just fe-e2e-vision-one /pose`); zero-shot scoring parity: `just fe-e2e-zeroshot`;
   super-resolution vs bicubic by PSNR: `just fe-e2e-superres`; link prediction by AUC band:
   `just fe-e2e-link`; graph classification above its baseline: `just fe-e2e-graphcls`;
-  text classification by a known label: `just fe-e2e-text`
+  text classification by a known label: `just fe-e2e-text`; zero-shot text by a known
+  ranking *and* a template that provably reaches the model: `just fe-e2e-zeroshot-text`
 - Install deps: `just fe-install`
 
 ---

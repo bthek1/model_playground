@@ -626,7 +626,7 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `live-fps` | `ImageSourcePanel` | Measured end-to-end frame rate. Present only while the camera runs. |
 | `audio-input` | `AudioSourcePanel` | The held clip: its name, duration, rate and waveform. The audio routes' "what am I about to run on?". |
 | `audio-input-empty` | `AudioSourcePanel` | No clip chosen yet. The audio counterpart of `output-empty`. |
-| `heavy-model-notice` | `/depth` | The opt-in a gigabyte-scale model gets on top of the size line. |
+| `heavy-model-notice` | `/depth` · `/zero-shot-classification` | The opt-in a heavy model gets on top of the size line. Driven by `isHeavyDownload` in `model/size.ts` — a **size** predicate, so it is not bound to either page's catalogue. |
 | `class-space` | `/segmentation` | What the selected model can possibly say, stated before the run. |
 | `depth-map` · `detection-canvas` · `segmentation-canvas` | vision routes | The rendered overlay, once a result exists. |
 | `encode-cost` | `/zero-shot-image-classification` | Per-tower timing, showing when the label embeddings were reused. |
@@ -639,6 +639,8 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `mask-canvas` · `mask-facts` · `decode-ms` | `/mask-generation` | The mask, its coverage and IoU, and the decode time the page claims. |
 | `pose-canvas` · `people` · `joints` | `/pose` | Skeletons, one entry per person, and per-joint confidence **and position**. |
 | `clip-progress` · `filmstrip` · `pooled-winner` · `baseline-note` | `/video-classification` | Sampling/scoring progress, the frames the model saw, the clip-level verdict, and the limitation. |
+| `pass-count` · `composed-hypothesis` · `template-problem` | `/zero-shot-classification` | What one press will cost in forward passes, the exact hypothesis the first label composes to, and the refusal when the template has no `{}`. All three are derivations over the input — none of them runs anything. |
+| `ran-labels` · `ran-template` · `scoring-note` | `/zero-shot-classification` | The label set and template the answer on screen was **actually** produced with, captured inside the run, and which normalisation produced the numbers. |
 
 The testids are unchanged by the horizontal arrangement — `slot-N` is bound to the
 step number, not to a position in the layout.

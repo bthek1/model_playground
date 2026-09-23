@@ -29,6 +29,19 @@
     --chart-3: oklch(0.546 0.245 262.881);
     --chart-4: oklch(0.488 0.243 264.376);
     --chart-5: oklch(0.424 0.199 265.638);
+    /* Categorical hues for named-entity highlight spans (`text/highlight.ts`).
+       Four slots, not five: a token-classification checkpoint has four entity
+       types, and only one model is live at a time, so MISC and DATE share slot
+       4 — they belong to different models and can never appear together.
+       Validated all-pairs in both modes (worst CVD ΔE 6.9, worst normal-vision
+       ΔE 19.3); the 6–8 CVD band is legal only with secondary encoding, which
+       is why every span carries its type as visible text rather than colour
+       alone. Five hues do not pass: no 5-subset of the reference order clears
+       the normal-vision floor with all pairs in play. */
+    --entity-1: #2a78d6;
+    --entity-2: #eda100;
+    --entity-3: #e87ba4;
+    --entity-4: #008300;
     --radius: 0.625rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
@@ -64,6 +77,12 @@
     --chart-3: oklch(0.546 0.245 262.881);
     --chart-4: oklch(0.488 0.243 264.376);
     --chart-5: oklch(0.424 0.199 265.638);
+    /* The same four hues stepped for the dark surface — a selected set, not an
+       automatic flip of the light one. */
+    --entity-1: #3987e5;
+    --entity-2: #c98500;
+    --entity-3: #d55181;
+    --entity-4: #008300;
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.673 0.182 264.376);
@@ -84,6 +103,10 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
+    --color-entity-1: var(--entity-1);
+    --color-entity-2: var(--entity-2);
+    --color-entity-3: var(--entity-3);
+    --color-entity-4: var(--entity-4);
     --color-chart-5: var(--chart-5);
     --color-chart-4: var(--chart-4);
     --color-chart-3: var(--chart-3);

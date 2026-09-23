@@ -15,15 +15,15 @@
 | Roadmap section | Route | Status |
 |---|---|---|
 | Text Classification (§3.1) | [`/text-classification`](../../frontend/src/routes/text-classification.tsx) | **Shipped** — three sentiment heads, the head-to-head, 68–250 MB |
-| Token Classification (§3.2) | — | Planned — [#39](https://github.com/bthek1/model_playground/issues/39) |
+| Token Classification (§3.2) | [`/token-classification`](../../frontend/src/routes/token-classification.tsx) | **Shipped** — NER + redaction, and the multilingual head the roadmap thought was lost |
 | Table Question Answering (§3.11) | — | **Does not port** — no export for TAPAS or TAPEX; text-to-SQL needs ~1 GB *and* a database |
-| Question Answering (§3.3) | — | Planned — [#40](https://github.com/bthek1/model_playground/issues/40) |
+| Question Answering (§3.3) | [`/question-answering`](../../frontend/src/routes/question-answering.tsx) | **Shipped** — extractive, the answer marked in the passage, 63–125 MB |
 | Zero-Shot Classification (§3.4) | — | Planned — [#42](https://github.com/bthek1/model_playground/issues/42) |
 | Translation (§3.5) | — | Planned — [#45](https://github.com/bthek1/model_playground/issues/45) |
 | Summarization (§3.6) | — | Planned, **gated on a measurement** — [#46](https://github.com/bthek1/model_playground/issues/46) |
 | Feature Extraction · Sentence Similarity (§3.7) | — | Planned — [#43](https://github.com/bthek1/model_playground/issues/43) |
 | Text Generation (§3.8) | — | Planned — [#47](https://github.com/bthek1/model_playground/issues/47) |
-| Fill-Mask (§3.9) | — | Planned — [#41](https://github.com/bthek1/model_playground/issues/41) |
+| Fill-Mask (§3.9) | [`/fill-mask`](../../frontend/src/routes/fill-mask.tsx) | **Shipped** — four base encoders, three tokenizer families, 68–300 MB |
 | Text Ranking (§3.10) | — | Planned — [#44](https://github.com/bthek1/model_playground/issues/44) |
 
 **The browser is an encoder paradise and a decoder compromise.** BERT-family encoders are
@@ -160,11 +160,48 @@ a time** (null the reference *first*, then `disposeQuietly`), **warm-up before `
   whole design: a classifier's argmax is the least informative thing it produces, because
   "POSITIVE" alone looks identical at 0.99 and at 0.51. Callers pass the full label set,
   and a near-tie is called out in words rather than left to be read off two bar widths.
-- **`SpanOverlay`** + `highlight()` — built in §3.2, where it can be tested against a real
+- **[`SpanOverlay`](../../frontend/src/components/text/SpanOverlay.tsx)** +
+  [`highlight()`](../../frontend/src/text/highlight.ts) — built by §3.2, against a real
   model's character offsets rather than against our expectations, and reused by §3.3 and
   §3.9. Its one rule: **slice the original string by character offset, never rebuild the
   text from tokens.** Concatenated subwords lose the original whitespace and the highlight
-  lands a character or two off — a wrong result that reads as a styling problem.
+  lands a character or two off — a wrong result that reads as a styling problem. The
+  assertion that pins it is that the concatenation of every slice equals the input
+  **exactly**, whitespace included.
+- **[`mask.ts`](../../frontend/src/text/mask.ts)** — added by §3.9, and the same rule in a
+  third disguise: **the filling is spliced into the user's own string**, never taken from
+  the pipeline's `sequence`, which is a `tokenizer.decode(…)` and on an uncased model comes
+  back as "the capital of france is paris." Everything here takes the mask token as an
+  *argument*: nothing in this module, or in any caller, writes `[MASK]`.
+  - Overlapping spans are **reported, not interleaved**. Two spans claiming the same
+    characters cannot both be drawn, and picking one quietly is how a page ends up showing
+    a confident highlight over a range no model proposed. `highlight()` returns them in
+    `dropped` and the component says so on screen — rather than throwing mid-render.
+  - **Every span carries its type as visible text, not as colour alone**, and that is a
+    correctness decision. The four `--entity-*` theme hues are validated all-pairs in both
+    themes, but their worst colour-vision separation (ΔE 6.9) sits in the band that is
+    legal only *with* a secondary encoding. **Five hues do not pass**: no 5-subset of the
+    reference categorical order clears the normal-vision floor with all pairs in play. Four
+    is enough because a checkpoint has four entity types and only one model is live at a
+    time — which is why `MISC` and `DATE` share slot 4. An unrecognised type renders
+    neutral rather than getting a generated hue, since off-palette colour is unvalidated
+    colour.
+- **[`offsets.ts`](../../frontend/src/text/offsets.ts)** — built by §3.3, and the reason
+  the rule above is not free. **Transformers.js 4.2.0 produces no character offsets at
+  all.** Its tokenizers return `input_ids` and `attention_mask` and nothing else — there is
+  no `return_offsets_mapping` — and *both* pipelines that would carry offsets ship with the
+  work unwritten: `question-answering` and `token-classification` each declare `start` /
+  `end` as **optional** in their types and each has a literal `// TODO` where they would be
+  filled in. A caller reading `result.start` type-checks cleanly and receives `undefined`
+  at runtime. Measured against 4.2.0 under `onnxruntime-node`, not inferred from the types.
+  - `wordPieceOffsets(text, pieces)` rebuilds the alignment by walking the pieces along the
+    source, and **returns `null` rather than guessing** when one does not match — an
+    `[UNK]`, a lowercasing tokenizer, an accent-stripping normaliser. A page's honest
+    fallback is "no highlight", because a near-miss mark reads as a styling bug and is
+    invisible to everyone but a careful reader.
+  - It is safe for the cased WordPiece checkpoints this category uses
+    (`do_lower_case: false`, `strip_accents: null`) — a property of the *checkpoint*, so
+    read its `tokenizer_config.json` before adding an entry that depends on a highlight.
 
 ### 2.2 Nothing is debounced, anywhere in this category
 
@@ -214,50 +251,205 @@ quotes the cost before the click. The samples are chosen so the three models **d
 quietly renders one model's answer twice cannot pass. Asserting that the two *rankings*
 differ would pin a property neither model promises.
 
-### 3.2 Token Classification — planned ([#39](https://github.com/bthek1/model_playground/issues/39))
+### 3.2 Token Classification — **shipped**
 
-NER with the entities highlighted in the user's own text, and a redact button. The
-redaction is a real argument for client-side inference rather than a demonstration of one:
-the document never leaves the tab.
+Taxonomy task **Token Classification** ·
+[`/token-classification`](../../frontend/src/routes/token-classification.tsx) ·
+[#39](https://github.com/bthek1/model_playground/issues/39).
 
-| entry | q8 | fp16 | role |
-|---|---|---|---|
-| `Xenova/bert-base-NER` | 103.9 MiB | 205.8 MiB | the default — 4 types, English |
-| `Xenova/bert-base-multilingual-cased-ner-hrl` | 178.5 MiB | 354.9 MiB | 10 languages |
+NER with the entities marked in the user's own text, and a redact button. **This is the
+page where "it runs in your browser" stops being a performance claim and becomes the
+point**: redacting a document you are not allowed to upload is a real reason to want the
+model on this side of the wire, rather than a demonstration of one.
+
+| entry | q8 | fp16 | types | role |
+|---|---|---|---|---|
+| `Xenova/bert-base-NER` | 103.9 MiB | 205.8 MiB | PER ORG LOC MISC | the default — English CoNLL-2003 |
+| `Xenova/bert-base-multilingual-cased-ner-hrl` | 170.2 MiB | 338.5 MiB | PER ORG LOC **DATE** | 10 languages |
 
 **The original roadmap is wrong that multilingual NER is lost.** It sends the task to a
-server on the strength of two repos with no export; the runtime's own *default* for
-`token-classification` is the multilingual entry above, which is under the bar.
+server on the strength of two repos with no ONNX export
+(`Babelscape/wikineural-multilingual-ner`, `Jean-Baptiste/roberta-large-ner-english`) —
+but the runtime's own *default* for `token-classification` is the multilingual entry
+above, comfortably under the bar. A page was planned without it.
 
-`aggregation_strategy: "simple"` is load-bearing and fails as a rendering bug: without it
-the pipeline returns one result per subword token and the page paints a highlight per
-word-piece, which looks like a broken overlay rather than a missing option.
+**`aggregation_strategy: "simple"` is pinned in the engine, not passed by the hook.**
+Without it the pipeline returns one result per *subword token*, so "Wellington" comes back
+as `Well` / `##ing` / `##ton` with three sets of offsets and the page paints three
+highlights across one word. That is a **rendering bug rather than an error** — it looks
+like a broken overlay, not a missing option — and it is one forgetful call site away at
+every future caller. Pinning it in `engine.ts` means there is one call site to keep right
+instead of all of them.
 
-### 3.3 Question Answering — planned ([#40](https://github.com/bthek1/model_playground/issues/40))
+**Redaction is a pure derivation**, so toggling it — or changing which types it removes —
+re-derives from the spans already in hand and costs nothing. Same rule as `/vad`'s
+threshold and detection's confidence floor: only GENERATE spends. The redacted text is
+offered as a **clipboard copy** rather than a download, which is the right affordance for
+a paragraph.
+
+`just fe-e2e-text` asserts the **offsets**, not the count: each mark's own text must be
+the entity exactly — no leading space, no truncated final character, no `##` fragment. A
+count-based assertion passes happily while every highlight sits two characters to the left
+of the word it means.
+
+### 3.3 Question Answering — **shipped**
+
+Taxonomy task **Question Answering** ·
+[`/question-answering`](../../frontend/src/routes/question-answering.tsx) ·
+[#40](https://github.com/bthek1/model_playground/issues/40).
 
 Extractive QA at **62.8 MiB q8 / 124.5 MiB fp16**
 (`Xenova/distilbert-base-cased-distilled-squad`) — the only exported entry, so this is a
 one-entry page, and §0's second question is satisfied by the floor being 63 MB rather than
-by there being an alternative.
+by there being an alternative. `deepset/roberta-base-squad2` and
+`deepset/deberta-v3-large-squad2` have no ONNX export, and #5's suggested Qwen3-0.6B
+reader is 569.8 MB for the same `{span, score}` a 63 MB encoder produces.
+
+**The pipeline could not carry this page, and that is the finding.** The plan was written
+around `question-answering` being in `SUPPORTED_TASKS` and returning
+`{ answer, score, start, end }` with character offsets. It is in `SUPPORTED_TASKS`, and it
+returns `{ answer, score }` — `start` and `end` are declared *optional* in its types and
+**never populated**, past a literal `// TODO add start and end?` in the pipeline's own
+source (4.2.0, measured under `onnxruntime-node`). So a caller reading `result.start`
+type-checks cleanly and gets `undefined`. `token-classification` has the same unwritten
+TODO in the same place.
+
+This is the fourth page planned around a pipeline that could not carry it — after MusicGen,
+Florence-2 and `/image-text-to-text` — and the first where the check that would have caught
+it is not "is the task in `SUPPORTED_TASKS`". **Check the fields a pipeline actually
+populates, not only that the task exists**; an optional field in a `.d.ts` is a claim about
+the type, not about the runtime.
+
+So the route owns an engine ([`src/text/qa/`](../../frontend/src/text/qa/)), on the repo's
+standing criterion — it is not a plain `pipeline()` call — and drives `AutoTokenizer` +
+`AutoModelForQuestionAnswering` directly.
+
+**Render the answer as a span, not as a string.** An extractive model's answer *is* a
+range, and showing it as one is what makes a wrong answer look wrong: quoted alone it reads
+as authoritative, shown where it came from it is obviously not there. The score sits beside
+it always — it is the only signal there is, and hiding it makes a 0.03 answer look like a
+0.99 one.
+
+**Owning the span means owning the alignment**, and that is where this page can silently
+fail. [`text/offsets.ts`](../../frontend/src/text/offsets.ts) walks the WordPiece pieces
+along the passage and returns one character range per token; it is exact, and it returns
+**null rather than guessing** when a piece does not match (an `[UNK]`, a lowercasing
+tokenizer, an accent-stripping normaliser). A near-miss highlight lands beside the word it
+means and reads as a styling bug, so "no highlight, answer quoted" is the honest fallback
+and the page has that branch.
+
+**The obvious shortcut — `context.indexOf(answer)` — is not merely fragile, it is wrong on
+this page's own sample.** Asked what WebGPU supports that WebGL does not, the model answers
+`general-purpose compute shaders`; the tokenizer decodes those same ids as
+`general - purpose compute shaders`, which does not occur in the passage at all, so a
+substring search returns -1. Slicing [213, 244) returns the passage's characters with the
+hyphen intact. The search also picks the *first* occurrence, which on a passage that names
+someone twice highlights the wrong one.
+
+**The selection is a transcription of the pipeline's, on purpose.**
+[`qa/select.ts`](../../frontend/src/text/qa/select.ts) keeps the same masking, the same two
+softmaxes and the same `p(start=i)·p(end=j)` sweep over every `i ≤ j` — no maximum answer
+length (HF's Python pipeline caps at 15 tokens; Transformers.js does not cap, and a cap
+changes the answer on exactly the unsure questions this page is about), and CLS left in the
+softmax denominator before its score is zeroed. Measured against the pipeline on nine
+question/passage pairs: **same answer, same score to six decimals, all nine** — so the
+offsets are added without the answers moving.
 
 **The model cannot abstain, and saying so is a first-class requirement.** SQuAD 1.1 models
 always answer; the squad2 checkpoints that can say "no answer" have no export, so the
-behaviour is not merely unshipped but unavailable. The page ships a sample whose question
-is unanswerable from its passage, and the model answering it anyway — with a score — is
-the lesson.
+behaviour is not merely unshipped but unavailable. The note lives in OUTPUT's *description*
+rather than beside the result, so it is on screen before the first answer — a caveat that
+appears only once you already believe the answer has arrived too late — and it is keyed off
+`QaModel.canAbstain` so an abstaining export would retire it without a rewrite. A route test
+and a mocked E2E spec pin the copy, the `/video-classification` precedent.
 
-### 3.4 Zero-Shot Classification — planned ([#42](https://github.com/bthek1/model_playground/issues/42))
+**The disclaimer ships with its demonstration.** One sample asks "Who won the 1998 World
+Cup?" of the Eiffel Tower passage. The model answers "Gustave Eiffel" **at 0.94** — chosen
+over an obviously off-topic pair that scores 0.03, because the lesson is not that the model
+answers but that it is *confident*: the score is not a usable "do I know this" signal
+either.
+
+`just fe-e2e-qa` asserts a **character range**, not a string — "a span appeared" passes
+while the alignment is off by a token, and "the span reads Gustave Eiffel" passes while it
+marks the second mention of a name.
+
+### 3.4 Zero-Shot Classification — **shipped**
+
+Taxonomy task **Zero Shot Classification** ·
+[`/zero-shot-classification`](../../frontend/src/routes/zero-shot-classification.tsx) ·
+[#42](https://github.com/bthek1/model_playground/issues/42).
+
+The first page in the app whose **label set is the user's** rather than the checkpoint's.
+An NLI model is asked, once per label, whether the text entails a hypothesis built from
+that label; the answers are normalised into a score list.
 
 | entry | q8 | fp16 | role |
 |---|---|---|---|
 | `Xenova/nli-deberta-v3-xsmall` | 83.2 MiB | 136.2 MiB | the default |
-| `Xenova/mobilebert-uncased-mnli` | 25.7 MiB | 47.8 MiB | the smallest that works at all |
-| `Xenova/distilbert-base-uncased-mnli` | 67.6 MiB | 134.1 MiB | the runtime's own default |
-| `Xenova/bart-large-mnli` | 392.2 MiB | **778.1 MiB** | the classic — gated on the fp16 number |
+| `Xenova/mobilebert-uncased-mnli` | **25.7 MiB** | 47.8 MiB | the floor — the smallest that works at all |
+| `Xenova/distilbert-base-uncased-mnli` | 67.6 MiB | 134.1 MiB | the runtime's own default, and **absent from #5's table** |
+| `Xenova/bart-large-mnli` | 392.2 MiB | **778.1 MiB** | the classic. Gated on the fp16 number |
 
-**N labels cost N forward passes**, because the model runs once per label as an NLI
-premise–hypothesis pair. The pass count is shown next to GENERATE, derived from the label
-list as it is edited.
+**`MoritzLaurer/deberta-v3-base-zeroshot-v2.0` is cut, and it was this page's recommended
+default.** It publishes exactly one ONNX file — `onnx/model.onnx` at fp32, 738.6 MB — so
+the "~180 MB" the original roadmap quoted was an estimate of a file that does not exist.
+The replacement is the fourth row above, which the original table also missed: it is what
+`pipeline("zero-shot-classification")` loads when you name no model at all.
+
+**`Xenova/bart-large-mnli` is not "411 MB, under the bar, but gate it".** 411 MB is its q8
+size; on WebGPU `loadOpts()` asks for fp16 and the download is 815,853,432 bytes. It still
+ships, because **§0's bar is about a page's floor and this page's floor is a 26 MB
+model** — a cheap default beside a gated heavy option is the shape §0 allows, and the
+failure it forbids is a page where every entry is heavy. But the entry carries measured
+bytes for both backends so the picker quotes the number the user will actually pay.
+
+**`isHeavy` moved out of `/depth` rather than being copied.** The threshold and the
+predicate now live in `model/size.ts` as `HEAVY_MODEL_BYTES` / `isHeavyDownload`, which is
+the same move `backend.ts` and `size.ts` made out of `audio/` when vision arrived. It is
+still a **size test and not a model id** — that is what let it survive Depth Pro being
+cut, and what let this page inherit it instead of writing a second gate.
+
+**N labels cost N forward passes**, and there is no batching anywhere in the pipeline —
+it is a `for` loop over the hypotheses with `await this.model(inputs)` inside it. Ten
+labels is ten inferences on one press. The pass count sits next to GENERATE and is derived
+from the label list as it is edited, so editing labels still spends nothing and the cost
+is on screen before the click.
+
+**The hypothesis template is part of the input, so it is on screen and editable.** This is
+the `hypothesis_template` finding from `/zero-shot-image-classification` transplanted: the
+pipeline applies `"This example is {}."` unless told otherwise, so a page that templates
+silently compares a prompt the user cannot read. The route shows the composed hypothesis
+for the first label, sends the template explicitly on every run, and carries it into
+OUTPUT beside the result. Labels are stored as **bare nouns** (`billing`, not
+`a billing issue`) so the template composes.
+
+**A template with no `{}` is the silent failure this page can have.** Every label would
+compose to the *same* hypothesis, so every label would get the same logits and the ranking
+would be whatever order the ties resolve in — nothing throws, and the bar chart is
+perfectly ordinary. `templateProblem()` refuses it and says why.
+
+**`multi_label` changes the arithmetic, not the model**, and cannot re-derive from scores
+already in hand: single-label is one softmax across every label's entailment logit, while
+multi-label is a softmax of entailment against contradiction per label. So flipping it
+runs nothing and the next GENERATE is a real second inference, which the page says beside
+the switch — the same contract as `/video-text-to-text`'s reverse toggle. One label is
+**always** scored independently (`softmaxEach = multi_label || labels.length === 1`),
+whatever the toggle says, and the page states that rather than rendering a lone 1.00 as
+certainty.
+
+**Every entry declares `entailment` in its `label2id`, and that is load-bearing.** The
+pipeline looks the index up by name and falls back to `2` with only a console warning if
+it is missing — and the right index is 1 for the DeBERTa head, 0 for MobileBERT and
+DistilBERT, and 2 for BART. A checkpoint without the mapping would be scored on the wrong
+logit and return a full, confident, wrongly-ordered list. `just fe-e2e-models` checks the
+mapping on the Hub, because no run would tell you.
+
+`just fe-e2e-zeroshot-text` asserts a **known ranking on a known sentence** — a billing
+complaint must put `billing` first against labels the model was never trained on — then
+re-runs the same premise under a bare `{}` template and asserts the **scores move**. Two
+templates producing identical numbers is exactly what a page that lets the pipeline apply
+its own default looks like, and nothing else can catch it. It asserts the scores move
+rather than that the ranking flips, which would pin a property the model does not promise.
 
 ### 3.5 Translation — planned ([#45](https://github.com/bthek1/model_playground/issues/45))
 
@@ -304,13 +496,68 @@ and the 128.3 MB file the roadmap quoted belongs to a legacy graph family 4.2.0 
 requests via `model_file_name`. `HuggingFaceTB/SmolLM2-360M-Instruct` at **272.7 MB**
 genuinely quantized is the default instead.
 
-### 3.9 Fill-Mask — planned ([#41](https://github.com/bthek1/model_playground/issues/41))
+### 3.9 Fill-Mask — **shipped**
+
+Taxonomy task **Fill-Mask** ·
+[`/fill-mask`](../../frontend/src/routes/fill-mask.tsx) ·
+[#41](https://github.com/bthek1/model_playground/issues/41).
 
 Four entries across three tokenizer families, specifically so the mask-token trap is one
 click away rather than theoretical: **always insert `tokenizer.mask_token`, never a
-literal string.** Hard-coding `[MASK]` breaks the moment the user switches to RoBERTa, and
-it does not error — the model treats the literal characters as words and returns fluent,
-wrong predictions.
+literal string.**
+
+| entry | q8 | fp16 | mask | role |
+|---|---|---|---|---|
+| `Xenova/bert-base-uncased` | 105.7 MiB | 209.2 MiB | `[MASK]` | the default — the original MLM |
+| `Xenova/distilbert-base-uncased` | 64.6 MiB | 127.9 MiB | `[MASK]` | the cheapest, and the least factual |
+| `Xenova/roberta-base` | 120.3 MiB | 238.2 MiB | `<mask>` | **the second tokenizer family** |
+| `onnx-community/ModernBERT-base-ONNX` | 144.1 MiB | 285.8 MiB | `[MASK]` | 2024 corpus, the sharpest |
+
+This is the one page where a *base* model is the qualification rather than the
+disqualification §3.1 made it: masked language modelling is the objective these encoders
+were pretrained on, so the head is the real one, not a randomly initialised
+`LABEL_0`/`LABEL_1`.
+
+**The plan's premise about the trap was wrong, and the correction is worth keeping.** It
+expected a hard-coded `[MASK]` on RoBERTa to return "fluent, wrong predictions". Measured
+against the real pipeline, it **throws**: `FillMaskPipeline` looks `mask_token_id` up in
+the token ids and raises `Mask token (<mask>) not found in text.` The bug is loud. It is
+still a failure the user did nothing to cause, so the page keeps all three defences — the
+token is inserted by a button, rewritten in place when the model changes, and reconciled
+against the loaded tokenizer in the engine (`text/mask.ts`, `text/engine.ts`). A run
+therefore stays correct even if a catalogue entry drifts from its repo, and the page says
+on screen when the two disagree.
+
+**The silent failure on this page is a *second* mask.** The pipeline takes `findIndex`
+over the ids: it fills the first and drops the rest with no error at all. Measured —
+"The `[MASK]` of France is `[MASK]`." comes back as "the border of france is.": one
+filling, and a sentence quietly missing a word. So the route refuses to run on anything
+but exactly one mask, with the reason on the trigger rather than a disabled button and
+nothing else.
+
+**A model change rewrites the mask already in the box**, which is the decision the plan
+left open for Phase 2. Rewriting beats refusing because the user's sentence is the part
+worth keeping and the token is punctuation they did not type — and the page says it
+happened, because the alternative to rewriting silently is not refusing, it is saying
+nothing.
+
+**The page's own lesson is that DistilBERT does not know the capital of France.** BERT
+says *paris* at 0.33 and ModernBERT at 0.88; DistilBERT says *marseille*, and at fp32 it
+is **worse** (marseille, nantes, toulouse — no *paris* in the top three), so this is
+distillation rather than quantization damage. One click, two models, and the cost of
+halving an encoder is on screen. That also settles the E2E's known answer: it asserts
+*paris* on BERT and RoBERTa, never on DistilBERT.
+
+Bias probing is framed as **evidence about the corpus, not about the world**, per this
+file's original §3.9 — three paired prompts differing by a single word, run as one
+batched GENERATE, rendered side by side under the prompts that produced them, with the
+framing sentence travelling *inside* the result rather than near it.
+
+`just fe-e2e-fillmask` is the guard, and **the RoBERTa half is the test**: the same
+question through a different tokenizer, which a page that hard-codes the literal cannot
+pass. `just fe-e2e-models` additionally reads each repo's own `tokenizer_config.json` and
+compares it to the declared `maskToken`, so a drifted entry is a red test rather than a
+note on a page.
 
 ### 3.10 Text Ranking — planned ([#44](https://github.com/bthek1/model_playground/issues/44))
 
@@ -351,10 +598,10 @@ into the interesting part.
 | Taxonomy task | In-browser? | Recommended model | Floor |
 |---|---|---|---|
 | Text Classification | Yes, excellent | `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | 64.5 MiB q8 / 127.9 MiB fp16 |
-| Token Classification | Yes | `Xenova/bert-base-NER` | 103.9 MiB q8 |
+| Token Classification | Yes, **and multilingual too** | `Xenova/bert-base-NER` | 103.9 MiB q8 |
 | Table QA | **No** | — | server, or `sql.js` plus a small LLM |
-| Question Answering | Yes, extractive only | `Xenova/distilbert-base-cased-distilled-squad` | 62.8 MiB q8 |
-| Zero-Shot Classification | Yes | `Xenova/nli-deberta-v3-xsmall` | 25.7 MiB q8 (mobilebert) |
+| Question Answering | **Shipped**, extractive only | `Xenova/distilbert-base-cased-distilled-squad` | 62.8 MiB q8 / 124.5 MiB fp16 |
+| Zero-Shot Classification | Yes, **shipped** | `Xenova/nli-deberta-v3-xsmall` | 25.7 MiB q8 (mobilebert) |
 | Translation | Yes, **one pair at a time** | `Xenova/opus-mt-en-de` per pair | 101.1 MiB q8 |
 | Summarization | **Only if q8-on-WebGPU measures well** | `Xenova/distilbart-cnn-6-6` | 270.8 MiB q8 |
 | Feature Extraction | Yes, excellent | `Xenova/all-MiniLM-L6-v2` | **21.9 MiB q8** |

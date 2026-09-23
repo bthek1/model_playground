@@ -37,7 +37,16 @@ export interface UseTextPipelineResult {
    * callers pass e.g. `[{ top_k: 5 }]` or `[candidateLabels, { multi_label }]`.
    * Resolves with the raw pipeline output.
    */
-  run: (input: TextInput, args?: unknown[]) => Promise<unknown>;
+  run: (
+    input: TextInput,
+    args?: unknown[],
+    /**
+     * The mask literal in `input`, for `fill-mask` only. It is beside `args`
+     * rather than inside them because the pipeline never sees it: the engine
+     * swaps it for the loaded tokenizer's own `mask_token` first.
+     */
+    mask?: string,
+  ) => Promise<unknown>;
   /** Start the download (no-op unless idle) — see model-page-pattern.md §3. */
   load: () => void;
   /** Re-attempt a failed load. */
@@ -63,8 +72,8 @@ export function useTextPipeline(
 
   const { run: post } = worker;
   const run = useCallback(
-    (input: TextInput, args?: unknown[]): Promise<unknown> =>
-      post({ input, args }),
+    (input: TextInput, args?: unknown[], mask?: string): Promise<unknown> =>
+      post({ input, args, mask }),
     [post],
   );
 

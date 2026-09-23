@@ -199,6 +199,9 @@ describe("Natural Language Processing", () => {
 
   it("maps the shipped NLP routes", () => {
     expect(at("text-classification")).toBe("/text-classification");
+    expect(at("token-classification")).toBe("/token-classification");
+    expect(at("question-answering")).toBe("/question-answering");
+    expect(at("zero-shot-classification")).toBe("/zero-shot-classification");
   });
 
   it("leaves Table Question Answering on the placeholder", () => {

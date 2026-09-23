@@ -200,4 +200,207 @@ describe("createTextHandler", () => {
     await handle({ type: "run", id: 1, input: "x" });
     expect(posted).toEqual([{ type: "error", id: 1, error: "No model loaded" }]);
   });
+
+  // `aggregation_strategy: "simple"` is pinned in the engine rather than passed
+  // by the hook, because forgetting it is a **rendering bug** rather than an
+  // error: without it the pipeline returns one result per subword token, so
+  // "Wellington" comes back as three spans and the page paints three
+  // highlights across one word. Pinning it means there is one call site to get
+  // right instead of every future one.
+  it("pins aggregation_strategy for token classification", async () => {
+    const pipe = vi.fn().mockResolvedValue([]);
+    const handle = createTextHandler(
+      () => {},
+      async () => pipe as unknown as CallableTextPipeline,
+      { warmup: false },
+    );
+    await handle({
+      type: "load",
+      task: "token-classification",
+      model: "Xenova/bert-base-NER",
+      opts: { device: "wasm", dtype: "q8" },
+    });
+    await handle({ type: "run", id: 1, input: "Priya flew to Berlin" });
+
+    expect(pipe).toHaveBeenCalledWith("Priya flew to Berlin", {
+      aggregation_strategy: "simple",
+    });
+  });
+
+  it("merges the pinned option into a caller's own options", async () => {
+    const pipe = vi.fn().mockResolvedValue([]);
+    const handle = createTextHandler(
+      () => {},
+      async () => pipe as unknown as CallableTextPipeline,
+      { warmup: false },
+    );
+    await handle({
+      type: "load",
+      task: "token-classification",
+      model: "m",
+      opts: { device: "wasm", dtype: "q8" },
+    });
+    await handle({ type: "run", id: 1, input: "x", args: [{ ignore_labels: [] }] });
+
+    expect(pipe).toHaveBeenCalledWith("x", {
+      ignore_labels: [],
+      aggregation_strategy: "simple",
+    });
+  });
+
+  it("leaves other tasks' args untouched", async () => {
+    const pipe = vi.fn().mockResolvedValue([]);
+    const handle = createTextHandler(
+      () => {},
+      async () => pipe as unknown as CallableTextPipeline,
+      { warmup: false },
+    );
+    await handle({
+      type: "load",
+      task: "text-classification",
+      model: "m",
+      opts: { device: "wasm", dtype: "q8" },
+    });
+    await handle({ type: "run", id: 1, input: "x", args: [{ top_k: 6 }] });
+
+    expect(pipe).toHaveBeenCalledWith("x", { top_k: 6 });
+  });
+});
+
+// --- fill-mask ---------------------------------------------------------------
+//
+// The one task whose *input* depends on the loaded tokenizer and whose result
+// carries a fact about it back. Everything asserted here was measured against
+// the real pipeline first: a wrong mask literal throws, and the warm-up string
+// needs a mask of its own.
+
+/** A fake fill-mask pipeline that records what it was actually called with. */
+function maskPipe(maskToken: string | null) {
+  const calls: unknown[][] = [];
+  const pipe = Object.assign(
+    vi.fn(async (...args: unknown[]) => {
+      calls.push(args);
+      return [{ token_str: " Paris", score: 0.67 }];
+    }),
+    maskToken === null ? {} : { tokenizer: { mask_token: maskToken } },
+  ) as unknown as CallableTextPipeline;
+  return { pipe, calls };
+}
+
+describe("createTextHandler — fill-mask", () => {
+  afterEach(() => clearGpu());
+
+  async function loaded(maskToken: string | null, warmup = false) {
+    const posted: TextResponse[] = [];
+    const { pipe, calls } = maskPipe(maskToken);
+    const handle = createTextHandler((m) => posted.push(m), async () => pipe, {
+      warmup,
+    });
+    await handle({
+      type: "load",
+      task: "fill-mask",
+      model: "Xenova/roberta-base",
+      opts: { device: "wasm", dtype: "q8" },
+    });
+    return { handle, posted, calls };
+  }
+
+  it("rewrites the caller's mask literal to the tokenizer's own", async () => {
+    // The page inserted `[MASK]` — from a catalogue entry, or from text the
+    // user pasted — and the loaded checkpoint is RoBERTa. Without this the
+    // pipeline raises "Mask token (<mask>) not found in text."
+    const { handle, calls } = await loaded("<mask>");
+    await handle({
+      type: "run",
+      id: 1,
+      input: "The capital of France is [MASK].",
+      mask: "[MASK]",
+      args: [{ top_k: 5 }],
+    });
+
+    expect(calls[0][0]).toBe("The capital of France is <mask>.");
+  });
+
+  it("leaves the input alone when the two already agree", async () => {
+    const { handle, calls } = await loaded("[MASK]");
+    await handle({
+      type: "run",
+      id: 1,
+      input: "a [MASK] b",
+      mask: "[MASK]",
+    });
+    expect(calls[0][0]).toBe("a [MASK] b");
+  });
+
+  it("rewrites every prompt in a batch, not only the first", async () => {
+    // The bias probe sends six prompts in one call; a rewrite that stopped at
+    // the first would fail five of them.
+    const { handle, calls } = await loaded("<mask>");
+    await handle({
+      type: "run",
+      id: 1,
+      input: ["a [MASK]", "b [MASK]"],
+      mask: "[MASK]",
+    });
+    expect(calls[0][0]).toEqual(["a <mask>", "b <mask>"]);
+  });
+
+  it("returns the resolved mask beside the fillings", async () => {
+    const { handle, posted } = await loaded("<mask>");
+    await handle({ type: "run", id: 7, input: "a [MASK]", mask: "[MASK]" });
+
+    expect(last(posted)).toEqual({
+      type: "result",
+      id: 7,
+      result: {
+        mask: "<mask>",
+        fills: [{ token_str: " Paris", score: 0.67 }],
+      },
+    });
+  });
+
+  it("reports a null mask rather than inventing one", async () => {
+    // A checkpoint with no mask token cannot be rewritten to anything; the page
+    // needs to be told that rather than shown the literal it sent.
+    const { handle, posted } = await loaded(null);
+    await handle({ type: "run", id: 1, input: "a [MASK]", mask: "[MASK]" });
+
+    expect(last(posted)).toMatchObject({ result: { mask: null } });
+    // And the input passed through untouched — there was nothing to swap to.
+    expect((last(posted) as { result: { fills: unknown } }).result.fills).toEqual([
+      { token_str: " Paris", score: 0.67 },
+    ]);
+  });
+
+  it("warms up on a string that actually contains a mask", async () => {
+    // `FillMaskPipeline` throws on an input with no mask — after the forward
+    // pass, so a maskless warm-up looks harmless and is one dependency
+    // refactor away from warming nothing at all.
+    const { calls } = await loaded("<mask>", true);
+    expect(calls).toHaveLength(1);
+    expect(String(calls[0][0])).toContain("<mask>");
+  });
+
+  it("does not touch another task's input", async () => {
+    const posted: TextResponse[] = [];
+    const { pipe, calls } = maskPipe("<mask>");
+    const handle = createTextHandler((m) => posted.push(m), async () => pipe, {
+      warmup: false,
+    });
+    await handle({
+      type: "load",
+      task: "text-classification",
+      model: "m",
+      opts: { device: "wasm", dtype: "q8" },
+    });
+    await handle({ type: "run", id: 1, input: "a [MASK] b", mask: "[MASK]" });
+
+    expect(calls[0][0]).toBe("a [MASK] b");
+    // …and the result is the pipeline's own shape, not a fill-mask envelope.
+    expect(last(posted)).toEqual({
+      type: "result",
+      id: 1,
+      result: [{ token_str: " Paris", score: 0.67 }],
+    });
+  });
 });

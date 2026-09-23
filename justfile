@@ -316,6 +316,53 @@ fe-e2e-videovlm:
 fe-e2e-text:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts
 
+# Run only the @slow fill-mask specs: two real loads (BERT base, 219 MB on
+# WebGPU / 111 MB on WASM, then RoBERTa base at 250 / 126) asking the same
+# question through two different tokenizers.
+#
+# **The RoBERTa half is the test.** Its mask is `<mask>`, not `[MASK]`, so a
+# page that hard-codes the literal passes the BERT test and fails this one —
+# loudly, because `FillMaskPipeline` looks `mask_token_id` up in the token ids
+# and raises "Mask token (<mask>) not found in text.". Both halves assert the
+# *word* (paris) rather than "a ranked list appeared".
+fe-e2e-fillmask:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "fill-mask"
+
+# Run only the @slow question-answering specs: a real DistilBERT-SQuAD load
+# (~125 MB on WebGPU / 63 MB on WASM) and real extractive answers.
+#
+# **The assertion is a character range, not a string**, and that is the whole
+# reason the spec is worth its minutes. "A span appeared" passes while the
+# token->character alignment is off by one; "the span reads Gustave Eiffel"
+# passes while it marks the *second* mention of a name. Only the offsets pin it.
+#
+# The second test is the one that justifies `text/offsets.ts` existing at all:
+# the model's own decode of that answer is `general - purpose compute shaders`,
+# which does not occur in the passage, so the obvious shortcut — searching the
+# passage for the answer string — highlights nothing. The third asserts that the
+# model answers a question its passage cannot answer, which is the page's
+# subject rather than a failure.
+fe-e2e-qa:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "question answering"
+
+# Run the @slow zero-shot spec on its own: a real DeBERTa-v3-xsmall load
+# (~136 MB on WebGPU / 83 MB on WASM) and real entailment runs.
+#
+# Three things only a real model can check, and every one of them produces a
+# plausible-looking page when it is broken:
+#
+#   * a **known ranking on a known sentence** — a billing complaint must put
+#     `billing` first against labels the model has never been trained on;
+#   * that the **hypothesis template reaches the model** — two different
+#     templates producing identical scores is exactly what a page that lets the
+#     pipeline apply its own default looks like, and nothing else can catch it;
+#   * that **multi-label is a second inference**, not a re-derivation: the
+#     single-label scores sum to 1 and the multi-label ones do not.
+#
+# It is one forward pass per label, so a three-label run is three inferences.
+fe-e2e-zeroshot-text:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "zero-shot"
+
 # Check every model id (audio + vision + multimodal + text) still resolves on
 # the Hugging Face Hub, that each vision entry publishes the dtypes both backends
 # ask for, that the VLM entries publish their three q4f16 graphs, and that the

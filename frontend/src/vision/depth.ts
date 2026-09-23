@@ -20,6 +20,8 @@
 // interface because the legend direction is read off the catalogue rather than
 // hard-coded, and a metric model is what would set it again.
 
+import { isHeavyDownload } from "@/model/size";
+
 import type { VisionModel } from "./types";
 
 export interface DepthModel extends VisionModel {
@@ -50,26 +52,20 @@ export const DEPTH_MODELS: DepthModel[] = [
 export const DEFAULT_DEPTH_MODEL = DEPTH_MODELS[0].id;
 
 /**
- * The threshold past which the picker's size line is not enough on its own and
- * the page states the cost a second time, bluntly. Half a gigabyte: ten times
- * the models this page actually ships, and the point at which a download stops
- * being a detail and becomes a decision.
- */
-export const HEAVY_MODEL_BYTES = 500e6;
-
-/**
  * Models heavy enough that the page states the cost and downloads nothing until
  * the user opts in a second time.
  *
- * **No shipped entry trips this today**, and that is the intended state: Depth
- * Pro did, and was cut for it. The predicate is a size test rather than a model
- * id precisely so it survived that cut — an id check would have had to be
- * deleted with its subject, taking the gate with it, and the next heavy entry
- * would have arrived ungated.
+ * **No shipped entry on this page trips it today**, and that is the intended
+ * state: Depth Pro did, and was cut for it. The predicate is a size test rather
+ * than a model id precisely so it survived that cut — an id check would have
+ * had to be deleted with its subject, taking the gate with it, and the next
+ * heavy entry would have arrived ungated. It survived twice over: the threshold
+ * and the test now live in `model/size.ts`, where
+ * `/zero-shot-classification` picked them up for BART-large-MNLI rather than
+ * writing a second copy.
  */
 export function isHeavy(model: DepthModel): boolean {
-  const { webgpu = 0, wasm = 0 } = model.bytes ?? {};
-  return Math.max(webgpu, wasm) >= HEAVY_MODEL_BYTES;
+  return isHeavyDownload(model.bytes);
 }
 
 /**
