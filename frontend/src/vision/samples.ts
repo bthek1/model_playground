@@ -62,16 +62,17 @@ export const IMAGE_SAMPLES: ImageSample[] = [
 export const DEFAULT_IMAGE_SAMPLE = IMAGE_SAMPLES[0].id;
 
 /**
- * Pictures whose subject is **printed text**, for `/image-to-text`.
+ * Pictures whose subject is **printed text**, used by `/image-text-to-text` —
+ * asking a VLM to read a sign is a different question from asking it to
+ * describe a scene, and both belong on that page's sample row.
  *
  * Kept out of `IMAGE_SAMPLES` on purpose: an advertisement is a poor sample for
  * a detector or a depth model, and a sample row is a set of suggestions, not a
- * catalogue. The OCR route appends these to the shared five.
+ * catalogue.
  *
- * The `@slow` spec asserts a substring of what the model reads back off the
- * Coca-Cola advertisement — **change that assertion if this sample changes**,
- * because "some text came back" would pass on a broken processor path that
- * hands the model noise.
+ * These were originally `/image-to-text`'s samples. That route is gone (its
+ * whole catalogue was 482–544 MB), and the set survived it because the VLM page
+ * wants exactly the same pictures.
  */
 export const TEXT_SAMPLES: ImageSample[] = [
   {
@@ -87,36 +88,6 @@ export const TEXT_SAMPLES: ImageSample[] = [
     url: `${BASE}/book-cover.png`,
     hint: "Title, author, publisher — several sizes of type at once",
     expect: "the title, at minimum",
-  },
-];
-
-/**
- * Photographed **documents**, for `/document-question-answering`.
- *
- * Kept separate from `TEXT_SAMPLES` because the two answer different questions.
- * Those are pictures that happen to contain type — an advertisement, a book
- * cover — and they are there to exercise OCR. These are documents with
- * *structure*: fields, labels and values, which is what a document-QA model is
- * asked about ("what is the invoice number", not "what does this say").
- *
- * `invoice.png` is the Transformers.js docs' own DocVQA example, which makes it
- * the natural fixture for the `@slow` spec: its invoice number is a known answer
- * on a known input, and "some text appeared" would pass without it.
- */
-export const DOCUMENT_SAMPLES: ImageSample[] = [
-  {
-    id: "invoice",
-    label: "Invoice",
-    url: `${BASE}/invoice.png`,
-    hint: "Fields and values — ask for the invoice number, a date, or the total",
-    expect: "the exact field you asked for, copied from the page",
-  },
-  {
-    id: "receipt",
-    label: "Receipt",
-    url: `${BASE}/receipt.png`,
-    hint: "Denser and less regular than the invoice — the harder of the two",
-    expect: "a line item or a total, when the print is legible enough",
   },
 ];
 

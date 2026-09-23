@@ -17,10 +17,10 @@
 // earned three times over: **check `SUPPORTED_TASKS` before planning around a
 // pipeline**, not after.
 //
-// The counterpart note lives in `vision/caption/types.ts`, which deliberately
-// left SmolVLM out of the captioning catalogue — "a model that can only be
-// driven by a question does not belong on a page whose four modes are fixed task
-// tokens". This is the page that question belongs to.
+// Both of those routes have since been cut for size — `/text-to-audio` (599 MB
+// minimum) and `/image-to-text` (482 MB minimum) had no lighter checkpoint to
+// fall back to — but the rule they paid for outlives them, which is why it is
+// recorded here rather than in either deleted file.
 
 import type { Backend, DtypeSpec, LoadOpts } from "@/model/backend";
 import type { ModelRequest, ModelResponse } from "@/model/types";
@@ -37,9 +37,9 @@ export interface VlmModelEntry {
   /**
    * How the worker drives it. One family today; the field exists because the
    * catalogue's next entry (Qwen3-VL, roadmap §3.1) is `qwen3_vl` and loads
-   * through the same auto-class but processes images differently — and because
-   * `vision/caption/types.ts` learned that a second family arrives sooner than
-   * expected.
+   * through the same auto-class but processes images differently. The deleted
+   * captioning catalogue learned the same lesson the hard way: a second family
+   * arrives sooner than expected.
    */
   family: "idefics3";
   backends?: readonly Backend[];

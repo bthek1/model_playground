@@ -51,7 +51,6 @@ const REAL_ROUTES: Record<string, string> = {
   "automatic-speech-recognition": "/asr",
   "audio-classification": "/audio-classification",
   "text-to-speech": "/text-to-speech",
-  "text-to-audio": "/text-to-audio",
   "audio-to-audio": "/audio-to-audio",
   "voice-activity-detection": "/vad",
   "image-classification": "/image-classification",
@@ -62,7 +61,6 @@ const REAL_ROUTES: Record<string, string> = {
   "zero-shot-object-detection": "/zero-shot-object-detection",
   "image-feature-extraction": "/image-features",
   "mask-generation": "/mask-generation",
-  "image-to-text": "/image-to-text",
   "keypoint-detection": "/pose",
   "video-classification": "/video-classification",
   "background-removal": "/background-removal",
@@ -95,12 +93,23 @@ const REAL_ROUTES: Record<string, string> = {
   // share this engine behind its own route rather than folding into this one —
   // a user looking for VQA does not think to click "image-text-to-text".
   "image-text-to-text": "/image-text-to-text",
-  // The category's second route, and the only one in it that rides a real
-  // pipeline: 4.2.0 carries `document-question-answering`, and Donut is that
-  // pipeline's own default model. Distinct from Image-Text-to-Text because the
-  // question is different in kind — a field lookup on a page, answered by
-  // extraction rather than prose.
-  "document-question-answering": "/document-question-answering",
+  // Three slugs deliberately have no route and fall through to the placeholder,
+  // for one reason each — every checkpoint the task has is too heavy to offer:
+  //
+  //   text-to-audio                 MusicGen-small, the only browser music
+  //                                 model, is 599 MB on WASM / 1127 MB on
+  //                                 WebGPU — past the ~1 GB ceiling.
+  //   image-to-text                 Florence-2 (544 MB) and vit-gpt2 (482 MB)
+  //                                 are the whole catalogue; neither is a
+  //                                 download to put behind a sidebar click.
+  //   document-question-answering   Donut is 411 MB on WebGPU and 597 MB on
+  //                                 WASM (its decoder cannot be quantized —
+  //                                 see `model/backend.ts`), and the pipeline
+  //                                 hardcodes Donut's prompt, so there is no
+  //                                 lighter second entry to fall back to.
+  //
+  // All three are written up in their category roadmaps with the measured
+  // numbers, which `adding-a-task-page.md` §0 counts as finished work.
 };
 
 function task(label: string): TaskItem {

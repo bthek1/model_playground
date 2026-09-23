@@ -11,8 +11,8 @@
 //
 // Two things are specific to this route.
 //
-// **The warm-up costs a real generation**, as it does for `vision/caption/`: an
-// autoregressive decoder warmed up to completion would add seconds to the
+// **The warm-up costs a real generation**: an autoregressive decoder warmed up
+// to completion would add seconds to the
 // longest load in the app. Capped at a couple of tokens — enough to compile the
 // shaders of all three graphs, which is the entire point.
 //

@@ -65,14 +65,20 @@ export function loadOpts(backend: Backend): LoadOpts {
  * except on WASM, where the decoder must stay **fp32**.
  *
  * **The bug below is not ASR-specific, despite this function's name.** It was
- * characterised here first because ASR hit it first, but
- * `/document-question-answering` reproduced it exactly — same error, same
- * missing `embed_tokens.weight_merged_0_scale` — on Donut, which is not an ASR
- * model. Read it as: *any encoder-decoder whose decoder is quantized* fails to
- * open a session on the bundled WASM provider. That catalogue expresses the fix
- * per entry (`dtypes: { wasm: { encoder_model: "q8", decoder_model_merged:
- * "fp32" } }`) rather than through a second named helper; if a third family
- * arrives, generalise this function rather than copying it again.
+ * characterised here first because ASR hit it first, but Donut — a document-QA
+ * model, not an ASR one — reproduced it exactly: same error, same missing
+ * `embed_tokens.weight_merged_0_scale`. Read it as: *any encoder-decoder whose
+ * decoder is quantized* fails to open a session on the bundled WASM provider.
+ * The fix is expressible per catalogue entry (`dtypes: { wasm: {
+ * encoder_model: "q8", decoder_model_merged: "fp32" } }`) rather than through a
+ * second named helper; if a third family arrives, generalise this function
+ * rather than copying it again.
+ *
+ * That finding cost Donut ~3x its download (411 MB → 597 MB on WASM) and is
+ * part of why `/document-question-answering` was cut. The knowledge is kept
+ * here because the next encoder-decoder will hit it too, and only a real
+ * in-browser load surfaces it — the unit suite mocks the runtime away, and the
+ * same call loads cleanly under `onnxruntime-node`.
  *
  * Why: the quantized (q8) Whisper/Moonshine decoders fail to even open a session
  * on the WASM execution provider bundled with `@huggingface/transformers` 4.2.0 —

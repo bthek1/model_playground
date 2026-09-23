@@ -358,8 +358,7 @@ function AnswerView({
       {body ? (
         // The testid goes on a wrapper, not on `Markdown`: that component takes
         // only `{children, className}` and drops everything else, so a
-        // `data-testid` passed to it is silently dead. (`/image-to-text` passes
-        // one too, and it has never resolved — its test queries `slot-4`.)
+        // `data-testid` passed to it is silently dead.
         <div data-testid="answer-text">
           <Markdown>{body}</Markdown>
         </div>

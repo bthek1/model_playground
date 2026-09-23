@@ -15,7 +15,6 @@ import { Route as VideoClassificationRouteImport } from './routes/video-classifi
 import { Route as VadRouteImport } from './routes/vad'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
-import { Route as TextToAudioRouteImport } from './routes/text-to-audio'
 import { Route as TensorRouteImport } from './routes/tensor'
 import { Route as SuperResolutionRouteImport } from './routes/super-resolution'
 import { Route as SignupRouteImport } from './routes/signup'
@@ -26,7 +25,6 @@ import { Route as ObjectDetectionRouteImport } from './routes/object-detection'
 import { Route as MaskGenerationRouteImport } from './routes/mask-generation'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LinkPredictionRouteImport } from './routes/link-prediction'
-import { Route as ImageToTextRouteImport } from './routes/image-to-text'
 import { Route as ImageTo3dRouteImport } from './routes/image-to-3d'
 import { Route as ImageTextToTextRouteImport } from './routes/image-text-to-text'
 import { Route as ImageFeaturesRouteImport } from './routes/image-features'
@@ -34,7 +32,6 @@ import { Route as ImageClassificationRouteImport } from './routes/image-classifi
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as GraphClassificationRouteImport } from './routes/graph-classification'
 import { Route as GraphRouteImport } from './routes/graph'
-import { Route as DocumentQuestionAnsweringRouteImport } from './routes/document-question-answering'
 import { Route as DepthRouteImport } from './routes/depth'
 import { Route as BackgroundRemovalRouteImport } from './routes/background-removal'
 import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
@@ -72,11 +69,6 @@ const TrainingRoute = TrainingRouteImport.update({
 const TextToSpeechRoute = TextToSpeechRouteImport.update({
   id: '/text-to-speech',
   path: '/text-to-speech',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TextToAudioRoute = TextToAudioRouteImport.update({
-  id: '/text-to-audio',
-  path: '/text-to-audio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TensorRoute = TensorRouteImport.update({
@@ -129,11 +121,6 @@ const LinkPredictionRoute = LinkPredictionRouteImport.update({
   path: '/link-prediction',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ImageToTextRoute = ImageToTextRouteImport.update({
-  id: '/image-to-text',
-  path: '/image-to-text',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ImageTo3dRoute = ImageTo3dRouteImport.update({
   id: '/image-to-3d',
   path: '/image-to-3d',
@@ -169,12 +156,6 @@ const GraphRoute = GraphRouteImport.update({
   path: '/graph',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DocumentQuestionAnsweringRoute =
-  DocumentQuestionAnsweringRouteImport.update({
-    id: '/document-question-answering',
-    path: '/document-question-answering',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const DepthRoute = DepthRouteImport.update({
   id: '/depth',
   path: '/depth',
@@ -218,7 +199,6 @@ export interface FileRoutesByFullPath {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
-  '/document-question-answering': typeof DocumentQuestionAnsweringRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
   '/home': typeof HomeRoute
@@ -226,7 +206,6 @@ export interface FileRoutesByFullPath {
   '/image-features': typeof ImageFeaturesRoute
   '/image-text-to-text': typeof ImageTextToTextRoute
   '/image-to-3d': typeof ImageTo3dRoute
-  '/image-to-text': typeof ImageToTextRoute
   '/link-prediction': typeof LinkPredictionRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
@@ -237,7 +216,6 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
-  '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
@@ -253,7 +231,6 @@ export interface FileRoutesByTo {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
-  '/document-question-answering': typeof DocumentQuestionAnsweringRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
   '/home': typeof HomeRoute
@@ -261,7 +238,6 @@ export interface FileRoutesByTo {
   '/image-features': typeof ImageFeaturesRoute
   '/image-text-to-text': typeof ImageTextToTextRoute
   '/image-to-3d': typeof ImageTo3dRoute
-  '/image-to-text': typeof ImageToTextRoute
   '/link-prediction': typeof LinkPredictionRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
@@ -272,7 +248,6 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
-  '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
@@ -289,7 +264,6 @@ export interface FileRoutesById {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
-  '/document-question-answering': typeof DocumentQuestionAnsweringRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
   '/home': typeof HomeRoute
@@ -297,7 +271,6 @@ export interface FileRoutesById {
   '/image-features': typeof ImageFeaturesRoute
   '/image-text-to-text': typeof ImageTextToTextRoute
   '/image-to-3d': typeof ImageTo3dRoute
-  '/image-to-text': typeof ImageToTextRoute
   '/link-prediction': typeof LinkPredictionRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
@@ -308,7 +281,6 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
-  '/text-to-audio': typeof TextToAudioRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
@@ -326,7 +298,6 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
-    | '/document-question-answering'
     | '/graph'
     | '/graph-classification'
     | '/home'
@@ -334,7 +305,6 @@ export interface FileRouteTypes {
     | '/image-features'
     | '/image-text-to-text'
     | '/image-to-3d'
-    | '/image-to-text'
     | '/link-prediction'
     | '/login'
     | '/mask-generation'
@@ -345,7 +315,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/super-resolution'
     | '/tensor'
-    | '/text-to-audio'
     | '/text-to-speech'
     | '/training'
     | '/vad'
@@ -361,7 +330,6 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
-    | '/document-question-answering'
     | '/graph'
     | '/graph-classification'
     | '/home'
@@ -369,7 +337,6 @@ export interface FileRouteTypes {
     | '/image-features'
     | '/image-text-to-text'
     | '/image-to-3d'
-    | '/image-to-text'
     | '/link-prediction'
     | '/login'
     | '/mask-generation'
@@ -380,7 +347,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/super-resolution'
     | '/tensor'
-    | '/text-to-audio'
     | '/text-to-speech'
     | '/training'
     | '/vad'
@@ -396,7 +362,6 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
-    | '/document-question-answering'
     | '/graph'
     | '/graph-classification'
     | '/home'
@@ -404,7 +369,6 @@ export interface FileRouteTypes {
     | '/image-features'
     | '/image-text-to-text'
     | '/image-to-3d'
-    | '/image-to-text'
     | '/link-prediction'
     | '/login'
     | '/mask-generation'
@@ -415,7 +379,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/super-resolution'
     | '/tensor'
-    | '/text-to-audio'
     | '/text-to-speech'
     | '/training'
     | '/vad'
@@ -432,7 +395,6 @@ export interface RootRouteChildren {
   AudioToAudioRoute: typeof AudioToAudioRoute
   BackgroundRemovalRoute: typeof BackgroundRemovalRoute
   DepthRoute: typeof DepthRoute
-  DocumentQuestionAnsweringRoute: typeof DocumentQuestionAnsweringRoute
   GraphRoute: typeof GraphRoute
   GraphClassificationRoute: typeof GraphClassificationRoute
   HomeRoute: typeof HomeRoute
@@ -440,7 +402,6 @@ export interface RootRouteChildren {
   ImageFeaturesRoute: typeof ImageFeaturesRoute
   ImageTextToTextRoute: typeof ImageTextToTextRoute
   ImageTo3dRoute: typeof ImageTo3dRoute
-  ImageToTextRoute: typeof ImageToTextRoute
   LinkPredictionRoute: typeof LinkPredictionRoute
   LoginRoute: typeof LoginRoute
   MaskGenerationRoute: typeof MaskGenerationRoute
@@ -451,7 +412,6 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   SuperResolutionRoute: typeof SuperResolutionRoute
   TensorRoute: typeof TensorRoute
-  TextToAudioRoute: typeof TextToAudioRoute
   TextToSpeechRoute: typeof TextToSpeechRoute
   TrainingRoute: typeof TrainingRoute
   VadRoute: typeof VadRoute
@@ -503,13 +463,6 @@ declare module '@tanstack/react-router' {
       path: '/text-to-speech'
       fullPath: '/text-to-speech'
       preLoaderRoute: typeof TextToSpeechRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/text-to-audio': {
-      id: '/text-to-audio'
-      path: '/text-to-audio'
-      fullPath: '/text-to-audio'
-      preLoaderRoute: typeof TextToAudioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tensor': {
@@ -582,13 +535,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LinkPredictionRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/image-to-text': {
-      id: '/image-to-text'
-      path: '/image-to-text'
-      fullPath: '/image-to-text'
-      preLoaderRoute: typeof ImageToTextRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/image-to-3d': {
       id: '/image-to-3d'
       path: '/image-to-3d'
@@ -636,13 +582,6 @@ declare module '@tanstack/react-router' {
       path: '/graph'
       fullPath: '/graph'
       preLoaderRoute: typeof GraphRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/document-question-answering': {
-      id: '/document-question-answering'
-      path: '/document-question-answering'
-      fullPath: '/document-question-answering'
-      preLoaderRoute: typeof DocumentQuestionAnsweringRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/depth': {
@@ -704,7 +643,6 @@ const rootRouteChildren: RootRouteChildren = {
   AudioToAudioRoute: AudioToAudioRoute,
   BackgroundRemovalRoute: BackgroundRemovalRoute,
   DepthRoute: DepthRoute,
-  DocumentQuestionAnsweringRoute: DocumentQuestionAnsweringRoute,
   GraphRoute: GraphRoute,
   GraphClassificationRoute: GraphClassificationRoute,
   HomeRoute: HomeRoute,
@@ -712,7 +650,6 @@ const rootRouteChildren: RootRouteChildren = {
   ImageFeaturesRoute: ImageFeaturesRoute,
   ImageTextToTextRoute: ImageTextToTextRoute,
   ImageTo3dRoute: ImageTo3dRoute,
-  ImageToTextRoute: ImageToTextRoute,
   LinkPredictionRoute: LinkPredictionRoute,
   LoginRoute: LoginRoute,
   MaskGenerationRoute: MaskGenerationRoute,
@@ -723,7 +660,6 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   SuperResolutionRoute: SuperResolutionRoute,
   TensorRoute: TensorRoute,
-  TextToAudioRoute: TextToAudioRoute,
   TextToSpeechRoute: TextToSpeechRoute,
   TrainingRoute: TrainingRoute,
   VadRoute: VadRoute,
