@@ -850,7 +850,7 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   `data-testid` on a wrapper.
 - **OCR now has no page**, and **metric depth has no path** (ZoeDepth has no export).
 
-**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`) — the fourth modality, and the cheapest module in the app:**
+**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`) — the fourth modality, and the cheapest module in the app:**
 
 - **There is no decode step, and that is the point.** No text equivalent of `audio/io.ts`
   or `vision/image.ts` exists: the input is already a string, so there is no
@@ -861,6 +861,38 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   message), a pure `engine.ts` owing the same three behaviours, a `client.ts`, thin hooks
   over `useTextPipeline`. Add a task by adding its arm to `TextTask` and its warm-up args
   to `warmupArgs()` — a union arm with no caller is an untested branch.
+- **`/question-answering` does not ride the generic worker, and the reason generalises.**
+  The plan assumed `question-answering` returns `{ answer, score, start, end }` with
+  character offsets because the task is in `SUPPORTED_TASKS` and the fields are in the
+  types. It returns `{ answer, score }`: `start`/`end` are **optional and never
+  populated**, past a literal `// TODO add start and end?` in the pipeline source, and
+  `token-classification` has the same unwritten TODO. Transformers.js 4.2.0 has no
+  `return_offsets_mapping` at all. **Check the fields a pipeline actually populates, not
+  only that the task exists** — an optional field in a `.d.ts` is a claim about the type,
+  not the runtime. Fourth page planned around a pipeline that could not carry it.
+- **`text/offsets.ts` owns the alignment, and returns `null` rather than guessing.**
+  `wordPieceOffsets` walks the pieces along the passage; any mismatch (`[UNK]`, a
+  lowercasing tokenizer, an accent-stripping normaliser) ends the whole alignment and the
+  page quotes the answer instead of marking it. A near-miss highlight reads as a styling
+  bug. Safe for *cased* checkpoints (`do_lower_case: false`, `strip_accents: null`) — read
+  the checkpoint's `tokenizer_config.json` before shipping an entry that highlights.
+- **`context.indexOf(answer)` is wrong, not merely fragile.** The model answers
+  `general-purpose compute shaders`; the tokenizer decodes the same ids as
+  `general - purpose compute shaders`, which is not in the passage, so the search returns
+  -1 — and a search takes the first occurrence anyway. `QaAnswer` keeps `text` (sliced)
+  and `decoded` (the tokenizer's) separate so the difference is asserted.
+- **`qa/select.ts` transcribes the pipeline's span choice rather than improving it** — same
+  masking, same softmaxes, **no max answer length** (HF Python caps at 15; Transformers.js
+  does not, and a cap moves the answer on exactly the unsure questions), CLS left in the
+  denominator before its score is zeroed. Verified against the pipeline on nine pairs: same
+  answer, same score to six decimals.
+- **The model cannot abstain and the page states it as a requirement.** SQuAD 1.1 always
+  answers; the squad2 checkpoints have no ONNX export, so it is unavailable rather than
+  unshipped. The note is in OUTPUT's *description*, not beside the result, so it precedes
+  the first answer, and is keyed off `QaModel.canAbstain`. It ships with its demonstration:
+  "Who won the 1998 World Cup?" against the Eiffel passage answers "Gustave Eiffel" at
+  **0.94** — the lesson is the confidence, not the wrongness. `just fe-e2e-qa` asserts a
+  **character range**, not a string.
 - **Every entry carries measured `bytes` for both backends**, stricter than vision's
   "measure where an estimate would mislead", and a finding rather than a preference: the
   NLP roadmap's size tables were all `q8` figures while `loadOpts()` asks for **fp16 on
@@ -928,6 +960,30 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   known sentence, then the same premise under a bare `{}` asserting the **scores move**.
   Identical numbers under two templates is exactly what a page letting the pipeline apply
   its own default looks like.
+- **`/fill-mask`: never write `[MASK]` in code.** Four entries across **three tokenizer
+  families**, so the hazard is one click away rather than theoretical. `text/mask.ts` takes
+  the token as an argument everywhere, `FillMaskModel.maskToken` carries it as catalogue
+  data (shown and inserted *before* the download), `MASK_TOKENS` is derived from the
+  entries, and the engine reconciles what the page sent against the **loaded tokenizer's
+  own** `mask_token` — so a drifted entry is a note on screen, not a failed run.
+  `just fe-e2e-models` reads each repo's `tokenizer_config.json` and fails on a mismatch.
+- **Measure a failure mode before designing around it.** The plan expected a hard-coded
+  `[MASK]` on RoBERTa to return fluent wrong predictions; it **throws**
+  (`Mask token (<mask>) not found in text.`). The silent failure is a *second* mask: the
+  pipeline `findIndex`es the ids, fills the first and drops the rest, so
+  "The `[MASK]` of France is `[MASK]`." returns "the border of france is." The route
+  refuses anything but exactly one, with the reason on the trigger.
+- **A model change rewrites the mask already in the box, and says so** — the sentence is
+  the part worth keeping, and the alternative to rewriting silently is saying nothing, not
+  refusing. **Splice the user's string, never the pipeline's `sequence`** (a decode: an
+  uncased model returns "the capital of france is paris."), and trim the word-initial
+  space byte-level BPE leaves on ` Paris`.
+- **Bias probing is evidence about the corpus, not the world**, and the framing travels
+  inside the result: three paired prompts differing by one word, one batched GENERATE,
+  columns side by side under the prompts that produced them.
+- **`just fe-e2e-fillmask` asserts *paris* on BERT and RoBERTa — never DistilBERT**, which
+  genuinely does not know it (at fp32 it is worse: marseille, nantes, toulouse). **The
+  RoBERTa half is the test**: the same question through a different tokenizer.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
@@ -942,10 +998,12 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`;
   vision only: `just fe-e2e-vision` (tens of minutes cold — one route at a time with
   `just fe-e2e-vision-one /pose`); zero-shot scoring parity: `just fe-e2e-zeroshot`;
+  fill-mask across two tokenizers: `just fe-e2e-fillmask`;
   super-resolution vs bicubic by PSNR: `just fe-e2e-superres`; link prediction by AUC band:
   `just fe-e2e-link`; graph classification above its baseline: `just fe-e2e-graphcls`;
   text classification by a known label: `just fe-e2e-text`; zero-shot text by a known
-  ranking *and* a template that provably reaches the model: `just fe-e2e-zeroshot-text`
+  ranking *and* a template that provably reaches the model: `just fe-e2e-zeroshot-text`;
+  extractive QA by a **character range** rather than a string: `just fe-e2e-qa`
 - Install deps: `just fe-install`
 
 ---

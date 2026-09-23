@@ -97,7 +97,9 @@ just fe-e2e-graphcls # @slow: graph classification, pinned above its majority ba
 just fe-e2e-vlm     # @slow: a real SmolVLM load + generation — the only chat-template guard (needs a GPU)
 just fe-e2e-videovlm # @slow: a real SmolVLM2-Video load — the only *multi-image* template guard (needs a GPU)
 just fe-e2e-text    # @slow: text classification, pinned by a known label on a known sentence
+just fe-e2e-qa      # @slow: extractive QA, pinned by a **character range** — not a string
 just fe-e2e-zeroshot-text # @slow: zero-shot text — a known ranking, and a template proven to reach the model
+just fe-e2e-fillmask # @slow: fill-mask — the same question through two tokenizers; the RoBERTa half is the test
 just fe-e2e-models  # check every model id (audio + vision + multimodal + text) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -741,7 +743,7 @@ behaviours, a thin `vlm.worker.ts` around it, a `client.ts`, and `useVlm` over
   produces a fluent answer about the wrong pictures, with no error anywhere. Both
   need a real GPU with `shader-f16`.
 
-### In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`)
+### In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`)
 
 The fourth modality on the Transformers.js path, and **the cheapest module in the
 app, for a reason worth knowing before planning a page**: there is no text
@@ -754,6 +756,62 @@ three: one generic worker per modality (`pipeline.worker.ts`, task in the `load`
 message), a pure `engine.ts` owing the same three behaviours, a `client.ts`, and
 thin task hooks over `useTextPipeline`. See [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md).
 
+- **`/question-answering` is the category's first route that does not ride the
+  generic worker, and the reason is a finding worth carrying forward.** The plan
+  was written around `question-answering` being in `SUPPORTED_TASKS` and
+  returning `{ answer, score, start, end }` with **character** offsets. It is in
+  `SUPPORTED_TASKS` — and it returns `{ answer, score }`. `start` and `end` are
+  declared *optional* in its types and **never populated**, past a literal
+  `// TODO add start and end?` in the pipeline's own source;
+  `token-classification` has the same unwritten TODO in the same place, and
+  Transformers.js 4.2.0 has no `return_offsets_mapping` anywhere. So a caller
+  reading `result.start` type-checks cleanly and gets `undefined` at runtime.
+  **Check the fields a pipeline actually populates, not only that the task
+  exists** — an optional field in a `.d.ts` is a claim about the type, not about
+  the runtime. This is the fourth page planned around a pipeline that could not
+  carry it, after MusicGen, Florence-2 and `/image-text-to-text`.
+- **Owning the span means owning the alignment** (`text/offsets.ts`), and it is
+  the page's whole correctness surface. `wordPieceOffsets` walks the tokenizer's
+  pieces along the passage and returns one character range each — and **returns
+  `null` rather than guessing** on any mismatch (`[UNK]`, a lowercasing
+  tokenizer, an accent-stripping normaliser). The honest fallback is "no
+  highlight, answer quoted": a near-miss mark lands beside the word it means and
+  reads as a styling bug. It is safe for this category's *cased* checkpoints
+  (`do_lower_case: false`, `strip_accents: null`) — a property of the checkpoint,
+  so read its `tokenizer_config.json` before shipping an entry that highlights.
+- **`context.indexOf(answer)` is not a shortcut, it is wrong on the page's own
+  sample.** Asked what WebGPU supports that WebGL does not, the model answers
+  `general-purpose compute shaders`; the tokenizer decodes those same ids as
+  `general - purpose compute shaders`, which does not occur in the passage, so a
+  substring search returns **-1**. Slicing [213, 244) returns the passage's
+  characters, hyphen intact. A search also takes the *first* occurrence, which on
+  a passage naming someone twice highlights the wrong one. `QaAnswer` keeps
+  `text` (sliced) and `decoded` (the tokenizer's) as separate fields so the
+  difference is asserted rather than assumed.
+- **`qa/select.ts` is a deliberate transcription of the pipeline's span choice**,
+  not an improvement: same masking, same two softmaxes, same `p(start)·p(end)`
+  sweep over every `i ≤ j`, **no maximum answer length** (HF's Python caps at 15
+  tokens; Transformers.js does not, and a cap changes the answer on exactly the
+  unsure questions this page is about), and CLS left in the softmax denominator
+  before its score is zeroed. Measured against the pipeline on nine
+  question/passage pairs: same answer, same score to six decimals, all nine — so
+  the offsets were added without the answers moving.
+- **The model cannot abstain, and the page says so as a requirement, not a
+  footnote.** SQuAD 1.1 heads always answer; the squad2 checkpoints that can
+  decline have **no ONNX export**, so it is unavailable rather than unshipped.
+  The note lives in OUTPUT's *description* rather than beside the result, so it
+  is on screen before the first answer — a caveat that arrives only once you
+  already believe the answer has arrived comes too late — and it is keyed off
+  `QaModel.canAbstain` so an abstaining export retires it without a rewrite. Same
+  class as `/video-classification`'s frame-level disclaimer, pinned by a test for
+  the same reason. **The disclaimer ships with its demonstration**: a sample asks
+  "Who won the 1998 World Cup?" of the Eiffel Tower passage and the model answers
+  "Gustave Eiffel" **at 0.94** — chosen over an off-topic pair scoring 0.03,
+  because the lesson is that it is *confident*, so the score is not a usable "do
+  I know this" signal either.
+- **`just fe-e2e-qa` asserts a character range, not a string.** "A span appeared"
+  passes while the alignment is off by a token, and "the span reads Gustave
+  Eiffel" passes while it marks the second mention of a name.
 - **Every entry carries measured `bytes` for both backends** — stricter than
   vision's "measure where an estimate would mislead", and a finding rather than a
   preference. The NLP roadmap's size tables were all `q8` figures while
@@ -861,6 +919,53 @@ thin task hooks over `useTextPipeline`. See [`docs/roadmaps/nlp.md`](docs/roadma
   is precisely what a page that lets the pipeline apply its own default looks like.
   It asserts movement rather than a flipped ranking, which would pin a property the
   model does not promise.
+- **`/fill-mask` is the one page where a *base* model is the qualification**, not
+  the disqualification the bullet above makes it: masked language modelling is
+  the objective these encoders were pretrained on, so the head is the real one.
+  Four entries across **three tokenizer families**, deliberately, so the
+  mask-token hazard is one click away rather than theoretical.
+- **Never write `[MASK]` in code.** `text/mask.ts` takes the token as an argument
+  everywhere, `FillMaskModel.maskToken` carries it as catalogue data (so the page
+  can show it and insert it *before* the 219 MB download), and the engine
+  reconciles whatever the page sent against the **loaded tokenizer's own**
+  `mask_token` — so a catalogue entry that drifts produces a note on screen
+  rather than a failed run. `just fe-e2e-models` reads each repo's
+  `tokenizer_config.json` and fails on a mismatch.
+- **The plan's premise about that trap was wrong, and the correction is the
+  useful part.** A hard-coded `[MASK]` on RoBERTa does **not** return fluent wrong
+  predictions: `FillMaskPipeline` looks `mask_token_id` up in the ids and raises
+  `Mask token (<mask>) not found in text.` The bug is loud. Measure the failure
+  mode before designing around it — the three defences stay because the failure
+  is still one the user did nothing to cause, not because it is silent.
+- **The silent failure is a *second* mask.** The pipeline `findIndex`es the ids,
+  fills the first and drops the rest with no error: "The `[MASK]` of France is
+  `[MASK]`." comes back as "the border of france is." — one filling, a sentence
+  quietly missing a word. The route refuses anything but **exactly one**, with
+  the reason on the trigger rather than a dead button.
+- **A model change rewrites the mask already in the box, and says so.** `[MASK]`
+  sitting in a box now pointed at RoBERTa is the page's own hazard with the user
+  holding it. Rewriting beats refusing (the sentence is the part worth keeping),
+  and the alternative to rewriting silently is not refusing — it is saying
+  nothing. `MASK_TOKENS` is **derived** from the catalogue, so a fifth family
+  arrives as an entry rather than an edit to `mask.ts`.
+- **Splice the user's string; never render the pipeline's `sequence`.** That
+  field is a `tokenizer.decode(…)`, so an uncased model hands back "the capital of
+  france is paris." and the page would silently rewrite what was typed. Same rule
+  as `highlight()`, one layer up. Byte-level BPE also leaves the word-initial
+  space on (` Paris`), and trimming can collide two token ids onto one label —
+  which `ScoreList` keys its rows on, so the duplicate is dropped.
+- **Bias probing is framed as evidence about the corpus, not the world**, and the
+  framing travels *inside* the result. Three paired prompts differing by a single
+  word, one batched GENERATE, rendered side by side under the prompts that
+  produced them. A pair is the mechanism: one prompt shows a plausible sentence,
+  two identical prompts show what changed when one word did.
+- **DistilBERT does not know the capital of France**, and that is the page's own
+  lesson rather than a quantization artefact — at fp32 it is *worse* (marseille,
+  nantes, toulouse; no paris in the top three) while BERT says paris at 0.33 and
+  ModernBERT at 0.88. So `just fe-e2e-fillmask` asserts *paris* on BERT and
+  RoBERTa and never on DistilBERT, and **the RoBERTa half is the test** — the
+  same question through a different tokenizer, which a hard-coded literal cannot
+  pass.
 
 ### Three routes were built and then cut for size — read this before adding one
 
