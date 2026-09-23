@@ -127,7 +127,9 @@ describe("ZeroShotImageClassificationPage", () => {
       screen.getByRole("heading", { name: /zero-shot image classification/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /clip vit-b\/32/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /siglip 2/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /siglip base/i }),
+    ).toBeInTheDocument();
   });
 
   it("downloads nothing on arrival, and loads only on request", () => {

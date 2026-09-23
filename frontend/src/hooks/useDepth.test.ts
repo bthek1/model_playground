@@ -29,6 +29,7 @@ vi.mock("./useVisionPipeline", () => ({
 }));
 
 const { useDepth, depthDims } = await import("./useDepth");
+const { DEPTH_MODELS } = await import("@/vision/depth");
 
 const image = {} as never;
 
@@ -45,14 +46,21 @@ describe("useDepth", () => {
     );
   });
 
-  it("passes the catalogue's per-backend precision override through", () => {
-    // Depth Pro is pinned to q8 because its fp16 export is 1.8 GB.
-    renderHook(() => useDepth("onnx-community/DepthPro-ONNX"));
+  it("pins no precision, because both remaining entries are 50 MB", () => {
+    // Depth Pro was the only depth entry with a `dtypes` override (q8 on both,
+    // because its fp16 export is 1.8 GB) and it was cut for size. The
+    // pass-through itself is still exercised by `vision/engine.test.ts` and by
+    // the classification, features, segmentation and super-resolution
+    // catalogues — this asserts the state of *this* one.
+    for (const m of DEPTH_MODELS) {
+      expect(m.dtypes, m.id).toBeUndefined();
+    }
+    renderHook(() => useDepth("onnx-community/depth-anything-v2-small"));
     expect(useVisionPipeline).toHaveBeenCalledWith(
       "depth-estimation",
-      "onnx-community/DepthPro-ONNX",
+      "onnx-community/depth-anything-v2-small",
       false,
-      { webgpu: "q8", wasm: "q8" },
+      undefined,
     );
   });
 

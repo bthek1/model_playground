@@ -3,17 +3,22 @@
 // One forward pass produces a per-pixel depth map — the best-looking output in
 // the category, and structurally the simplest after classification.
 //
-// **What comes back is *relative* depth, not metres**, for everything here
-// except Depth Pro. The values are an inverse-depth map on an arbitrary,
-// per-image scale: comparing two frames without aligning them first is
-// meaningless. That is a fact about the models, so it belongs in the UI copy on
-// `/depth`, not only in this comment.
+// **What comes back is *relative* depth, not metres.** The values are an
+// inverse-depth map on an arbitrary, per-image scale: comparing two frames
+// without aligning them first is meaningless. That is a fact about the models,
+// so it belongs in the UI copy on `/depth`, not only in this comment.
 //
 // Sizes are read off the Hub's blob listing, not estimated:
 //
 //   Depth Anything V2 Small   fp16 47.3 MB · q8 26.0 MB
 //   Depth Anything Small      fp16 47.6 MB · q8 26.2 MB
-//   Depth Pro                 q8  962 MB  (fp16 is 1.8 GB — see below)
+//
+// **Depth Pro used to be the third entry and was cut for size.** It is the only
+// metric-depth export that exists for the browser, and it is 1009 MB at q8
+// (the fp16 build is 1.8 GB) — twenty times either model above, on a page whose
+// point is that one forward pass is interactive. `metric` stays on the
+// interface because the legend direction is read off the catalogue rather than
+// hard-coded, and a metric model is what would set it again.
 
 import type { VisionModel } from "./types";
 
@@ -40,31 +45,31 @@ export const DEPTH_MODELS: DepthModel[] = [
     task: "depth-estimation",
     bytes: { webgpu: 49_861_035, wasm: 27_524_771 },
   },
-  {
-    id: "onnx-community/DepthPro-ONNX",
-    label: "Depth Pro (metric)",
-    hint: "Real metres, plus a focal-length estimate — and roughly 1 GB to download.",
-    params: 952,
-    task: "depth-estimation",
-    metric: true,
-    // WebGPU only, and **quantized on both**: the fp16 export is 1.8 GB, which
-    // is past what a tab will reliably hold alongside a WebGPU context. q8 is
-    // still ~1 GB, which is why this entry is gated behind an explicit opt-in
-    // the way `/text-to-audio` gates MusicGen rather than merely warned about.
-    backends: ["webgpu"],
-    dtypes: { webgpu: "q8", wasm: "q8" },
-    bytes: { webgpu: 1_009_098_757, wasm: 1_009_098_757 },
-  },
 ];
 
 export const DEFAULT_DEPTH_MODEL = DEPTH_MODELS[0].id;
 
 /**
+ * The threshold past which the picker's size line is not enough on its own and
+ * the page states the cost a second time, bluntly. Half a gigabyte: ten times
+ * the models this page actually ships, and the point at which a download stops
+ * being a detail and becomes a decision.
+ */
+export const HEAVY_MODEL_BYTES = 500e6;
+
+/**
  * Models heavy enough that the page states the cost and downloads nothing until
- * the user opts in a second time. One entry today; the predicate is the contract.
+ * the user opts in a second time.
+ *
+ * **No shipped entry trips this today**, and that is the intended state: Depth
+ * Pro did, and was cut for it. The predicate is a size test rather than a model
+ * id precisely so it survived that cut — an id check would have had to be
+ * deleted with its subject, taking the gate with it, and the next heavy entry
+ * would have arrived ungated.
  */
 export function isHeavy(model: DepthModel): boolean {
-  return model.id === "onnx-community/DepthPro-ONNX";
+  const { webgpu = 0, wasm = 0 } = model.bytes ?? {};
+  return Math.max(webgpu, wasm) >= HEAVY_MODEL_BYTES;
 }
 
 /**

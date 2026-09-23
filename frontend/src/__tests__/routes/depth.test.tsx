@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseDepthResult } from "@/hooks/useDepth";
+import { DEPTH_MODELS, isHeavy } from "@/vision/depth";
 
 // The image helpers reach for RawImage / canvas / getUserMedia, none of which
 // exists under happy-dom. The route only passes what they return to `run`.
@@ -107,7 +108,7 @@ describe("DepthPage", () => {
       screen.getByRole("button", { name: /depth anything v2 small/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /depth pro/i }),
+      screen.getByRole("button", { name: /depth anything \(v1\)/i }),
     ).toBeInTheDocument();
   });
 
@@ -133,17 +134,17 @@ describe("DepthPage", () => {
     expect(screen.getByRole("button", { name: /estimate depth/i })).toBeDisabled();
   });
 
-  it("gates the gigabyte model behind an explicit notice, not just a size line", () => {
-    // The picker already quotes the size. Depth Pro gets a second, blunter
-    // statement because a gigabyte is a decision, not a detail — the same gate
-    // /text-to-audio puts in front of MusicGen.
+  it("shows no heavy-model notice, because no entry is heavy any more", () => {
+    // Depth Pro tripped this gate and was cut for size (1009 MB against 50 MB
+    // for both survivors). `isHeavy` is a size predicate rather than a model id
+    // precisely so the gate outlived it — so the assertion is that nothing in
+    // the catalogue reaches the threshold, not that the notice was deleted.
     renderPage();
     expect(screen.queryByTestId("heavy-model-notice")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /depth pro/i }));
-    const notice = screen.getByTestId("heavy-model-notice");
-    expect(screen.getByTestId("slot-2")).toContainElement(notice);
-    expect(baseState.load).not.toHaveBeenCalled();
+    for (const m of DEPTH_MODELS) {
+      expect(isHeavy(m), m.id).toBe(false);
+    }
   });
 
   it("picks a sample without running, then estimates when asked", async () => {

@@ -18,7 +18,13 @@
 //
 //   CLIP ViT-B/32   fp16 289 MB · q8 147 MB
 //   SigLIP base     fp16 388 MB · q8 201 MB
-//   SigLIP 2 base   fp16 716 MB · q8 360 MB
+//
+// **SigLIP 2 base was the third entry and was cut for size**: 751 MB on WebGPU,
+// two and a half times CLIP, for a page whose argument is a prompt template
+// rather than a leaderboard position. Its measured constants are kept in
+// `scoring.test.ts` — they were recovered from the published weights and from
+// the reference model's own probabilities, which is work worth not repeating
+// if it ever earns its download back (scale 112.668907, bias -16.771725).
 
 import type { VisionModel } from "./types";
 
@@ -72,19 +78,6 @@ export const ZERO_SHOT_MODELS: ZeroShotModel[] = [
     logitBias: -12.932437,
 
     bytes: { webgpu: 407_013_090, wasm: 210_977_441 },
-  },
-  {
-    id: "onnx-community/siglip2-base-patch16-224-ONNX",
-    label: "SigLIP 2 base/16",
-    hint: "The current generation, and the best of the three. 360 MB even quantized.",
-    params: 375,
-    task: "zero-shot-image-classification",
-    family: "siglip",
-    scoring: "sigmoid",
-    logitScale: 112.668907, // exp(4.724453)
-    logitBias: -16.771725,
-
-    bytes: { webgpu: 750_910_198, wasm: 378_000_135 },
   },
 ];
 
