@@ -299,19 +299,40 @@ at the end of that document.
 Running a *pretrained* checkpoint is a different job from writing a kernel: the
 model already exists as ONNX on the Hub, so there is no WGSL to write. These live
 in their own domain folder — `frontend/src/audio/` for the audio tasks,
-`frontend/src/vision/` for the vision ones — and are explicitly carved out of the
-raw-WebGPU-only rule, which scopes to `src/webgpu/`. Reference implementations:
-the ASR, audio-classification and text-to-speech routes
-([`docs/roadmaps/audio.md`](../roadmaps/audio.md)) and `/image-classification`
-([`docs/roadmaps/vision.md`](../roadmaps/vision.md)).
+`frontend/src/vision/` for the vision ones, `frontend/src/text/` for NLP — and are
+explicitly carved out of the raw-WebGPU-only rule, which scopes to `src/webgpu/`.
+Reference implementations: the ASR, audio-classification and text-to-speech routes
+([`docs/roadmaps/audio.md`](../roadmaps/audio.md)), `/image-classification`
+([`docs/roadmaps/vision.md`](../roadmaps/vision.md)) and `/text-classification`
+([`docs/roadmaps/nlp.md`](../roadmaps/nlp.md)).
 
-The two modalities are deliberately the same shape: a generic worker per
-modality, a pure engine, a thin task hook. What differs is only the payload —
-`Float32Array` samples one side, a flattened image the other, because a
-`RawImage` is a class instance and does not survive `postMessage` (see
-`vision/image.ts` → *Worker transport*). The **backend probe and the size
-guardrail are shared by both** and live in `src/model/` (`backend.ts`,
-`size.ts`); a third modality imports them rather than copying them.
+The modalities are deliberately the same shape: a generic worker per modality, a
+pure engine, a thin task hook. What differs is only the payload — `Float32Array`
+samples for audio, a flattened image for vision (a `RawImage` is a class instance
+and does not survive `postMessage`; see `vision/image.ts` → *Worker transport*),
+and for text **nothing at all**. The **backend probe and the size guardrail are
+shared by all of them** and live in `src/model/` (`backend.ts`, `size.ts`); a
+fourth modality imports them rather than copying them.
+
+**Text is the cheap case, and it is worth knowing why before you plan a page
+around it.** There is no text equivalent of `audio/io.ts` or `vision/image.ts`:
+the input is already a string, so there is no decode step, no preprocessing, and
+no transport problem — a string crosses `postMessage` as itself. `src/text/` is
+therefore the whole of the modality: `types.ts`, a pure `engine.ts`,
+`pipeline.worker.ts`, `client.ts`, `catalogue.ts`. Add a task by adding its arm
+to the `TextTask` union and its warm-up args to `warmupArgs()`; a union arm with
+no caller is an untested branch, so each page adds its own as it ships.
+
+One rule is stricter for text than for the other modalities: **every NLP
+catalogue entry carries measured `bytes` for both backends**, not merely the ones
+where an estimate would mislead. The reason is a finding rather than a
+preference — the NLP roadmap's size tables were all `q8` figures while
+`loadOpts()` asks for `fp16` on WebGPU, which is roughly **double**, all the way
+down the category, and enough to move a page across the ~500 MB feasibility bar.
+`just fe-e2e-models` re-checks those numbers against the Hub rather than trusting
+them. Related: **`q4` is not a lever for an encoder** — on every encoder measured,
+`model_q4.onnx` is *larger* than `model_quantized.onnx`. 4-bit is a decoder
+format.
 
 **On pinning `dtypes`:** the rule is "leave it unset unless a real measurement
 says otherwise", and when you do pin one, say in the comment **whether it is a

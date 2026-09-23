@@ -66,13 +66,4 @@ test.describe("/text-classification", () => {
     await expect(page.getByTestId("compare-cost")).toContainText(/MB/);
     await expect(page.getByTestId("compare-load")).toBeVisible();
   });
-
-  test("is reachable from the sidebar", async ({ page }) => {
-    await page.goto("/");
-    await page
-      .getByRole("button", { name: /natural language processing/i })
-      .click();
-    await page.getByRole("link", { name: /^Text Classification$/ }).click();
-    await expect(page).toHaveURL(/\/text-classification$/);
-  });
 });

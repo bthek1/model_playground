@@ -850,6 +850,47 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   `data-testid` on a wrapper.
 - **OCR now has no page**, and **metric depth has no path** (ZoeDepth has no export).
 
+**In-browser NLP (`src/text/` — `/text-classification`) — the fourth modality, and the cheapest module in the app:**
+
+- **There is no decode step, and that is the point.** No text equivalent of `audio/io.ts`
+  or `vision/image.ts` exists: the input is already a string, so there is no
+  preprocessing and no transport problem — a `RawImage` does not survive `postMessage`
+  and a `Tensor` throws outright, while a string crosses as itself. That absence is why
+  `/text-classification` establishes the module rather than a more impressive page. Same
+  shape as the other three: one generic worker (`pipeline.worker.ts`, task in the `load`
+  message), a pure `engine.ts` owing the same three behaviours, a `client.ts`, thin hooks
+  over `useTextPipeline`. Add a task by adding its arm to `TextTask` and its warm-up args
+  to `warmupArgs()` — a union arm with no caller is an untested branch.
+- **Every entry carries measured `bytes` for both backends**, stricter than vision's
+  "measure where an estimate would mislead", and a finding rather than a preference: the
+  NLP roadmap's size tables were all `q8` figures while `loadOpts()` asks for **fp16 on
+  WebGPU**. Roughly double, all the way down the category — it moves several entries
+  across `LARGE_MODEL_BYTES` and Summarization's floor from 283.9 MB to 563.6 MB, over
+  the feasibility bar. `just fe-e2e-models` re-checks the quoted numbers against the Hub.
+- **`q4` is not a lever for an encoder**: `model_q4.onnx` measures *larger* than
+  `model_quantized.onnx` on every encoder tried. 4-bit is a decoder format.
+- **No `textLoadOpts()`, deliberately** — the `asrLoadOpts`/`vlmLoadOpts` precedent is for
+  a family-wide decision and the measurements do not support one. Pins go per entry in
+  `dtypes`, each saying whether it is a **measurement or a precaution**.
+- **A base model is not a classifier, and it fails silently.**
+  `onnx-community/ModernBERT-base-ONNX` was cut from the catalogue against the roadmap's
+  own table: no trained head means `LABEL_0`/`LABEL_1` from random weights — confident,
+  fluent, meaningless. Read what a checkpoint was fine-tuned *for* before writing its
+  entry.
+- **`ScoreList` refuses to render a single row.** A classifier's argmax is its least
+  informative output — "POSITIVE" looks identical at 0.99 and at 0.51 — so callers pass
+  the full label set and a near-tie is stated in words. `SpanOverlay` + `highlight()` is
+  the other shared component, built by `/token-classification` against a real model's
+  offsets: **slice the original string by character offset, never rebuild from tokens**,
+  or the highlight lands a character off and reads as a styling problem.
+- **Nothing here is debounced.** The roadmap wants live classification on a 200–300 ms
+  pause; the page-pattern rule wins. Typing is INPUT, only GENERATE spends — a debounced
+  auto-run is the five-samples-five-inferences failure with a timer in front of it.
+- **The head-to-head is a second LOAD, not a toggle**, and the samples are chosen so the
+  three models **disagree**. `just fe-e2e-text` asserts a known label on a known sentence
+  and pins the comparison *structurally* (SST-2 has two classes, FinBERT three) — asserting
+  the rankings differ would pin a property neither model promises.
+
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
 **Commands:**
@@ -864,7 +905,8 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   vision only: `just fe-e2e-vision` (tens of minutes cold — one route at a time with
   `just fe-e2e-vision-one /pose`); zero-shot scoring parity: `just fe-e2e-zeroshot`;
   super-resolution vs bicubic by PSNR: `just fe-e2e-superres`; link prediction by AUC band:
-  `just fe-e2e-link`; graph classification above its baseline: `just fe-e2e-graphcls`
+  `just fe-e2e-link`; graph classification above its baseline: `just fe-e2e-graphcls`;
+  text classification by a known label: `just fe-e2e-text`
 - Install deps: `just fe-install`
 
 ---

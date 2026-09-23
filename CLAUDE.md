@@ -60,6 +60,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Computer Vision roadmap** (13 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | **Graph ML roadmap** (**complete, 4 of 4**; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
 | **Multimodal roadmap** (**complete as scoped, 3 of 3**; VLMs, `q4f16`, streaming, video frames) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
+| **NLP roadmap** (1 of 11 shipped; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -95,7 +96,8 @@ just fe-e2e-link    # @slow: link prediction, pinned by an AUC *band* (leakage p
 just fe-e2e-graphcls # @slow: graph classification, pinned above its majority baseline
 just fe-e2e-vlm     # @slow: a real SmolVLM load + generation — the only chat-template guard (needs a GPU)
 just fe-e2e-videovlm # @slow: a real SmolVLM2-Video load — the only *multi-image* template guard (needs a GPU)
-just fe-e2e-models  # check every model id (audio + vision + multimodal) resolves on the HF Hub (seconds)
+just fe-e2e-text    # @slow: text classification, pinned by a known label on a known sentence
+just fe-e2e-models  # check every model id (audio + vision + multimodal + text) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
 just fe-lint        # eslint
@@ -737,6 +739,65 @@ behaviours, a thin `vlm.worker.ts` around it, a `client.ts`, and `useVlm` over
   `fe-e2e-vlm` is for the single-image one: N frames out of step with N slots
   produces a fluent answer about the wrong pictures, with no error anywhere. Both
   need a real GPU with `shader-f16`.
+
+### In-browser NLP (`src/text/` — `/text-classification`)
+
+The fourth modality on the Transformers.js path, and **the cheapest module in the
+app, for a reason worth knowing before planning a page**: there is no text
+equivalent of `audio/io.ts` or `vision/image.ts`. The input is already a string,
+so there is no decode step, no preprocessing and no transport problem — a
+`RawImage` does not survive `postMessage` and a `Tensor` throws outright, while a
+string crosses as itself. That absence is why `/text-classification` is the
+category's first page rather than a more impressive one. Same shape as the other
+three: one generic worker per modality (`pipeline.worker.ts`, task in the `load`
+message), a pure `engine.ts` owing the same three behaviours, a `client.ts`, and
+thin task hooks over `useTextPipeline`. See [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md).
+
+- **Every entry carries measured `bytes` for both backends** — stricter than
+  vision's "measure where an estimate would mislead", and a finding rather than a
+  preference. The NLP roadmap's size tables were all `q8` figures while
+  `loadOpts()` asks for **fp16 on WebGPU**, the backend any machine with an
+  adapter gets: roughly **double**, all the way down the category. It moves
+  several entries across `LARGE_MODEL_BYTES` and moves Summarization's floor from
+  283.9 MB to 563.6 MB, over the feasibility bar. `just fe-e2e-models` re-checks
+  the quoted numbers against the Hub rather than trusting them.
+- **`q4` is not a lever for an encoder.** On every encoder measured,
+  `model_q4.onnx` is *larger* than `model_quantized.onnx` (distilbert-sst-2:
+  118.9 MiB q4 against 64.5 MiB q8) and `q4f16` usually is too. 4-bit is a decoder
+  format; only `/text-generation` has anything to gain from it.
+- **There is no `textLoadOpts()`, deliberately.** The `asrLoadOpts`/`vlmLoadOpts`
+  precedent is for a precision decision that holds across a *family*, and the
+  measurements do not support one: q8-on-WebGPU is right for a seq2seq summarizer
+  and wrong by default for a 22 MB embedder. Pins go per entry in `dtypes`, each
+  saying in its comment whether it is a **measurement or a precaution**.
+- **A base model is not a classifier, and the failure is silent.**
+  `onnx-community/ModernBERT-base-ONNX` was cut from `/text-classification`'s
+  catalogue against the roadmap's own table: a base encoder has no trained head, so
+  it emits `LABEL_0`/`LABEL_1` from randomly initialised weights — confident,
+  fluent and meaningless, with nothing failing on the way there. Read what a
+  checkpoint was fine-tuned *for* before the catalogue entry, not after.
+- **`ScoreList` refuses to render a single row**, and that is its whole design: a
+  classifier's argmax is the least informative thing it produces, because
+  "POSITIVE" looks identical at 0.99 and at 0.51. Callers pass the full label set,
+  and a near-tie is stated in words. `SpanOverlay` + `highlight()` is the other
+  shared component; it is built by `/token-classification`, against a real model's
+  character offsets — and its rule is **slice the original string by character
+  offset, never rebuild the text from tokens**, or the highlight lands a character
+  or two off and reads as a styling problem.
+- **Nothing in this category is debounced.** The roadmap wants live classification
+  on a 200–300 ms pause; the page-pattern rule wins and is absolute. Typing is
+  INPUT, and only GENERATE spends — a debounced auto-run is the
+  five-samples-five-inferences failure with a timer in front of it.
+- **The head-to-head on `/text-classification` is a second LOAD, not a toggle.**
+  A second model is a second download and a second model in memory, so the page
+  quotes the cost before the click. Its samples are chosen so the three models
+  **disagree**; a sample set every model gets right demonstrates nothing about any
+  of them.
+- **`just fe-e2e-text` asserts a known label on a known sentence**, never "a ranked
+  list appeared" — which is exactly what a model with a broken tokenizer also
+  produces. It pins the head-to-head *structurally* (SST-2 has two classes,
+  FinBERT three), because asserting that the two rankings differ would pin a
+  property neither model promises.
 
 ### Three routes were built and then cut for size — read this before adding one
 
