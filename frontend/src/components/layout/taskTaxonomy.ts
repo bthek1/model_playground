@@ -93,6 +93,19 @@ const REAL_ROUTES: Record<string, string> = {
   // share this engine behind its own route rather than folding into this one —
   // a user looking for VQA does not think to click "image-text-to-text".
   "image-text-to-text": "/image-text-to-text",
+  // The second Multimodal route, and the cheapest in the repo: it downloads
+  // nothing new and adds no engine. VQA in a browser *is* prompting a general
+  // VLM — neither classical VQA model (ViLT, BLIP-VQA) has an ONNX export — so
+  // this is the route above with the question shaped differently. Separate
+  // because a user looking for VQA does not click "Image Text to Text", and the
+  // Hub has both tags.
+  "visual-question-answering": "/visual-question-answering",
+  // The third, and the one that needed a model rather than only a prompt:
+  // SmolVLM2's video-instruct tune, 189 MB, on the same engine. A
+  // video-language model in a tab is a frame sampler plus an image model, which
+  // the page states next to its result rather than implying a temporal
+  // understanding it does not have.
+  "video-text-to-text": "/video-text-to-text",
   // Three slugs deliberately have no route and fall through to the placeholder,
   // for one reason each — every checkpoint the task has is too heavy to offer:
   //

@@ -14,17 +14,28 @@
 | Roadmap section | Route | Status |
 |---|---|---|
 | Image-Text-to-Text (§3.1) | [`/image-text-to-text`](../../frontend/src/routes/image-text-to-text.tsx) | **Shipped** — SmolVLM 256M / 500M, streaming |
-| Visual Question Answering (§3.2) | — | Planned — [#31](https://github.com/bthek1/model_playground/issues/31): same engine, its own route |
+| Visual Question Answering (§3.2) | [`/visual-question-answering`](../../frontend/src/routes/visual-question-answering.tsx) | **Shipped** — the same engine, no new download |
 | Document Question Answering (§3.3) | — | **Cut** — shipped, then removed for size. 411 MB / 597 MB, one checkpoint |
-| Video-Text-to-Text (§3.4) | — | Planned — [#33](https://github.com/bthek1/model_playground/issues/33): a frame sampler over §3.1 |
+| Video-Text-to-Text (§3.4) | [`/video-text-to-text`](../../frontend/src/routes/video-text-to-text.tsx) | **Shipped** — SmolVLM2 256M Video, 189 MB, a frame sampler over §3.1 |
 | Audio-Text-to-Text (§3.5) | — | **Cut** — [#34](https://github.com/bthek1/model_playground/issues/34) closed: blocked, and ~800 MB of two live models |
 | Visual Document Retrieval (§3.6) | — | **Cut** — [#35](https://github.com/bthek1/model_playground/issues/35) closed: 953 MB, fp32-only, no `config.json` |
 | the four that stay on a server (§3.7) | — | **Done** — documented, with a reason each |
 
-**One of nine is built, and the category is now scoped to three.** §3.1 shipped,
-§3.2 is planned and costs no new download, §3.4 is planned. The other six are
-server-side or cut, each with its measured reason below. The build-out so far is
-recorded in [#30](https://github.com/bthek1/model_playground/issues/30).
+**Three of nine are built, and that is the whole of the category.** §3.1, §3.2
+and §3.4 all ship, over **one** engine — one worker, one `engine.ts`, one
+`useVlm`, one `VlmRun` envelope — and two downloads between them, because §3.2
+adds none at all. The other six are server-side or cut, each with its measured
+reason below. The build-out is recorded in
+[#30](https://github.com/bthek1/model_playground/issues/30),
+[#31](https://github.com/bthek1/model_playground/issues/31) and
+[#33](https://github.com/bthek1/model_playground/issues/33).
+
+**Three routes over one engine is the category's design and also its hazard.**
+They must not drift into three catalogues, three hooks and three sets of copy: a
+change this category needs belongs in the shared hook, and every route gets it.
+That is what §3.4 did when it needed N images — `VlmRun.image` became
+`VlmRun.images`, additively, and §3.1's own route tests are what proved the
+shipped page unchanged.
 
 ### What was cut, and why
 
@@ -265,13 +276,40 @@ it can see what you asked about.
 it never reaches the DOM. `/image-to-text` passed one and it never resolved — its test
 queried `slot-4` instead. This route puts the testid on a wrapper.
 
-### 3.2 Visual Question Answering — planned
+### 3.2 Visual Question Answering — **shipped** ([`/visual-question-answering`](../../frontend/src/routes/visual-question-answering.tsx))
 
 VQA is now prompting a general VLM, and the browser confirms it: neither classical model
 has a usable export (`dandelin/vilt-b32-finetuned-vqa`, `Salesforce/blip-vqa-base` — no
-ONNX). So this is §3.1's engine behind a **distinct route** — a user looking for VQA does
-not think to click "image-text-to-text" — with a question box, a short `max_new_tokens`,
-and the "answer in one word" toggle that makes what a prompt is worth visible.
+ONNX), so the 3129-answer classification approach is simply unavailable in a tab. This is
+§3.1's engine behind a **distinct route** — a user looking for VQA does not think to click
+"image-text-to-text", and the taxonomy has both rows because the Hub has both tags. It is
+the cheapest route in the repo: **no new download, no new worker, no new catalogue**.
+
+**The whole page is [`multimodal/prompt.ts`](../../frontend/src/multimodal/prompt.ts), 80
+lines of pure function.** `composePrompt(question, { terse })` returns the exact string
+that will be sent and the cap that travels with it — off, the question as typed at 128
+tokens; on, the question plus `Answer in one word.` at 16. The same weights and the same
+picture produce visibly different output, which is the most legible lesson about prompting
+a VLM that fits on one screen.
+
+Three decisions inside those 80 lines:
+
+- **The cap is 16, not 1 or 2.** The instruction is the mechanism and the cap is a
+  backstop. A model told to answer in one word and then truncated mid-word has been cut
+  off, not instructed — and the demonstration would be indistinguishable from the
+  scissors. The `@slow` assertion is "materially shorter in words", which is only
+  meaningful because the model had room to be verbose.
+- **A question that already asks for brevity is not instructed again.** Doubly ordering a
+  small decoder makes it answer the *instruction*, and a user who typed the instruction
+  themselves would have no way to see why.
+- **The composed prompt is on screen before the click, and labels the answer after it.** A
+  page that rewrites the prompt behind the user's back is the `hypothesis_template`
+  problem `/zero-shot-image-classification` was caught by: the user compares two prompts
+  while the model is shown two others.
+
+**The toggle looks like a filter, which is why it is this page's §1.6 hazard.** Flipping
+it runs nothing — it changes what the next GENERATE sends, and the line beside it says so.
+A route test, a mocked E2E spec and the `@slow` spec each assert it separately.
 
 ### 3.3 Document Question Answering — **built, then cut for size**
 
@@ -392,14 +430,77 @@ cut for size; with both gone, **OCR has no page** — asking `/image-text-to-tex
 to read a sign is the nearest thing, and it is a VLM answering a question rather
 than a transcription.)
 
-### 3.4 Video-Text-to-Text — planned
+### 3.4 Video-Text-to-Text — **shipped** ([`/video-text-to-text`](../../frontend/src/routes/video-text-to-text.tsx))
 
-`HuggingFaceTB/SmolVLM2-256M-Video-Instruct` (~189 MB at q4f16, also `idefics3`) is the
-practical choice. A video model in a tab is a **frame sampler plus an image model**. Sample
-4 to 8 frames, be explicit about the sampling in the UI, and put the frame count on a
-slider — each frame carries its own image tokens, so 4 against 16 is a four-times latency
-difference the user feels. The temporal-blindness toggle (feed the frames reversed and see
-whether the answer changes) is the honest companion.
+`HuggingFaceTB/SmolVLM2-256M-Video-Instruct`, **189.2 MB at q4f16** measured, three graphs,
+`model_type: smolvlm` — and in 4.2.0 `SmolVLMForConditionalGeneration extends
+Idefics3ForConditionalGeneration` with the processor re-exported unchanged, so it is a
+catalogue entry on the existing engine rather than a new module. It is within 0.2% of
+SmolVLM-256M's size. The 500M video variant (357.6 MB) is structurally identical and is the
+second rung if it earns one.
+
+**A video model in a tab is a frame sampler plus an image model, and the page says so
+next to the result.** That is a correctness requirement, not decoration — the same one
+`/video-classification` carries, and an E2E spec asserts the copy for the same reason.
+It is also simply true: there is no temporal attention in SmolVLM2 to hide.
+
+| | |
+|---|---|
+| download | **189.2 MB** q4f16 (WebGPU) · 264.2 MB q4 (WASM, not offered) |
+| graphs | `embed_tokens` + `vision_encoder` + `decoder_model_merged` |
+| backends | **WebGPU only**, and `shader-f16` gated — a decoder on WASM is seconds per token, and this page hands it eight frames' worth of image tokens |
+| frames | 1–8, default 4 |
+
+**What it added to the engine, and how.** `VlmRun.image` became `VlmRun.images`, an
+**ordered list**, and the worker's chat template grew from one `{ type: "image" }` slot to
+N. Strictly additive: a single-image run is a one-element list, `useVlm.run` takes
+`RawImage | RawImage[]`, and `/image-text-to-text`'s own route tests are what proved the
+shipped page unchanged. The slots are filled **positionally** from the array, so the count
+is derived from the list's own length at the call site rather than passed beside it — the
+only way that goes wrong is if the two are allowed to be two facts.
+
+**Frames multiply the tile problem; they do not add to it.** §3.1 learned that the
+processor splits anything over 512px into tiles, each costing its own image tokens plus a
+global view. With N frames that multiplies by N — a 640x360 frame becomes five tiles, so
+eight of them is forty encodes for one question. `MAX_FRAME_SIDE = 512` is the fix, and it
+is the model's own `video_sampling.video_size.longest_edge` rather than a number inherited
+from the sibling page.
+
+**The frame count is the cost dial, capped at 8.** Each frame at 512px is one tile and
+`processor_config.json` sets `image_seq_len: 64`, so N frames is 64N image tokens *before*
+the question is appended, attended over for every generated word. The model's own config
+allows 64 frames; that is a number for a server. Moving the slider runs nothing.
+
+**Sampling is uniform over the clip, and shown.** [`multimodal/frames.ts`](../../frontend/src/multimodal/frames.ts)
+is the pure half — `uniformFrameTimes(duration, count)` samples the **centre of each of N
+equal slices**, because 0 is usually a black frame or a fade and `duration` is past the
+last decodable frame on a good many encodes, and both failures look like the model
+ignoring the video. The filmstrip in OUTPUT is the frames the model was actually given: a
+page that samples invisibly makes every wrong answer unattributable.
+
+Note what this is *not*: `vision/video.ts`'s `frameTimes` samples at a fixed **rate**,
+which is right for `/video-classification` where each frame is an independent pass and a
+longer clip should produce more points. Here the frames share one prompt, so the cost is
+the **count** and eight means eight whether the clip is six seconds or six minutes.
+The decode itself is still `sampleVideo` — it grew a `times` option rather than a second
+copy, and that option is a *function of the duration*, because only the decoder has read
+it by then.
+
+**The reverse toggle is the experiment, and it is the one control on these pages that
+legitimately spends.** Feed the frames backwards and see whether the answer changes. Often
+it does not, and that is a real property of a small video VLM — it is describing a picture,
+not reading a sequence — rather than a gotcha. Unlike a threshold it cannot re-derive: the
+model has to actually see the other order. So flipping it runs nothing, the next GENERATE
+is a genuine second inference, and the page says that before the click. The `@slow` spec
+asserts the **re-run**, not a difference in the answer: asserting a difference would pin a
+property the model does not have.
+
+**Decoding is cached on (clip, frame count).** Frame extraction is a seek per frame, so
+pressing GENERATE twice must cost one decode and two inferences —
+[`useVideoPick`](../../frontend/src/hooks/useVideoPick.ts) owns that, along with the
+one-object-URL rule `useImagePick` and `useAudioPick` already follow. It deliberately does
+**not** cache by frame *order*: reversing is a property of the run, and a hook that cached
+it would decode the same clip twice to produce the same pictures.
 
 ### 3.5 Audio-Text-to-Text — **cut** ([#34](https://github.com/bthek1/model_playground/issues/34) closed)
 
@@ -527,9 +628,15 @@ accept.
 - `just fe-e2e-models` — every id resolves, every entry publishes its three q4f16 graphs,
   and the quoted sizes still match the Hub.
 - `just fe-e2e-vlm` — a real SmolVLM-256M load and a real generation, asserting a **known
-  answer on a known image**. Needs a real GPU with `shader-f16`: on SwiftShader the model
-  loads in 29 s and then every run fails on the first Gather, which is how that gate was
-  found in the first place.
+  answer on a known image**, plus §3.2's terse toggle as a **property**: a materially
+  shorter answer, in words, to the same question on the same picture. Needs a real GPU with
+  `shader-f16`: on SwiftShader the model loads in 29 s and then every run fails on the first
+  Gather, which is how that gate was found in the first place.
+- `just fe-e2e-videovlm` — the same for §3.4, and the only guard on the **multi-image**
+  template. It asserts a known answer about a known clip, that the frame count reaches the
+  model, and that reversing the frames is a genuine second inference. It deliberately does
+  **not** assert that the answer changes: at this size it usually does not, and that is the
+  page's finding rather than its failure.
 
 ---
 

@@ -164,3 +164,31 @@ describe("categoryForPath", () => {
     expect(categoryForPath("/nope")).toBeUndefined();
   });
 });
+
+describe("the Multimodal category", () => {
+  const at = (slug: string) =>
+    taskCategories
+      .flatMap((c) => c.tasks)
+      .find((t) => t.slug === slug)!.to;
+
+  it("maps the three shipped routes", () => {
+    // All three ride one engine — one worker, one hook, one `VlmRun` envelope —
+    // and are separate routes because the Hub has separate tags and a user
+    // looking for VQA does not click "Image Text to Text".
+    expect(at("image-text-to-text")).toBe("/image-text-to-text");
+    expect(at("visual-question-answering")).toBe("/visual-question-answering");
+    expect(at("video-text-to-text")).toBe("/video-text-to-text");
+  });
+
+  it("leaves the rest of the category on the placeholder", () => {
+    // Cut for size or blocked on NLP, each with measured numbers in
+    // docs/roadmaps/multimodal.md. The rows stay because the sidebar mirrors
+    // the Hub, not our build state.
+    expect(at("audio-text-to-text")).toBe("/tasks/audio-text-to-text");
+    expect(at("visual-document-retrieval")).toBe(
+      "/tasks/visual-document-retrieval",
+    );
+    expect(at("image-text-to-image")).toBe("/tasks/image-text-to-image");
+    expect(at("any-to-any")).toBe("/tasks/any-to-any");
+  });
+});

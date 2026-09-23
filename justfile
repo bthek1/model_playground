@@ -291,6 +291,20 @@ fe-e2e-graphcls:
 fe-e2e-vlm:
     cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/vlm.spec.ts
 
+# @slow: a real SmolVLM2-Video load and generation — the only guard on the
+# *multi-image* chat template, and the only place the reverse-frames toggle is
+# shown to be a real second inference rather than a re-render.
+#
+# N frames means N `{ type: "image" }` slots filled positionally from the image
+# list; one short, or the two out of step, and the model answers fluently about
+# the wrong pictures with no error anywhere. Hence a known answer about a known
+# clip. Four frames of image tokens through a 256M decoder is the slowest run in
+# the app, so this is minutes rather than seconds.
+#
+# Needs a GPU with shader-f16 (it skips without one), same as fe-e2e-vlm.
+fe-e2e-videovlm:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/video-vlm.spec.ts
+
 # Check every model id (audio + vision + multimodal) still resolves on the
 # Hugging Face Hub, that each vision entry publishes the dtypes both backends ask
 # for, and that the VLM entries publish their three q4f16 graphs and still match

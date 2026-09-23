@@ -37,7 +37,9 @@ test.describe("@slow model catalogue", () => {
       "../../src/vision/backgroundRemoval"
     );
     const { SUPER_RES_MODELS } = await import("../../src/vision/superRes");
-    const { VLM_MODELS } = await import("../../src/multimodal/types");
+    const { VLM_MODELS, VIDEO_VLM_MODELS } = await import(
+      "../../src/multimodal/types"
+    );
 
     const ids = [
       ...ASR_MODELS,
@@ -58,6 +60,7 @@ test.describe("@slow model catalogue", () => {
       ...MATTE_MODELS,
       ...SUPER_RES_MODELS,
       ...VLM_MODELS,
+      ...VIDEO_VLM_MODELS,
       // A pose entry is a *pair*, so its own `id` is a composite that resolves
       // to nothing on the Hub — the two halves are what get downloaded.
       ...POSE_MODELS.flatMap((m) => [m.detector, m.pose]),
@@ -198,7 +201,9 @@ test.describe("@slow model catalogue", () => {
     // precision: a repo that publishes `decoder_model_merged_q4f16.onnx` but not
     // `vision_encoder_q4f16.onnx` resolves fine on the API and then 404s
     // halfway through a 189 MB load.
-    const { VLM_MODELS } = await import("../../src/multimodal/types");
+    const { VLM_MODELS, VIDEO_VLM_MODELS } = await import(
+      "../../src/multimodal/types"
+    );
 
     const SUFFIX: Record<string, string> = { q4f16: "_q4f16", q4: "_q4" };
     const DEFAULT_DTYPE: Record<string, string> = {
@@ -207,7 +212,7 @@ test.describe("@slow model catalogue", () => {
     };
 
     const missing: string[] = [];
-    for (const model of VLM_MODELS) {
+    for (const model of [...VLM_MODELS, ...VIDEO_VLM_MODELS]) {
       const res = await request.get(
         `https://huggingface.co/api/models/${model.id}`,
       );
@@ -236,10 +241,12 @@ test.describe("@slow model catalogue", () => {
     // not 4-bit quantized at all, so an estimate is out by 30%. A measurement
     // that has drifted from the Hub is worse than an estimate, because the page
     // presents it as fact — so check it.
-    const { VLM_MODELS } = await import("../../src/multimodal/types");
+    const { VLM_MODELS, VIDEO_VLM_MODELS } = await import(
+      "../../src/multimodal/types"
+    );
 
     const wrong: string[] = [];
-    for (const model of VLM_MODELS) {
+    for (const model of [...VLM_MODELS, ...VIDEO_VLM_MODELS]) {
       const res = await request.get(
         `https://huggingface.co/api/models/${model.id}/tree/main/onnx`,
       );

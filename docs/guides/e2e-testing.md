@@ -83,6 +83,7 @@ just fe-e2e-graph     # a real GNN training run on Cora, pinned by an accuracy f
 just fe-e2e-link      # link prediction on Cora, pinned by an AUC band
 just fe-e2e-graphcls  # graph classification on PROTEINS, pinned above its baseline
 just fe-e2e-vlm       # a real SmolVLM load + generation — needs a real GPU
+just fe-e2e-videovlm  # a real SmolVLM2-Video load — the multi-image template, same GPU requirement
 ```
 
 `fe-e2e-graph` is the odd one: it is `@slow` without downloading anything, because
@@ -122,6 +123,23 @@ sentence that is not an answer to the question. There is nothing to bound, so th
 spec asserts a **known answer on a known image** ("tiger" for the tiger sample) and
 then asserts that changing the *question* changes the answer, which is the sharpest
 available evidence that the prompt reaches the model at all.
+
+It also carries `/visual-question-answering`'s one assertion, which is a **property
+rather than a value**: the terse toggle must produce a materially shorter answer, in
+words, to the same question on the same picture. A toggle wired to nothing passes
+any assertion that only checks an answer appeared — and the terse cap is 16 tokens
+rather than 1 precisely so that the model has room to be verbose if the instruction
+is not reaching it. A cap of 1 would make this test pass with the mechanism broken.
+
+`fe-e2e-videovlm` is the same failure one level up, and it is the **only** guard on
+the multi-image template: N frames means N `{ type: "image" }` slots filled
+positionally, and a list out of step with the slots answers fluently about the wrong
+pictures. Hence a known answer about a known clip again. Its second assertion is
+worth copying for any "compare two settings" control: the reverse-frames toggle is
+checked to be a **real second inference** (the label records the order the model was
+shown, captured inside the run) and *not* checked to change the answer — a small
+video VLM usually describes the scene either way, which is what the page exists to
+demonstrate. Asserting a difference would pin a property the model does not have.
 
 It lives in `e2e/specs/webgpu/` rather than beside the other model specs because
 both catalogue entries declare `backends: ["webgpu"]` — on a machine the probe
@@ -249,8 +267,8 @@ frontend/
       vision.spec.ts       # /image-classification, weights blocked — default run
       vision-models.spec.ts# @slow: real loads across all fourteen vision routes
       model-ids.spec.ts    # @slow, seconds: every catalogue id + vision/VLM dtypes
-      multimodal.spec.ts   # /image-text-to-text with weights blocked — default run
-      webgpu/              # the GPU-only project
+      multimodal.spec.ts   # all three VLM routes, weights blocked — default run
+      webgpu/              # the GPU-only project (vlm.spec.ts, video-vlm.spec.ts …)
     utils/
       enhance.ts           # in-page enhancement run + SDR measurement
 ```

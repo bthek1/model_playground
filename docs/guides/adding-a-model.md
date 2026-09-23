@@ -593,6 +593,18 @@ continue the question; and `generate` returns **prompt + answer**, so the
 prompt's tokens are sliced off before decoding or the user gets their own
 question handed back.
 
+The first of those scales, and `/video-text-to-text` is where it bites: **N
+pictures means N slots, in the same order.** A video-language model in a browser
+is a frame sampler in front of exactly this engine, so the run payload carries an
+ordered list and the template is built from it — one slot short, or the two out
+of step, and every frame after the gap is attributed to the wrong moment, with
+nothing on screen but a confident sentence. Derive the count from the list's own
+length at the point of use rather than passing it alongside; the only way this
+goes wrong is if the two are allowed to be two separate facts. And note that the
+tile problem **multiplies** by the frame count rather than adding to it: a source
+over the model's tile size becomes a grid of tiles *plus* a global view, per
+frame.
+
 It is also the route that added **streaming** to the shared envelope. A
 generative decoder encodes the image to completion before a single token exists,
 so `ModelResponse` gained a `partial` variant (`TPartial` defaults to `never`, so
@@ -621,6 +633,8 @@ owes a `@slow` spec that measures a **property**, never a count:
 | `/super-resolution` | **PSNR against a ground truth**, beating a bicubic resize |
 | `/image-to-3d` | the point count tracks the stride, and sliders re-derive without a run |
 | `/image-text-to-text` | a **known answer on a known image** — a broken chat template returns fluent, confident, unrelated prose |
+| `/visual-question-answering` | the terse answer is **materially shorter in words** than the verbose one, same question and same picture |
+| `/video-text-to-text` | a **known answer about a known clip**, and reversing the frames is a real **second inference** — not that the answer changed, which at this size it usually does not |
 
 "Five rows appeared" passes for all of them.
 

@@ -146,4 +146,75 @@ test.describe("@slow real VLM loads", () => {
     await model.button(/^Street$/).click();
     await expect(model.emptyOutput).toBeVisible();
   });
+
+  // --- /visual-question-answering -------------------------------------------
+  //
+  // The second route on this engine. Its only mechanism is the prompt, so the
+  // only thing worth a real model here is whether the prompt does anything —
+  // and that is a **property**, not a count. A toggle wired to nothing passes
+  // any assertion that merely checks an answer appeared.
+
+  test("terse mode returns a materially shorter answer to the same question", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const model = new ModelPageObject(page);
+    await page.goto("/visual-question-answering");
+    await model.button(/SmolVLM 256M/).click();
+    await model.load();
+    await expect(page.getByTestId("model-ready")).toBeVisible({
+      timeout: DOWNLOAD_BUDGET_MS,
+    });
+
+    await model.button(/^Tiger$/).click();
+    await page
+      .getByTestId("question-input")
+      .fill("What animal is in this photo, and what is it doing?");
+
+    await model.run(/^Generate$/);
+    await expect(model.outputPanel.getByTestId("answer-text")).toBeVisible({
+      timeout: GENERATE_BUDGET_MS,
+    });
+    const verbose = (
+      await model.outputPanel.getByTestId("answer-text").innerText()
+    ).trim();
+
+    await page.getByTestId("terse-toggle").check();
+    // Flipping it must not have run anything — the previous answer is still the
+    // one on screen, and the prompt shown is the new one.
+    await expect(page.getByTestId("composed-prompt")).toContainText(
+      "Answer in one word.",
+    );
+
+    await model.run(/^Generate$/);
+    await expect
+      .poll(
+        async () =>
+          (
+            await model.outputPanel.getByTestId("answer-text").innerText()
+          ).trim(),
+        { timeout: GENERATE_BUDGET_MS },
+      )
+      .not.toBe(verbose);
+
+    const terse = (
+      await model.outputPanel.getByTestId("answer-text").innerText()
+    ).trim();
+
+    // "Materially shorter", measured in words. The cap alone would guarantee
+    // *some* shortening, which is why the terse cap is 16 tokens rather than
+    // one or two: at 16 the model has room to be verbose if the instruction is
+    // not reaching it, and this assertion fails when it does not.
+    const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
+    expect(
+      words(terse),
+      `terse "${terse}" should be shorter than verbose "${verbose}"`,
+    ).toBeLessThan(words(verbose));
+
+    // And the answer is labelled with what was actually sent, not the box.
+    await expect(model.outputPanel.getByTestId("answer-asked")).toContainText(
+      "Answer in one word.",
+    );
+  });
 });

@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ZeroShotObjectDetectionRouteImport } from './routes/zero-shot-object-detection'
 import { Route as ZeroShotImageClassificationRouteImport } from './routes/zero-shot-image-classification'
+import { Route as VisualQuestionAnsweringRouteImport } from './routes/visual-question-answering'
+import { Route as VideoTextToTextRouteImport } from './routes/video-text-to-text'
 import { Route as VideoClassificationRouteImport } from './routes/video-classification'
 import { Route as VadRouteImport } from './routes/vad'
 import { Route as TrainingRouteImport } from './routes/training'
@@ -51,6 +53,16 @@ const ZeroShotImageClassificationRoute =
     path: '/zero-shot-image-classification',
     getParentRoute: () => rootRouteImport,
   } as any)
+const VisualQuestionAnsweringRoute = VisualQuestionAnsweringRouteImport.update({
+  id: '/visual-question-answering',
+  path: '/visual-question-answering',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VideoTextToTextRoute = VideoTextToTextRouteImport.update({
+  id: '/video-text-to-text',
+  path: '/video-text-to-text',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VideoClassificationRoute = VideoClassificationRouteImport.update({
   id: '/video-classification',
   path: '/video-classification',
@@ -220,6 +232,8 @@ export interface FileRoutesByFullPath {
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
   '/video-classification': typeof VideoClassificationRoute
+  '/video-text-to-text': typeof VideoTextToTextRoute
+  '/visual-question-answering': typeof VisualQuestionAnsweringRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
   '/tasks/$slug': typeof TasksSlugRoute
@@ -252,6 +266,8 @@ export interface FileRoutesByTo {
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
   '/video-classification': typeof VideoClassificationRoute
+  '/video-text-to-text': typeof VideoTextToTextRoute
+  '/visual-question-answering': typeof VisualQuestionAnsweringRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
   '/tasks/$slug': typeof TasksSlugRoute
@@ -285,6 +301,8 @@ export interface FileRoutesById {
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
   '/video-classification': typeof VideoClassificationRoute
+  '/video-text-to-text': typeof VideoTextToTextRoute
+  '/visual-question-answering': typeof VisualQuestionAnsweringRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
   '/tasks/$slug': typeof TasksSlugRoute
@@ -319,6 +337,8 @@ export interface FileRouteTypes {
     | '/training'
     | '/vad'
     | '/video-classification'
+    | '/video-text-to-text'
+    | '/visual-question-answering'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
     | '/tasks/$slug'
@@ -351,6 +371,8 @@ export interface FileRouteTypes {
     | '/training'
     | '/vad'
     | '/video-classification'
+    | '/video-text-to-text'
+    | '/visual-question-answering'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
     | '/tasks/$slug'
@@ -383,6 +405,8 @@ export interface FileRouteTypes {
     | '/training'
     | '/vad'
     | '/video-classification'
+    | '/video-text-to-text'
+    | '/visual-question-answering'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
     | '/tasks/$slug'
@@ -416,6 +440,8 @@ export interface RootRouteChildren {
   TrainingRoute: typeof TrainingRoute
   VadRoute: typeof VadRoute
   VideoClassificationRoute: typeof VideoClassificationRoute
+  VideoTextToTextRoute: typeof VideoTextToTextRoute
+  VisualQuestionAnsweringRoute: typeof VisualQuestionAnsweringRoute
   ZeroShotImageClassificationRoute: typeof ZeroShotImageClassificationRoute
   ZeroShotObjectDetectionRoute: typeof ZeroShotObjectDetectionRoute
   TasksSlugRoute: typeof TasksSlugRoute
@@ -435,6 +461,20 @@ declare module '@tanstack/react-router' {
       path: '/zero-shot-image-classification'
       fullPath: '/zero-shot-image-classification'
       preLoaderRoute: typeof ZeroShotImageClassificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/visual-question-answering': {
+      id: '/visual-question-answering'
+      path: '/visual-question-answering'
+      fullPath: '/visual-question-answering'
+      preLoaderRoute: typeof VisualQuestionAnsweringRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/video-text-to-text': {
+      id: '/video-text-to-text'
+      path: '/video-text-to-text'
+      fullPath: '/video-text-to-text'
+      preLoaderRoute: typeof VideoTextToTextRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/video-classification': {
@@ -664,6 +704,8 @@ const rootRouteChildren: RootRouteChildren = {
   TrainingRoute: TrainingRoute,
   VadRoute: VadRoute,
   VideoClassificationRoute: VideoClassificationRoute,
+  VideoTextToTextRoute: VideoTextToTextRoute,
+  VisualQuestionAnsweringRoute: VisualQuestionAnsweringRoute,
   ZeroShotImageClassificationRoute: ZeroShotImageClassificationRoute,
   ZeroShotObjectDetectionRoute: ZeroShotObjectDetectionRoute,
   TasksSlugRoute: TasksSlugRoute,

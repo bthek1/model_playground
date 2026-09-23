@@ -59,7 +59,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Audio category roadmap** (5 of 6; Text to Audio cut for size) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
 | **Computer Vision roadmap** (13 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | **Graph ML roadmap** (**complete, 4 of 4**; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
-| **Multimodal roadmap** (1 of 9, scoped to 3; VLMs, `q4f16`, streaming) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
+| **Multimodal roadmap** (**complete as scoped, 3 of 3**; VLMs, `q4f16`, streaming, video frames) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -94,6 +94,7 @@ just fe-e2e-vision-one /pose   # one @slow vision route at a time
 just fe-e2e-link    # @slow: link prediction, pinned by an AUC *band* (leakage pushes it up)
 just fe-e2e-graphcls # @slow: graph classification, pinned above its majority baseline
 just fe-e2e-vlm     # @slow: a real SmolVLM load + generation — the only chat-template guard (needs a GPU)
+just fe-e2e-videovlm # @slow: a real SmolVLM2-Video load — the only *multi-image* template guard (needs a GPU)
 just fe-e2e-models  # check every model id (audio + vision + multimodal) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -581,7 +582,7 @@ Six more stay on a server, with a reason per task ([`docs/roadmaps/vision.md`](d
   metres (big = far). `DepthModel.metric` is that seam, and it is currently unset by every
   entry because Depth Pro was cut at 1009 MB — the seam stays so a metric model can plug in.
 
-### In-browser vision-language models (`src/multimodal/`, `/image-text-to-text`)
+### In-browser vision-language models (`src/multimodal/` — `/image-text-to-text`, `/visual-question-answering`, `/video-text-to-text`)
 
 The third modality on the Transformers.js path, and the first **streaming** one. Same
 shape as `src/audio/` and `src/vision/` — a pure `engine.ts` owing the same three
@@ -653,6 +654,70 @@ behaviours, a thin `vlm.worker.ts` around it, a `client.ts`, and `useVlm` over
   a real GPU (the models are WebGPU-only by catalogue declaration). It asserts a **known
   answer on a known image**; "some text appeared" would pass straight through the failure
   this page actually has.
+- **Three routes, one engine — and that is the hazard as much as the point.**
+  `/image-text-to-text` (a question about a picture), `/visual-question-answering`
+  (the same, shaped for a short answer) and `/video-text-to-text` (a frame sampler
+  in front of it) share one worker, one `engine.ts`, one `useVlm` and one
+  `VlmRun` envelope. Separate routes because the Hub has separate tags and a user
+  looking for VQA does not click "Image Text to Text"; the rule that keeps them
+  from drifting into three catalogues and three hooks is that **a change one page
+  needs belongs in the shared hook, and the other two get it**. A reviewer should
+  be able to diff two of the route files and see only the question-shaping
+  difference.
+- **`/visual-question-answering` downloads nothing new, and its entire mechanism is
+  `multimodal/prompt.ts`.** `composePrompt(question, { terse })` returns the exact
+  string that will be sent *and* the cap with it — 128 tokens as typed, or the
+  question plus `Answer in one word.` at 16. Three things it settles: the terse cap
+  is **16, not 1**, because the instruction is the mechanism and the cap is only a
+  backstop (truncating mid-word would make the demonstration indistinguishable from
+  the scissors); a question that **already asks for brevity is not instructed
+  again**, since ordering a small decoder twice makes it answer the instruction;
+  and the **composed prompt is on screen before the click and labels the answer
+  after it** — a page that rewrites the prompt silently is the
+  `hypothesis_template` problem again. The toggle looks like a filter, so it is
+  this page's §1.6 hazard: flipping it runs nothing.
+- **`/video-text-to-text` is a frame sampler plus an image model, and says so beside
+  the result** — a correctness requirement, the same one `/video-classification`
+  carries, asserted by an E2E spec. `SmolVLM2-256M-Video-Instruct`, 189.2 MB
+  measured, `model_type: smolvlm` (which 4.2.0 defines as a subclass of
+  `idefics3` with the processor re-exported unchanged), in its own
+  `VIDEO_VLM_MODELS` array — the two pages share the worker and the type, not the
+  list.
+- **N images, not one, and the widening was strictly additive.** `VlmRun.image`
+  became `VlmRun.images`, an **ordered list**, and the chat template grew from one
+  `{ type: "image" }` slot to N filled **positionally** — so the count is derived
+  from the list's own length at the call site rather than passed beside it. A
+  single-image run is a one-element list; `/image-text-to-text`'s own route tests
+  are what proved the shipped page unchanged.
+- **Frames multiply the tile problem; they do not add to it.** A 640x360 frame is
+  five tiles, so eight of them is forty encodes for one question. `MAX_FRAME_SIDE`
+  is 512 — the model's own `video_sampling.video_size.longest_edge`, quoted rather
+  than inherited from `MAX_INFERENCE_SIDE`. The frame count is the cost dial
+  (64 image tokens each, attended over for every generated word), capped at **8**;
+  the model's config allows 64, which is a number for a server.
+- **Sampling is by count, not by rate, and it is shown.** `multimodal/frames.ts`
+  samples the **centre of each of N equal slices** (0 is usually a black frame,
+  `duration` is past the last decodable one, and both look like the model ignoring
+  the video). That is deliberately *not* `vision/video.ts`'s `frameTimes`, which
+  samples at a fixed fps because `/video-classification`'s frames are independent
+  passes; here they share one prompt, so eight means eight on a six-second clip and
+  a six-minute one. The decode is still `sampleVideo` — it grew a `times` option
+  (a **function of the duration**, which only the decoder has read by then) rather
+  than a second copy. The filmstrip in OUTPUT is the frames the model was actually
+  given: sampling invisibly makes every wrong answer unattributable.
+- **The reverse toggle is the one control on these pages that legitimately spends.**
+  Feed the frames backwards; if the answer does not change, the model is describing
+  a picture rather than reading a sequence — the usual result at this size, and the
+  finding rather than the failure. It cannot re-derive (the model must see the other
+  order), so flipping runs nothing and the next GENERATE is a real second inference,
+  which the page says before the click. The `@slow` spec asserts the **re-run**, not
+  a difference in the answer — asserting a difference would pin a property the model
+  does not have. Decoding is cached on **(clip, frame count)** and deliberately not
+  on order: `useVideoPick` owns that, and the one-object-URL rule with it.
+- **`just fe-e2e-videovlm` is the only guard on the multi-image template**, as
+  `fe-e2e-vlm` is for the single-image one: N frames out of step with N slots
+  produces a fluent answer about the wrong pictures, with no error anywhere. Both
+  need a real GPU with `shader-f16`.
 
 ### Three routes were built and then cut for size — read this before adding one
 
