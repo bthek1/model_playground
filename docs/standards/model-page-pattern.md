@@ -333,7 +333,8 @@ a bug before this was true:
   inputs that are expensive to obtain: a 60-second clip, or a take the user recorded
   once and cannot reproduce.
 - **A parameter is a reason to re-run, not a reason to re-capture.** CLAP's prompts,
-  zero-shot's template, the mode on `/image-to-text`: edit, press GENERATE, compare.
+  zero-shot's template, a VLM's question on `/image-text-to-text`: edit, press GENERATE,
+  compare.
   Editing the prompts used to mean recording again.
 - **An audio worker detaches the buffer it is given.** `useAudioPick`'s `take()` returns
   `clip.audio.slice()` for exactly this reason — hand over the stored array itself and
@@ -636,8 +637,6 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `encoding` · `encoded` | `/mask-generation` | The per-image encode, in flight and finished. Distinct from LOAD. |
 | `point-canvas` · `points` | `/mask-generation` | The clickable input surface, and the points placed on it. |
 | `mask-canvas` · `mask-facts` · `decode-ms` | `/mask-generation` | The mask, its coverage and IoU, and the decode time the page claims. |
-| `modes` · `generate-ms` | `/image-to-text` | The capability-driven mode selector, and how long the generation took. |
-| `grounding-canvas` · `grounding-list` | `/image-to-text` | The boxes mode, which must never render as prose. |
 | `pose-canvas` · `people` · `joints` | `/pose` | Skeletons, one entry per person, and per-joint confidence **and position**. |
 | `clip-progress` · `filmstrip` · `pooled-winner` · `baseline-note` | `/video-classification` | Sampling/scoring progress, the frames the model saw, the clip-level verdict, and the limitation. |
 

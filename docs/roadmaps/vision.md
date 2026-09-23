@@ -5,7 +5,8 @@
 > which checkpoint to use, and which tasks stay on a server. No Python server in
 > the inference path.
 
-**Fourteen of twenty are built.** §3.1 to §3.11 and §3.13 to §3.15 all ship —
+**Thirteen of twenty are built.** §3.1 to §3.8, §3.10, §3.11 and §3.13 to §3.15
+ship —
 [`/depth`](../../frontend/src/routes/depth.tsx),
 [`/image-classification`](../../frontend/src/routes/image-classification.tsx),
 [`/object-detection`](../../frontend/src/routes/object-detection.tsx),
@@ -14,14 +15,15 @@
 [`/zero-shot-object-detection`](../../frontend/src/routes/zero-shot-object-detection.tsx),
 [`/mask-generation`](../../frontend/src/routes/mask-generation.tsx),
 [`/image-features`](../../frontend/src/routes/image-features.tsx),
-[`/image-to-text`](../../frontend/src/routes/image-to-text.tsx),
 [`/pose`](../../frontend/src/routes/pose.tsx),
 [`/video-classification`](../../frontend/src/routes/video-classification.tsx),
 [`/background-removal`](../../frontend/src/routes/background-removal.tsx),
 [`/super-resolution`](../../frontend/src/routes/super-resolution.tsx) and
 [`/image-to-3d`](../../frontend/src/routes/image-to-3d.tsx).
-The other six tasks in the sidebar still render the `/tasks/$slug`
-placeholder, and §3.12 says why each of them stays on a server. This file is
+The other seven tasks in the sidebar render the `/tasks/$slug` placeholder:
+§3.12 says why six of them stay on a server, and §3.9 records the seventh —
+**Image to Text shipped and was then cut for size** (Florence-2 544 MB,
+vit-gpt2 482 MB; that was the entire catalogue). This file is
 therefore two things at once: a description of the shipped `src/vision/` module
 (§1–§2), and the record of what each route settled (§3) — the verified
 checkpoint, the shape of the page, and the specific failure each decision guards.
@@ -220,20 +222,26 @@ impressive output of any task here.
 |---|---|---|
 | `onnx-community/depth-anything-v2-small` | 47 MB fp16 · 26 MB q8 | relative depth, the default |
 | `Xenova/depth-anything-small-hf` | 48 MB fp16 · 26 MB q8 | the older mirror, equivalent |
-| `onnx-community/DepthPro-ONNX` | **962 MB q8**, WebGPU only | metric depth plus focal length — gated |
-| `Intel/zoedepth-nyu-kitti` | none | no export. Use Depth Pro for metric |
+| `onnx-community/DepthPro-ONNX` | **1009 MB q8**, WebGPU only | metric depth plus focal length — **cut**: twenty times either shipped entry, on a page whose point is that one pass is interactive |
+| `Intel/zoedepth-nyu-kitti` | none | no export — so with Depth Pro cut, **there is no metric-depth path in the browser** |
 
 Sizes are read off the Hub's blob listing. Two findings that only a real look at
 the repos could produce:
 
-* **Depth Pro is pinned to q8 on both backends**, not merely warned about. Its
-  fp16 export is **1.8 GB**, which is past what a tab reliably holds alongside a
-  WebGPU context; q8 is still ~1 GB, so the route gates it behind an explicit
-  opt-in notice — the same gate `/text-to-audio` puts in front of MusicGen —
-  rather than relying on the picker's size line alone.
+* **Depth Pro was pinned to q8 on both backends**, not merely warned about. Its
+  fp16 export is **1.8 GB**, past what a tab reliably holds alongside a WebGPU
+  context; q8 is still 1009 MB, so the route gated it behind an explicit opt-in
+  notice rather than relying on the picker's size line alone. **It was cut
+  anyway**, which is the lesson: a gate makes an expensive entry honest, not
+  affordable. The gate itself survives on `/depth` as a *size threshold*
+  (`isHeavy`, `HEAVY_MODEL_BYTES`) rather than a model id, so the next heavy
+  entry does not arrive ungated — an id check would have been deleted with its
+  subject.
 * **The legend direction is read from the catalogue, not hard-coded.** Depth
-  Anything emits *inverse* depth (a big number is near); Depth Pro emits metres
+  Anything emits *inverse* depth (a big number is near); Depth Pro emitted metres
   (a big number is far). One ramp, two labellings, and `DepthModel.metric` picks.
+  `metric` stays on the interface with nothing setting it, for the same reason
+  `isHeavy` does: it is the seam a metric model would plug back into.
 
 The page's two obligations, both about honesty rather than code:
 
@@ -391,7 +399,7 @@ The most satisfying page in the category, because the user types the labels.
 |---|---|---|
 | `Xenova/clip-vit-base-patch32` | softmax over your labels | 289 MB fp16 · 147 MB q8 — the default |
 | `Xenova/siglip-base-patch16-224` | independent sigmoid | 388 MB fp16 · 201 MB q8 |
-| `onnx-community/siglip2-base-patch16-224-ONNX` | independent sigmoid | 716 MB fp16 · 360 MB q8 |
+| `onnx-community/siglip2-base-patch16-224-ONNX` | independent sigmoid | 751 MB fp16 · 378 MB q8 — **cut for size**; its recovered constants are kept in `zeroShot.ts` |
 | `laion/CLIP-ViT-B-32-laion2B-*` | - | no usable export |
 
 Sizes measured. Note that CLIP-B/32 is **289 MB fp16**, not the ~150 MB the
@@ -680,13 +688,26 @@ with the tiger — which is deliberately *not* in the gallery — and asserts th
 neighbour is an animal. A mis-pooled or unnormalised vector destroys exactly that
 ordering while still producing a full, plausible-looking list.
 
-### 3.9 Image to Text — **shipped** at [`/image-to-text`](../../frontend/src/routes/image-to-text.tsx)
+### 3.9 Image to Text — **built, then cut for size**
 
-Taxonomy task **Image to Text** · built. Upstream research: BLIP, Florence-2,
-SmolVLM2, GOT-OCR 2.0.
+Taxonomy task **Image to Text** · shipped, then removed. Upstream research:
+BLIP, Florence-2, SmolVLM2, GOT-OCR 2.0.
 
-The first vision route with a **generative decoder**: runs take seconds, not
-milliseconds, and there is deliberately no live camera mode.
+**Both entries in the table below are the catalogue** — 544 MB and 482 MB on
+WebGPU, 275 MB and 246 MB on WASM — and the rows beneath them are the reasons
+there is no third: BLIP's only mirror ships the wrong layout, GOT-OCR has no
+export, and SmolVLM belongs to Image-Text-to-Text. A page whose cheapest option
+is a quarter of a gigabyte, with nothing lighter to fall back on, is
+[`adding-a-task-page.md`](../guides/adding-a-task-page.md) §0 question 2
+answered "no".
+
+The route's own findings are kept below because they are about Florence-2 and
+the runtime rather than about this page, and because `/image-text-to-text`
+inherited the modality. Its sample set (`TEXT_SAMPLES`) survived the deletion
+for the same reason — a VLM asked to read a sign wants exactly those pictures.
+
+It was the first vision route with a **generative decoder**: runs took seconds,
+not milliseconds, and there was deliberately no live camera mode.
 
 | Model | Modes | Download (WebGPU · WASM) |
 |---|---|---|
@@ -1102,11 +1123,11 @@ asserts that path in a real Chromium with no GPU.
 
 | Taxonomy task | In-browser? | Recommended model | Best backend | If not |
 |---|---|---|---|---|
-| **Depth Estimation** | **Shipped** — `/depth` | `onnx-community/depth-anything-v2-small` | WebGPU | DepthPro gated for metric |
+| **Depth Estimation** | **Shipped** — `/depth` | `onnx-community/depth-anything-v2-small` | WebGPU | DepthPro cut: 1009 MB, so no metric depth |
 | **Image Classification** | **Shipped** — `/image-classification` | `Xenova/vit-base-patch16-224` | WebGPU / WASM | - |
 | **Object Detection** | **Shipped** — `/object-detection` | `onnx-community/dfine_n_coco-ONNX` | WebGPU | RF-DETR to server |
 | **Image Segmentation** | **Shipped** — `/segmentation` (semantic) | `Xenova/segformer-b0-finetuned-ade-512-512` | WebGPU | Mask2Former / OneFormer to server |
-| **Image to Text** | **Shipped** — `/image-to-text` | `onnx-community/Florence-2-base-ft` | WebGPU | GOT-OCR to server; SmolVLM is [Image-Text-to-Text](multimodal.md) |
+| **Image to Text** | **Cut** — built, then removed: 482 MB at its cheapest | `onnx-community/Florence-2-base-ft` | — | GOT-OCR to server; SmolVLM is [Image-Text-to-Text](multimodal.md) |
 | **Video Classification** | **Shipped** — `/video-classification`, frame-level baseline | CLIP over sampled frames | WebGPU / WASM | real video transformers to server |
 | **Zero Shot Image Classification** | **Shipped** — `/zero-shot-image-classification` | `Xenova/clip-vit-base-patch32` | WebGPU / WASM | - |
 | **Mask Generation** | **Shipped** — `/mask-generation` | `Xenova/slimsam-77-uniform` | WebGPU / WASM | SAM-HQ, SAM 3, Grounded SAM to server |
@@ -1143,7 +1164,8 @@ mechanics.
   engine disposes both halves with `Promise.allSettled`: a detector whose
   teardown throws must not skip the pose model's, which is the larger of the two.
 - **A model the machine cannot run is not offered.** `VisionModel.backends` was
-  declarable from Wave 0 and read by nothing until `/image-to-text` needed it;
+  declarable from Wave 0 and read by nothing until `/image-to-text` needed it
+  (that route is gone; `/image-text-to-text` needs it just as much);
   `model/useBackendProbe.ts` now answers "what would this load on" before
   anything downloads, and `ModelPicker` disables the row with the reason on it
   rather than letting a 275 MB download fail.
@@ -1190,8 +1212,8 @@ mechanics.
 - **Transformers.js pipelines used here**: `depth-estimation`,
   `image-classification`, `object-detection`, `image-segmentation`,
   `zero-shot-image-classification`, `zero-shot-object-detection`,
-  `image-feature-extraction`, `image-to-text`, `mask-generation`,
-  `background-removal`, `image-to-image`.
+  `image-feature-extraction`, `mask-generation`, `background-removal`,
+  `image-to-image`. (`image-to-text` was used by §3.9 until that route was cut.)
 - **onnxruntime-web** for the models with no pipeline wrapper.
 - **Raw WGSL** for one thing only: `/image-to-3d`'s point-cloud render pass
   (`webgpu/shaders/points.wgsl` + `webgpu/pointRenderer.ts`) — the first *render*

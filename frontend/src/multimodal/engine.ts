@@ -11,8 +11,8 @@
 //
 // Two things are specific to this route.
 //
-// **The warm-up costs a real generation**, as it does for `vision/caption/`: an
-// autoregressive decoder warmed up to completion would add seconds to the
+// **The warm-up costs a real generation**: an autoregressive decoder warmed up
+// to completion would add seconds to the
 // longest load in the app. Capped at a couple of tokens — enough to compile the
 // shaders of all three graphs, which is the entire point.
 //
@@ -43,7 +43,8 @@ export interface VlmOutput {
 /** A loaded vision-language model, however it is driven underneath. */
 export interface Vlm {
   generate: (
-    image: ImagePayload,
+    /** One or more pictures, **in order** — video frames are the many case. */
+    images: ImagePayload[],
     prompt: string,
     maxNewTokens: number,
     onPartial: (partial: VlmPartial) => void,
@@ -100,7 +101,7 @@ export function createVlmHandler(
           post({ type: "progress", progress: { status: "warmup" } });
           try {
             await vlm.generate(
-              warmupImage(),
+              [warmupImage()],
               WARMUP_PROMPT,
               WARMUP_TOKENS,
               () => {
@@ -120,9 +121,10 @@ export function createVlmHandler(
 
     try {
       if (!vlm) throw new Error("No model loaded");
+      if (msg.images.length === 0) throw new Error("No image to look at");
       const started = now();
       const out = await vlm.generate(
-        msg.image,
+        msg.images,
         msg.prompt,
         msg.maxNewTokens,
         (partial) => post({ type: "partial", id: msg.id, partial }),

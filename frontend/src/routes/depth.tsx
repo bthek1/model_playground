@@ -56,9 +56,12 @@ import { IMAGE_SAMPLES } from "@/vision/samples";
 export const Route = createFileRoute("/depth")({ component: DepthPage });
 
 /**
- * The opt-in for Depth Pro, the one entry heavy enough that stating the size in
- * the picker is not enough. Same gate as `/text-to-audio` puts in front of
- * MusicGen, and for the same reason: a gigabyte is a decision, not a detail.
+ * The opt-in for any entry heavy enough that stating the size in the picker is
+ * not enough: a gigabyte is a decision, not a detail.
+ *
+ * It is catalogue-driven rather than keyed to a model id, so it survives the
+ * entry it was written for. `/text-to-audio` had the same gate in front of
+ * MusicGen before that route was cut for being nothing but a 599 MB download.
  */
 function HeavyModelNotice({ sizeLabel }: { sizeLabel: string }) {
   return (

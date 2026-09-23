@@ -17,10 +17,10 @@
 // earned three times over: **check `SUPPORTED_TASKS` before planning around a
 // pipeline**, not after.
 //
-// The counterpart note lives in `vision/caption/types.ts`, which deliberately
-// left SmolVLM out of the captioning catalogue — "a model that can only be
-// driven by a question does not belong on a page whose four modes are fixed task
-// tokens". This is the page that question belongs to.
+// Both of those routes have since been cut for size — `/text-to-audio` (599 MB
+// minimum) and `/image-to-text` (482 MB minimum) had no lighter checkpoint to
+// fall back to — but the rule they paid for outlives them, which is why it is
+// recorded here rather than in either deleted file.
 
 import type { Backend, DtypeSpec, LoadOpts } from "@/model/backend";
 import type { ModelRequest, ModelResponse } from "@/model/types";
@@ -35,13 +35,18 @@ export interface VlmModelEntry {
   params: number;
   bytes: MeasuredBytes;
   /**
-   * How the worker drives it. One family today; the field exists because the
-   * catalogue's next entry (Qwen3-VL, roadmap §3.1) is `qwen3_vl` and loads
-   * through the same auto-class but processes images differently — and because
-   * `vision/caption/types.ts` learned that a second family arrives sooner than
-   * expected.
+   * How the worker drives it.
+   *
+   * `smolvlm` is the video variant's own `model_type`, and in 4.2.0
+   * `SmolVLMForConditionalGeneration extends Idefics3ForConditionalGeneration`
+   * with the processor and image processor re-exported unchanged — so the two
+   * are driven identically today and the field records what the checkpoint
+   * says rather than pretending it is the other. It exists at all because the
+   * catalogue's next entry (Qwen3-VL, roadmap §3.1) is `qwen3_vl`, loads
+   * through the same auto-class and processes images differently; the deleted
+   * captioning catalogue learned that the hard way.
    */
-  family: "idefics3";
+  family: "idefics3" | "smolvlm";
   backends?: readonly Backend[];
   dtypes?: Partial<Record<Backend, DtypeSpec>>;
   /** ONNX graph base names, for the Hub-id spec. Neither repo has `model.onnx`. */
@@ -85,7 +90,7 @@ export const VLM_MODELS: VlmModelEntry[] = [
     family: "idefics3",
     // Not a preference. An autoregressive decoder on WASM is seconds per token,
     // so the picker disables the row rather than offering a page that looks
-    // broken — the shipped Florence-2 decision, same reasoning.
+    // broken.
     backends: ["webgpu"],
     graphs: ["embed_tokens", "vision_encoder", "decoder_model_merged"],
     bytes: { webgpu: 188_843_109, wasm: 263_889_326 },
@@ -103,6 +108,44 @@ export const VLM_MODELS: VlmModelEntry[] = [
 ];
 
 export const DEFAULT_VLM_MODEL = VLM_MODELS[0].id;
+
+/**
+ * The video catalogue (`/video-text-to-text`, roadmap §3.4). One entry.
+ *
+ * **A separate array rather than a flag on the one above**, because the two
+ * pages ask different questions of the Hub: a still-image page must not offer a
+ * video checkpoint and this page must not offer a still-image one. They share
+ * the worker, the engine, the hook and the type — which is the reuse that
+ * matters — and not the list.
+ *
+ * `HuggingFaceTB/SmolVLM2-256M-Video-Instruct` is `smolvlm`
+ * (`SmolVLMForConditionalGeneration`, registered in 4.2.0), three graphs, the
+ * same shape as the still entries and within 0.2% of the 256M's size:
+ *
+ *   embed_tokens 56.8 + vision_encoder 55.0 + decoder 77.4  =  189.2 MB at q4f16
+ *
+ * Measured off the Hub, like every entry here, and re-checked by
+ * `just fe-e2e-models`. The 500M video variant (357.6 MB) is structurally
+ * identical and is the second rung if it earns one — one entry is enough to
+ * make the page, and a second heavy download is not free just because the first
+ * one was paid.
+ */
+export const VIDEO_VLM_MODELS: VlmModelEntry[] = [
+  {
+    id: "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
+    label: "SmolVLM2 256M Video",
+    hint: "SmolVLM2's video-instruct tune. Reads a handful of frames at once — the smallest model that will do it. WebGPU only.",
+    params: 256,
+    family: "smolvlm",
+    // An autoregressive decoder on WASM is seconds per token, and this page
+    // sends it eight frames' worth of image tokens.
+    backends: ["webgpu"],
+    graphs: ["embed_tokens", "vision_encoder", "decoder_model_merged"],
+    bytes: { webgpu: 189_174_979, wasm: 264_221_217 },
+  },
+];
+
+export const DEFAULT_VIDEO_VLM_MODEL = VIDEO_VLM_MODELS[0].id;
 
 /**
  * Longest side fed to the processor. **512, and this one is not a round number
@@ -123,11 +166,11 @@ export const DEFAULT_VLM_MODEL = VLM_MODELS[0].id;
  * reads the model's own config and does the real resize and normalisation.
  * Never resize *for* the model.
  *
- * §3.3's DocVQA page will have to reverse this — a document needs pixels before
- * its text is legible to the encoder — so that plan must set its own number
- * rather than inheriting this one. Noted here because inheriting a sibling
- * page's hyperparameter is a mistake this repo has already made once, on
- * `/link-prediction`.
+ * A document-QA page would have to reverse this — a document needs pixels
+ * before its text is legible to the encoder — so any future page sets its own
+ * number rather than inheriting this one. Noted here because inheriting a
+ * sibling page's hyperparameter is a mistake this repo has already made once,
+ * on `/link-prediction`.
  */
 export const MAX_INFERENCE_SIDE = 512;
 
@@ -146,7 +189,20 @@ export interface VlmLoad {
 }
 
 export interface VlmRun {
-  image: ImagePayload;
+  /**
+   * The pictures, **in order**.
+   *
+   * A list rather than one image because a video-language model is a frame
+   * sampler plus an image model, and the frames are the whole of the difference
+   * (`/video-text-to-text`, roadmap §3.4). A single-image run is a one-element
+   * list, which is what keeps `/image-text-to-text` unchanged by this.
+   *
+   * The order is load-bearing twice over: the chat template's `{ type: "image" }`
+   * slots are filled **positionally** from this array, and the reverse-frames
+   * experiment is precisely a reordering of it. A list that arrives shuffled
+   * produces a fluent answer about a video that never happened.
+   */
+  images: ImagePayload[];
   prompt: string;
   maxNewTokens: number;
 }

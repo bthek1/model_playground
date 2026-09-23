@@ -71,12 +71,14 @@ describe("the zero-shot catalogue", () => {
       logitScale: 117.330795,
       logitBias: -12.932437,
     });
-    expect(by("onnx-community/siglip2-base-patch16-224-ONNX")).toMatchObject({
-      family: "siglip",
-      scoring: "sigmoid",
-      logitScale: 112.668907,
-      logitBias: -16.771725,
-    });
+    // SigLIP 2 base was the third entry and was cut for size (751 MB on
+    // WebGPU). Its recovered constants — scale 112.668907, bias -16.771725 —
+    // are recorded in `zeroShot.ts`'s header so the recovery work is not
+    // repeated if it ever earns its download back.
+    expect(
+      ZERO_SHOT_MODELS.some((m) => m.id.includes("siglip2")),
+      "SigLIP 2 is back in the catalogue — restore its constants assertion",
+    ).toBe(false);
   });
 
   it("gives every entry the parameters its scoring needs", () => {

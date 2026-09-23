@@ -527,7 +527,9 @@ encoding is the per-image pass, and collapsing them means the user clicks, waits
 a second, and is told nothing.
 
 **c. The pipeline cannot load the model at all.**
-`/image-to-text` — `ImageToTextPipeline` resolves through
+The example is `/image-to-text`, which has since been cut for size — the reason
+is about the runtime rather than the route, so it stands. `ImageToTextPipeline`
+resolves through
 `AutoModelForVision2Seq`, whose registry maps `vision-encoder-decoder`,
 `idefics3` and `smolvlm`. Florence-2's model type is `florence2`, registered
 under *image-text-to-text*. It also does exactly two things — run the processor
@@ -541,9 +543,10 @@ grep -n "MODEL_FOR_.*MAPPING_NAMES" -A 20 \
   frontend/node_modules/@huggingface/transformers/src/models/registry.js
 ```
 
-`vision/caption/` then puts *both* families behind one `Captioner` interface,
-which is the same trade `tts.worker.ts` makes for Kokoro / MMS / MusicGen. One
-engine per **modality**, not per model.
+`vision/caption/` then put *both* families behind one `Captioner` interface — the
+same trade `tts.worker.ts` makes for Kokoro and MMS/SpeechT5, and made for
+MusicGen too before `/text-to-audio` was cut. One engine per **modality**, not
+per model.
 
 **d. The task is two models.**
 `/pose` — a detector finds people, a pose model runs on each person's crop.
@@ -574,7 +577,10 @@ node -e "const s=require('fs').readFileSync(
 This is the **third** page in the repo planned around a pipeline that could not
 carry it — MusicGen (§3.4 of the audio roadmap) and Florence-2 (reason **c**
 above) were the first two. Three is enough to make it a step rather than a
-lesson.
+lesson. (Both of those routes were later cut for size; the check still earns
+its place, and `/document-question-answering` is the one page that *passed* it
+— the pipeline, the registry entry and the default model all lined up, and it
+was cut for a different reason entirely.)
 
 Driving the model directly means owning the prompt, and for a VLM that is
 `apply_chat_template`. It is not decoration: each checkpoint has its own image
@@ -586,6 +592,18 @@ up; `add_generation_prompt: true` is what makes the model answer rather than
 continue the question; and `generate` returns **prompt + answer**, so the
 prompt's tokens are sliced off before decoding or the user gets their own
 question handed back.
+
+The first of those scales, and `/video-text-to-text` is where it bites: **N
+pictures means N slots, in the same order.** A video-language model in a browser
+is a frame sampler in front of exactly this engine, so the run payload carries an
+ordered list and the template is built from it — one slot short, or the two out
+of step, and every frame after the gap is attributed to the wrong moment, with
+nothing on screen but a confident sentence. Derive the count from the list's own
+length at the point of use rather than passing it alongside; the only way this
+goes wrong is if the two are allowed to be two separate facts. And note that the
+tile problem **multiplies** by the frame count rather than adding to it: a source
+over the model's tile size becomes a grid of tiles *plus* a global view, per
+frame.
 
 It is also the route that added **streaming** to the shared envelope. A
 generative decoder encodes the image to completion before a single token exists,
@@ -608,7 +626,6 @@ owes a `@slow` spec that measures a **property**, never a count:
 |---|---|
 | `/zero-shot-image-classification` | the split path's numbers against the full graph |
 | `/mask-generation` | the mask's **coverage band** — ~0% and ~100% are what a broken coordinate space produces |
-| `/image-to-text` | a substring of the text actually printed in the picture |
 | `/pose` | the nose is **above** the ankles |
 | `/zero-shot-object-detection` | a present phrase finds boxes and an absent one finds none |
 | `/image-features` | an animal's nearest neighbour is an animal |
@@ -616,6 +633,8 @@ owes a `@slow` spec that measures a **property**, never a count:
 | `/super-resolution` | **PSNR against a ground truth**, beating a bicubic resize |
 | `/image-to-3d` | the point count tracks the stride, and sliders re-derive without a run |
 | `/image-text-to-text` | a **known answer on a known image** — a broken chat template returns fluent, confident, unrelated prose |
+| `/visual-question-answering` | the terse answer is **materially shorter in words** than the verbose one, same question and same picture |
+| `/video-text-to-text` | a **known answer about a known clip**, and reversing the frames is a real **second inference** — not that the answer changed, which at this size it usually does not |
 
 "Five rows appeared" passes for all of them.
 

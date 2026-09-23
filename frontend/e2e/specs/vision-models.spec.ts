@@ -373,64 +373,6 @@ test.describe("@slow real vision model loads", () => {
   });
 });
 
-// Florence-2 is WebGPU-only in the catalogue, so its spec lives in the `webgpu`
-// project rather than the default chromium one — on a machine with no GPU the
-// picker correctly refuses to select it, and there is nothing to assert.
-test.describe("@slow real vision model loads on WebGPU", () => {
-  test.describe.configure({ mode: "serial", timeout: DOWNLOAD_BUDGET_MS });
-
-  test("/image-to-text captions a photo and reads printed text", async ({
-    page,
-    mockApi,
-  }) => {
-    await mockApi();
-    const model = new ModelPageObject(page);
-    await page.goto("/image-to-text");
-
-    const florence = model.button(/Florence-2 base/);
-    test.skip(
-      !(await florence.isEnabled()),
-      "no WebGPU adapter — Florence-2 is gated off",
-    );
-
-    await model.button(/^Load model$/).click();
-    await expect(page.getByTestId("model-ready")).toBeVisible({
-      timeout: DOWNLOAD_BUDGET_MS,
-    });
-
-    // 1. Captioning. A plausible noun, on a picture whose subject is not in
-    //    doubt — "a string came back" would pass on a model generating noise.
-    await model.button(/^Tiger$/).click();
-    await model.run(/^Generate$/);
-    await expect(model.outputPanel).toContainText(/tiger|cat|animal/i, {
-      timeout: 180_000,
-    });
-
-    // 2. OCR, and **this is the assertion that catches a broken processor
-    //    path**. A model handed mis-normalised pixels still produces fluent
-    //    text; only text that matches what is actually in the picture proves
-    //    the image reached it intact.
-    await page.getByTestId("modes").getByRole("button", { name: "OCR" }).click();
-    await model.button(/^Advertisement$/).click();
-    await expect(model.outputPanel).toContainText(/coca|cola/i, {
-      timeout: 180_000,
-    });
-
-    // 3. Grounding renders as boxes, not as prose — the two output shapes come
-    //    from one task and are routed by the mode, not by sniffing the answer.
-    await page
-      .getByTestId("modes")
-      .getByRole("button", { name: "Grounding" })
-      .click();
-    await model.button(/^City street$/).click();
-    await model.run(/^Generate$/);
-    await expect(page.getByTestId("grounding-canvas")).toBeVisible({
-      timeout: 180_000,
-    });
-    await expect(page.getByTestId("grounding-list")).toBeVisible();
-  });
-});
-
 test.describe("@slow real two-model pose", () => {
   test.describe.configure({ mode: "serial", timeout: DOWNLOAD_BUDGET_MS });
 

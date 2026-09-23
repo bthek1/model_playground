@@ -139,18 +139,20 @@ test.describe("/depth", () => {
     const model = new ModelPageObject(page);
     await page.goto("/depth");
 
-    // The default entry is quoted but not gated.
+    // Every entry is quoted, and none is gated: Depth Pro was the only model
+    // heavy enough to trip the second, blunter notice, and it was cut for size
+    // (1009 MB against 50 MB for both survivors). The notice itself stays —
+    // `isHeavy` is a size threshold, not a model id — so this asserts it is
+    // correctly silent rather than that it is gone.
     await expect(model.sizeNote).toContainText(/MB/);
     await expect(page.getByTestId("heavy-model-notice")).toBeHidden();
 
-    // Depth Pro is ~1 GB, so it gets a second, blunter statement — and still
-    // fetches nothing until Load is pressed.
-    await model.button(/Depth Pro/).click();
-    await expect(page.getByTestId("heavy-model-notice")).toBeVisible();
-    await expect(model.largeModelWarning).toBeVisible();
+    // Switching models is still free: SELECT commits to nothing.
+    await model.button(/Depth Anything \(v1\)/).click();
+    await expect(page.getByTestId("heavy-model-notice")).toBeHidden();
     expect(
       weightRequests,
-      "selecting a gated model started its download",
+      "selecting a model started its download",
     ).toEqual([]);
   });
 
@@ -405,63 +407,6 @@ test.describe("/mask-generation", () => {
     // it where the clicking happens.
     await expect(model.slot(3)).toContainText(/Alt/);
     await expect(model.slot(3)).toContainText(/this is not/i);
-  });
-});
-
-test.describe("/image-to-text", () => {
-  test("offers four modes and sets the expectation before any download", async ({
-    page,
-    mockApi,
-  }) => {
-    await mockApi();
-    const weightRequests = await stubHub(page);
-
-    const model = new ModelPageObject(page);
-    await page.goto("/image-to-text");
-
-    // Florence-2's four modes come from its capability flags, not a fixed list.
-    // `exact`, because "Caption" is also a substring of "Detailed caption".
-    const modes = page.getByTestId("modes");
-    await expect(
-      modes.getByRole("button", { name: "Caption", exact: true }),
-    ).toBeVisible();
-    await expect(
-      modes.getByRole("button", { name: "Detailed caption", exact: true }),
-    ).toBeVisible();
-    await expect(modes.getByRole("button", { name: "OCR" })).toBeVisible();
-    await expect(modes.getByRole("button", { name: "Grounding" })).toBeVisible();
-
-    // The one expectation this page must set: every other vision route answers
-    // in milliseconds, this one decodes a token at a time.
-    await expect(model.slot(3)).toContainText(/expect\s+seconds/i);
-
-    await expect(model.button(/^Generate$/)).toBeDisabled();
-    expect(weightRequests, "arriving fetched model weights").toEqual([]);
-  });
-
-  test("does not offer the WebGPU-only model when the probe says WASM", async ({
-    page,
-    mockApi,
-  }) => {
-    await mockApi();
-    await stubHub(page);
-
-    // No `navigator.gpu` at all — the CPU-only case, which is what a machine
-    // without a usable adapter looks like to `pickBackend`.
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "gpu", { value: undefined });
-    });
-
-    const model = new ModelPageObject(page);
-    await page.goto("/image-to-text");
-
-    // Known before the click. Offering it anyway turns a documented limitation
-    // into a failed 275 MB download.
-    await expect(
-      page.getByTestId("model-unsupported-onnx-community/Florence-2-base-ft"),
-    ).toBeVisible();
-    await expect(model.button(/Florence-2 base/)).toBeDisabled();
-    await expect(model.button(/ViT-GPT2/)).toBeEnabled();
   });
 });
 

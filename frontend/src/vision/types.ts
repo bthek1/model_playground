@@ -24,7 +24,12 @@ export type VisionTask =
   | "image-segmentation"
   | "depth-estimation"
   | "image-feature-extraction"
-  | "image-to-text"
+  // `image-to-text` was here until its route was cut: Florence-2 (544 MB) and
+  // vit-gpt2 (482 MB) were the whole catalogue, with nothing lighter to offer.
+  // It never rode this worker anyway — Florence-2 needed its own engine because
+  // the pipeline resolves through `AutoModelForVision2Seq`, whose registry has
+  // no `florence2`.
+  //
   // Two tasks that arrived with Wave 3. Both are plain `pipeline()` calls
   // returning a `RawImage`, so neither earns an engine of its own
   // (docs/guides/adding-a-model.md §10) — they ride this worker unchanged.

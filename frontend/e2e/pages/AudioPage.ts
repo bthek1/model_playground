@@ -4,7 +4,7 @@ import { ModelPageObject } from "./ModelPage";
 
 /**
  * Shared page object for the in-browser audio routes (`/asr`,
- * `/audio-classification`, `/text-to-speech`, `/text-to-audio`,
+ * `/audio-classification`, `/text-to-speech`,
  * `/audio-to-audio`). They share the four-slot model page
  * (docs/standards/model-page-pattern.md): a `ModelPicker` in SELECT, a
  * `ModelStatus` in LOAD, transport in RUN, an `OutputPanel` in OUTPUT — so one

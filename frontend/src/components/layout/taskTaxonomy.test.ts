@@ -44,19 +44,33 @@ describe("taskCategories", () => {
     const all = taskCategories.flatMap((c) => c.tasks);
     const textGen = all.find((t) => t.slug === "text-generation")!;
     const textToSpeech = all.find((t) => t.slug === "text-to-speech")!;
-    const textToAudio = all.find((t) => t.slug === "text-to-audio")!;
     const audioToAudio = all.find((t) => t.slug === "audio-to-audio")!;
     const vad = all.find((t) => t.slug === "voice-activity-detection")!;
 
     expect(textGen.to).toBe("/playground");
     expect(textToSpeech.to).toBe("/text-to-speech");
-    expect(textToAudio.to).toBe("/text-to-audio");
     expect(audioToAudio.to).toBe("/audio-to-audio");
     expect(vad.to).toBe("/vad");
 
     // Unmapped tasks still fall through to the generic placeholder route.
     const discreteMaths = all.find((t) => t.slug === "discrete-maths")!;
     expect(discreteMaths.to).toBe("/tasks/discrete-maths");
+  });
+
+  it("leaves the three heavy-only tasks on the placeholder", () => {
+    // These had routes and lost them: every checkpoint each task has is a
+    // several-hundred-megabyte download with no lighter alternative, which is
+    // `adding-a-task-page.md` §0's second question answered "no". The rows stay
+    // in the sidebar — the taxonomy mirrors the Hub, not our build state — but
+    // they must not map to a route again without a smaller model to point at.
+    const all = taskCategories.flatMap((c) => c.tasks);
+    const at = (slug: string) => all.find((t) => t.slug === slug)!.to;
+
+    expect(at("text-to-audio")).toBe("/tasks/text-to-audio");
+    expect(at("image-to-text")).toBe("/tasks/image-to-text");
+    expect(at("document-question-answering")).toBe(
+      "/tasks/document-question-answering",
+    );
   });
 
   it("maps the real Theory tools to their implemented routes", () => {
@@ -91,7 +105,6 @@ describe("taskCategories", () => {
     // reads like a spec section.
     expect(at("image-feature-extraction")).toBe("/image-features");
     expect(at("mask-generation")).toBe("/mask-generation");
-    expect(at("image-to-text")).toBe("/image-to-text");
     expect(at("keypoint-detection")).toBe("/pose");
     expect(at("video-classification")).toBe("/video-classification");
     // The one row in this category with no Hub task behind it: the Hub has no
@@ -149,5 +162,33 @@ describe("categoryForPath", () => {
 
   it("returns undefined for an unknown path", () => {
     expect(categoryForPath("/nope")).toBeUndefined();
+  });
+});
+
+describe("the Multimodal category", () => {
+  const at = (slug: string) =>
+    taskCategories
+      .flatMap((c) => c.tasks)
+      .find((t) => t.slug === slug)!.to;
+
+  it("maps the three shipped routes", () => {
+    // All three ride one engine — one worker, one hook, one `VlmRun` envelope —
+    // and are separate routes because the Hub has separate tags and a user
+    // looking for VQA does not click "Image Text to Text".
+    expect(at("image-text-to-text")).toBe("/image-text-to-text");
+    expect(at("visual-question-answering")).toBe("/visual-question-answering");
+    expect(at("video-text-to-text")).toBe("/video-text-to-text");
+  });
+
+  it("leaves the rest of the category on the placeholder", () => {
+    // Cut for size or blocked on NLP, each with measured numbers in
+    // docs/roadmaps/multimodal.md. The rows stay because the sidebar mirrors
+    // the Hub, not our build state.
+    expect(at("audio-text-to-text")).toBe("/tasks/audio-text-to-text");
+    expect(at("visual-document-retrieval")).toBe(
+      "/tasks/visual-document-retrieval",
+    );
+    expect(at("image-text-to-image")).toBe("/tasks/image-text-to-image");
+    expect(at("any-to-any")).toBe("/tasks/any-to-any");
   });
 });

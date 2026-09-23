@@ -163,7 +163,7 @@ describe("createVlmHandler — run", () => {
   const run = {
     type: "run" as const,
     id: 7,
-    image,
+    images: [image],
     prompt: "What is this?",
     maxNewTokens: 64,
   };
@@ -257,5 +257,84 @@ describe("createVlmHandler — run", () => {
     const [, prompt, maxNewTokens] = lastCall(models[0].generate);
     expect(prompt).toBe("What is this?");
     expect(maxNewTokens).toBe(64);
+  });
+});
+
+describe("createVlmHandler — an ordered list of pictures", () => {
+  // A video-language model is a frame sampler plus an image model, so the run
+  // payload carries N pictures rather than one. The worker's chat template
+  // fills its `{ type: "image" }` slots **positionally** from this array, which
+  // makes the order load-bearing: frames that arrive shuffled produce a fluent
+  // answer about a video that never happened, with no error anywhere.
+  const frame = (n: number) => ({
+    data: new Uint8ClampedArray([n, n, n]),
+    width: 1,
+    height: 1,
+    channels: 3 as const,
+  });
+
+  it("hands every frame to the model, in the order it was sent", async () => {
+    const { handle, models } = harness(undefined, { warmup: false });
+    await handle(load);
+    await handle({
+      type: "run",
+      id: 3,
+      images: [frame(1), frame(2), frame(3)],
+      prompt: "What happens?",
+      maxNewTokens: 32,
+    });
+
+    const [images] = lastCall(models[0].generate) as [
+      Array<{ data: Uint8ClampedArray }>,
+    ];
+    expect(images).toHaveLength(3);
+    expect(images.map((f) => f.data[0])).toEqual([1, 2, 3]);
+  });
+
+  it("preserves a reversed list rather than normalising it", async () => {
+    // The temporal-blindness experiment *is* a reordering. An engine that
+    // sorted, de-duplicated or re-ordered the frames would silently answer the
+    // question the page was not asking.
+    const { handle, models } = harness(undefined, { warmup: false });
+    await handle(load);
+    await handle({
+      type: "run",
+      id: 4,
+      images: [frame(3), frame(2), frame(1)],
+      prompt: "What happens?",
+      maxNewTokens: 32,
+    });
+
+    const [images] = lastCall(models[0].generate) as [
+      Array<{ data: Uint8ClampedArray }>,
+    ];
+    expect(images.map((f) => f.data[0])).toEqual([3, 2, 1]);
+  });
+
+  it("refuses an empty list against the request id, leaving the model loaded", async () => {
+    const { handle, posted } = harness(undefined, { warmup: false });
+    await handle(load);
+    await handle({
+      type: "run",
+      id: 5,
+      images: [],
+      prompt: "What happens?",
+      maxNewTokens: 32,
+    });
+    expect(last(posted)).toEqual({
+      type: "error",
+      id: 5,
+      error: "No image to look at",
+    });
+  });
+
+  it("warms up on a one-element list, like any other run", async () => {
+    // The warm-up must exercise the same code path a real run takes; a
+    // bare image here would be a shape the engine never otherwise sees.
+    const { handle, models } = harness();
+    await handle(load);
+    const [images] = models[0].generate.mock.calls[0];
+    expect(Array.isArray(images)).toBe(true);
+    expect(images).toHaveLength(1);
   });
 });

@@ -2,7 +2,7 @@
 
 > The **Audio** category of `components/layout/taskTaxonomy.ts`, task by task: what
 > runs client-side on the user's GPU (WebGPU) or CPU (WebAssembly), which checkpoint
-> to use, and — for the six tasks already built — where the code lives. No Python
+> to use, and — for the five tasks with routes — where the code lives. No Python
 > server in the inference path.
 >
 > This is the reference the other category roadmaps cite. Sections 1 and 2
@@ -11,16 +11,17 @@
 > [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap);
 > each moves here, as a file, once its first route ships.
 
-**Audio is the category Model Playground finished first — and it is now complete.**
-All six tasks in the taxonomy have working routes, so this file is a map of
-shipped code rather than a proposal. Read it that way: where a section says *shipped*, the design
+**Audio is the category Model Playground finished first, and it is complete at
+five of six.** Text to Audio shipped and was then **cut for size** (below), so
+five tasks have working routes and the sixth has a measured reason not to. This
+file is a map of shipped code rather than a proposal. Read it that way: where a section says *shipped*, the design
 questions are settled and the files named are the answer. Where it says *not built*,
 the model research is done and the page is not.
 
 | Taxonomy task | Route | Status |
 |---|---|---|
 | Text to Speech | [`/text-to-speech`](../../frontend/src/routes/text-to-speech.tsx) | Shipped — Kokoro, MMS-VITS, SpeechT5 |
-| Text to Audio | [`/text-to-audio`](../../frontend/src/routes/text-to-audio.tsx) | Shipped — MusicGen, gated behind its size |
+| Text to Audio | — | **Cut** — MusicGen is 599 MB WASM / 1127 MB WebGPU, and the only browser music model there is |
 | Automatic Speech Recognition | [`/asr`](../../frontend/src/routes/asr.tsx) | Shipped — Whisper, Moonshine, live mic |
 | Audio to Audio | [`/audio-to-audio`](../../frontend/src/routes/audio-to-audio.tsx) | Shipped — DeepFilterNet3 on bare ONNX |
 | Audio Classification | [`/audio-classification`](../../frontend/src/routes/audio-classification.tsx) | Shipped — AST, wav2vec2-KS, CLAP |
@@ -142,7 +143,7 @@ split is deliberate:
 |---|---|
 | [`audio/pipeline.worker.ts`](../../frontend/src/audio/pipeline.worker.ts) | every discriminative pipeline task — the task string travels in the `load` message |
 | [`audio/asr.worker.ts`](../../frontend/src/audio/asr.worker.ts) | ASR, because it drives the real-time capture loop |
-| [`audio/tts.worker.ts`](../../frontend/src/audio/tts.worker.ts) | the whole text→audio modality: Kokoro, MMS/SpeechT5 *and* MusicGen behind one `TtsSynthesizer` interface |
+| [`audio/tts.worker.ts`](../../frontend/src/audio/tts.worker.ts) | the text→speech modality: Kokoro and MMS/SpeechT5 behind one `TtsSynthesizer` interface. It carried MusicGen too until that route was cut — the seam is still the right shape for a third engine |
 | [`audio/enhance/enhance.worker.ts`](../../frontend/src/audio/enhance/enhance.worker.ts) | bare ONNX Runtime with hand-written DSP |
 | [`audio/vad/vad.worker.ts`](../../frontend/src/audio/vad/vad.worker.ts) | bare ONNX Runtime, recurrent frame loop — *and* the no-weights energy baseline |
 
@@ -223,27 +224,37 @@ the `voice` option.
 
 Bark (1B codec LM) is too heavy for a tab. It stays server-side.
 
-### 3.4 Text to Audio (music / SFX) — shipped, and deliberately gated
+### 3.4 Text to Audio (music / SFX) — **built, then cut for size**
 
-Route [`/text-to-audio`](../../frontend/src/routes/text-to-audio.tsx) · catalogue
-[`audio/textToAudio.ts`](../../frontend/src/audio/textToAudio.ts) · shares
-`tts.worker.ts`.
+The route shipped, ran, and was removed. `Xenova/musicgen-small` is 300M params
+and a **599 MB q8 / 1127 MB fp16** download — measured, not estimated —
+generating autoregressively at ~50 tokens per second of audio. It is also the
+*only* text-to-audio checkpoint the browser has: AudioLDM and Stable Audio are
+`diffusers` latent-diffusion models with no Transformers.js path at all.
 
-`Xenova/musicgen-small` is 300M params and a **571 MB q8 / ~1 GB fp16** download,
-generating autoregressively at ~50 tokens per second of audio. The route states that
-cost and downloads nothing until the user opts in; an E2E spec asserts zero Hub
-requests before the click. **Use this pattern for anything this heavy** — the size
-guardrail in `ModelPicker` is the mechanism, not a suggestion.
+So the page could not be made cheaper and could not be given a second entry.
+That is [`adding-a-task-page.md`](../guides/adding-a-task-page.md) §0 question 2
+answered "no", one step later than it should have been.
 
-Two implementation notes worth keeping:
+**The gating pattern it established outlives it, and so does its sharpest
+lesson.** The route did everything right: it stated the cost, downloaded nothing
+until an explicit opt-in, and an E2E spec asserted zero Hub requests before the
+click. It was cut anyway. **A gate is not a substitute for a size that fits** —
+it makes an expensive page honest, not affordable. Use it for a heavy entry
+*beside* light ones (the mechanism now lives on `/depth` as a size threshold
+rather than a model id), not to justify a page that is nothing but a heavy
+entry.
+
+Three implementation notes worth keeping, none of them specific to this route:
 
 - MusicGen needs `MusicgenForConditionalGeneration` **directly**. The `text-to-audio`
-  *pipeline* throws "Missing the following inputs: input_ids" on 4.2.0.
-- Generation length is capped (`MAX_SECONDS = 15`, default 5) because the cost is
-  linear in the audio duration and a user cannot tell a slow model from a hung tab.
-
-AudioLDM and Stable Audio are `diffusers` latent-diffusion models with no
-Transformers.js path. They stay on a server.
+  *pipeline* throws "Missing the following inputs: input_ids" on 4.2.0. This is
+  the first of the three times this repo planned a page around a pipeline that
+  could not carry it — see [`multimodal.md`](multimodal.md) §1.
+- One `TtsSynthesizer` interface covered Kokoro, MMS/SpeechT5 and MusicGen, which
+  is why a fourth worker was never needed. The seam is still there.
+- Generation length was capped (`MAX_SECONDS = 15`, default 5) because cost is
+  linear in duration and a user cannot tell a slow model from a hung tab.
 
 ### 3.5 Audio to Audio (speech enhancement) — shipped on bare ONNX
 
@@ -333,9 +344,10 @@ silence as eagerly as speech — was deliberately left out of #9 and is unclaime
 
 Audio LLMs (Qwen2-Audio and friends) are multi-billion-parameter and have no browser
 runtime. The buildable version is a **cascade** — ASR then a small text model, both
-already in the catalogue — and it is specified in
-[`Multimodal_Models_in_React_WebGPU_and_CPU.md`](https://github.com/bthek1/model_playground/issues/4)
-§3.5.
+already in the catalogue — and it is specified in [`multimodal.md`](multimodal.md)
+§3.5. That page was **cut** before it was built: it is blocked on a
+text-generation worker that does not exist yet, and the cascade is ~800 MB of
+two models live at once.
 
 ---
 
@@ -346,7 +358,7 @@ already in the catalogue — and it is specified in
 | **ASR** | Yes — shipped | Whisper-base / Moonshine-tiny | WebGPU (WASM ok) | — |
 | **Audio classification** | Yes — shipped | AST / wav2vec2-KS / CLAP | WASM or WebGPU | — |
 | **TTS** | Yes — shipped | Kokoro-82M, MMS-VITS, SpeechT5 | WebGPU (Kokoro) / WASM | Bark → server |
-| **Text-to-Audio** | Partial — shipped, gated | MusicGen-small, short clips only | WebGPU | AudioLDM / Stable Audio → server |
+| **Text-to-Audio** | **No** — the one checkpoint is 599 MB at its cheapest | MusicGen-small | — | AudioLDM / Stable Audio → server |
 | **Audio-to-Audio** | Yes — shipped | DeepFilterNet3 (bare ONNX) | WebGPU / WASM | Demucs, voice conversion → server |
 | **Voice Activity Detection** | Yes — shipped | `onnx-community/silero-vad` + an energy baseline | WASM (by design) | — |
 | **Audio-Text-to-Text** | As a cascade | Whisper + a small LLM | WebGPU | native audio LLMs → server |

@@ -22,7 +22,6 @@ const TASK_ROUTES = [
     downloads: true,
   },
   { path: "/text-to-speech", heading: "Text to Speech", downloads: true },
-  { path: "/text-to-audio", heading: "Text to Audio", downloads: true },
   { path: "/audio-to-audio", heading: "Audio to Audio", downloads: true },
   { path: "/vad", heading: "Voice Activity Detection", downloads: true },
   {
@@ -53,7 +52,6 @@ const TASK_ROUTES = [
     downloads: true,
   },
   { path: "/mask-generation", heading: "Mask Generation", downloads: true },
-  { path: "/image-to-text", heading: "Image to Text", downloads: true },
   { path: "/pose", heading: "Keypoint Detection", downloads: true },
   {
     path: "/video-classification",
