@@ -50,6 +50,33 @@ category guide's feasibility table saying so and why, and it keeps its
 reason" is a finished piece of work.** It stops the next person spending three
 days rediscovering it.
 
+### Question 2 has teeth, and three shipped routes proved it
+
+`/text-to-audio`, `/image-to-text` and `/document-question-answering` were all
+built, all worked, and were all **cut for size** — because on each of them
+*every* checkpoint the task has is a several-hundred-megabyte download, with
+nothing lighter to fall back on:
+
+| route | cheapest option | why there was no second |
+|---|---|---|
+| `/text-to-audio` | 599 MB (WASM); 1127 MB on WebGPU | MusicGen-small is the only browser music model; AudioLDM and Stable Audio are `diffusers` |
+| `/image-to-text` | 482 MB (vit-gpt2); Florence-2 is 544 MB | BLIP's only mirror ships the wrong layout, GOT-OCR has no export |
+| `/document-question-answering` | 411 MB (WebGPU); 597 MB on WASM | the pipeline hardcodes Donut's prompt, so another architecture is prompted with tokens it has never seen |
+
+Two things to take from that.
+
+**A gate is not a substitute for a size that fits.** All three did the gating
+correctly — the cost stated up front, nothing downloaded until an explicit
+click, an E2E spec asserting zero Hub requests before it — and were removed
+anyway. Gating makes a heavy entry honest *beside light ones*; it cannot make a
+page whose every entry is heavy into a page worth keeping.
+
+**So ask question 2 about the catalogue, not the best model.** "Is there a
+checkpoint under 1 GB" is the wrong form. The right one is: **what does the
+cheapest usable entry cost, and is there a second one?** A page with a 50 MB
+default and a 1 GB option behind a gate is fine. A page whose floor is 400 MB
+is not, however well it behaves.
+
 The one exception is the raw WebGPU path
 ([`frontend/src/webgpu/`](../../frontend/src/webgpu/)). A task with no ONNX
 export can still become a page if the maths is small enough to write as WGSL by
@@ -185,20 +212,21 @@ are eleven: [`audio/asr.worker.ts`](../../frontend/src/audio/asr.worker.ts),
 [`vision/vision.worker.ts`](../../frontend/src/vision/vision.worker.ts),
 [`vision/zeroshot/worker.ts`](../../frontend/src/vision/zeroshot/worker.ts),
 [`vision/sam/sam.worker.ts`](../../frontend/src/vision/sam/sam.worker.ts),
-[`vision/caption/caption.worker.ts`](../../frontend/src/vision/caption/caption.worker.ts),
 [`vision/pose/pose.worker.ts`](../../frontend/src/vision/pose/pose.worker.ts) and the
-raw-WGSL [`webgpu/worker.ts`](../../frontend/src/webgpu/worker.ts). A *twelfth*
+raw-WGSL [`webgpu/worker.ts`](../../frontend/src/webgpu/worker.ts). Another
 is only justified when a task genuinely needs different machinery — none of the
 three Wave 3 routes did: background removal and super-resolution are plain
 pipeline calls, and image-to-3D reuses depth's.
 
 **Before choosing, answer one question: is this a plain `pipeline()` call?** Ten of
-the fourteen vision routes are, and they all ride `vision.worker.ts` with the task string
-in the `load` message. Four are not, and each owns an engine for a different reason —
+the thirteen vision routes are, and they all ride `vision.worker.ts` with the task string
+in the `load` message. Three are not, and each owns an engine for a different reason —
 the pipeline throws away work you want to keep (zero-shot: it re-encodes the labels every
 call), the architecture *is* a split you want to exploit (SAM: encode once, decode many),
-the pipeline cannot load the model at all (Florence-2's model type is registered for
-image-text-to-text, not vision2seq), or the task is two models (pose). §10 of
+or the task is two models (pose). A fourth reason is real and has no route today: **the
+pipeline cannot load the model at all** — Florence-2's model type is registered for
+image-text-to-text, not vision2seq, which is why `/image-to-text` owned
+`vision/caption/` until that route was cut for size. §10 of
 [`adding-a-model.md`](adding-a-model.md) works through all four with the code.
 
 Check the registry before writing the hook, not after the first load fails:
@@ -209,9 +237,10 @@ grep -n "MODEL_FOR_.*MAPPING_NAMES" -A 20 \
 ```
 
 When a task does own an engine, it still puts **one engine per modality-shaped
-problem**, not one per model: `vision/caption/` drives Florence-2 and a
-vision-encoder-decoder behind a single `Captioner` interface, exactly as
-`tts.worker.ts` drives Kokoro, MMS and MusicGen behind one `TtsSynthesizer`.
+problem**, not one per model: `tts.worker.ts` drives Kokoro and MMS/SpeechT5 behind
+one `TtsSynthesizer`, and drove MusicGen through the same seam until `/text-to-audio`
+was cut. The deleted `vision/caption/` did the same for Florence-2 and a
+vision-encoder-decoder behind a single `Captioner`.
 
 The two bare-ONNX workers are the reason the rule says "modality", not "runtime":
 enhancement and VAD both drive `onnxruntime-web` directly, but their machinery
@@ -571,7 +600,7 @@ export const DEFAULT_DEPTH_MODEL = DEPTH_MODELS[0].id;
 
 `graphs` and `backends` are both about *not lying*, and both were added because the
 absence bit. `graphs` names the files the model actually downloads — CLIP as a feature
-extractor loads `vision_model.onnx`, SAM ships two graphs, Florence-2 four — so the
+extractor loads `vision_model.onnx`, SAM ships two graphs, a VLM three — so the
 Hub-id spec checks the right file instead of a `model.onnx` that does not exist there.
 `backends` is enforced by `ModelPicker` through `model/useBackendProbe.ts`, so a model
 this machine cannot run is greyed out with a reason rather than failing 275 MB into a

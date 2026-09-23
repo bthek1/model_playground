@@ -15,18 +15,33 @@
 |---|---|---|
 | Image-Text-to-Text (§3.1) | [`/image-text-to-text`](../../frontend/src/routes/image-text-to-text.tsx) | **Shipped** — SmolVLM 256M / 500M, streaming |
 | Visual Question Answering (§3.2) | — | Planned — [#31](https://github.com/bthek1/model_playground/issues/31): same engine, its own route |
-| Document Question Answering (§3.3) | [`/document-question-answering`](../../frontend/src/routes/document-question-answering.tsx) | **Shipped** — Donut, extractive, either backend |
+| Document Question Answering (§3.3) | — | **Cut** — shipped, then removed for size. 411 MB / 597 MB, one checkpoint |
 | Video-Text-to-Text (§3.4) | — | Planned — [#33](https://github.com/bthek1/model_playground/issues/33): a frame sampler over §3.1 |
-| Audio-Text-to-Text (§3.5) | — | [#34](https://github.com/bthek1/model_playground/issues/34) — **blocked** on NLP ([#5](https://github.com/bthek1/model_playground/issues/5)) |
-| Visual Document Retrieval (§3.6) | — | [#35](https://github.com/bthek1/model_playground/issues/35) — **starts with a spike that may end it** |
+| Audio-Text-to-Text (§3.5) | — | **Cut** — [#34](https://github.com/bthek1/model_playground/issues/34) closed: blocked, and ~800 MB of two live models |
+| Visual Document Retrieval (§3.6) | — | **Cut** — [#35](https://github.com/bthek1/model_playground/issues/35) closed: 953 MB, fp32-only, no `config.json` |
 | the four that stay on a server (§3.7) | — | **Done** — documented, with a reason each |
 
-**Two of nine are built**, and every remaining section has a plan issue. The build-out so far
-is recorded in [#30](https://github.com/bthek1/model_playground/issues/30); the category
-closes when the last route ships, the way
-[#1](https://github.com/bthek1/model_playground/issues/1),
-[#2](https://github.com/bthek1/model_playground/issues/2) and
-[#3](https://github.com/bthek1/model_playground/issues/3) did.
+**One of nine is built, and the category is now scoped to three.** §3.1 shipped,
+§3.2 is planned and costs no new download, §3.4 is planned. The other six are
+server-side or cut, each with its measured reason below. The build-out so far is
+recorded in [#30](https://github.com/bthek1/model_playground/issues/30).
+
+### What was cut, and why
+
+The browser budget is the whole story of this category, so the cuts belong at
+the top of it rather than buried in their sections.
+
+| | download | why it went |
+|---|---|---|
+| `/document-question-answering` (§3.3) | **411 MB** WebGPU · **597 MB** WASM | shipped and then removed. One checkpoint, and no second one is possible: the pipeline hardcodes Donut's prompt, so another architecture would be prompted with tokens it has never seen |
+| `/audio-text-to-text` (§3.5) | ~**800 MB** combined | blocked on NLP ([#5](https://github.com/bthek1/model_playground/issues/5)) *and* two models live at once — the largest standing exception to the one-model rule, for a page whose own point is that the architecture fails |
+| `/visual-document-retrieval` (§3.6) | **953.5 MB**, fp32 only | its own plan opened with a spike that was allowed to end it. `colSmol-256M-ONNX` publishes no `config.json`, so no `Auto*` class can load it, and the three-stage comparison needs CLIP and Florence-2 live beside it |
+
+Two of those three were never built, so cutting them costs nothing but the
+plan. The third was built, shipped, and measured — and the measurement is what
+condemned it. That is §0 of
+[`adding-a-task-page.md`](../guides/adding-a-task-page.md) working as intended,
+one step later than it should have.
 
 Multimodal is where the browser budget bites hardest. A vision-language model is an image
 encoder bolted to a language decoder, so it pays both costs: hundreds of image tokens per
@@ -247,8 +262,8 @@ it can see what you asked about.
 
 **A dead `data-testid`, found on the way.** `components/Markdown.tsx` accepts only
 `{ children, className }` and silently drops everything else, so a `data-testid` passed to
-it never reaches the DOM. `/image-to-text` passes one and it has never resolved — its test
-queries `slot-4` instead. This route puts the testid on a wrapper.
+it never reaches the DOM. `/image-to-text` passed one and it never resolved — its test
+queried `slot-4` instead. This route puts the testid on a wrapper.
 
 ### 3.2 Visual Question Answering — planned
 
@@ -258,12 +273,21 @@ ONNX). So this is §3.1's engine behind a **distinct route** — a user looking 
 not think to click "image-text-to-text" — with a question box, a short `max_new_tokens`,
 and the "answer in one word" toggle that makes what a prompt is worth visible.
 
-### 3.3 Document Question Answering — **shipped**
+### 3.3 Document Question Answering — **built, then cut for size**
 
-[`/document-question-answering`](../../frontend/src/routes/document-question-answering.tsx) ·
-[`src/multimodal/docvqa/`](../../frontend/src/multimodal/docvqa/) · [#32](https://github.com/bthek1/model_playground/issues/32)
+[#32](https://github.com/bthek1/model_playground/issues/32) shipped this route and
+it was removed in the same breath as `/text-to-audio` and `/image-to-text`. The
+reason is the table at the top of this file: **411 MB on WebGPU, 597 MB on
+WASM**, one checkpoint, and no possibility of a lighter second entry — the
+pipeline hardcodes Donut's prompt (below), so there is nothing else to offer.
 
-**The one route in this category that rides a real pipeline.** 4.2.0 carries
+The section is kept in full rather than deleted, because almost everything it
+records is about the *runtime* rather than about this page, and the next
+encoder-decoder will need all of it. The ORT quantized-decoder finding in
+particular now lives in [`model/backend.ts`](../../frontend/src/model/backend.ts)
+beside `asrLoadOpts`, which is the function it generalises.
+
+**It was the one route in this category that rode a real pipeline.** 4.2.0 carries
 `document-question-answering`; its registry maps exactly one entry,
 `vision-encoder-decoder → VisionEncoderDecoderModel`, which is Donut's model type; and
 `Xenova/donut-base-finetuned-docvqa` is the pipeline's *own default model*. Checked before
@@ -304,7 +328,8 @@ justified the same way: the alternative is not a cheaper CPU path but *no CPU pa
 **Nothing but a real browser load catches it.** The unit suite mocks the runtime away, the
 mocked E2E run never loads weights, `just fe-e2e-models` confirms the files exist (they
 do), and the identical call loads cleanly under `onnxruntime-node` — the fault is specific
-to the WASM provider in the browser. `just fe-e2e-docvqa` is what found it.
+to the WASM provider in the browser. `just fe-e2e-docvqa` is what found it; that
+recipe is gone with the route, and this finding is the reason the section is kept.
 
 **WebGPU keeps fp16, unpinned.** `q4f16` would cut it to 241.0 MB, but that would be a
 *precaution, not a measurement*, and document QA is where quantization error lands directly
@@ -362,7 +387,10 @@ decoration — the `/video-classification` precedent — and an E2E spec asserts
 
 The alternatives remain unbuildable: `impira/layoutlm-document-qa` needs OCR boxes as
 *input*, which the browser would have to produce first, and `stepfun-ai/GOT-OCR-2.0-hf` has
-no export (Florence-2 on `/image-to-text` already covers plain OCR).
+no export. (Florence-2 covered plain OCR on `/image-to-text` until that route was
+cut for size; with both gone, **OCR has no page** — asking `/image-text-to-text`
+to read a sign is the nearest thing, and it is a VLM answering a question rather
+than a transcription.)
 
 ### 3.4 Video-Text-to-Text — planned
 
@@ -373,7 +401,19 @@ slider — each frame carries its own image tokens, so 4 against 16 is a four-ti
 difference the user feels. The temporal-blindness toggle (feed the frames reversed and see
 whether the answer changes) is the honest companion.
 
-### 3.5 Audio-Text-to-Text — **blocked**
+### 3.5 Audio-Text-to-Text — **cut** ([#34](https://github.com/bthek1/model_playground/issues/34) closed)
+
+Two independent reasons, either of which would have been enough. It was
+**blocked** on a text-generation worker that does not exist yet (NLP,
+[#5](https://github.com/bthek1/model_playground/issues/5)), and the cascade is
+**~800 MB of two models live at once** — Whisper-base plus whichever decoder #5
+eventually picks, which at `Qwen3-0.6B` is 569.8 MB on its own. That is the
+largest standing exception to the one-model rule, and it would have been paid
+for a page whose own thesis is that the architecture loses information.
+
+If NLP ships something materially smaller than 0.6B, this is worth reopening —
+the wiring is two existing workers and the plan below is still correct. What
+follows is that plan's substance, kept for that case.
 
 The cascade — `onnx-community/whisper-base` into a small text-generation model — needs a
 text-generation worker, which arrives with the NLP category
@@ -387,9 +427,19 @@ the transcript and the answer side by side. Two models are live at once here —
 exception to the one-model rule, affordable only because both are small, and one to note in
 the code.
 
-### 3.6 Visual Document Retrieval — planned, and less certain than the roadmap implied
+### 3.6 Visual Document Retrieval — **cut** ([#35](https://github.com/bthek1/model_playground/issues/35) closed)
 
-[#35](https://github.com/bthek1/model_playground/issues/35). The comparison is the page:
+The plan opened with a spike that was explicitly allowed to end it, and the
+evidence that spike was meant to gather was already in the plan: **953.5 MB,
+fp32 only, and no `config.json`**. Three stages would have had to be live at
+once (colSmol, CLIP, Florence-2). This is the cleanest possible instance of
+[`adding-a-task-page.md`](../guides/adding-a-task-page.md) §0 — a documented
+"server-side, and here is the reason" is a finished piece of work, and it is
+worth more than three days of rediscovery.
+
+What would have made it worth building is recorded below, because the argument
+is a good one and the day a quantized ColPali export appears it becomes live
+again. The comparison is the page:
 `onnx-community/colSmol-256M-ONNX` for late interaction, `Xenova/clip-vit-base-patch32` as
 the single-vector control, and Florence-2 `<OCR>` + BM25 as the lexical baseline — all
 three in the browser over dropped-in page images. MaxSim over patch vectors is real
@@ -430,10 +480,10 @@ or audio, there is not.**
 |---|---|---|---|---|
 | **Image Text to Text** | **Shipped** | SmolVLM-256M / 500M | WebGPU only | Qwen3-VL-2B past the size ceiling |
 | **Visual Question Answering** | Yes, via a VLM | the §3.1 engine | WebGPU only | ViLT and BLIP-VQA have no export |
-| **Document Question Answering** | **Shipped** | `Xenova/donut-base-finetuned-docvqa` | WebGPU **or** WASM | LayoutLM, GOT-OCR to server |
+| **Document Question Answering** | **Cut** — built, measured at 411/597 MB, one checkpoint | `Xenova/donut-base-finetuned-docvqa` | — | LayoutLM, GOT-OCR to server |
 | **Video Text to Text** | Yes, sampled frames | `HuggingFaceTB/SmolVLM2-256M-Video-Instruct` | WebGPU only | long-video understanding to server |
-| **Audio Text to Text** | Yes, as a cascade | Whisper-base + a small LLM | WebGPU | native audio LLMs to server |
-| **Visual Document Retrieval** | **Unproven** — bare ONNX, fp32 only, 953 MB, no `config.json` | `onnx-community/colSmol-256M-ONNX` | WebGPU | full ColQwen2 to server |
+| **Audio Text to Text** | **Cut** — blocked on #5, and ~800 MB of two live models | Whisper-base + a small LLM | — | native audio LLMs to server |
+| **Visual Document Retrieval** | **Cut** — bare ONNX, fp32 only, 953 MB, no `config.json` | `onnx-community/colSmol-256M-ONNX` | — | full ColQwen2 to server |
 | **Any-to-Any** | Understanding half only | `onnx-community/Janus-Pro-1B-ONNX` | WebGPU | generation half to server |
 | **Image Text to Image** | No | — | — | server API |
 | **Image Text to Video** | No | — | — | server API |
@@ -446,17 +496,22 @@ The audio and vision rules apply, plus five of their own.
 
 - **`q4f16` on WebGPU, always** — via `vlmLoadOpts()`, never a literal in a worker.
 - **Quote measured bytes**, because a q4f16 estimate is wrong by up to 30%.
-- **Downscale to the model's tile size** (512 for SmolVLM), with documents the deliberate
-  exception.
+- **Downscale to the model's tile size** (512 for SmolVLM). Documents were the one
+  deliberate exception, and that route is gone — but the rule it proved stands: a
+  page sets its own number from the processor's own config rather than inheriting a
+  sibling's.
 - **Cap the frame count** at 4–8 for video. A 32-frame clip is not a slower page, it is a
   broken one.
 - **Give the encode its own state**, and stream every generation.
 - **One VLM live at a time, no exception.** These are the largest downloads in the app; a
   leaked session ends the tab. Null the reference *first*, then dispose.
 - **The large-model warning is not optional here.** Every model in this file is past
-  `LARGE_MODEL_BYTES` several times over. `/text-to-audio` is the gating precedent: state
-  the cost, download nothing until the click, and assert zero Hub requests before it in an
-  E2E spec.
+  `LARGE_MODEL_BYTES` several times over: state the cost, download nothing until the
+  click, and assert zero Hub requests before it in an E2E spec. `/text-to-audio` was
+  the gating precedent and has itself since been cut — which is the sharper lesson.
+  **A gate is not a substitute for a size that fits.** Three routes in this repo were
+  correctly gated, honest about the cost, and removed anyway, because a page whose
+  every checkpoint is several hundred megabytes is a page nobody clicks twice.
 
 ---
 
@@ -475,21 +530,14 @@ accept.
   answer on a known image**. Needs a real GPU with `shader-f16`: on SwiftShader the model
   loads in 29 s and then every run fails on the first Gather, which is how that gate was
   found in the first place.
-- `just fe-e2e-docvqa` — a real Donut load and a real extraction, pinned by a **known
-  answer on a known document**: `invoice.png` is the Transformers.js docs' own DocVQA
-  example and its invoice number is `us-001`. Needs **no GPU** — the WASM path is real
-  here — so unlike the VLM spec it runs anywhere. It is deliberately **one test**: a fresh
-  context per test re-downloads 597 MB, which turned an 8-minute file into a 25-minute one.
-  It also waits for the **trigger** to come back rather than for the answer text to change,
-  because the previous answer stays on screen during a re-run and polling it cannot tell
-  "still running" from "same answer".
 
 ---
 
 ## 7. Reference
 
 - **Transformers.js**: `AutoModelForImageTextToText`, `AutoProcessor.apply_chat_template`,
-  `TextStreamer`, and the `document-question-answering` pipeline (§3.3).
+  `TextStreamer`. (The `document-question-answering` pipeline is real and works —
+  §3.3 — but no route uses it any more.)
 - **Image helpers**: [`vision.md`](vision.md) §2 — `useImagePick`, `ImageSourcePanel`,
   `downscale`, `toPayload`/`fromPayload`. **Audio helpers**: [`audio.md`](audio.md) §2.
 - **Page construction**: [`docs/guides/adding-a-task-page.md`](../guides/adding-a-task-page.md).

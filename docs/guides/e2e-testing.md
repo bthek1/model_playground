@@ -131,11 +131,11 @@ that SwiftShader, which lets the WGSL kernel specs run on a machine with no
 256M autoregressive decoder on it is not a test anyone will wait for.
 
 `fe-e2e-vision` grew from "one MobileNetV4 load" into the whole category, and it is
-now the longest job in the repo: OWLv2 alone is 155 MB, and Florence-2 is 544 MB on
-WebGPU. **Reach for `fe-e2e-vision-one` while iterating** — it greps the same file by
-route path. The Florence-2 block runs in the `webgpu` project and `test.skip`s itself
-when the picker has gated the model off, so a machine with no GPU adapter reports a
-skip rather than a failure.
+still among the longest jobs in the repo — OWLv2 alone is 155 MB. **Reach for
+`fe-e2e-vision-one` while iterating**: it greps the same file by route path. It got
+measurably shorter when `/image-to-text` was cut (Florence-2 was 544 MB on WebGPU,
+and its block was the one that had to run in the `webgpu` project and skip itself on
+a machine with no adapter).
 
 **These are not optional nice-to-haves.** Three bugs shipped past a fully green
 unit suite because all of them lived in exactly what the unit tests mock away:
@@ -164,7 +164,7 @@ imports the catalogue modules directly and checks three things:
    composite that resolves to nothing — the two halves are what get asked about.
 2. **Every entry publishes the dtype its backend asks for**, against the files it
    actually downloads. That last part needed `VisionModel.graphs`: CLIP as a feature
-   extractor loads `vision_model.onnx`, SAM ships two graphs and Florence-2 four, so a
+   extractor loads `vision_model.onnx`, SAM ships two graphs and a VLM three, so a
    check hard-coded to `onnx/model.onnx` looks at a file that does not exist in those
    repos and passes.
 3. **Every bundled sample and gallery picture resolves.** Same class of bug one layer up:
@@ -185,7 +185,6 @@ error, so "a result appeared" and "N rows rendered" are both worthless there. Ea
 | `/zero-shot-object-detection` | a phrase that **is** in the picture finds boxes and one that is not finds none — a detector that boxes everything is as broken as one that boxes nothing, and only asking for something absent tells them apart |
 | `/image-features` | an animal's nearest neighbour is an animal — a mis-pooled (CLS averaged in with the patches) or unnormalised vector destroys the ordering while still filling the list |
 | `/mask-generation` | the mask's **coverage band**, 3–95% of the frame — a wrong point-coordinate space produces exactly one of the two degenerate masks, and both look plausible until measured |
-| `/image-to-text` | a substring of the text actually printed in the picture — a model handed mis-normalised pixels still writes fluent English |
 | `/pose` | the nose is **above** the ankles — the crop origin is not added back by the processor, and without it the skeleton floats beside the person |
 | `/video-classification` | the pooled verdict names the clip's true label over a distractor, and the pooling window moves without a single new Hub request |
 | `/background-removal` | the matte covers a **plausible fraction** of the frame — a broken preprocessing path produces 0% (an empty checkerboard) or 100% (the original photo), and both render perfectly |

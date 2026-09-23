@@ -94,7 +94,6 @@ just fe-e2e-vision-one /pose   # one @slow vision route at a time
 just fe-e2e-link    # @slow: link prediction, pinned by an AUC *band* (leakage pushes it up)
 just fe-e2e-graphcls # @slow: graph classification, pinned above its majority baseline
 just fe-e2e-vlm     # @slow: a real SmolVLM load + generation — the only chat-template guard (needs a GPU)
-just fe-e2e-docvqa  # @slow: a real Donut load, pinned by a known answer on a known invoice (no GPU needed)
 just fe-e2e-models  # check every model id (audio + vision + multimodal) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -362,9 +361,9 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
 
 - **One worker per modality, not per task.** Discriminative tasks share the generic
   `pipeline.worker.ts` (the task string travels in the `load` message). ASR keeps its own worker (it
-  drives the real-time capture loop). `tts.worker.ts` owns the whole **text→audio** modality — Kokoro,
-  MMS/SpeechT5 *and* MusicGen — because they all fit one `TtsSynthesizer` interface; a fourth worker
-  would have bought nothing. Each engine (`asrEngine`/`pipelineEngine`/`ttsEngine`/`enhanceEngine`/`vadEngine`) is a pure,
+  drives the real-time capture loop). `tts.worker.ts` owns the whole **text→speech** modality — Kokoro
+  and MMS/SpeechT5 behind one `TtsSynthesizer` interface; it carried MusicGen too until
+  `/text-to-audio` was cut, and a fourth worker would still buy nothing. Each engine (`asrEngine`/`pipelineEngine`/`ttsEngine`/`enhanceEngine`/`vadEngine`) is a pure,
   unit-testable message handler; the `*.worker.ts` file is a thin wrapper around it.
 - **Every engine owes three behaviours:** *one model live at a time* (null the reference **first**,
   then dispose via `disposeQuietly` — a failed teardown must not leave a stale model live);
@@ -387,11 +386,11 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
   `components/model/ModelPicker.tsx` quote the download for both backends and warn past
   `LARGE_MODEL_BYTES`. Supply measured `bytes` when the params estimate would mislead — ASR's fp32
   decoder makes the WASM download ~3x the estimate.
-- **Heavy/experimental models are gated, not auto-loaded.** `/text-to-audio` (MusicGen, 571 MB q8 /
-  ~1 GB fp16) states its size and speed cost and downloads nothing until the user opts in — an E2E
-  spec asserts zero Hub requests before the click. Use the same pattern for anything this heavy.
-  MusicGen also needs `MusicgenForConditionalGeneration` directly: the `text-to-audio` **pipeline**
-  throws "Missing the following inputs: input_ids" on 4.2.0.
+- **Heavy models are gated, not auto-loaded** — state the size and speed cost, download nothing
+  until an explicit opt-in, and assert zero Hub requests before the click in an E2E spec. But
+  **a gate is not a substitute for a size that fits**: `/text-to-audio` did all of that in front
+  of MusicGen and was cut anyway, because a 599 MB minimum was the *whole* page. Gate a heavy
+  entry that sits beside light ones; do not gate a page into existence.
 - **Audio-to-Audio (`src/audio/enhance/`) has no Transformers.js path at all.** DeepFilterNet3
   publishes the neural graph only — normalised ERB/spectral features in, an ERB mask plus complex
   deep-filter coefficients out — so the STFT, ERB filterbank, feature normalisation, deep filtering
@@ -432,10 +431,10 @@ one generic worker for every discriminative task (`vision.worker.ts` — the tas
 `load` message), a pure `engine.ts` that owes the same three behaviours, and thin task hooks over
 `useVisionPipeline`. Shipped: `/image-classification`, `/depth`, `/object-detection`,
 `/segmentation`, `/zero-shot-image-classification`, `/zero-shot-object-detection`,
-`/image-features`, `/mask-generation`, `/image-to-text`, `/pose`, `/video-classification`,
+`/image-features`, `/mask-generation`, `/pose`, `/video-classification`,
 `/background-removal`, `/super-resolution`, `/image-to-3d`.
-The rest of the category stays on a server, with a reason per task — see
-[`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) §3.12.
+Six more stay on a server, with a reason per task ([`docs/roadmaps/vision.md`](docs/roadmaps/vision.md)
+§3.12); `/image-to-text` shipped and was **cut for size** (§3.9).
 
 - **The last three cover *part* of a slug, and each page says which part.**
   `/super-resolution` is the `image-to-image` slug's single-pass half (editing is
@@ -482,13 +481,12 @@ The rest of the category stays on a server, with a reason per task — see
   per frame. The focal length is an **assumption** — relative depth carries no intrinsics —
   and the page says so beside the slider.
 
-- **Four vision tasks own an engine instead of riding the generic worker**, and the criterion is
+- **Three vision tasks own an engine instead of riding the generic worker**, and the criterion is
   always the same one: it is not a plain `pipeline()` call. `vision/zeroshot/` (split towers, to
-  cache label embeddings), `vision/sam/` (two graphs — encode once, decode many),
-  `vision/caption/` (the `image-to-text` pipeline cannot load Florence-2 at all: its model type is
-  registered for image-text-to-text, not vision2seq, and the pipeline has nowhere to put a task
-  token), and `vision/pose/` (two models live at once). Everything else is a thin hook over
-  `useVisionPipeline`.
+  cache label embeddings), `vision/sam/` (two graphs — encode once, decode many) and
+  `vision/pose/` (two models live at once). Everything else is a thin hook over
+  `useVisionPipeline`. `vision/caption/` was a fourth — the `image-to-text` pipeline cannot load
+  Florence-2 at all — and went with its route.
 - **`/pose` is the single deliberate exception to "one model live at a time."** Top-down pose is a
   detector plus a pose model and neither half is useful alone, so a catalogue entry names both and
   quotes the **combined** download. Two consequences that bit: `model/progress.ts` had to be keyed
@@ -500,8 +498,8 @@ The rest of the category stays on a server, with a reason per task — see
   machine cannot run, with the reason on the row. A `null` probe gates nothing — treating the
   undecided state as WASM greys out every WebGPU model for a frame on each page load.
 - **`VisionModel.graphs` names the ONNX files an entry actually downloads** (default `["model"]`).
-  CLIP as a feature extractor loads `vision_model.onnx`; SAM ships two graphs; Florence-2 ships
-  four. `just fe-e2e-models` checks *those* files for the dtype each backend asks for — hard-coded
+  CLIP as a feature extractor loads `vision_model.onnx`; SAM ships two graphs; the VLM entries ship
+  three. `just fe-e2e-models` checks *those* files for the dtype each backend asks for — hard-coded
   to `model.onnx` it would look at the wrong file and pass.
 - **Two coordinate round-trips are the whole correctness surface of their pages, and both fail
   silently.** SAM: a click is in CSS pixels and the canvas is sized to the source, so `OverlayCanvas`'s
@@ -578,8 +576,10 @@ The rest of the category stays on a server, with a reason per task — see
   leaked `MediaStream` leaves the webcam light on.
 - **Normalise a single-channel map before painting it** (`drawHeatmap`): relative depth is on an
   arbitrary scale, and without it the canvas is uniformly black or white. Say so in the UI too — the
-  values are not metres — and read the ramp's direction from the catalogue entry, because Depth
-  Anything emits inverse depth (big = near) while Depth Pro emits metres (big = far).
+  values are not metres — and read the ramp's direction from the catalogue entry rather than
+  hard-coding it: Depth Anything emits inverse depth (big = near), while a metric model emits
+  metres (big = far). `DepthModel.metric` is that seam, and it is currently unset by every
+  entry because Depth Pro was cut at 1009 MB — the seam stays so a metric model can plug in.
 
 ### In-browser vision-language models (`src/multimodal/`, `/image-text-to-text`)
 
@@ -647,69 +647,77 @@ behaviours, a thin `vlm.worker.ts` around it, a `client.ts`, and `useVlm` over
   its own plan rather than arriving as a side effect. SmolVLM-500M (358 MB) is the second
   rung.
 - **`components/Markdown.tsx` silently drops every prop but `{children, className}`**, so a
-  `data-testid` handed to it never reaches the DOM — `/image-to-text` passes one that has
-  never resolved. Put the testid on a wrapper.
+  `data-testid` handed to it never reaches the DOM. Put the testid on a wrapper, as this
+  route does — the now-deleted `/image-to-text` passed one that never resolved.
 - **`just fe-e2e-vlm` is the only test that can catch a broken chat template**, and it needs
   a real GPU (the models are WebGPU-only by catalogue declaration). It asserts a **known
   answer on a known image**; "some text appeared" would pass straight through the failure
   this page actually has.
 
-### In-browser document QA (`src/multimodal/docvqa/`, `/document-question-answering`)
+### Three routes were built and then cut for size — read this before adding one
 
-The category's second route, and the one that is **not** like the others: it rides a real
-`pipeline()` call, needs no GPU, and does not stream. See
-[`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) §3.3.
+`/text-to-audio` (MusicGen: **599 MB** WASM / **1127 MB** WebGPU),
+`/image-to-text` (Florence-2 544 MB, vit-gpt2 482 MB) and
+`/document-question-answering` (Donut: 411 MB WebGPU / 597 MB WASM) all shipped,
+ran correctly, and were removed. Each failed the same test:
+[`adding-a-task-page.md`](docs/guides/adding-a-task-page.md) §0 question 2 —
+**every checkpoint the task has is a several-hundred-megabyte download, with no
+lighter entry to fall back on.** Two heavy *entries* went with them: Depth Pro
+(1009 MB) off `/depth` and SigLIP 2 (751 MB) off `/zero-shot-image-classification`.
 
-- **Check `SUPPORTED_TASKS` *and* the registry — here both pass.** 4.2.0 carries
-  `document-question-answering`, its registry maps exactly `vision-encoder-decoder →
-  VisionEncoderDecoderModel` (Donut's model type), and `Xenova/donut-base-finetuned-docvqa`
-  is the pipeline's own default model. This is the rare case where
-  [`adding-a-model.md`](docs/guides/adding-a-model.md) §8 applies unchanged, so the route
-  owns no engine beyond the generic one.
-- **It is one checkpoint, and that is the pipeline's doing, not a shortage of models.**
-  `DocumentQuestionAnsweringPipeline` hardcodes Donut's prompt
-  (`<s_docvqa><s_question>…</s_question><s_answer>`), so another architecture would be
-  prompted with tokens it has never seen — fluent and unrelated, the Florence-2 failure.
-- **This route does not downscale, and it is the only one that must not.**
-  `preprocessor_config.json` is `do_resize` + `do_thumbnail` + `do_pad` at a fixed
-  2560x1920, and `thumbnail()` **never upscales** — it shrinks to fit, then pads. So the
-  encoder always sees a 2560x1920 tensor: **inference cost is constant**, and a smaller
-  source is *padded*, not enlarged. A resolution slider would therefore trade legibility
-  away for no speed at all — the plan proposed one and it was wrong. `MAX_SOURCE_SIDE =
-  2560` is a **memory bound at the processor's own dimension**, not preprocessing. The page
-  says why it differs from every sibling route, because an unexplained inconsistency reads
-  as an oversight.
-- **`answer` can be `null`, and nothing errors.** The pipeline extracts with
-  `decoded.match(/<s_answer>(.*?)<\/s_answer>/)` and returns `[{ answer: null }]` when that
-  misses — an ordinary outcome, arriving on exactly the documents the model found hardest.
-  The engine passes `null` through rather than flattening it to `""`, and OUTPUT renders it
-  explicitly instead of showing a blank panel.
-- **The WASM decoder must stay fp32, and the ORT bug is not ASR-specific.** A uniform q8
-  cannot open a session in the browser at all (`qdq_actions.cc:137 … Missing required
-  scale: …embed_tokens.weight_merged_0_scale`) — **the same bug `asrLoadOpts` was written
-  for**, on a model that is not ASR. Read that note as *any encoder-decoder whose decoder is
-  quantized*, on the WASM provider bundled with 4.2.0. Expressed per entry as
-  `dtypes: { wasm: { encoder_model: "q8", decoder_model_merged: "fp32" } }`; if a third
-  family hits it, generalise `asrLoadOpts` rather than copying it again. Cost: **596.7 MB
-  on WASM instead of 218.7**, the same ~3x ASR pays, and worth it for the same reason —
-  the alternative is *no* CPU path.
-- **Only a real browser load catches that.** Unit tests mock the runtime, the mocked E2E run
-  never loads weights, `fe-e2e-models` confirms the files exist (they do), and the identical
-  call loads cleanly under `onnxruntime-node`. `just fe-e2e-docvqa` found it.
-- **Both backends, ungated, deliberately.** An encoder plus a short extractive decode is a
-  real CPU path, unlike the chat decoders in `src/multimodal/` — merely an expensive one.
-- **WebGPU keeps fp16, unpinned.** `q4f16` would cut it to 241.0 MB, but that would be a
-  **precaution, not a measurement**, and document QA is where quantization error lands
-  straight on small print.
-- **The repo publishes three *alternative* decoders**, so a naive sum quotes a 4 GB model.
-  Sum the graphs the entry declares (`encoder_model` + `decoder_model_merged`), and carry
-  measured `bytes`.
-- **The page owes two sentences**: the privacy argument (the one page where a user feels
-  why the architecture was chosen) and that the answer is **extracted, not reasoned** —
-  Donut copies a span and cannot add up a column. Both asserted by an E2E spec, the
-  `/video-classification` precedent.
-- **`just fe-e2e-docvqa` needs no GPU** and pins a known answer on a known document —
-  `invoice.png` is the Transformers.js docs' own DocVQA example, invoice number `us-001`.
+- **A gate is not a substitute for a size that fits.** All three stated the cost,
+  downloaded nothing until an explicit click, and had an E2E spec asserting zero
+  Hub requests before it. They were cut anyway. Gating makes a heavy entry honest
+  *beside light ones*; it cannot rescue a page that is nothing but a heavy entry.
+- **§0 is cheap and skipping it is not.** The measurement that condemned each page
+  was available before a line was written. Ask the three questions first.
+- **The taxonomy row stays; the route goes.** All three fall through to
+  `/tasks/$slug`, asserted by a test in `taskTaxonomy.test.ts` so none can be
+  re-mapped without a smaller model to point at. The sidebar mirrors the Hub, not
+  our build state, and a documented "too heavy, here are the numbers" is a
+  finished piece of work.
+- **Rewrite a mechanism rather than deleting it with its subject.** `isHeavy` was
+  a Depth Pro id check and is now a size threshold (`HEAVY_MODEL_BYTES`), so the
+  `/depth` gate outlived the entry it was written for; `DepthModel.metric` stays
+  unset for the same reason. An id check dies with its model and the next heavy
+  entry arrives ungated.
+
+**Findings these routes paid for, kept because they outlive them:**
+
+- **Any encoder-decoder whose decoder is quantized cannot open a WASM session** on
+  the ORT bundled with 4.2.0 (`qdq_actions.cc:137 … Missing required scale`). ASR
+  hit it first; **Donut proved it is not ASR-specific**. Expressed per entry as
+  `dtypes: { wasm: { encoder_model: "q8", decoder_model_merged: "fp32" } }`, at
+  ~3x the download — the alternative is *no* CPU path. The note lives in
+  `model/backend.ts` beside `asrLoadOpts`; generalise that function if a third
+  family hits it. **Only a real browser load catches it**: unit tests mock the
+  runtime, the mocked E2E run never loads weights, `fe-e2e-models` confirms the
+  files exist, and the identical call loads cleanly under `onnxruntime-node`.
+- **Check `SUPPORTED_TASKS` before planning a page around a pipeline**, not after.
+  Three pages needed a model class instead: MusicGen
+  (`MusicgenForConditionalGeneration` — the `text-to-audio` pipeline throws
+  "Missing the following inputs: input_ids"), Florence-2
+  (`Florence2ForConditionalGeneration` — `image-to-text` resolves via
+  `AutoModelForVision2Seq`, whose registry has no `florence2`) and
+  `/image-text-to-text` (no such task). Donut was the one that passed the check.
+- **A pipeline can hardcode one model's prompt.** `DocumentQuestionAnsweringPipeline`
+  bakes in `<s_docvqa><s_question>…</s_question><s_answer>`, so a second
+  architecture would be prompted with tokens it has never seen — fluent and
+  unrelated, the Florence-2 failure. That is why DocVQA could never have had a
+  lighter second entry.
+- **Never resize for the model, in both directions.** Donut's processor is
+  `do_resize` + `do_thumbnail` + `do_pad` at a fixed 2560x1920 and `thumbnail()`
+  **never upscales** — so inference cost was constant and a smaller source was
+  *padded*, not enlarged. The plan's resolution slider would have traded
+  legibility for no speed at all. `AutoProcessor` reads the model's own config
+  and that file *is* the input contract.
+- **`components/Markdown.tsx` silently drops every prop but `{children, className}`**,
+  so a `data-testid` handed to it never reaches the DOM. Put the testid on a
+  wrapper — `/image-text-to-text` does.
+- **With both OCR-capable routes gone, OCR has no page.** `/image-text-to-text` is
+  the nearest thing, and it is a VLM answering a question rather than a
+  transcription. Likewise **there is no metric-depth path** now Depth Pro is cut:
+  ZoeDepth has no export.
 
 **Two Base UI gotchas (carried over from the Radix → Base UI migration):**
 

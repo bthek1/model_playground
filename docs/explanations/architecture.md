@@ -184,7 +184,7 @@ suite stays green on a GPU-less machine, while the graceful-degradation specs ru
 everywhere. See [`../guides/e2e-testing.md`](../guides/e2e-testing.md).
 
 **Every task page is Select → Load → Run → Output.** The routes under `src/routes/` that
-run a model — text-to-speech, text-to-audio, ASR, audio classification, speech
+run a model — text-to-speech, ASR, audio classification, speech
 enhancement, tensor arithmetic, training —
 share one four-stage pipeline: pick a model, load its weights, run it on an input, show
 the result. Two orthogonal state machines back it: a *load* machine per worker
@@ -210,7 +210,7 @@ its own dependencies, and lives in the per-modality folders `src/audio/` and
 | Runtime | Where | Used by |
 |---|---|---|
 | Hand-written WGSL | `src/webgpu/` | tensor arithmetic, linear/MNIST training, **graph neural networks**, benchmarks |
-| Transformers.js (`@huggingface/transformers`, `kokoro-js`) | `src/audio/` | ASR, audio classification, TTS, text-to-audio |
+| Transformers.js (`@huggingface/transformers`, `kokoro-js`) | `src/audio/` | ASR, audio classification, TTS |
 | Transformers.js | `src/vision/` | fourteen of the twenty Computer Vision tasks — classification, depth, detection, segmentation, both zero-shot tasks, embeddings, SAM, captioning/OCR, pose, a frame-level video baseline, background removal, super-resolution and depth-to-point-cloud |
 | `onnxruntime-web` **directly** | `src/audio/enhance/`, `src/audio/vad/` | speech enhancement (DeepFilterNet3), voice activity detection (Silero VAD) |
 
@@ -218,7 +218,7 @@ Inside `src/vision/` there is a second split, on a different axis. Ten routes ar
 `pipeline()` calls and share one generic worker; four own an engine, because the
 pipeline abstraction fails them in four different ways — it re-encodes work worth
 keeping (`zeroshot/`), it hides a split worth exploiting (`sam/`), it cannot load the
-model at all (`caption/`), or the task is two models (`pose/`). The criterion and the
+model at all, or the task is two models (`pose/`). The criterion and the
 four cases are in `docs/guides/adding-a-model.md` §10. An engine is always the same
 three files — a pure `engine.ts`, a thin `*.worker.ts` that is the only importer of the
 runtime, and a `client.ts` so the hook can be tested without `new Worker`.

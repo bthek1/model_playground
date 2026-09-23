@@ -291,18 +291,6 @@ fe-e2e-graphcls:
 fe-e2e-vlm:
     cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/vlm.spec.ts
 
-# Run the @slow document-QA spec: a real Donut load and a real extraction,
-# pinned by a **known answer on a known document** — `invoice.png` is the
-# Transformers.js docs' own DocVQA example and its invoice number is `us-001`.
-#
-# Unlike `fe-e2e-vlm` this needs no GPU: Donut is an encoder plus a short
-# extractive decode, the catalogue gates no backend, and the WASM path is real
-# (219 MB at q8). Resolution handling is this page's whole correctness surface
-# and it fails legibly rather than loudly — a mis-sized crop returns a confident
-# wrong field — so the specific answer is the assertion, not "text appeared".
-fe-e2e-docvqa:
-    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 docvqa-models.spec.ts
-
 # Check every model id (audio + vision + multimodal) still resolves on the
 # Hugging Face Hub, that each vision entry publishes the dtypes both backends ask
 # for, and that the VLM entries publish their three q4f16 graphs and still match
