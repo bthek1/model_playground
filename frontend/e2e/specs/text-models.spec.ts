@@ -461,7 +461,7 @@ test.describe("@slow fill-mask", () => {
 
     // The bias probe: one press, six prompts, two columns per pair, and the
     // framing sentence travelling with the result rather than near it.
-    await model.run(/run the bias probes/i);
+    await model.run(/run the \d+ bias probes/i);
     const probes = page.getByTestId("probes");
     await expect(probes).toBeVisible({ timeout: 180_000 });
     await expect(probes).toContainText(/evidence about the training data/i);

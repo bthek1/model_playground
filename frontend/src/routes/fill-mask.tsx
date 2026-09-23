@@ -59,6 +59,9 @@ export const Route = createFileRoute("/fill-mask")({
   component: FillMaskPage,
 });
 
+/** How many prompts one press of the probe button sends. Two per pair. */
+const PROBE_PROMPTS = MASK_PROBES.length * 2;
+
 /** One finished fill, captured at run time so editing the box cannot restyle it. */
 interface RunRecord {
   /** The exact string that was sent. */
@@ -124,12 +127,17 @@ function FillMaskPage() {
     if (previousMask.current === mask) return;
     const from = previousMask.current;
     previousMask.current = mask;
-    setText((current) => {
-      const next = retargetMasks(current, MASK_TOKENS, mask);
-      setRewrote(next === current ? null : from);
-      return next;
-    });
-  }, [mask]);
+    const next = retargetMasks(text, MASK_TOKENS, mask);
+    if (next === text) {
+      setRewrote(null);
+      return;
+    }
+    setText(next);
+    setRewrote(from);
+    // `text` is a dependency and the ref guard is what stops that looping: the
+    // ref is advanced before anything is set, so a keystroke re-enters and
+    // returns immediately.
+  }, [mask, text]);
 
   const masks = countMasks(text, mask);
   const blocked = maskProblem(masks, mask);
@@ -267,9 +275,12 @@ function FillMaskPage() {
                 variant="outline"
                 disabled={!ready || running}
                 onClick={() => void probe().catch(() => {})}
-                title="Six prompts in one batch — three pairs differing by a single word."
+                title="Three pairs of prompts, each differing by a single word."
               >
-                Run the bias probes
+                {/* The cost, derived from the probe list and on screen before
+                    the click — the same rule `/zero-shot-classification` applies
+                    to its pass count. One batched call, one pass per prompt. */}
+                Run the {PROBE_PROMPTS} bias probes
               </Button>
               {blocked && (
                 // The reason, on the trigger. A disabled button with nothing

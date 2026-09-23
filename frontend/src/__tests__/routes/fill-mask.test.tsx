@@ -48,8 +48,11 @@ const base: UseFillMaskResult = {
   maskToken: "[MASK]",
 };
 
+// Keyed by model id, so a test can assert *which* entry the page asked for —
+// the mask token is per model, and picking the wrong one is this page's bug.
+let states = new Map<string, UseFillMaskResult>();
 let state: UseFillMaskResult = { ...base };
-const useFillMask = vi.fn((_id?: string) => state);
+const useFillMask = vi.fn((id: string) => states.get(id) ?? state);
 vi.mock("@/hooks/useFillMask", () => ({
   useFillMask: (...args: unknown[]) => useFillMask(...(args as [string])),
 }));
@@ -74,6 +77,7 @@ function ready(extra: Partial<UseFillMaskResult> = {}) {
 describe("FillMaskPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    states = new Map();
     state = { ...base };
     localStorage.clear();
   });
@@ -316,7 +320,7 @@ describe("FillMaskPage", () => {
     renderPage();
 
     expect(probeRun).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /run the bias probes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /run the \d+ bias probes/i }));
 
     await waitFor(() => expect(screen.getByTestId("probes")).toBeInTheDocument());
     // One call, six prompts — each carrying this model's own token.
