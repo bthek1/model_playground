@@ -140,9 +140,9 @@ only way this process actually fails.
 | **Task string** | the category guide's table, then the model card on the Hub | it is the Transformers.js task verbatim, and it travels in the worker's `load` message |
 | **Checkpoint** | the category guide's table (browser id, not the PyTorch one) | becomes the catalogue entry's `id`, and `ModelCard.slug` on the backend |
 | **Input contract** | `preprocessor_config.json` in the model's own repo | sample rate, image size, colour order, normalisation. This is where silent wrongness lives |
-| **Output shape** | the pipeline's documented return type | decides what `OutputPanel` renders, and it is the only part of the page a user actually looks at |
+| **Output shape** | the pipeline's **observed** return value — run it once, do not read the type | decides what `OutputPanel` renders, and it is the only part of the page a user actually looks at |
 
-Two of these deserve suspicion.
+Three of these deserve suspicion.
 
 **The input contract is where bugs hide.** Audio gets resampled to 16 kHz (48 kHz
 for enhancement), images get letterboxed to a fixed size, and everything is
@@ -152,6 +152,33 @@ reads `preprocessor_config.json` from the same repo. Hand-rolling preprocessing 
 exactly how the two DSP bugs in `audio/enhance/` shipped past a green test suite —
 and that route only hand-rolls it because DeepFilterNet3 publishes no processor at
 all.
+
+**The declared output shape is a claim about the type, not about the runtime.**
+`/question-answering` was planned around `question-answering` being in
+`SUPPORTED_TASKS` and returning `{ answer, score, start, end }` with character
+offsets. It is in `SUPPORTED_TASKS`, and it returns `{ answer, score }` — `start`
+and `end` are declared **optional** and never populated, past a literal `// TODO
+add start and end?` in the pipeline's own source. `token-classification` has the
+same unwritten TODO in the same place, and 4.2.0 has no `return_offsets_mapping`
+anywhere. A caller reading `result.start` type-checks cleanly and gets
+`undefined`, so the spans are all dropped and the page renders the user's text
+with nothing marked — which looks exactly like a model that found nothing, and
+which both the unit suite (its mock supplied the offsets) and the mocked E2E run
+(it loads no bytes) let through.
+
+So **print one real result before you design the OUTPUT slot**, under Node, in
+seconds:
+
+```bash
+cd frontend && node -e "import('@huggingface/transformers').then(async t => {
+  const p = await t.pipeline('<task>', '<id>');
+  console.dir(await p(/* a real input */), { depth: null });
+})"
+```
+
+If a field you were counting on is missing, that is a §10-of-`adding-a-model.md`
+decision — reason **f** — and it is cheaper to make now than after the page is
+built.
 
 **The output shape decides the page's whole layout.** A label list is a bar
 chart. A set of boxes is a canvas overlay on the input image. A depth map is a
@@ -769,9 +796,12 @@ Three traps worth knowing before you hit them:
 
 Docs travel with code. A new page touches these, and none of them is optional:
 
-1. the [category roadmap issue](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap)
-   for the task, so its status table stops saying "not built" and starts
-   pointing at the route;
+1. the category roadmap, so its status table stops saying "not built" and starts
+   pointing at the route. **Once a category has a shipped route the roadmap is a
+   file, not an issue** — [`../roadmaps/`](../roadmaps/) holds Audio, Computer
+   Vision, Graph ML, Multimodal and NLP, and a roadmap that documents shipped code
+   has to be reviewable in the same commit as the code. Only a category with no
+   route yet is still an issue;
 2. [`../standards/model-page-pattern.md`](../standards/model-page-pattern.md),
    if the page needed a genuinely new slot behaviour or a new testid;
 3. [`../standards/api-contracts.md`](../standards/api-contracts.md), if
@@ -820,6 +850,7 @@ structurally: the run controls simply do not work until the load machine says
 ```
 [ ] Triaged: browser-runnable checkpoint exists, fits in a tab, not a diffusion model
 [ ] Four facts extracted: task string, checkpoint, input contract, output shape
+[ ] Output shape *observed* from one real run, not read off the pipeline's types
 [ ] Browser id verified against the Hub; catalogue imported by `just fe-e2e-models`
 [ ] dtype chosen per backend, download size (not param count) quoted
 [ ] Is it a plain pipeline() call? If not, engine + worker + client (adding-a-model §10)
@@ -834,7 +865,8 @@ structurally: the run controls simply do not work until the load machine says
 [ ] ModelCard rows created if used; task is a ModelTask choice, not a pipeline
 [ ] Vitest contract asserted, including which controls re-derive and which re-run
 [ ] @slow spec asserts a property of the real output, never a count
-[ ] Category roadmap issue status table updated; plan issue closed
+[ ] Category roadmap status table updated (the file under docs/roadmaps/, or the
+    issue if the category has no route yet); plan issue closed after the merge
 ```
 
 ---

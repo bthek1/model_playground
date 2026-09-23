@@ -18,7 +18,7 @@
 | Token Classification (§3.2) | [`/token-classification`](../../frontend/src/routes/token-classification.tsx) | **Shipped** — NER + redaction, and the multilingual head the roadmap thought was lost |
 | Table Question Answering (§3.11) | — | **Does not port** — no export for TAPAS or TAPEX; text-to-SQL needs ~1 GB *and* a database |
 | Question Answering (§3.3) | [`/question-answering`](../../frontend/src/routes/question-answering.tsx) | **Shipped** — extractive, the answer marked in the passage, 63–125 MB |
-| Zero-Shot Classification (§3.4) | — | Planned — [#42](https://github.com/bthek1/model_playground/issues/42) |
+| Zero-Shot Classification (§3.4) | [`/zero-shot-classification`](../../frontend/src/routes/zero-shot-classification.tsx) | **Shipped** — your own labels, N labels cost N passes, 26–816 MB |
 | Translation (§3.5) | — | Planned — [#45](https://github.com/bthek1/model_playground/issues/45) |
 | Summarization (§3.6) | — | Planned, **gated on a measurement** — [#46](https://github.com/bthek1/model_playground/issues/46) |
 | Feature Extraction · Sentence Similarity (§3.7) | — | Planned — [#43](https://github.com/bthek1/model_playground/issues/43) |

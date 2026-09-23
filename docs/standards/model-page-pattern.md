@@ -641,6 +641,17 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `clip-progress` · `filmstrip` · `pooled-winner` · `baseline-note` | `/video-classification` | Sampling/scoring progress, the frames the model saw, the clip-level verdict, and the limitation. |
 | `pass-count` · `composed-hypothesis` · `template-problem` | `/zero-shot-classification` | What one press will cost in forward passes, the exact hypothesis the first label composes to, and the refusal when the template has no `{}`. All three are derivations over the input — none of them runs anything. |
 | `ran-labels` · `ran-template` · `scoring-note` | `/zero-shot-classification` | The label set and template the answer on screen was **actually** produced with, captured inside the run, and which normalisation produced the numbers. |
+| `span-overlay` · `span-mark` · `span-text` | `SpanOverlay` | The source string with spans marked. Every mark slices the **original** characters — the concatenation of the slices equals the input exactly, because a highlight rebuilt from tokens loses the whitespace between subwords and lands a character or two off. |
+| `span-dropped` (`SpanOverlay`) · `unplaced-note` (`/token-classification`) | text routes | Overlapping spans are **reported, not interleaved**, and an entity that could not be placed in the source is said out loud — never dropped quietly, which looks identical to a model that found nothing. |
+| `redact-toggle` · `redact-types` · `span-redacted` | `/token-classification` | Redaction and which types it removes. A pure derivation over spans in hand — toggling runs nothing. |
+| `answer-span` · `answer-range` · `answer-score` | `/question-answering` | The marked answer, its **character range** (`data-start` / `data-end`) and the score, which is shown always — 0.04 and 0.98 look identical otherwise. |
+| `answer-unaligned` · `no-abstain-note` | `/question-answering` | The honest fallback when the offsets cannot be recovered (answer quoted, nothing marked), and the standing note that this model cannot decline to answer — in OUTPUT's *description*, so it is on screen before the first result. |
+| `mask-token` · `insert-mask` · `mask-note` | `/fill-mask` | The loaded model's own mask token, the button that inserts it, and the reconciliation note when the catalogue and the tokenizer disagree. Never a `[MASK]` literal anywhere. |
+| `mask-rewritten` · `mask-drift` | `/fill-mask` | A model change rewrote the mask already in the box, and said so. Rewriting beats refusing; saying nothing is the failure. |
+| `fill-scores` · `filled` · `probes` | `/fill-mask` | The top-k, the user's own sentence with one word spliced in (not the pipeline's `sequence`, which is a decode), and the paired bias probes with their framing. |
+| `ran-text` · `ran-question` | text routes | The input the result on screen was **actually** produced from, captured inside the run. |
+| `compare-load` · `compare-cost` | `/text-classification` | The head-to-head's second model: a second download and a second model in memory, quoted before the click. |
+| `score-near-tie` · `score-single` | `ScoreList` | A near-tie stated in words, and the refusal to render a lone 1.00 as certainty. |
 
 The testids are unchanged by the horizontal arrangement — `slot-N` is bound to the
 step number, not to a position in the layout.

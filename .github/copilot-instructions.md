@@ -1088,6 +1088,8 @@ Key commands:
 │   │   ├── webgpu/            # Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
 │   │   ├── audio/             # Pretrained audio models (Transformers.js; enhance/ + vad/ on bare ONNX)
 │   │   ├── vision/            # Pretrained vision models (image I/O, canvas overlays, one worker)
+│   │   ├── multimodal/        # Vision-language models (one streaming engine, three routes)
+│   │   ├── text/              # Pretrained NLP models (one worker; qa/ owns its own engine)
 │   │   ├── model/             # Shared task-page plumbing (backend probe, size, worker lifecycle)
 │   │   ├── hooks/             # Custom hooks (business logic)
 │   │   ├── lib/               # Shared utilities: cn(), date wrappers
