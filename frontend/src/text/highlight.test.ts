@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { entitySlot, highlight, redact, type EntitySpan } from "./highlight";
+import {
+  entitySlot,
+  highlight,
+  locateEntities,
+  redact,
+  type EntitySpan,
+} from "./highlight";
 
 const span = (start: number, end: number, label = "PER", score = 0.99):
   EntitySpan => ({ start, end, label, score });
@@ -154,5 +160,117 @@ describe("entitySlot", () => {
     for (const label of ["PER", "ORG", "LOC", "MISC", "DATE"]) {
       expect([1, 2, 3, 4]).toContain(entitySlot(label));
     }
+  });
+});
+
+describe("locateEntities", () => {
+  // **Recorded from a real run**, not invented: this is exactly what
+  // `pipeline("token-classification", "Xenova/bert-base-NER")` returns for the
+  // sentence below at `aggregation_strategy: "simple"` on 4.2.0. Note there is
+  // no `start` and no `end` anywhere in it — which is the bug this function
+  // exists for, and the reason the earlier mocked tests passed while the page
+  // rendered nothing.
+  const TEXT = "Priya Raman flew from Wellington to Berlin to meet Siemens.";
+  const REAL = [
+    { word: "P", label: "PER", score: 0.9989821314811707 },
+    { word: "##riya Raman", label: "PER", score: 0.983789841334025 },
+    { word: "Wellington", label: "LOC", score: 0.9982415437698364 },
+    { word: "Berlin", label: "LOC", score: 0.9994273781776428 },
+    { word: "Siemens", label: "ORG", score: 0.9907663464546204 },
+  ];
+
+  it("places every entity from a real pipeline response", () => {
+    const { spans, unplaced } = locateEntities(TEXT, REAL);
+    expect(unplaced).toEqual([]);
+    // Four, not five: the two PER pieces are one name.
+    expect(spans).toHaveLength(4);
+  });
+
+  it("returns spans that slice back to the entity, exactly", () => {
+    const { spans } = locateEntities(TEXT, REAL);
+    expect(spans.map((s) => TEXT.slice(s.start, s.end))).toEqual([
+      "Priya Raman",
+      "Wellington",
+      "Berlin",
+      "Siemens",
+    ]);
+  });
+
+  it("merges the two halves of a name that aggregation split", () => {
+    // `aggregation_strategy: "simple"` returns `P` + `##riya Raman` as two PER
+    // groups. Painted as-is that is two marks across one name, and redaction
+    // would remove two half-names.
+    const { spans } = locateEntities(TEXT, REAL);
+    expect(spans[0]).toMatchObject({ start: 0, end: 11, label: "PER" });
+    // A merged span is only as trustworthy as its least confident half.
+    expect(spans[0].score).toBeCloseTo(0.9837898, 5);
+  });
+
+  it("does not merge two separate mentions of the same person", () => {
+    const text = "Priya spoke. Later Priya left.";
+    const { spans } = locateEntities(text, [
+      { word: "Priya", label: "PER", score: 0.9 },
+      { word: "Priya", label: "PER", score: 0.8 },
+    ]);
+    expect(spans).toHaveLength(2);
+    expect(spans.map((s) => s.start)).toEqual([0, 19]);
+  });
+
+  // The failure a bare `indexOf` has, and it looks like a working page.
+  it("walks forward, so a repeated name marks both occurrences", () => {
+    const text = "Berlin then Berlin again";
+    const { spans } = locateEntities(text, [
+      { word: "Berlin", label: "LOC", score: 0.9 },
+      { word: "Berlin", label: "LOC", score: 0.9 },
+    ]);
+    expect(spans.map((s) => s.start)).toEqual([0, 12]);
+  });
+
+  it("strips the WordPiece continuation marker before searching", () => {
+    const { spans } = locateEntities("Wellington", [
+      { word: "##ellington", label: "LOC", score: 0.9 },
+    ]);
+    expect(spans[0]).toMatchObject({ start: 1, end: 10 });
+  });
+
+  it("finds an entity whose decoding re-spaced its punctuation", () => {
+    // WordPiece decodes `Foo-Bar` as `Foo - Bar`, so an exact search returns
+    // -1 on text that plainly contains the entity.
+    const text = "The Jones-Smith report landed.";
+    const { spans, unplaced } = locateEntities(text, [
+      { word: "Jones - Smith", label: "ORG", score: 0.9 },
+    ]);
+    expect(unplaced).toEqual([]);
+    expect(text.slice(spans[0].start, spans[0].end)).toBe("Jones-Smith");
+  });
+
+  it("reports an entity it cannot place rather than guessing at one", () => {
+    const { spans, unplaced } = locateEntities("nothing here", [
+      { word: "Siemens", label: "ORG", score: 0.9 },
+    ]);
+    expect(spans).toEqual([]);
+    expect(unplaced).toHaveLength(1);
+  });
+
+  it("handles a word containing regex metacharacters", () => {
+    const text = "Filed under C++ (Draft) today.";
+    const { spans, unplaced } = locateEntities(text, [
+      { word: "C++ (Draft)", label: "MISC", score: 0.9 },
+    ]);
+    expect(unplaced).toEqual([]);
+    expect(text.slice(spans[0].start, spans[0].end)).toBe("C++ (Draft)");
+  });
+
+  it("produces spans highlight() can render without dropping any", () => {
+    // The end-to-end invariant: locate → highlight must lose nothing.
+    const { spans } = locateEntities(TEXT, REAL);
+    const { slices, dropped } = highlight(TEXT, spans);
+    expect(dropped).toEqual([]);
+    expect(slices.map((s) => s.text).join("")).toBe(TEXT);
+    expect(slices.filter((s) => s.span != null)).toHaveLength(4);
+  });
+
+  it("returns nothing for an empty entity list", () => {
+    expect(locateEntities(TEXT, [])).toEqual({ spans: [], unplaced: [] });
   });
 });

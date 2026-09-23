@@ -60,7 +60,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Computer Vision roadmap** (13 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | **Graph ML roadmap** (**complete, 4 of 4**; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
 | **Multimodal roadmap** (**complete as scoped, 3 of 3**; VLMs, `q4f16`, streaming, video frames) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
-| **NLP roadmap** (3 of 11 shipped; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
+| **NLP roadmap** (4 of 11 shipped; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -857,6 +857,20 @@ thin task hooks over `useTextPipeline`. See [`docs/roadmaps/nlp.md`](docs/roadma
   highlights across one word — a rendering bug rather than an error, and one
   forgetful call site away at every future caller. `pinnedArgs()` is the single
   call site.
+- **Transformers.js 4.2.0 returns no character offsets, and the types say otherwise.**
+  `token-classification` hands back `entity_group`/`score`/`word` and nothing else — it
+  ships with the work unwritten (`// TODO add start and end?`) and declares `start`/`end`
+  **optional**, so `result.start` type-checks and is `undefined` at runtime. Every span is
+  then dropped as invalid and the page renders the user's text with nothing marked, which
+  is indistinguishable from a model that found nothing. It passed the unit suite (the mock
+  supplied offsets the real pipeline never produces) and the mocked E2E run (which loads no
+  bytes); **only `just fe-e2e-text` caught it.** `locateEntities()` recovers them by walking
+  the source forward — forward rather than `indexOf` from zero, or a name said twice marks
+  the first occurrence twice; with whitespace made flexible on the retry, because WordPiece
+  decodes `Jones-Smith` as `Jones - Smith`; and merging *contiguous* same-label spans,
+  because `aggregation_strategy: "simple"` returns "Priya Raman" as `P` + `##riya Raman`.
+  Spans separated by whitespace are **not** merged — that would join "Berlin Munich" into
+  one LOC. An entity that cannot be placed is reported on screen, never dropped quietly.
 - **`/token-classification` is where "it runs in your browser" stops being a
   performance claim**: redacting a document you may not upload is a real reason to
   want the model on this side of the wire. Redaction is a pure derivation over

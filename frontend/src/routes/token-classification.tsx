@@ -70,6 +70,7 @@ function TokenClassificationPage() {
     backend,
     running,
     error,
+    unplaced,
     load,
     retry,
     cancel,
@@ -269,6 +270,20 @@ function TokenClassificationPage() {
                 result={marked}
                 redacted={redacting ? types : undefined}
               />
+
+              {unplaced.length > 0 && (
+                // Never swallowed: the model found something the page could
+                // not place in the source, and a silently shorter list of
+                // highlights is indistinguishable from a model that found less.
+                <p
+                  data-testid="unplaced-note"
+                  className="text-xs text-amber-600 dark:text-amber-500"
+                >
+                  {unplaced.length} entit
+                  {unplaced.length === 1 ? "y" : "ies"} could not be located in
+                  the text and {unplaced.length === 1 ? "is" : "are"} not shown.
+                </p>
+              )}
 
               {ran.spans.length === 0 && (
                 <p className="text-xs text-muted-foreground">

@@ -923,6 +923,20 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   passed by the hook: without it `token-classification` returns one result per subword
   token and paints three highlights across "Wellington" — a rendering bug rather than an
   error, one forgetful call site away at every future caller.
+- **Transformers.js 4.2.0 returns no character offsets, and the types say otherwise.**
+  `token-classification` hands back `entity_group`/`score`/`word` and nothing else — it
+  ships with the work unwritten (`// TODO add start and end?`) and declares `start`/`end`
+  **optional**, so `result.start` type-checks and is `undefined` at runtime. Every span is
+  then dropped as invalid and the page renders the user's text with nothing marked, which
+  is indistinguishable from a model that found nothing. It passed the unit suite (the mock
+  supplied offsets the real pipeline never produces) and the mocked E2E run (which loads no
+  bytes); **only `just fe-e2e-text` caught it.** `locateEntities()` recovers them by walking
+  the source forward — forward rather than `indexOf` from zero, or a name said twice marks
+  the first occurrence twice; with whitespace made flexible on the retry, because WordPiece
+  decodes `Jones-Smith` as `Jones - Smith`; and merging *contiguous* same-label spans,
+  because `aggregation_strategy: "simple"` returns "Priya Raman" as `P` + `##riya Raman`.
+  Spans separated by whitespace are **not** merged — that would join "Berlin Munich" into
+  one LOC. An entity that cannot be placed is reported on screen, never dropped quietly.
 - **`/token-classification` is where "in your browser" stops being a performance claim**:
   redacting a document you may not upload is a real reason to want the model here.
   Redaction is a pure derivation over spans in hand, so it runs nothing.

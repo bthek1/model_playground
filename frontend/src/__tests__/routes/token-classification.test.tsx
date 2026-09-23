@@ -40,6 +40,7 @@ const base: UseNerResult = {
   running: false,
   error: null,
   result: null,
+  unplaced: [],
   run: mockRun,
   load: vi.fn(),
   retry: vi.fn(),

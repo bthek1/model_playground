@@ -281,6 +281,46 @@ like a broken overlay, not a missing option — and it is one forgetful call sit
 every future caller. Pinning it in `engine.ts` means there is one call site to keep right
 instead of all of them.
 
+**Transformers.js 4.2.0 returns no character offsets, and this is the finding of the
+page.** The `token-classification` pipeline hands back `entity_group`, `score` and `word` —
+that is all. It ships with the work unwritten (`// TODO add start and end?`) and declares
+`start`/`end` as **optional** in its own types, so a caller reading `result.start`
+type-checks cleanly and receives `undefined` at runtime. Measured against 4.2.0 on
+`Xenova/bert-base-NER`, not inferred:
+
+```
+[{ entity_group: "PER", score: 0.998, word: "P" },
+ { entity_group: "PER", score: 0.984, word: "##riya Raman" },
+ { entity_group: "LOC", score: 0.998, word: "Wellington" }, …]
+```
+
+Without offsets every span is dropped as invalid and the overlay renders the user's text
+with **nothing marked** — a page indistinguishable from a model that found nothing. It
+shipped past a green unit suite, because the mock supplied the offsets the real pipeline
+never produces, and past the mocked E2E run, which never loads a byte. **Only
+`just fe-e2e-text` caught it**, which is the entire argument for that suite.
+
+`locateEntities()` recovers them by walking the source **forward**, matching each returned
+word from where the previous one ended. Three things that walk has to get right, each of
+which otherwise produces a working-looking page:
+
+- **Forward, never `indexOf` from zero.** A passage naming the same person twice would
+  otherwise mark the first occurrence twice.
+- **Re-spaced punctuation.** WordPiece decodes `Jones-Smith` as `Jones - Smith`, so an
+  exact search returns −1 on text that plainly contains the entity; the fallback makes
+  whitespace flexible.
+- **`aggregation_strategy: "simple"` does not always merge a word it split.** "Priya
+  Raman" comes back as `P` + `##riya Raman`, two PER groups — two marks across one name,
+  and two half-names for redaction to remove. Contiguous same-label spans are merged; ones
+  separated by whitespace are **not**, because that would join two genuinely separate
+  mentions ("Berlin Munich" as one LOC).
+
+An entity that cannot be placed is **reported on screen**, never dropped quietly: a
+silently shorter list of highlights looks exactly like a model that found less.
+`offsets.ts` solves the adjacent problem for a caller that owns its tokenizer and has a
+complete, contiguous piece list; this one is for a caller reading the *pipeline's* output,
+which is aggregated and skips every `O` token, so the pieces arrive with arbitrary gaps.
+
 **Redaction is a pure derivation**, so toggling it — or changing which types it removes —
 re-derives from the spans already in hand and costs nothing. Same rule as `/vad`'s
 threshold and detection's confidence floor: only GENERATE spends. The redacted text is
@@ -606,7 +646,7 @@ into the interesting part.
 | Summarization | **Only if q8-on-WebGPU measures well** | `Xenova/distilbart-cnn-6-6` | 270.8 MiB q8 |
 | Feature Extraction | Yes, excellent | `Xenova/all-MiniLM-L6-v2` | **21.9 MiB q8** |
 | Text Generation | Yes, small models, streamed | `HuggingFaceTB/SmolLM2-360M-Instruct` | 260.1 MiB q4f16 |
-| Fill-Mask | Yes, excellent | `Xenova/distilbert-base-uncased` | 64.6 MiB q8 |
+| Fill-Mask | **Shipped** | `Xenova/bert-base-uncased` — DistilBERT is cheaper and misses facts | 105.7 MiB q8 / 209.2 MiB fp16 |
 | Sentence Similarity | Yes, excellent | `Xenova/all-MiniLM-L6-v2` | 21.9 MiB q8 |
 | Text Ranking | Yes, all four stages | `bge-base-en-v1.5` + `ms-marco-MiniLM-L-6-v2` | 127.1 MiB q8 combined |
 
