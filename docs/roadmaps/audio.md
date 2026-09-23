@@ -38,6 +38,37 @@ by `just fe-e2e-models` — re-run it before adding one.
 
 ---
 
+## The feasibility bar this file is filtered by
+
+Every model named below as a *recommendation* clears two tests. Rows that fail
+one are kept, marked, and given the measured number — a documented "no, and
+here is why" is a finished piece of work
+([`adding-a-task-page.md`](../guides/adding-a-task-page.md) §0).
+
+1. **It runs client-side**, on WebGPU where the operators are covered and on the
+   WASM provider where they are not. A CPU-only path is legitimate when CPU is
+   the right engineering answer; a row that needs a server is not.
+2. **Its cheapest usable checkpoint is under ~500 MB**, measured off the Hub's
+   blob listing, summing only the graphs a page actually loads — `encoder_model`
+   + `decoder_model_merged`, never the alternative `decoder_model` /
+   `decoder_with_past_model` a seq2seq repo also publishes.
+
+Test 2 is about the **floor, not the ceiling**: a page needs a cheap default,
+and may then offer a heavier entry behind a gate. A page whose *every* option is
+heavy is the failure — that is what removed `/text-to-audio`, `/image-to-text`
+and `/document-question-answering` from the app.
+
+**On test 1, this category has the repo's one deliberate CPU-only route.**
+`/vad` is pinned to WASM in `audio/vad/session.ts`, and it is not a fallback:
+Silero v5's LSTM and `If` operators have no coverage in ORT's WebGPU provider,
+and at 0.30 ms per 32 ms frame (~100x real time) there is nothing left for a GPU
+to win. `/audio-to-audio` does the opposite — it probes WebGPU first and falls
+back — because DeepFilterNet3's graph is convolutional. **The rule is "runs on
+the user's hardware", not "runs on the GPU":** picking WASM where WASM is faster
+is the right answer, and the page says which it used.
+
+---
+
 ## 1. The runtime, and how a backend is chosen
 
 Both runtimes are already dependencies (`frontend/package.json`); nothing needs

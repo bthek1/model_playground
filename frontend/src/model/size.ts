@@ -38,6 +38,35 @@ const BYTES_PER_PARAM: Record<Dtype, number> = {
  */
 export const LARGE_MODEL_BYTES = 200 * 1024 * 1024;
 
+/**
+ * The threshold past which the picker's size line is not enough on its own and
+ * the page states the cost a second time, bluntly. Half a gigabyte: the point
+ * at which a download stops being a detail and becomes a decision.
+ *
+ * This lives here rather than beside the route that first needed it, for the
+ * same reason `backend.ts` and this module moved out of `audio/`: the guardrail
+ * is shared, and a second copy is how two pages end up disagreeing about what
+ * "heavy" means. `/depth` wrote it for Depth Pro, which was then cut for being
+ * a gigabyte; `/zero-shot-classification` is the second caller, gating
+ * BART-large-MNLI at 816 MB on WebGPU.
+ */
+export const HEAVY_MODEL_BYTES = 500e6;
+
+/**
+ * Heavy enough that the page states the cost and downloads nothing until the
+ * user opts in a second time.
+ *
+ * A **size predicate, never a model id**. `/depth`'s gate was originally an id
+ * check for Depth Pro, and would have been deleted along with the entry it was
+ * written for — taking the gate with it, so the next heavy model arrived
+ * ungated. Written this way it outlived its subject, and this page inherited it
+ * rather than re-deriving it.
+ */
+export function isHeavyDownload(bytes?: MeasuredBytes): boolean {
+  const { webgpu = 0, wasm = 0 } = bytes ?? {};
+  return Math.max(webgpu, wasm) >= HEAVY_MODEL_BYTES;
+}
+
 /** Approximate weight bytes for `params` (in millions) at a given precision. */
 export function estimateBytes(params: number, dtype: Dtype): number {
   return params * 1e6 * BYTES_PER_PARAM[dtype];

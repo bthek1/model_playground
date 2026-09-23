@@ -76,9 +76,20 @@ export class ModelPageObject {
     return this.main.getByTestId("model-ready");
   }
 
-  /** The LOAD slot's action, shown while the model is `idle`. */
+  /**
+   * The LOAD slot's action, shown while the model is `idle`.
+   *
+   * Matches the cached label too. The button reads "Load model (cached)" once
+   * the weights are in the browser cache, and a pattern anchored to the
+   * uncached wording silently stops matching the moment a `@slow` spec runs
+   * second on the same profile — `load()` then cannot click the only control
+   * that starts a download. A spec asserting one *specific* wording still says
+   * so itself, via `button(/^Load model \(cached\)$/)`.
+   */
   get loadButton(): Locator {
-    return this.main.getByRole("button", { name: /^Load model$/ });
+    return this.main.getByRole("button", {
+      name: /^Load model( \(cached\))?$/,
+    });
   }
 
   /** Shown in place of the load action after a failed load. */
@@ -127,9 +138,38 @@ export class ModelPageObject {
     );
   }
 
-  /** Wait out a real model download + warm-up. Only for `@slow` specs. */
+  /**
+   * Wait out a real model download + warm-up. Only for `@slow` specs.
+   *
+   * Fails fast if the page falls back to `idle` mid-load rather than spending
+   * the whole timeout on a page that is never going to become ready. The dev
+   * server can reload itself while re-optimising dependencies (see the
+   * `ensureMounted` note in `fixtures/base.ts`), and a reload resets Machine A
+   * — so the symptom is an eight-minute wait ending in a screenshot of an
+   * untouched LOAD slot, which says nothing about why.
+   */
   async waitForReady(timeout = 8 * 60 * 1000): Promise<void> {
-    await this.readyStatus.waitFor({ timeout });
+    const ready = this.readyStatus.waitFor({ timeout }).then(() => "ready");
+    // Never rejects: whichever of the two loses the race is abandoned, and an
+    // abandoned rejection would surface as an unhandled promise rejection that
+    // fails the run for the wrong reason.
+    const reset = this.loadButton
+      .waitFor({ state: "visible", timeout })
+      .then(() => "idle")
+      .catch(() => "never");
+    const first = await Promise.race([
+      ready,
+      // Only treat a *return* to idle as a reset — the click itself takes a
+      // moment to move the machine out of idle, so give the load a head start.
+      new Promise<void>((r) => setTimeout(r, 15_000)).then(() => reset),
+    ]);
+    if (first === "idle") {
+      throw new Error(
+        "The LOAD slot went back to idle mid-load — the page reloaded " +
+          "underneath the download (dev-server dependency re-optimisation is " +
+          "the usual cause). The model never reached ready.",
+      );
+    }
   }
 
   /** The backend the model actually loaded on, from the ready line. */

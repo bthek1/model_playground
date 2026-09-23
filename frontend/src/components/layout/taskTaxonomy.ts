@@ -106,6 +106,34 @@ const REAL_ROUTES: Record<string, string> = {
   // the page states next to its result rather than implying a temporal
   // understanding it does not have.
   "video-text-to-text": "/video-text-to-text",
+  // The Natural Language Processing category's first route, and the smallest
+  // useful page in the app: a string in, a score list out, no decode step at
+  // all. It establishes `src/text/` — the generic text worker, engine and
+  // catalogue the rest of the category rides on.
+  "text-classification": "/text-classification",
+  // §3.2, and the page where "it runs in your browser" stops being a
+  // performance claim: redacting a document you are not allowed to upload is a
+  // real reason to want the model on this side of the wire. It also builds
+  // `SpanOverlay`, which /question-answering and /fill-mask then reuse.
+  "token-classification": "/token-classification",
+  // §3.3, and the category's first route that does **not** ride the generic
+  // text worker. The `question-answering` pipeline returns `{ answer, score }`
+  // and throws away the token indices it chose, so it cannot say *where* in the
+  // passage the answer is — which is this page's whole output. `text/qa/` drives
+  // the tokenizer and model directly and recovers the character range.
+  "question-answering": "/question-answering",
+  // §3.4, and the first page in the app whose *label set* is the user's rather
+  // than the checkpoint's. Its cost model is the thing it has to say out loud:
+  // an NLI model runs once per label, so the page derives the pass count from
+  // the label list as it is edited.
+  "zero-shot-classification": "/zero-shot-classification",
+  // §3.9, and the only page in the category whose models are *base* encoders:
+  // masked language modelling is the objective they were pretrained on, so the
+  // head is the real one. Four entries across three tokenizer families, so the
+  // mask-token hazard is one click away rather than theoretical — the token is
+  // inserted by a button, rewritten on a model change, and reconciled against
+  // the loaded tokenizer in the engine.
+  "fill-mask": "/fill-mask",
   // Three slugs deliberately have no route and fall through to the placeholder,
   // for one reason each — every checkpoint the task has is too heavy to offer:
   //

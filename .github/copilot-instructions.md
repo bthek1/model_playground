@@ -426,6 +426,18 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - **ASR timestamps are take-relative.** The live loop re-transcribes only the tail 30 s, so the
   model's timestamps restart at 0 on a longer take; `useLiveAsr`'s `shiftChunks()` offsets them by
   the window start before the route renders `m:ss`. Don't render worker `chunks` unshifted.
+- **Roadmaps are filtered by a two-part feasibility bar.** A task becomes a page only if it
+  **runs client-side** *and* its **cheapest usable checkpoint is under ~500 MB** (measured off
+  the Hub, never estimated). The size test is about the **floor, not the ceiling** — a cheap
+  default plus a gated heavy option is fine; a page whose every entry is heavy is the failure.
+- **"In the browser" ≠ "on the GPU".** Prefer WebGPU, but CPU-only is right when CPU is faster:
+  `/vad` is pinned to WASM (Silero's LSTM/`If` ops have no WebGPU coverage, ~100x real time on
+  CPU), and Tabular's decision trees are TypeScript in a Worker. A task needing a *server* is
+  what fails the test.
+- **Measure a download; never estimate it.** Five of six sizes in the NLP roadmap were wrong,
+  one by 4x on the recommended default (`deberta-v3-base-zeroshot-v2.0`: quoted ~180 MB, really
+  **738.6 MB** — one fp32 `model.onnx`, no q8). An official in-repo export is not automatically
+  a quantized one, and for seq2seq sum `encoder_model` + `decoder_model_merged` only.
 - **Gate anything heavy** — state the size and speed cost, download nothing until an explicit
   opt-in, assert zero Hub requests before the click in an E2E spec. But **a gate is not a
   substitute for a size that fits**: `/text-to-audio` did all of that in front of MusicGen and
@@ -838,6 +850,155 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   `data-testid` on a wrapper.
 - **OCR now has no page**, and **metric depth has no path** (ZoeDepth has no export).
 
+**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`) — the fourth modality, and the cheapest module in the app:**
+
+- **There is no decode step, and that is the point.** No text equivalent of `audio/io.ts`
+  or `vision/image.ts` exists: the input is already a string, so there is no
+  preprocessing and no transport problem — a `RawImage` does not survive `postMessage`
+  and a `Tensor` throws outright, while a string crosses as itself. That absence is why
+  `/text-classification` establishes the module rather than a more impressive page. Same
+  shape as the other three: one generic worker (`pipeline.worker.ts`, task in the `load`
+  message), a pure `engine.ts` owing the same three behaviours, a `client.ts`, thin hooks
+  over `useTextPipeline`. Add a task by adding its arm to `TextTask` and its warm-up args
+  to `warmupArgs()` — a union arm with no caller is an untested branch.
+- **`/question-answering` does not ride the generic worker, and the reason generalises.**
+  The plan assumed `question-answering` returns `{ answer, score, start, end }` with
+  character offsets because the task is in `SUPPORTED_TASKS` and the fields are in the
+  types. It returns `{ answer, score }`: `start`/`end` are **optional and never
+  populated**, past a literal `// TODO add start and end?` in the pipeline source, and
+  `token-classification` has the same unwritten TODO. Transformers.js 4.2.0 has no
+  `return_offsets_mapping` at all. **Check the fields a pipeline actually populates, not
+  only that the task exists** — an optional field in a `.d.ts` is a claim about the type,
+  not the runtime. Fourth page planned around a pipeline that could not carry it.
+- **`text/offsets.ts` owns the alignment, and returns `null` rather than guessing.**
+  `wordPieceOffsets` walks the pieces along the passage; any mismatch (`[UNK]`, a
+  lowercasing tokenizer, an accent-stripping normaliser) ends the whole alignment and the
+  page quotes the answer instead of marking it. A near-miss highlight reads as a styling
+  bug. Safe for *cased* checkpoints (`do_lower_case: false`, `strip_accents: null`) — read
+  the checkpoint's `tokenizer_config.json` before shipping an entry that highlights.
+- **`context.indexOf(answer)` is wrong, not merely fragile.** The model answers
+  `general-purpose compute shaders`; the tokenizer decodes the same ids as
+  `general - purpose compute shaders`, which is not in the passage, so the search returns
+  -1 — and a search takes the first occurrence anyway. `QaAnswer` keeps `text` (sliced)
+  and `decoded` (the tokenizer's) separate so the difference is asserted.
+- **`qa/select.ts` transcribes the pipeline's span choice rather than improving it** — same
+  masking, same softmaxes, **no max answer length** (HF Python caps at 15; Transformers.js
+  does not, and a cap moves the answer on exactly the unsure questions), CLS left in the
+  denominator before its score is zeroed. Verified against the pipeline on nine pairs: same
+  answer, same score to six decimals.
+- **The model cannot abstain and the page states it as a requirement.** SQuAD 1.1 always
+  answers; the squad2 checkpoints have no ONNX export, so it is unavailable rather than
+  unshipped. The note is in OUTPUT's *description*, not beside the result, so it precedes
+  the first answer, and is keyed off `QaModel.canAbstain`. It ships with its demonstration:
+  "Who won the 1998 World Cup?" against the Eiffel passage answers "Gustave Eiffel" at
+  **0.94** — the lesson is the confidence, not the wrongness. `just fe-e2e-qa` asserts a
+  **character range**, not a string.
+- **Every entry carries measured `bytes` for both backends**, stricter than vision's
+  "measure where an estimate would mislead", and a finding rather than a preference: the
+  NLP roadmap's size tables were all `q8` figures while `loadOpts()` asks for **fp16 on
+  WebGPU**. Roughly double, all the way down the category — it moves several entries
+  across `LARGE_MODEL_BYTES` and Summarization's floor from 283.9 MB to 563.6 MB, over
+  the feasibility bar. `just fe-e2e-models` re-checks the quoted numbers against the Hub.
+- **`q4` is not a lever for an encoder**: `model_q4.onnx` measures *larger* than
+  `model_quantized.onnx` on every encoder tried. 4-bit is a decoder format.
+- **No `textLoadOpts()`, deliberately** — the `asrLoadOpts`/`vlmLoadOpts` precedent is for
+  a family-wide decision and the measurements do not support one. Pins go per entry in
+  `dtypes`, each saying whether it is a **measurement or a precaution**.
+- **A base model is not a classifier, and it fails silently.**
+  `onnx-community/ModernBERT-base-ONNX` was cut from the catalogue against the roadmap's
+  own table: no trained head means `LABEL_0`/`LABEL_1` from random weights — confident,
+  fluent, meaningless. Read what a checkpoint was fine-tuned *for* before writing its
+  entry.
+- **`ScoreList` refuses to render a single row.** A classifier's argmax is its least
+  informative output — "POSITIVE" looks identical at 0.99 and at 0.51 — so callers pass
+  the full label set and a near-tie is stated in words.
+- **`SpanOverlay` + `highlight()`: slice the original string by character offset, never
+  rebuild from tokens**, or the highlight lands a character off and reads as a styling
+  problem. Pinned by asserting the slices concatenate to the input exactly. Overlapping
+  spans are **reported, not interleaved**, and every span carries its **type as visible
+  text, not colour alone** — the four validated `--entity-*` hues sit in the colour-vision
+  band that is legal only with a secondary encoding, and no 5-hue subset passes, which is
+  why MISC and DATE share a slot (different models, never on screen together).
+- **`aggregation_strategy: "simple"` is pinned in the engine** (`pinnedArgs()`), not
+  passed by the hook: without it `token-classification` returns one result per subword
+  token and paints three highlights across "Wellington" — a rendering bug rather than an
+  error, one forgetful call site away at every future caller.
+- **Transformers.js 4.2.0 returns no character offsets, and the types say otherwise.**
+  `token-classification` hands back `entity_group`/`score`/`word` and nothing else — it
+  ships with the work unwritten (`// TODO add start and end?`) and declares `start`/`end`
+  **optional**, so `result.start` type-checks and is `undefined` at runtime. Every span is
+  then dropped as invalid and the page renders the user's text with nothing marked, which
+  is indistinguishable from a model that found nothing. It passed the unit suite (the mock
+  supplied offsets the real pipeline never produces) and the mocked E2E run (which loads no
+  bytes); **only `just fe-e2e-text` caught it.** `locateEntities()` recovers them by walking
+  the source forward — forward rather than `indexOf` from zero, or a name said twice marks
+  the first occurrence twice; with whitespace made flexible on the retry, because WordPiece
+  decodes `Jones-Smith` as `Jones - Smith`; and merging *contiguous* same-label spans,
+  because `aggregation_strategy: "simple"` returns "Priya Raman" as `P` + `##riya Raman`.
+  Spans separated by whitespace are **not** merged — that would join "Berlin Munich" into
+  one LOC. An entity that cannot be placed is reported on screen, never dropped quietly.
+- **`/token-classification` is where "in your browser" stops being a performance claim**:
+  redacting a document you may not upload is a real reason to want the model here.
+  Redaction is a pure derivation over spans in hand, so it runs nothing.
+- **Nothing here is debounced.** The roadmap wants live classification on a 200–300 ms
+  pause; the page-pattern rule wins. Typing is INPUT, only GENERATE spends — a debounced
+  auto-run is the five-samples-five-inferences failure with a timer in front of it.
+- **The head-to-head is a second LOAD, not a toggle**, and the samples are chosen so the
+  three models **disagree**. `just fe-e2e-text` asserts a known label on a known sentence
+  and pins the comparison *structurally* (SST-2 has two classes, FinBERT three) — asserting
+  the rankings differ would pin a property neither model promises.
+- **`/zero-shot-classification`: N labels cost N forward passes.** The NLI pipeline is a
+  `for` loop over the hypotheses with `await this.model(inputs)` inside it — no batching
+  anywhere — so the pass count sits beside GENERATE, **derived from the label list as it
+  is edited** (`text/zeroShot.ts`). Labels are bare nouns, deduped case-insensitively: a
+  repeated label is a second forward pass returning the same logits.
+- **The hypothesis template is INPUT — on screen, editable, and sent explicitly.** The
+  pipeline applies `"This example is {}."` unless told otherwise, so a page that templates
+  silently compares a prompt the user cannot read (the `/zero-shot-image-classification`
+  finding). A template **without `{}` is refused**: every label would compose to the same
+  hypothesis, get the same logits, and rank arbitrarily — with nothing throwing.
+- **`multi_label` changes the arithmetic and cannot re-derive**, so flipping it runs
+  nothing and the next GENERATE is a real second inference. **One label is always scored
+  independently** (`softmaxEach = multi_label || labels.length === 1`) whatever the toggle
+  says, and the page states that rather than rendering a lone 1.00 as certainty.
+- **An NLI head that does not declare `entailment` is scored on the wrong logit**: the
+  pipeline looks the index up by name and falls back to `2` with a console warning, and
+  the right index is 1 for DeBERTa-xsmall, 0 for MobileBERT and DistilBERT, 2 for BART.
+  The result is a confident, wrongly-ordered list, so `just fe-e2e-models` checks the
+  mapping on the Hub.
+- **`isHeavyDownload` lives in `model/size.ts`** — `/depth`'s gate *moved* rather than
+  being copied, and is still a **size predicate, never a model id**. BART-large-MNLI is
+  816 MB on WebGPU (the roadmap's 411 MB is its q8 size) and gets the second opt-in; a
+  page whose floor is a 26 MB model may ship it, because §0's bar is about the floor.
+- **`just fe-e2e-zeroshot-text` is the only guard on the template**: a known ranking on a
+  known sentence, then the same premise under a bare `{}` asserting the **scores move**.
+  Identical numbers under two templates is exactly what a page letting the pipeline apply
+  its own default looks like.
+- **`/fill-mask`: never write `[MASK]` in code.** Four entries across **three tokenizer
+  families**, so the hazard is one click away rather than theoretical. `text/mask.ts` takes
+  the token as an argument everywhere, `FillMaskModel.maskToken` carries it as catalogue
+  data (shown and inserted *before* the download), `MASK_TOKENS` is derived from the
+  entries, and the engine reconciles what the page sent against the **loaded tokenizer's
+  own** `mask_token` — so a drifted entry is a note on screen, not a failed run.
+  `just fe-e2e-models` reads each repo's `tokenizer_config.json` and fails on a mismatch.
+- **Measure a failure mode before designing around it.** The plan expected a hard-coded
+  `[MASK]` on RoBERTa to return fluent wrong predictions; it **throws**
+  (`Mask token (<mask>) not found in text.`). The silent failure is a *second* mask: the
+  pipeline `findIndex`es the ids, fills the first and drops the rest, so
+  "The `[MASK]` of France is `[MASK]`." returns "the border of france is." The route
+  refuses anything but exactly one, with the reason on the trigger.
+- **A model change rewrites the mask already in the box, and says so** — the sentence is
+  the part worth keeping, and the alternative to rewriting silently is saying nothing, not
+  refusing. **Splice the user's string, never the pipeline's `sequence`** (a decode: an
+  uncased model returns "the capital of france is paris."), and trim the word-initial
+  space byte-level BPE leaves on ` Paris`.
+- **Bias probing is evidence about the corpus, not the world**, and the framing travels
+  inside the result: three paired prompts differing by one word, one batched GENERATE,
+  columns side by side under the prompts that produced them.
+- **`just fe-e2e-fillmask` asserts *paris* on BERT and RoBERTa — never DistilBERT**, which
+  genuinely does not know it (at fp32 it is worse: marseille, nantes, toulouse). **The
+  RoBERTa half is the test**: the same question through a different tokenizer.
+
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
 **Commands:**
@@ -851,8 +1012,12 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`;
   vision only: `just fe-e2e-vision` (tens of minutes cold — one route at a time with
   `just fe-e2e-vision-one /pose`); zero-shot scoring parity: `just fe-e2e-zeroshot`;
+  fill-mask across two tokenizers: `just fe-e2e-fillmask`;
   super-resolution vs bicubic by PSNR: `just fe-e2e-superres`; link prediction by AUC band:
-  `just fe-e2e-link`; graph classification above its baseline: `just fe-e2e-graphcls`
+  `just fe-e2e-link`; graph classification above its baseline: `just fe-e2e-graphcls`;
+  text classification by a known label: `just fe-e2e-text`; zero-shot text by a known
+  ranking *and* a template that provably reaches the model: `just fe-e2e-zeroshot-text`;
+  extractive QA by a **character range** rather than a string: `just fe-e2e-qa`
 - Install deps: `just fe-install`
 
 ---

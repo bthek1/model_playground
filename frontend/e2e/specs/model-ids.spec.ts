@@ -16,30 +16,33 @@ test.describe("@slow model catalogue", () => {
     request,
   }) => {
     const { ASR_MODELS } = await import("../../src/audio/types");
-    const { CLASSIFIER_MODELS } = await import("../../src/audio/classification");
+    const { CLASSIFIER_MODELS } =
+      await import("../../src/audio/classification");
     const { TTS_MODELS } = await import("../../src/audio/tts");
     const { ENHANCE_MODELS } = await import("../../src/audio/enhance/types");
     const { VAD_MODELS } = await import("../../src/audio/vad/types");
-    const { IMAGE_CLASSIFIER_MODELS } = await import(
-      "../../src/vision/classification"
-    );
+    const { IMAGE_CLASSIFIER_MODELS } =
+      await import("../../src/vision/classification");
     const { DEPTH_MODELS } = await import("../../src/vision/depth");
     const { DETECTOR_MODELS } = await import("../../src/vision/detection");
     const { SEGMENTER_MODELS } = await import("../../src/vision/segmentation");
     const { ZERO_SHOT_MODELS } = await import("../../src/vision/zeroShot");
-    const { ZERO_SHOT_DETECTOR_MODELS } = await import(
-      "../../src/vision/zeroShotDetection"
-    );
+    const { ZERO_SHOT_DETECTOR_MODELS } =
+      await import("../../src/vision/zeroShotDetection");
     const { FEATURE_MODELS } = await import("../../src/vision/features");
     const { SAM_MODELS } = await import("../../src/vision/sam/types");
     const { POSE_MODELS } = await import("../../src/vision/pose/types");
-    const { MATTE_MODELS } = await import(
-      "../../src/vision/backgroundRemoval"
-    );
+    const { MATTE_MODELS } = await import("../../src/vision/backgroundRemoval");
     const { SUPER_RES_MODELS } = await import("../../src/vision/superRes");
-    const { VLM_MODELS, VIDEO_VLM_MODELS } = await import(
-      "../../src/multimodal/types"
-    );
+    const { VLM_MODELS, VIDEO_VLM_MODELS } =
+      await import("../../src/multimodal/types");
+    const {
+      TEXT_CLASSIFIER_MODELS,
+      NER_MODELS,
+      ZERO_SHOT_TEXT_MODELS,
+      QA_MODELS,
+      FILL_MASK_MODELS,
+    } = await import("../../src/text/catalogue");
 
     const ids = [
       ...ASR_MODELS,
@@ -61,6 +64,11 @@ test.describe("@slow model catalogue", () => {
       ...SUPER_RES_MODELS,
       ...VLM_MODELS,
       ...VIDEO_VLM_MODELS,
+      ...TEXT_CLASSIFIER_MODELS,
+      ...QA_MODELS,
+      ...NER_MODELS,
+      ...ZERO_SHOT_TEXT_MODELS,
+      ...FILL_MASK_MODELS,
       // A pose entry is a *pair*, so its own `id` is a composite that resolves
       // to nothing on the Hub — the two halves are what get downloaded.
       ...POSE_MODELS.flatMap((m) => [m.detector, m.pose]),
@@ -85,22 +93,18 @@ test.describe("@slow model catalogue", () => {
     // and why `mattmdjaga/segformer_b2_clothes` is pinned to fp32 on both
     // backends rather than left to the default. Assert the files, not merely
     // the repo.
-    const { IMAGE_CLASSIFIER_MODELS } = await import(
-      "../../src/vision/classification"
-    );
+    const { IMAGE_CLASSIFIER_MODELS } =
+      await import("../../src/vision/classification");
     const { DEPTH_MODELS } = await import("../../src/vision/depth");
     const { DETECTOR_MODELS } = await import("../../src/vision/detection");
     const { SEGMENTER_MODELS } = await import("../../src/vision/segmentation");
     const { ZERO_SHOT_MODELS } = await import("../../src/vision/zeroShot");
-    const { ZERO_SHOT_DETECTOR_MODELS } = await import(
-      "../../src/vision/zeroShotDetection"
-    );
+    const { ZERO_SHOT_DETECTOR_MODELS } =
+      await import("../../src/vision/zeroShotDetection");
     const { FEATURE_MODELS } = await import("../../src/vision/features");
     const { SAM_MODELS } = await import("../../src/vision/sam/types");
     const { POSE_MODELS } = await import("../../src/vision/pose/types");
-    const { MATTE_MODELS } = await import(
-      "../../src/vision/backgroundRemoval"
-    );
+    const { MATTE_MODELS } = await import("../../src/vision/backgroundRemoval");
     const { SUPER_RES_MODELS } = await import("../../src/vision/superRes");
 
     // Suffix per precision, applied to each of the entry's graph base names.
@@ -114,7 +118,10 @@ test.describe("@slow model catalogue", () => {
       q8: "_quantized",
       fp32: "",
     };
-    const DEFAULT_DTYPE: Record<string, string> = { webgpu: "fp16", wasm: "q8" };
+    const DEFAULT_DTYPE: Record<string, string> = {
+      webgpu: "fp16",
+      wasm: "q8",
+    };
 
     const models = [
       ...IMAGE_CLASSIFIER_MODELS,
@@ -130,7 +137,10 @@ test.describe("@slow model catalogue", () => {
       // Each half separately: the pair's `backends` gate applies to both, so it
       // is carried down here rather than declared twice in the catalogue.
       ...POSE_MODELS.flatMap((m) =>
-        [m.detector, m.pose].map((stage) => ({ ...stage, backends: m.backends })),
+        [m.detector, m.pose].map((stage) => ({
+          ...stage,
+          backends: m.backends,
+        })),
       ),
     ];
 
@@ -161,6 +171,172 @@ test.describe("@slow model catalogue", () => {
     expect(missing, "catalogue entries missing a dtype we ask for").toEqual([]);
   });
 
+  test("every text catalogue entry publishes the dtype its backend asks for — and the size it quotes", async ({
+    request,
+  }) => {
+    // Same check as the vision one above, plus one the vision catalogue cannot
+    // make: **every NLP entry carries measured `bytes` for both backends**, so
+    // the numbers can be re-verified against the Hub rather than trusted. That
+    // rule exists because the NLP roadmap quoted q8 sizes throughout while
+    // `loadOpts()` asks for fp16 on WebGPU — roughly double, all the way down
+    // the category, and enough to move a page across the feasibility bar.
+    const {
+      TEXT_CLASSIFIER_MODELS,
+      NER_MODELS,
+      ZERO_SHOT_TEXT_MODELS,
+      QA_MODELS,
+      FILL_MASK_MODELS,
+    } = await import("../../src/text/catalogue");
+
+    const SUFFIX: Record<string, string> = {
+      fp16: "_fp16",
+      q8: "_quantized",
+      fp32: "",
+    };
+    const DEFAULT_DTYPE: Record<string, string> = {
+      webgpu: "fp16",
+      wasm: "q8",
+    };
+    /** Allow for a repo re-upload; catch a number that is simply wrong. */
+    const TOLERANCE = 0.02;
+
+    const problems: string[] = [];
+    for (const model of [
+      ...TEXT_CLASSIFIER_MODELS,
+      ...QA_MODELS,
+      ...NER_MODELS,
+      ...ZERO_SHOT_TEXT_MODELS,
+      ...FILL_MASK_MODELS,
+    ]) {
+      const res = await request.get(
+        `https://huggingface.co/api/models/${model.id}?blobs=true`,
+      );
+      const siblings: { rfilename: string; size?: number }[] =
+        (await res.json()).siblings ?? [];
+      const sizeOf = (f: string) =>
+        siblings.find((s) => s.rfilename === f)?.size;
+
+      const backends = model.backends ?? (["webgpu", "wasm"] as const);
+      const graphs = model.graphs ?? (["model"] as const);
+      for (const backend of backends) {
+        const dtype = model.dtypes?.[backend] ?? DEFAULT_DTYPE[backend];
+        const suffix = SUFFIX[String(dtype)];
+        if (suffix === undefined) continue;
+
+        let total = 0;
+        for (const graph of graphs) {
+          const file = `onnx/${graph}${suffix}.onnx`;
+          const size = sizeOf(file);
+          if (size == null) {
+            problems.push(`${model.id} (${backend}) -> missing ${file}`);
+            continue;
+          }
+          total += size;
+          // External weights, where a repo keeps them beside the graph stub.
+          total += sizeOf(`${file}_data`) ?? 0;
+        }
+
+        const quoted = model.bytes[backend];
+        if (quoted == null) {
+          problems.push(`${model.id} (${backend}) -> no measured bytes`);
+        } else if (total > 0 && Math.abs(total - quoted) / total > TOLERANCE) {
+          problems.push(
+            `${model.id} (${backend}) -> quotes ${quoted}, Hub says ${total}`,
+          );
+        }
+      }
+    }
+    expect(problems, "text catalogue entries out of step with the Hub").toEqual(
+      [],
+    );
+  });
+
+  test("every zero-shot entry tells the pipeline where entailment is", async ({
+    request,
+  }) => {
+    // The one thing about this catalogue that cannot fail loudly. The pipeline
+    // reads the entailment index out of `config.label2id` **by name**, and if
+    // it is missing it warns to the console and falls back to `2` — so a
+    // checkpoint without the mapping would be scored on whichever logit
+    // happens to sit at index 2. That is `neutral` for BART, `contradiction`
+    // for MobileBERT and DistilBERT, and the right answer for none of them.
+    //
+    // The output of that mistake is a full, ranked, confidently-scored label
+    // list. No run tells you, so the Hub does.
+    const { ZERO_SHOT_TEXT_MODELS } = await import("../../src/text/catalogue");
+
+    const problems: string[] = [];
+    for (const model of ZERO_SHOT_TEXT_MODELS) {
+      const res = await request.get(
+        `https://huggingface.co/${model.id}/raw/main/config.json`,
+      );
+      if (!res.ok()) {
+        problems.push(`${model.id} -> config.json ${res.status()}`);
+        continue;
+      }
+      const config = await res.json();
+      const labels: string[] = Object.values(config.id2label ?? {});
+      const lower = labels.map((l) => String(l).toLowerCase());
+      if (!lower.includes("entailment")) {
+        problems.push(
+          `${model.id} -> no entailment label, got ${lower.join()}`,
+        );
+      }
+      if (
+        !lower.includes("contradiction") &&
+        !lower.includes("not_entailment")
+      ) {
+        problems.push(`${model.id} -> no contradiction label`);
+      }
+    }
+    expect(problems, "zero-shot entries whose NLI head cannot be read").toEqual(
+      [],
+    );
+  });
+
+  test("every fill-mask entry declares the mask token its tokenizer really uses", async ({
+    request,
+  }) => {
+    // The one catalogue field on `/fill-mask` that cannot be checked by looking
+    // at the page: `maskToken` is shown in the UI *before* a model is loaded and
+    // is what the "Insert mask" button puts in the box, so a wrong one sends the
+    // user's sentence out with a literal the tokenizer has never seen.
+    //
+    // At run time the engine defers to the loaded tokenizer, so a drifted entry
+    // produces a note rather than a failed run — but the note is a symptom, and
+    // this is the test that names the cause. Read from each repo's own
+    // `tokenizer_config.json`, never from our expectations.
+    const { FILL_MASK_MODELS } = await import("../../src/text/catalogue");
+    expect(FILL_MASK_MODELS.length).toBeGreaterThan(0);
+
+    const wrong: string[] = [];
+    for (const model of FILL_MASK_MODELS) {
+      const res = await request.get(
+        `https://huggingface.co/${model.id}/resolve/main/tokenizer_config.json`,
+      );
+      if (!res.ok()) {
+        wrong.push(`${model.id} -> tokenizer_config.json ${res.status()}`);
+        continue;
+      }
+      const config = await res.json();
+      // The field is a plain string on every current entry, but the format
+      // allows an `AddedToken` object — take `content` when it is one rather
+      // than comparing a string to "[object Object]".
+      const declared =
+        typeof config.mask_token === "string"
+          ? config.mask_token
+          : config.mask_token?.content;
+      if (declared !== model.maskToken) {
+        wrong.push(
+          `${model.id} -> catalogue says ${JSON.stringify(
+            model.maskToken,
+          )}, tokenizer says ${JSON.stringify(declared)}`,
+        );
+      }
+    }
+    expect(wrong, "fill-mask entries whose mask token has drifted").toEqual([]);
+  });
+
   test("every bundled sample and gallery picture still resolves", async ({
     request,
   }) => {
@@ -168,9 +344,8 @@ test.describe("@slow model catalogue", () => {
     // only reason a vision route works before the user has a file of their own,
     // and the unit suite mocks `fromUrl` away entirely. A 404 here is a page
     // whose sample buttons all fail — green tests, broken page.
-    const { IMAGE_SAMPLES, TEXT_SAMPLES, PORTRAIT_SAMPLES } = await import(
-      "../../src/vision/samples"
-    );
+    const { IMAGE_SAMPLES, TEXT_SAMPLES, PORTRAIT_SAMPLES } =
+      await import("../../src/vision/samples");
     const { GALLERY_IMAGES } = await import("../../src/vision/gallery");
 
     const urls = [
@@ -201,9 +376,8 @@ test.describe("@slow model catalogue", () => {
     // precision: a repo that publishes `decoder_model_merged_q4f16.onnx` but not
     // `vision_encoder_q4f16.onnx` resolves fine on the API and then 404s
     // halfway through a 189 MB load.
-    const { VLM_MODELS, VIDEO_VLM_MODELS } = await import(
-      "../../src/multimodal/types"
-    );
+    const { VLM_MODELS, VIDEO_VLM_MODELS } =
+      await import("../../src/multimodal/types");
 
     const SUFFIX: Record<string, string> = { q4f16: "_q4f16", q4: "_q4" };
     const DEFAULT_DTYPE: Record<string, string> = {
@@ -232,30 +406,34 @@ test.describe("@slow model catalogue", () => {
         }
       }
     }
-    expect(missing, "VLM graphs missing at the requested precision").toEqual([]);
+    expect(missing, "VLM graphs missing at the requested precision").toEqual(
+      [],
+    );
   });
 
-  test("the VLM catalogue quotes its real download size", async ({ request }) => {
+  test("the VLM catalogue quotes its real download size", async ({
+    request,
+  }) => {
     // These entries carry *measured* bytes rather than a params estimate,
     // because at q4f16 the precision is mixed: SmolVLM-256M's embedding table is
     // not 4-bit quantized at all, so an estimate is out by 30%. A measurement
     // that has drifted from the Hub is worse than an estimate, because the page
     // presents it as fact — so check it.
-    const { VLM_MODELS, VIDEO_VLM_MODELS } = await import(
-      "../../src/multimodal/types"
-    );
+    const { VLM_MODELS, VIDEO_VLM_MODELS } =
+      await import("../../src/multimodal/types");
 
     const wrong: string[] = [];
     for (const model of [...VLM_MODELS, ...VIDEO_VLM_MODELS]) {
       const res = await request.get(
         `https://huggingface.co/api/models/${model.id}/tree/main/onnx`,
       );
-      const files: Array<{ path: string; size?: number; lfs?: { size?: number } }> =
-        await res.json();
+      const files: Array<{
+        path: string;
+        size?: number;
+        lfs?: { size?: number };
+      }> = await res.json();
       const total = model.graphs.reduce((sum, graph) => {
-        const entry = files.find(
-          (f) => f.path === `onnx/${graph}_q4f16.onnx`,
-        );
+        const entry = files.find((f) => f.path === `onnx/${graph}_q4f16.onnx`);
         return sum + (entry?.lfs?.size ?? entry?.size ?? 0);
       }, 0);
       const quoted = model.bytes.webgpu ?? 0;

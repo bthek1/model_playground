@@ -77,6 +77,45 @@ cheapest usable entry cost, and is there a second one?** A page with a 50 MB
 default and a 1 GB option behind a gate is fine. A page whose floor is 400 MB
 is not, however well it behaves.
 
+The category roadmaps are now swept against a **~500 MB bar on the cheapest
+entry**, and the sweep of the NLP roadmap removed six models without costing a
+single page — every affected section already had a 23–284 MB default.
+
+### Measure the size, never estimate it
+
+That sweep also found that **five of those six were quoted at sizes that were
+wrong**, one of them by 4x *and* recommended as its page's default
+(`MoritzLaurer/deberta-v3-base-zeroshot-v2.0`: quoted "~180 MB", actually
+**738.6 MB**). Two habits prevent it:
+
+- **An official in-repo ONNX export is not automatically a quantized one.** That
+  DeBERTa repo publishes exactly one file, `onnx/model.onnx` at fp32. The
+  "~180 MB" was an estimate of a file that does not exist. Read the blob
+  listing: `https://huggingface.co/api/models/<id>?blobs=true`.
+- **Never infer a seq2seq download from the parameter count.** The repo
+  publishes three *alternative* decoders (`decoder_model`,
+  `decoder_with_past_model`, `decoder_model_merged`) and only the merged one is
+  ever loaded. Sum `encoder_model` + `decoder_model_merged` — summing the
+  directory inflates `Xenova/LaMini-Flan-T5-783M` from its real 822.7 MB to over
+  1.7 GB, and summing only the `.onnx` stubs of a repo with external
+  `.onnx_data` files measures a 1373 MB model at 1.2 **MB**.
+
+### "In the browser" means the user's hardware, not necessarily the GPU
+
+Question 3's companion. Prefer WebGPU — `loadOpts()` defaults to it — but a
+**CPU-only path is a legitimate answer when the CPU is the right engineering
+choice**, and two shipped things prove it:
+
+- `/vad` is pinned to WASM deliberately. Silero v5's LSTM and `If` operators
+  have no coverage in ORT's WebGPU provider, and at ~100x real time on CPU there
+  is nothing for a GPU to win.
+- The Tabular roadmap's decision trees are recursive splits with no linear
+  algebra in them, so they are TypeScript in a Worker; forcing them onto the GPU
+  would make them slower.
+
+What is *not* acceptable is a task that needs a server. That is the line —
+`/tasks/$slug` and a documented reason, per the rule above.
+
 The one exception is the raw WebGPU path
 ([`frontend/src/webgpu/`](../../frontend/src/webgpu/)). A task with no ONNX
 export can still become a page if the maths is small enough to write as WGSL by

@@ -37,6 +37,35 @@ a notebook can only draw the graph once.
 
 ---
 
+## The feasibility bar this file is filtered by
+
+Every model named below as a *recommendation* clears two tests. Rows that fail
+one are kept, marked, and given the measured number — a documented "no, and
+here is why" is a finished piece of work
+([`adding-a-task-page.md`](../guides/adding-a-task-page.md) §0).
+
+1. **It runs client-side**, on WebGPU where the operators are covered and on the
+   WASM provider where they are not. A CPU-only path is legitimate when CPU is
+   the right engineering answer; a row that needs a server is not.
+2. **Its cheapest usable checkpoint is under ~500 MB**, measured off the Hub's
+   blob listing, summing only the graphs a page actually loads — `encoder_model`
+   + `decoder_model_merged`, never the alternative `decoder_model` /
+   `decoder_with_past_model` a seq2seq repo also publishes.
+
+Test 2 is about the **floor, not the ceiling**: a page needs a cheap default,
+and may then offer a heavier entry behind a gate. A page whose *every* option is
+heavy is the failure — that is what removed `/text-to-audio`, `/image-to-text`
+and `/document-question-answering` from the app.
+
+**On test 1, this category is the purest case there is: the model *is* WGSL.**
+There is no checkpoint to download and no ONNX runtime involved — the network is
+written as compute shaders and trained in the tab, so it runs on WebGPU by
+construction. Test 2 is vacuous here for the same reason. What this category
+downloads instead is a **dataset** (PROTEINS, 2.06 MB), which is why §3.4 is the
+only section in the repo that talks about IndexedDB caching of one.
+
+---
+
 ## 1. The core stack
 
 Nothing was installed. No Transformers.js, no `onnxruntime-web`; this route shares the
