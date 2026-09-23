@@ -387,6 +387,25 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
   `components/model/ModelPicker.tsx` quote the download for both backends and warn past
   `LARGE_MODEL_BYTES`. Supply measured `bytes` when the params estimate would mislead — ASR's fp32
   decoder makes the WASM download ~3x the estimate.
+- **The roadmaps are filtered by a feasibility bar, and it has two halves.** A task becomes a
+  page only if it **runs client-side** *and* its **cheapest usable checkpoint is under ~500 MB**
+  (measured off the Hub, never estimated). The size test is about the **floor, not the ceiling**:
+  a cheap default plus a gated heavy option is fine; a page whose every entry is heavy is the
+  failure, and is what removed `/text-to-audio`, `/image-to-text` and
+  `/document-question-answering`. Sweeping the NLP roadmap at that bar removed six models and
+  cost no page — every section kept a 23–284 MB default.
+- **"In the browser" means the user's hardware, not necessarily the GPU.** Prefer WebGPU
+  (`loadOpts()` defaults to it), but a CPU-only path is the right answer when the CPU is
+  faster: `/vad` is pinned to WASM because Silero's LSTM/`If` ops have no WebGPU coverage and
+  it already runs ~100x real time, and the Tabular roadmap's decision trees are TypeScript in a
+  Worker because recursive splits have no matmul to accelerate. A task that needs a *server* is
+  the thing that does not qualify.
+- **Measure a download; never estimate it.** The NLP sweep found five of six quoted sizes wrong,
+  one by 4x *and* recommended as its page's default (`deberta-v3-base-zeroshot-v2.0`: quoted
+  "~180 MB", actually **738.6 MB** — the repo publishes one fp32 `model.onnx` and no q8 at all).
+  **An official in-repo export is not automatically a quantized one**, and **never infer a
+  seq2seq size from the parameter count**: sum `encoder_model` + `decoder_model_merged` only,
+  never the alternative `decoder_model` / `decoder_with_past_model` the same repo publishes.
 - **Heavy models are gated, not auto-loaded** — state the size and speed cost, download nothing
   until an explicit opt-in, and assert zero Hub requests before the click in an E2E spec. But
   **a gate is not a substitute for a size that fits**: `/text-to-audio` did all of that in front

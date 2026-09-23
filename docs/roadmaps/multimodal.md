@@ -92,6 +92,35 @@ Every model id below was checked against the Hugging Face API. Re-check with
 
 ---
 
+## The feasibility bar this file is filtered by
+
+Every model named below as a *recommendation* clears two tests. Rows that fail
+one are kept, marked, and given the measured number — a documented "no, and
+here is why" is a finished piece of work
+([`adding-a-task-page.md`](../guides/adding-a-task-page.md) §0).
+
+1. **It runs client-side**, on WebGPU where the operators are covered and on the
+   WASM provider where they are not. A CPU-only path is legitimate when CPU is
+   the right engineering answer; a row that needs a server is not.
+2. **Its cheapest usable checkpoint is under ~500 MB**, measured off the Hub's
+   blob listing, summing only the graphs a page actually loads — `encoder_model`
+   + `decoder_model_merged`, never the alternative `decoder_model` /
+   `decoder_with_past_model` a seq2seq repo also publishes.
+
+Test 2 is about the **floor, not the ceiling**: a page needs a cheap default,
+and may then offer a heavier entry behind a gate. A page whose *every* option is
+heavy is the failure — that is what removed `/text-to-audio`, `/image-to-text`
+and `/document-question-answering` from the app.
+
+**On test 1, this category is WebGPU-only by catalogue declaration**, which is
+the opposite end of the same rule. Every model here is an autoregressive
+decoder, and a decoder on WASM is seconds per token — so the entries declare
+`backends: ["webgpu"]` and `useBackendProbe` disables the row on a machine
+without an adapter, rather than offering a CPU path nobody will wait for. And
+the gate is `shader-f16`, not merely "has a GPU" (below).
+
+---
+
 ## 1. The core stack
 
 `@huggingface/transformers` is already a dependency at 4.2.0. Nothing needs installing.

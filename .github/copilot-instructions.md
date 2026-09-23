@@ -426,6 +426,18 @@ show the output*. The modality changes; the pipeline does not. Full contract in
 - **ASR timestamps are take-relative.** The live loop re-transcribes only the tail 30 s, so the
   model's timestamps restart at 0 on a longer take; `useLiveAsr`'s `shiftChunks()` offsets them by
   the window start before the route renders `m:ss`. Don't render worker `chunks` unshifted.
+- **Roadmaps are filtered by a two-part feasibility bar.** A task becomes a page only if it
+  **runs client-side** *and* its **cheapest usable checkpoint is under ~500 MB** (measured off
+  the Hub, never estimated). The size test is about the **floor, not the ceiling** — a cheap
+  default plus a gated heavy option is fine; a page whose every entry is heavy is the failure.
+- **"In the browser" ≠ "on the GPU".** Prefer WebGPU, but CPU-only is right when CPU is faster:
+  `/vad` is pinned to WASM (Silero's LSTM/`If` ops have no WebGPU coverage, ~100x real time on
+  CPU), and Tabular's decision trees are TypeScript in a Worker. A task needing a *server* is
+  what fails the test.
+- **Measure a download; never estimate it.** Five of six sizes in the NLP roadmap were wrong,
+  one by 4x on the recommended default (`deberta-v3-base-zeroshot-v2.0`: quoted ~180 MB, really
+  **738.6 MB** — one fp32 `model.onnx`, no q8). An official in-repo export is not automatically
+  a quantized one, and for seq2seq sum `encoder_model` + `decoder_model_merged` only.
 - **Gate anything heavy** — state the size and speed cost, download nothing until an explicit
   opt-in, assert zero Hub requests before the click in an E2E spec. But **a gate is not a
   substitute for a size that fits**: `/text-to-audio` did all of that in front of MusicGen and
