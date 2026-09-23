@@ -233,3 +233,8 @@ frontend/dist/
 frontend/.env
 frontend/.env.local
 frontend/vite.config.ts.timestamp-*.mjs
+
+# vite-plugin-basic-ssl's generated localhost cert. Self-signed and regenerated
+# on demand, but it carries an RSA private key — a key in the tree is a key in
+# the tree, and every checkout would otherwise share one.
+.vite/
