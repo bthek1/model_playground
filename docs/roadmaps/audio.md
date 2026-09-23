@@ -344,9 +344,10 @@ silence as eagerly as speech — was deliberately left out of #9 and is unclaime
 
 Audio LLMs (Qwen2-Audio and friends) are multi-billion-parameter and have no browser
 runtime. The buildable version is a **cascade** — ASR then a small text model, both
-already in the catalogue — and it is specified in
-[`Multimodal_Models_in_React_WebGPU_and_CPU.md`](https://github.com/bthek1/model_playground/issues/4)
-§3.5.
+already in the catalogue — and it is specified in [`multimodal.md`](multimodal.md)
+§3.5. That page was **cut** before it was built: it is blocked on a
+text-generation worker that does not exist yet, and the cascade is ~800 MB of
+two models live at once.
 
 ---
 

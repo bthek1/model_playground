@@ -56,10 +56,10 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | Celery / async tasks | [`docs/guides/celery_setup.md`](docs/guides/celery_setup.md) |
 | **Adding a task page (end-to-end procedure)** | [`docs/guides/adding-a-task-page.md`](docs/guides/adding-a-task-page.md) |
 | Feature plans (phased) | **GitHub issues**, label [`plan`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aplan) — open = active, closed = done |
-| **Audio category roadmap** (complete, 6 of 6) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
-| **Computer Vision roadmap** (14 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
+| **Audio category roadmap** (5 of 6; Text to Audio cut for size) | [`docs/roadmaps/audio.md`](docs/roadmaps/audio.md) |
+| **Computer Vision roadmap** (13 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | **Graph ML roadmap** (**complete, 4 of 4**; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
-| **Multimodal roadmap** (2 of 9; VLMs, `q4f16`, streaming, document QA) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
+| **Multimodal roadmap** (1 of 9, scoped to 3; VLMs, `q4f16`, streaming) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
