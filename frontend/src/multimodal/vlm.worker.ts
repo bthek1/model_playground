@@ -13,11 +13,17 @@
 //                       fluent, confident and not an answer to the question.
 //                       Same class of bug as Florence-2's `construct_prompts`,
 //                       which this repo already paid for once.
-//   the image slot      `{ type: "image" }` is a *slot*, filled positionally
+//   the image slots     `{ type: "image" }` is a *slot*, filled positionally
 //                       from the array passed to the processor. The content
 //                       array's image entries and the image list must line up;
 //                       a template rendered with no image slot puts the picture
 //                       nowhere and the model answers from the text alone.
+//                       With N frames that becomes N slots in the same order —
+//                       one short and every later frame is attributed to the
+//                       wrong moment, with nothing to see but a confident
+//                       sentence. `imageSlots` is that count, derived from the
+//                       list rather than passed alongside it, so the two cannot
+//                       disagree.
 //   the prompt echo     `generate` returns the full sequence, prompt included.
 //                       Decoding all of it hands the user back their own
 //                       question with the answer glued to the end, so the
@@ -75,12 +81,12 @@ const handle = createVlmHandler(
 
     return {
       generate: async (
-        payload,
+        payloads,
         prompt,
         maxNewTokens,
         onPartial,
       ): Promise<VlmOutput> => {
-        const image = fromPayload(payload);
+        const images = payloads.map(fromPayload);
 
         // Everything up to the first generated token: templating, tokenizing,
         // and the vision encoder. On a 500M model this is seconds, and it is
@@ -93,12 +99,12 @@ const handle = createVlmHandler(
           [
             {
               role: "user",
-              content: [{ type: "image" }, { type: "text", text: prompt }],
+              content: [...imageSlots(images.length), { type: "text", text: prompt }],
             },
           ],
           { add_generation_prompt: true },
         );
-        const inputs = await proc(text, [image]);
+        const inputs = await proc(text, images);
 
         // The prompt's own length, so the answer can be sliced out of the
         // returned sequence below.
@@ -140,6 +146,17 @@ const handle = createVlmHandler(
     };
   },
 );
+
+/**
+ * One `{ type: "image" }` slot per picture, in order.
+ *
+ * Derived from the image list's own length at the call site rather than taken
+ * as a separate argument: the count and the array are the same fact, and the
+ * only way this goes wrong is if they are allowed to be two.
+ */
+function imageSlots(count: number): { type: "image" }[] {
+  return Array.from({ length: count }, () => ({ type: "image" as const }));
+}
 
 /** Token count of the templated prompt, read off whichever input carries it. */
 function inputLength(inputs: Record<string, unknown>): number {

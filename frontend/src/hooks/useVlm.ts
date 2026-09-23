@@ -42,9 +42,16 @@ export interface UseVlmResult {
    * renders `partial` while it exists and `result` afterwards, never both.
    */
   partial: VlmPartial | null;
-  /** Answer `prompt` about `image`. */
+  /**
+   * Answer `prompt` about a picture, or about an ordered list of them.
+   *
+   * The list is what makes `/video-text-to-text` a page rather than a module: a
+   * video-language model is a frame sampler plus this. A single image is passed
+   * as itself and becomes a one-element list — which is why `/image-text-to-text`
+   * did not change when the list arrived.
+   */
   run: (
-    image: RawImage,
+    images: RawImage | RawImage[],
     prompt: string,
     maxNewTokens?: number,
   ) => Promise<VlmResult>;
@@ -84,18 +91,20 @@ export function useVlm(
   const { run: post } = worker;
   const run = useCallback(
     async (
-      image: RawImage,
+      images: RawImage | RawImage[],
       prompt: string,
       maxNewTokens: number = DEFAULT_MAX_NEW_TOKENS,
     ): Promise<VlmResult> => {
       const question = prompt.trim();
       if (!question) throw new Error("Ask a question about the image");
-      // `copy: false` — the payload is built for this post and the page keeps
-      // its own `RawImage` for the preview.
-      const payload = toPayload(image, { copy: false });
+      const list = Array.isArray(images) ? images : [images];
+      if (list.length === 0) throw new Error("Pick a picture first");
+      // `copy: false` — each payload is built for this post and the page keeps
+      // its own `RawImage`s for the preview and the filmstrip.
+      const payloads = list.map((image) => toPayload(image, { copy: false }));
       const res = await post(
-        { image: payload, prompt: question, maxNewTokens },
-        transferablesOf(payload),
+        { images: payloads, prompt: question, maxNewTokens },
+        payloads.flatMap(transferablesOf),
       );
       setResult(res);
       return res;

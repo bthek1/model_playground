@@ -1,4 +1,5 @@
-// Frame sampling for `/video-classification`.
+// Frame sampling — `/video-classification`, and `/video-text-to-text` through
+// the `times` option below. One decode path, two sampling policies.
 //
 // **Seeking, not playback.** A 30-second clip must not take 30 seconds to
 // sample: setting `currentTime` and waiting for `seeked` decodes only the frames
@@ -74,6 +75,26 @@ export interface SampleOptions {
   fps?: number;
   maxFrames?: number;
   maxSide?: number;
+  /**
+   * Sample exactly these timestamps (seconds), instead of at a fixed rate.
+   *
+   * `/video-text-to-text` needs a fixed **count** rather than a fixed rate — its
+   * frames share one prompt, so the cost is the number of them and not the
+   * length of the clip — and it computes them itself
+   * (`multimodal/frames.ts`). Times past the clip's end are dropped rather than
+   * seeked to, since a seek beyond `duration` never fires `seeked` on some
+   * encodes and would hang the sample.
+   *
+   * A **function** of the duration, because the caller usually cannot know the
+   * duration before this does: reading it means loading the clip's metadata,
+   * which is the first thing below. A caller that already has the times passes
+   * them directly.
+   *
+   * This is an option on the one decode path rather than a second decode path:
+   * the `<video>` lifecycle, the CORS ordering and the teardown below are the
+   * parts worth having once.
+   */
+  times?: readonly number[] | ((duration: number) => readonly number[]);
   /** Called as each frame is decoded, for the progress line. */
   onFrame?: (frame: SampledFrame, index: number, total: number) => void;
   /** Return true to stop early — the page's Cancel. */
@@ -95,6 +116,7 @@ export async function sampleVideo(
     fps = DEFAULT_SAMPLE_FPS,
     maxFrames = MAX_FRAMES,
     maxSide = MAX_FRAME_SIDE,
+    times: explicitTimes,
     onFrame,
     cancelled,
   }: SampleOptions = {},
@@ -113,7 +135,13 @@ export async function sampleVideo(
       throw new Error("Could not read the clip's duration");
     }
 
-    const times = frameTimes(duration, fps, maxFrames);
+    const requested =
+      typeof explicitTimes === "function"
+        ? explicitTimes(duration)
+        : explicitTimes;
+    const times = requested
+      ? requested.filter((t) => t >= 0 && t < duration)
+      : frameTimes(duration, fps, maxFrames);
     const target = fitWithin(video.videoWidth, video.videoHeight, maxSide);
     const canvas = document.createElement("canvas");
     canvas.width = target.width;
@@ -132,7 +160,13 @@ export async function sampleVideo(
       onFrame?.(frame, i, times.length);
     }
 
-    return { frames, duration, capped: wasCapped(duration, fps, maxFrames) };
+    return {
+      frames,
+      duration,
+      // Explicit times are exactly what the caller asked for, so nothing was
+      // cut short by a cap — the cap lives in whoever computed them.
+      capped: explicitTimes ? false : wasCapped(duration, fps, maxFrames),
+    };
   } finally {
     // Release the decoder and the buffered data. A `<video>` left with a `src`
     // holds its whole decoded pipeline for as long as the element is reachable.
