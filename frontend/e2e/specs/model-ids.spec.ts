@@ -40,6 +40,7 @@ test.describe("@slow model catalogue", () => {
     const { VLM_MODELS, VIDEO_VLM_MODELS } = await import(
       "../../src/multimodal/types"
     );
+    const { TEXT_CLASSIFIER_MODELS } = await import("../../src/text/catalogue");
 
     const ids = [
       ...ASR_MODELS,
@@ -61,6 +62,7 @@ test.describe("@slow model catalogue", () => {
       ...SUPER_RES_MODELS,
       ...VLM_MODELS,
       ...VIDEO_VLM_MODELS,
+      ...TEXT_CLASSIFIER_MODELS,
       // A pose entry is a *pair*, so its own `id` is a composite that resolves
       // to nothing on the Hub — the two halves are what get downloaded.
       ...POSE_MODELS.flatMap((m) => [m.detector, m.pose]),
@@ -159,6 +161,71 @@ test.describe("@slow model catalogue", () => {
       }
     }
     expect(missing, "catalogue entries missing a dtype we ask for").toEqual([]);
+  });
+
+  test("every text catalogue entry publishes the dtype its backend asks for — and the size it quotes", async ({
+    request,
+  }) => {
+    // Same check as the vision one above, plus one the vision catalogue cannot
+    // make: **every NLP entry carries measured `bytes` for both backends**, so
+    // the numbers can be re-verified against the Hub rather than trusted. That
+    // rule exists because the NLP roadmap quoted q8 sizes throughout while
+    // `loadOpts()` asks for fp16 on WebGPU — roughly double, all the way down
+    // the category, and enough to move a page across the feasibility bar.
+    const { TEXT_CLASSIFIER_MODELS } = await import("../../src/text/catalogue");
+
+    const SUFFIX: Record<string, string> = {
+      fp16: "_fp16",
+      q8: "_quantized",
+      fp32: "",
+    };
+    const DEFAULT_DTYPE: Record<string, string> = { webgpu: "fp16", wasm: "q8" };
+    /** Allow for a repo re-upload; catch a number that is simply wrong. */
+    const TOLERANCE = 0.02;
+
+    const problems: string[] = [];
+    for (const model of TEXT_CLASSIFIER_MODELS) {
+      const res = await request.get(
+        `https://huggingface.co/api/models/${model.id}?blobs=true`,
+      );
+      const siblings: { rfilename: string; size?: number }[] =
+        (await res.json()).siblings ?? [];
+      const sizeOf = (f: string) =>
+        siblings.find((s) => s.rfilename === f)?.size;
+
+      const backends = model.backends ?? (["webgpu", "wasm"] as const);
+      const graphs = model.graphs ?? (["model"] as const);
+      for (const backend of backends) {
+        const dtype = model.dtypes?.[backend] ?? DEFAULT_DTYPE[backend];
+        const suffix = SUFFIX[String(dtype)];
+        if (suffix === undefined) continue;
+
+        let total = 0;
+        for (const graph of graphs) {
+          const file = `onnx/${graph}${suffix}.onnx`;
+          const size = sizeOf(file);
+          if (size == null) {
+            problems.push(`${model.id} (${backend}) -> missing ${file}`);
+            continue;
+          }
+          total += size;
+          // External weights, where a repo keeps them beside the graph stub.
+          total += sizeOf(`${file}_data`) ?? 0;
+        }
+
+        const quoted = model.bytes[backend];
+        if (quoted == null) {
+          problems.push(`${model.id} (${backend}) -> no measured bytes`);
+        } else if (total > 0 && Math.abs(total - quoted) / total > TOLERANCE) {
+          problems.push(
+            `${model.id} (${backend}) -> quotes ${quoted}, Hub says ${total}`,
+          );
+        }
+      }
+    }
+    expect(problems, "text catalogue entries out of step with the Hub").toEqual(
+      [],
+    );
   });
 
   test("every bundled sample and gallery picture still resolves", async ({

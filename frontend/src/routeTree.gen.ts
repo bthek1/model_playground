@@ -17,6 +17,7 @@ import { Route as VideoClassificationRouteImport } from './routes/video-classifi
 import { Route as VadRouteImport } from './routes/vad'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
+import { Route as TextClassificationRouteImport } from './routes/text-classification'
 import { Route as TensorRouteImport } from './routes/tensor'
 import { Route as SuperResolutionRouteImport } from './routes/super-resolution'
 import { Route as SignupRouteImport } from './routes/signup'
@@ -81,6 +82,11 @@ const TrainingRoute = TrainingRouteImport.update({
 const TextToSpeechRoute = TextToSpeechRouteImport.update({
   id: '/text-to-speech',
   path: '/text-to-speech',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TextClassificationRoute = TextClassificationRouteImport.update({
+  id: '/text-classification',
+  path: '/text-classification',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TensorRoute = TensorRouteImport.update({
@@ -228,6 +234,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
+  '/text-classification': typeof TextClassificationRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
@@ -262,6 +269,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
+  '/text-classification': typeof TextClassificationRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
@@ -297,6 +305,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
+  '/text-classification': typeof TextClassificationRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/training': typeof TrainingRoute
   '/vad': typeof VadRoute
@@ -333,6 +342,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/super-resolution'
     | '/tensor'
+    | '/text-classification'
     | '/text-to-speech'
     | '/training'
     | '/vad'
@@ -367,6 +377,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/super-resolution'
     | '/tensor'
+    | '/text-classification'
     | '/text-to-speech'
     | '/training'
     | '/vad'
@@ -401,6 +412,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/super-resolution'
     | '/tensor'
+    | '/text-classification'
     | '/text-to-speech'
     | '/training'
     | '/vad'
@@ -436,6 +448,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   SuperResolutionRoute: typeof SuperResolutionRoute
   TensorRoute: typeof TensorRoute
+  TextClassificationRoute: typeof TextClassificationRoute
   TextToSpeechRoute: typeof TextToSpeechRoute
   TrainingRoute: typeof TrainingRoute
   VadRoute: typeof VadRoute
@@ -503,6 +516,13 @@ declare module '@tanstack/react-router' {
       path: '/text-to-speech'
       fullPath: '/text-to-speech'
       preLoaderRoute: typeof TextToSpeechRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/text-classification': {
+      id: '/text-classification'
+      path: '/text-classification'
+      fullPath: '/text-classification'
+      preLoaderRoute: typeof TextClassificationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tensor': {
@@ -700,6 +720,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   SuperResolutionRoute: SuperResolutionRoute,
   TensorRoute: TensorRoute,
+  TextClassificationRoute: TextClassificationRoute,
   TextToSpeechRoute: TextToSpeechRoute,
   TrainingRoute: TrainingRoute,
   VadRoute: VadRoute,

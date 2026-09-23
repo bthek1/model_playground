@@ -106,6 +106,11 @@ const REAL_ROUTES: Record<string, string> = {
   // the page states next to its result rather than implying a temporal
   // understanding it does not have.
   "video-text-to-text": "/video-text-to-text",
+  // The Natural Language Processing category's first route, and the smallest
+  // useful page in the app: a string in, a score list out, no decode step at
+  // all. It establishes `src/text/` — the generic text worker, engine and
+  // catalogue the rest of the category rides on.
+  "text-classification": "/text-classification",
   // Three slugs deliberately have no route and fall through to the placeholder,
   // for one reason each — every checkpoint the task has is too heavy to offer:
   //

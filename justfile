@@ -305,10 +305,21 @@ fe-e2e-vlm:
 fe-e2e-videovlm:
     cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/video-vlm.spec.ts
 
-# Check every model id (audio + vision + multimodal) still resolves on the
-# Hugging Face Hub, that each vision entry publishes the dtypes both backends ask
-# for, and that the VLM entries publish their three q4f16 graphs and still match
-# the download sizes the catalogue quotes (seconds)
+# Run the @slow text spec: a real DistilBERT SST-2 load (~128 MB on WebGPU /
+# 68 MB on WASM) and a real classification, asserting a **known label on a known
+# sentence** rather than "a ranked list appeared" — the latter is exactly what a
+# model with a broken tokenizer also produces.
+#
+# The second test loads FinBERT alongside it and pins the head-to-head
+# structurally: SST-2's head has two classes and FinBERT's has three, so a
+# comparison that quietly renders one model's answer twice cannot pass.
+fe-e2e-text:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts
+
+# Check every model id (audio + vision + multimodal + text) still resolves on
+# the Hugging Face Hub, that each vision entry publishes the dtypes both backends
+# ask for, that the VLM entries publish their three q4f16 graphs, and that the
+# VLM and text catalogues still match the download sizes they quote (seconds)
 fe-e2e-models:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium model-ids.spec.ts
 

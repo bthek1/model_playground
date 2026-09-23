@@ -192,3 +192,24 @@ describe("the Multimodal category", () => {
     expect(at("any-to-any")).toBe("/tasks/any-to-any");
   });
 });
+
+describe("Natural Language Processing", () => {
+  const all = taskCategories.flatMap((c) => c.tasks);
+  const at = (slug: string) => all.find((t) => t.slug === slug)!.to;
+
+  it("maps the shipped NLP routes", () => {
+    expect(at("text-classification")).toBe("/text-classification");
+  });
+
+  it("leaves Table Question Answering on the placeholder", () => {
+    // §3.11's decision, pinned so it cannot be re-mapped without a model to
+    // point at. TAPAS and TAPEX have no ONNX export and their table-aware
+    // position embeddings mean a generic encoder is not a substitute;
+    // text-to-SQL needs a ~1 GB coder model *and* a database. The row stays
+    // in the sidebar because the taxonomy mirrors the Hub, not our build
+    // state.
+    expect(at("table-question-answering")).toBe(
+      "/tasks/table-question-answering",
+    );
+  });
+});
