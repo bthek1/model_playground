@@ -18,7 +18,6 @@ test.describe("@slow model catalogue", () => {
     const { ASR_MODELS } = await import("../../src/audio/types");
     const { CLASSIFIER_MODELS } = await import("../../src/audio/classification");
     const { TTS_MODELS } = await import("../../src/audio/tts");
-    const { MUSIC_MODELS } = await import("../../src/audio/textToAudio");
     const { ENHANCE_MODELS } = await import("../../src/audio/enhance/types");
     const { VAD_MODELS } = await import("../../src/audio/vad/types");
     const { IMAGE_CLASSIFIER_MODELS } = await import(
@@ -33,22 +32,17 @@ test.describe("@slow model catalogue", () => {
     );
     const { FEATURE_MODELS } = await import("../../src/vision/features");
     const { SAM_MODELS } = await import("../../src/vision/sam/types");
-    const { CAPTION_MODELS } = await import("../../src/vision/caption/types");
     const { POSE_MODELS } = await import("../../src/vision/pose/types");
     const { MATTE_MODELS } = await import(
       "../../src/vision/backgroundRemoval"
     );
     const { SUPER_RES_MODELS } = await import("../../src/vision/superRes");
     const { VLM_MODELS } = await import("../../src/multimodal/types");
-    const { DOCVQA_MODELS } = await import(
-      "../../src/multimodal/docvqa/types"
-    );
 
     const ids = [
       ...ASR_MODELS,
       ...CLASSIFIER_MODELS,
       ...TTS_MODELS,
-      ...MUSIC_MODELS,
       ...ENHANCE_MODELS,
       // The energy baseline has no repo to resolve — it is a detector, not a
       // checkpoint, so it is filtered out rather than asked about.
@@ -61,11 +55,9 @@ test.describe("@slow model catalogue", () => {
       ...ZERO_SHOT_DETECTOR_MODELS,
       ...FEATURE_MODELS,
       ...SAM_MODELS,
-      ...CAPTION_MODELS,
       ...MATTE_MODELS,
       ...SUPER_RES_MODELS,
       ...VLM_MODELS,
-      ...DOCVQA_MODELS,
       // A pose entry is a *pair*, so its own `id` is a composite that resolves
       // to nothing on the Hub — the two halves are what get downloaded.
       ...POSE_MODELS.flatMap((m) => [m.detector, m.pose]),
@@ -102,17 +94,11 @@ test.describe("@slow model catalogue", () => {
     );
     const { FEATURE_MODELS } = await import("../../src/vision/features");
     const { SAM_MODELS } = await import("../../src/vision/sam/types");
-    const { CAPTION_MODELS } = await import("../../src/vision/caption/types");
     const { POSE_MODELS } = await import("../../src/vision/pose/types");
     const { MATTE_MODELS } = await import(
       "../../src/vision/backgroundRemoval"
     );
     const { SUPER_RES_MODELS } = await import("../../src/vision/superRes");
-    // Document QA takes the *shared* `loadOpts()` (fp16 / q8), not the 4-bit VLM
-    // override, so it belongs in this check rather than the multimodal one.
-    const { DOCVQA_MODELS } = await import(
-      "../../src/multimodal/docvqa/types"
-    );
 
     // Suffix per precision, applied to each of the entry's graph base names.
     // Not every repo publishes one `model.onnx`: CLIP as a feature extractor
@@ -136,10 +122,8 @@ test.describe("@slow model catalogue", () => {
       ...ZERO_SHOT_DETECTOR_MODELS,
       ...FEATURE_MODELS,
       ...SAM_MODELS,
-      ...CAPTION_MODELS,
       ...MATTE_MODELS,
       ...SUPER_RES_MODELS,
-      ...DOCVQA_MODELS,
       // Each half separately: the pair's `backends` gate applies to both, so it
       // is carried down here rather than declared twice in the catalogue.
       ...POSE_MODELS.flatMap((m) =>
@@ -172,31 +156,6 @@ test.describe("@slow model catalogue", () => {
       }
     }
     expect(missing, "catalogue entries missing a dtype we ask for").toEqual([]);
-  });
-
-  test("the BLIP mirror is still unusable, so the roadmap note stays honest", async ({
-    request,
-  }) => {
-    // A *negative* assertion about a third-party repo, and deliberately so.
-    // `docs/roadmaps/vision.md` §3.9 says BLIP is absent from `/image-to-text`
-    // because its only ONNX mirror ships `split_0.onnx` / `split_1.onnx` rather
-    // than the transformers.js layout (`encoder_model` + `decoder_model_merged`).
-    // That claim ages: the day someone publishes a proper export this test fails,
-    // which is exactly when we want to hear about it. A note in a doc cannot do
-    // that.
-    const res = await request.get(
-      "https://huggingface.co/api/models/onnx-community/Salesforce_blip-image-captioning-base",
-    );
-    expect(res.ok(), "the BLIP mirror stopped resolving entirely").toBe(true);
-
-    const files: string[] = ((await res.json()).siblings ?? []).map(
-      (f: { rfilename: string }) => f.rfilename,
-    );
-    expect(
-      files.some((f) => f.endsWith("encoder_model.onnx")),
-      "BLIP now publishes a transformers.js layout — it can join the /image-to-text catalogue, and roadmap §3.9 needs updating",
-    ).toBe(false);
-    expect(files).toContain("split_0.onnx");
   });
 
   test("every bundled sample and gallery picture still resolves", async ({

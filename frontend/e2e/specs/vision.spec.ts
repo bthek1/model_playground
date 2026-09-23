@@ -408,63 +408,6 @@ test.describe("/mask-generation", () => {
   });
 });
 
-test.describe("/image-to-text", () => {
-  test("offers four modes and sets the expectation before any download", async ({
-    page,
-    mockApi,
-  }) => {
-    await mockApi();
-    const weightRequests = await stubHub(page);
-
-    const model = new ModelPageObject(page);
-    await page.goto("/image-to-text");
-
-    // Florence-2's four modes come from its capability flags, not a fixed list.
-    // `exact`, because "Caption" is also a substring of "Detailed caption".
-    const modes = page.getByTestId("modes");
-    await expect(
-      modes.getByRole("button", { name: "Caption", exact: true }),
-    ).toBeVisible();
-    await expect(
-      modes.getByRole("button", { name: "Detailed caption", exact: true }),
-    ).toBeVisible();
-    await expect(modes.getByRole("button", { name: "OCR" })).toBeVisible();
-    await expect(modes.getByRole("button", { name: "Grounding" })).toBeVisible();
-
-    // The one expectation this page must set: every other vision route answers
-    // in milliseconds, this one decodes a token at a time.
-    await expect(model.slot(3)).toContainText(/expect\s+seconds/i);
-
-    await expect(model.button(/^Generate$/)).toBeDisabled();
-    expect(weightRequests, "arriving fetched model weights").toEqual([]);
-  });
-
-  test("does not offer the WebGPU-only model when the probe says WASM", async ({
-    page,
-    mockApi,
-  }) => {
-    await mockApi();
-    await stubHub(page);
-
-    // No `navigator.gpu` at all — the CPU-only case, which is what a machine
-    // without a usable adapter looks like to `pickBackend`.
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "gpu", { value: undefined });
-    });
-
-    const model = new ModelPageObject(page);
-    await page.goto("/image-to-text");
-
-    // Known before the click. Offering it anyway turns a documented limitation
-    // into a failed 275 MB download.
-    await expect(
-      page.getByTestId("model-unsupported-onnx-community/Florence-2-base-ft"),
-    ).toBeVisible();
-    await expect(model.button(/Florence-2 base/)).toBeDisabled();
-    await expect(model.button(/ViT-GPT2/)).toBeEnabled();
-  });
-});
-
 test.describe("/pose", () => {
   test("quotes both models as one download, and downloads neither", async ({
     page,

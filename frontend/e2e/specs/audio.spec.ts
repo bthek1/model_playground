@@ -33,47 +33,6 @@ const ROUTES = [
 ] as const;
 
 test.describe("audio routes", () => {
-  // /text-to-audio is deliberately gated: MusicGen is 571 MB, so the route must
-  // not fetch anything until the user opts in. That gate is the spec.
-  test("/text-to-audio downloads nothing until the user opts in", async ({
-    page,
-    mockApi,
-  }) => {
-    await mockApi();
-    const audio = new AudioPage(page);
-
-    const hubRequests: string[] = [];
-    await page.route(
-      (url) => url.hostname.endsWith("huggingface.co"),
-      (route) => {
-        hubRequests.push(route.request().url());
-        return route.abort();
-      },
-    );
-
-    await page.goto("/text-to-audio");
-    await expect(
-      page.getByRole("heading", { name: "Text to Audio" }),
-    ).toBeVisible();
-    // The cost is stated before anything is fetched.
-    await expect(page.getByText(/Experimental — and slow/)).toBeVisible();
-    await expect(page.getByText(/autoregressive/)).toBeVisible();
-    expect(hubRequests, "no weights before opt-in").toEqual([]);
-
-    // The input surface is present but dead, and the cost is stated, before any
-    // fetch — the gate is the `idle` state now, not an unmounted component.
-    await expect(page.getByLabel(/Prompt/)).toBeVisible();
-    await expect(audio.modelButton(/^Generate$/)).toBeDisabled();
-
-    // Pressing Load in the LOAD slot is what starts the download. With the Hub
-    // blocked it fails — which is also the proof it was attempted. Wait for that
-    // rather than asserting on the request list immediately: the worker spawn and
-    // the first fetch are both async.
-    await audio.load();
-    await expect(audio.error).toBeVisible({ timeout: 30_000 });
-    expect(hubRequests.length, "load starts the download").toBeGreaterThan(0);
-  });
-
   // /audio-to-audio is the one route with no Transformers.js path — the DSP is
   // ours and the model is a bare ONNX graph. It is small (~8 MB), but it still
   // downloads on an explicit action, so the gate is the spec here too.

@@ -85,7 +85,7 @@ export const VLM_MODELS: VlmModelEntry[] = [
     family: "idefics3",
     // Not a preference. An autoregressive decoder on WASM is seconds per token,
     // so the picker disables the row rather than offering a page that looks
-    // broken — the shipped Florence-2 decision, same reasoning.
+    // broken.
     backends: ["webgpu"],
     graphs: ["embed_tokens", "vision_encoder", "decoder_model_merged"],
     bytes: { webgpu: 188_843_109, wasm: 263_889_326 },
@@ -123,11 +123,11 @@ export const DEFAULT_VLM_MODEL = VLM_MODELS[0].id;
  * reads the model's own config and does the real resize and normalisation.
  * Never resize *for* the model.
  *
- * §3.3's DocVQA page will have to reverse this — a document needs pixels before
- * its text is legible to the encoder — so that plan must set its own number
- * rather than inheriting this one. Noted here because inheriting a sibling
- * page's hyperparameter is a mistake this repo has already made once, on
- * `/link-prediction`.
+ * A document-QA page would have to reverse this — a document needs pixels
+ * before its text is legible to the encoder — so any future page sets its own
+ * number rather than inheriting this one. Noted here because inheriting a
+ * sibling page's hyperparameter is a mistake this repo has already made once,
+ * on `/link-prediction`.
  */
 export const MAX_INFERENCE_SIDE = 512;
 
