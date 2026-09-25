@@ -445,6 +445,20 @@ fe-e2e-rank:
 fe-e2e-embed:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "embedding"
 
+# Run the Tabular specs: the whole model ladder fitted in a real browser on a
+# bundled sample, in the `webgpu` project because half of it is real WGSL.
+#
+# **The assertion is above the majority-class baseline**, never "a number
+# appeared". A class prior is the easiest thing in any dataset to learn, so a
+# page whose fit is broken still renders a confident accuracy — /graph-classification
+# settled this. The spec also pins the two claims the page makes in words: the
+# neural network loses to the trees, and the threshold slider re-reads the fit
+# rather than refitting it.
+#
+# Not @slow: nothing is downloaded, so the whole file is seconds.
+fe-e2e-tabular:
+    cd frontend && npx playwright test --project=webgpu --workers=1 webgpu/tabular.spec.ts
+
 # Check every model id (audio + vision + multimodal + text) still resolves on
 # the Hugging Face Hub, that each vision entry publishes the dtypes both backends
 # ask for, that the VLM entries publish their three q4f16 graphs, and that the

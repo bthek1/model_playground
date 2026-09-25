@@ -72,6 +72,13 @@ const REAL_ROUTES: Record<string, string> = {
   // SD-derived and stays on a server. The route adds no new model — it is
   // /depth's checkpoint plus an unprojection.
   "image-to-3d": "/image-to-3d",
+  // The Tabular category, and the only pages in the app that download nothing
+  // at all: there is no checkpoint to fetch because the model is *fitted in the
+  // tab* on the user's own CSV. That inverts the usual privacy sentence — every
+  // other route says "the weights come to you", these say "your file never
+  // leaves the device" — and it is the stronger claim, because tabular data is
+  // the kind people actually mind about.
+  "tabular-classification": "/tabular-classification",
   // The only route on the raw-WebGPU path outside Theory: no checkpoint exists,
   // so the network is written as WGSL and trained in the tab. Covers node
   // classification and the oversmoothing demonstration; link prediction and

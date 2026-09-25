@@ -25,6 +25,7 @@ import { Route as TextGenerationRouteImport } from './routes/text-generation'
 import { Route as TextFeaturesRouteImport } from './routes/text-features'
 import { Route as TextClassificationRouteImport } from './routes/text-classification'
 import { Route as TensorRouteImport } from './routes/tensor'
+import { Route as TabularClassificationRouteImport } from './routes/tabular-classification'
 import { Route as SuperResolutionRouteImport } from './routes/super-resolution'
 import { Route as SummarizationRouteImport } from './routes/summarization'
 import { Route as SignupRouteImport } from './routes/signup'
@@ -132,6 +133,11 @@ const TextClassificationRoute = TextClassificationRouteImport.update({
 const TensorRoute = TensorRouteImport.update({
   id: '/tensor',
   path: '/tensor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TabularClassificationRoute = TabularClassificationRouteImport.update({
+  id: '/tabular-classification',
+  path: '/tabular-classification',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SuperResolutionRoute = SuperResolutionRouteImport.update({
@@ -297,6 +303,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
+  '/tabular-classification': typeof TabularClassificationRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
@@ -342,6 +349,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
+  '/tabular-classification': typeof TabularClassificationRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
@@ -388,6 +396,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
+  '/tabular-classification': typeof TabularClassificationRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
@@ -435,6 +444,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/summarization'
     | '/super-resolution'
+    | '/tabular-classification'
     | '/tensor'
     | '/text-classification'
     | '/text-features'
@@ -480,6 +490,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/summarization'
     | '/super-resolution'
+    | '/tabular-classification'
     | '/tensor'
     | '/text-classification'
     | '/text-features'
@@ -525,6 +536,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/summarization'
     | '/super-resolution'
+    | '/tabular-classification'
     | '/tensor'
     | '/text-classification'
     | '/text-features'
@@ -571,6 +583,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   SummarizationRoute: typeof SummarizationRoute
   SuperResolutionRoute: typeof SuperResolutionRoute
+  TabularClassificationRoute: typeof TabularClassificationRoute
   TensorRoute: typeof TensorRoute
   TextClassificationRoute: typeof TextClassificationRoute
   TextFeaturesRoute: typeof TextFeaturesRoute
@@ -702,6 +715,13 @@ declare module '@tanstack/react-router' {
       path: '/tensor'
       fullPath: '/tensor'
       preLoaderRoute: typeof TensorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tabular-classification': {
+      id: '/tabular-classification'
+      path: '/tabular-classification'
+      fullPath: '/tabular-classification'
+      preLoaderRoute: typeof TabularClassificationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/super-resolution': {
@@ -923,6 +943,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   SummarizationRoute: SummarizationRoute,
   SuperResolutionRoute: SuperResolutionRoute,
+  TabularClassificationRoute: TabularClassificationRoute,
   TensorRoute: TensorRoute,
   TextClassificationRoute: TextClassificationRoute,
   TextFeaturesRoute: TextFeaturesRoute,

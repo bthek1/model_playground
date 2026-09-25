@@ -1234,6 +1234,98 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
+**In-browser tabular models (`src/tabular/` — `/tabular-classification`) — the fifth modality, and the one that inverts the question:**
+
+Every other category asks whether the *weights* fit in a tab; here there are no weights at all —
+the model is **fitted in the tab on the user's own CSV**, so the question is whether the *training*
+fits. Nothing is downloaded, nothing is uploaded, and a reload loses the file by design. See
+[`docs/roadmaps/tabular.md`](../docs/roadmaps/tabular.md).
+
+- **The dataset is the memory budget, so there is no row type anywhere in the module.** One
+  `Float32Array` per column, a `string[]` level table for a categorical one, and an explicit
+  `Uint8Array` missing mask — never a sentinel, because `NaN` and `0` are both real values in
+  real data and any sentinel silently becomes one of them on some file. The parser is ours
+  rather than `papaparse`'s for exactly this reason: a general-purpose parser returns an array
+  of row objects, which is the memory problem the module exists to avoid.
+- **`Number("")` is `0`**, and that is the single most expensive coercion in JavaScript for a
+  file parser: one empty cell in a numeric column becomes a real zero and shifts every mean,
+  every split threshold and every coefficient that column touches, with nothing failing
+  anywhere. A **ragged row is rejected with its line number**, never padded — a best-effort
+  recovery fits a model on shifted columns, which trains happily and is wrong everywhere.
+  Blank lines are skipped on a multi-column file and **kept as a missing value on a
+  single-column one**, because there the two are the same characters and only the width
+  decides.
+- **Phase 0 was a *timing* measurement, not a size one, and it set the caps** (`limits.ts`
+  carries the table). 20 columns, 2 classes, CPU-reference matmul: at 10 000 rows the whole
+  ladder is ≤ 3 s; at 50 000 the worst case is 12 s; at 200 000 boosting at depth 6 is
+  **51 s**. So `MAX_ROWS = 50_000`, boosting's depth caps at **6** and the forest's at 12, and
+  **nothing was cut from the ladder**. Rows past the cap are **sampled evenly**, never
+  truncated to a prefix: the first 50 000 rows of a file sorted by date is a different dataset,
+  and saying "50 000 rows" about it would be true and misleading.
+- **FIT is LOAD relabelled by the route, and the fit itself is a `run`.** Machine A is
+  untouched and no page invents a `fitting` status. `load` hands typed arrays already in the
+  tab to a worker in the same tab and spends nothing; the *fit* costs, so it is a request —
+  which is what puts its metrics on `partial`, with `running` an inflight count and Machine A
+  staying `ready`. The FIT button posts `load` and its `run` together and `fitEngine.ts`
+  **serialises them with a chain** rather than trusting message order; `stop` jumps that queue,
+  or it would be delivered after the fit it was meant to interrupt.
+- **A fit's progress is determinate, and `model/progress.ts` is neither touched nor reused.**
+  Its indeterminate mode is the obvious reach for a page with no bytes and is the wrong one:
+  epochs, trees and rows are hyperparameters the user set a moment ago. The counter is
+  route-owned and the engine **throttles it to ~20 posts a second** — `useModelWorker` sets
+  React state from every `partial`, so a booster posting per tree would re-render a hundred
+  times in eight seconds. (`useLinearTraining` rAF-batches for the same reason; batching one
+  step earlier also skips the `postMessage`.)
+- **Two buttons spend, one per band: FIT in slot 2, PREDICT in the RUN transport.** Choosing a
+  sample, dropping a file, picking the target, toggling a feature and moving a hyperparameter
+  are all *choices*. This is the page where §1.2 is easiest to break — "pick a target column
+  and it fits" feels responsive and is the five-samples-five-inferences failure with a dropdown
+  in front of it. **The threshold slider is the legitimate re-derivation**: it recomputes
+  precision, recall and the whole confusion matrix from the held-out probabilities the fit
+  already returned, on the main thread, with no worker message.
+- **Every encoding decision is fitted on the training rows only** — the imputation mean, the
+  standardiser's variance, the level tables — and `design.ts` takes the training indices
+  explicitly so the rule is impossible to forget. Fitting them over the whole frame raises the
+  held-out score and looks like a better page: `/link-prediction`'s leakage lesson in its
+  cheapest form, and it fails *upward*.
+- **Trees are TypeScript in a Worker with no GPU at all, and the page says why.** Recursive
+  splitting is branch-heavy and does not vectorise; the linear and MLP rungs go through the
+  same `MatmulFn` seam `webgpu/linearModel.ts` uses — which is **reused, not reimplemented**
+  (softmax, cross-entropy and the SGD loop included). The engine reports the compute it
+  *actually* used, so a silent CPU fallback cannot make the page's one sentence untrue.
+- **The MLP ships because it loses.** Asserting "deep learning does not win on tabular data",
+  or omitting the model and explaining why, proves nothing — so it is a genuine fit on the same
+  split, and `just fe-e2e-tabular` asserts it comes in under the boosting model, because that
+  claim is on screen. Measured on the bundled synthetic sample: baseline 0.556, logistic 0.611,
+  forest **0.731**, boosting 0.700, MLP 0.631.
+- **A sample every family gets right demonstrates nothing about any of them**, and is satisfied
+  by a page that fits one model and draws it four times. Penguins (CC0) and wine (CC BY 4.0)
+  are real and near-separable — the linear *floor* wins on both — so the third sample is
+  **generated** (`scripts/make-tabular-samples.mjs`), built around an interaction no straight
+  line can express, and labelled synthetic everywhere it appears. Every sample renders its
+  licence.
+- **Permutation importance has two silent failures.** Forgetting to **restore** a shuffled
+  column poisons every column measured afterwards and still returns a complete, ordered,
+  plausible ranking; and sharing one random stream across columns makes each shuffle depend on
+  how many came before it, so the ranking moves when an unrelated feature is toggled off. It is
+  grouped by the **source** column, not the design column — shuffling one indicator of a
+  one-hot city produces an impossible row rather than a measurement.
+- **Nothing is persisted and nothing is uploaded, and the claim is asserted rather than
+  stated.** `lib/mnistCache.ts` and `lib/proteinsCache.ts` cache their dataset to IndexedDB and
+  are right to — they cache a public benchmark; this would be caching someone's payroll. A
+  reload loses the file, by design. **No route posts an `InferenceRun`** (`createInferenceRun`
+  still has no caller anywhere in `src/`), and tests spy on `fetch`, `indexedDB.open` and
+  `Storage.setItem` during a real fit.
+- **The parse gets its own one-shot worker**, not a message on the fit worker, and the reason
+  is the shared envelope: `ModelResponse`'s `ready` carries `{ model, backend }` and nothing
+  else, so a parse riding Machine A could not hand the column list back — and the page needs
+  the columns *before* it can offer a target.
+- **The bundled CSVs are loaded by dynamic `import()`**, not static `?raw`. Three of them are
+  ~97 KB of text no minifier can compress, and a static import puts every byte in the entry
+  chunk — `npm run check:bundle` fails on exactly that. It works only because nothing imports
+  them statically; one static importer anywhere and the dynamic import buys a microtask and
+  nothing else.
+
 **Commands:**
 - Dev server: `just fe-dev`
 - Build: `just fe-build`

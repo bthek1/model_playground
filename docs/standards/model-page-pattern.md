@@ -473,6 +473,7 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Background Removal | model catalogue **+ its licence** | weight download | image / camera frame | cut-out on a checkerboard, backdrop swap, raw matte, PNG |
 | Super Resolution | model catalogue | weight download | an image, **plus the tile count and time it will cost** | a draggable split against a bicubic baseline |
 | Image to 3D | depth catalogue, reused | weight download **and** a GPU probe | image / camera, focal + density sliders | an orbitable point cloud, or the depth map and why not |
+| Tabular Classification | the **model family** and its hyperparameters | **FIT** — there are no weights, so the band holds the fit and its determinate iteration counter | the CSV, the target column, the feature set, and a row to predict | accuracy **against the majority baseline**, the confusion matrix, permutation importance, and a threshold slider that only re-reads |
 | `/tasks/$slug` placeholder | — | — | — | "not available yet" |
 
 Where LOAD is fast and free (a shader compile), it may auto-run — pass `autoLoad`. The
@@ -525,6 +526,43 @@ ones. (That last one needed a fix: `model/progress.ts` keys its file table on **
 file**, because both checkpoints publish an `onnx/model_fp16.onnx` and the second was
 overwriting the first's entry — the bar reached 100% halfway through and the second
 download read as a stall.)
+
+**LOAD may be a fit rather than a download, and the machine does not change.**
+The Tabular routes have no checkpoint at all: the model is *trained in the tab* on
+the user's own CSV. So slot 2 is labelled **Fit** by the route — a relabelling, not a
+renamed status. Machine A stays `idle → loading → ready | error`, and no page invents
+a `fitting` state: `useModelWorker` owns that enum, and a category that renames it
+costs the one vocabulary that makes every other page readable.
+
+Three consequences worth writing down, because each is a plausible wrong turn:
+
+- **The fit is a `run`, not the load.** What `load` does here is hand typed arrays
+  that are already in the tab to a worker in the same tab — no bytes, no allocation
+  that was not already made. What *costs* is the fit, so the fit is a request, its
+  metrics ride `partial` (progress inside one run, correlated to its id), and
+  `running` stays an inflight count. The FIT button posts the `load` and its `run`
+  together, and the engine serialises the two rather than trusting message order.
+- **A fit's progress is determinate, and `model/progress.ts` is not reused for it.**
+  That module is written around a byte count, and its indeterminate mode is the
+  obvious reach for a page with no bytes. It is the wrong reach: epochs, trees and
+  rows are hyperparameters the user set a moment ago, so `{ done, total }` is known
+  before the fit starts. An indeterminate bar in front of a number the page already
+  has is worse than no bar. The counter is route-owned; a shared module written
+  around bytes must not grow a second meaning for one category.
+- **The `data-testid` contract shifts by one name, not by one slot.** All four bands
+  are present and `slot-1`…`slot-4`, `output-panel`, `output-empty` and `error-note`
+  are unchanged. `model-ready` is emitted by the FIT band when a fit completes rather
+  than when weights land — the same question ("is there something to run?") asked of a
+  page with nothing to download.
+
+**A fitting page's two spending buttons are one per band.** FIT lives in slot 2, the
+slot it replaced; PREDICT lives in the RUN transport row with the row it reads. Putting
+a second Fit button in the transport would make the one control that costs seconds
+appear twice and mean the same thing. Everything else — choosing a sample, dropping a
+file, picking the target, toggling a feature, moving a hyperparameter — is a *choice*
+and spends nothing. This is the page where §1.2 is easiest to break: "pick a target
+column and it fits" feels responsive, and is the five-samples-five-inferences failure
+with a dropdown in front of it.
 
 **A run whose cost the user cannot guess must be quoted before it starts.**
 `/super-resolution` is many inferences, and how many depends on the picture: the RUN
