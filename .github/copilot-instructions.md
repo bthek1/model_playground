@@ -236,6 +236,17 @@ export const Route = createFileRoute('/users/$userId')({
   (`echarts` is heavy — keep it code-split with `lazy(() => import(...))`). One charting library,
   not two: Recharts was a listed alternative that nothing ever imported, and was removed
 - Markdown / LLM output: render with the `src/components/Markdown.tsx` component (`react-markdown` + `remark-gfm`)
+- **A dynamic `import()` of a module something else imports statically does nothing.**
+  Rolldown says so — `[INEFFECTIVE_DYNAMIC_IMPORT] ... is dynamically imported by X but
+  also statically imported by Y, dynamic import will not move module into another chunk` —
+  and it is a **build warning, not an error**, so it survives a green `npm run build`
+  indefinitely. `useRanking` awaited `import("@/model/similarity")` while four other
+  modules imported it statically: the module stayed in the entry chunk and the await
+  bought nothing but a microtask on the dense-search path. Code-splitting works only if
+  **every** importer is lazy, which is why `EChart.tsx` is a wrapper rather than a
+  convention — one static import of `echarts` anywhere undoes it, and
+  `npm run check:bundle` is what fails then. Grep for a module's other importers before
+  reaching for `await import`
 - **Visualizing a model or its internal structure** follows the UI standard in
   `docs/standards/model-visualization.md` — a shared grammar of left-to-right stage/arrow
   schematics (`Stage`/`Arrow`/`ParamChip` in `components/viz/schematic.tsx`), canvas
@@ -352,6 +363,21 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   empty OUTPUT; the GENERATE trigger is gated on `ready` while the input sources are not; and each
   error is in its own slot. Playwright page objects mirror this — `ModelPageObject` is the base
   (its `run(name)` presses the RUN trigger), `AudioPage`/`TensorPage` extend it.
+- **Testing a *task hook* is a different job from testing its route**, and one assertion
+  carries most of it: **which model id reached the pipeline.** A task hook is a thin
+  wrapper, so the bugs available to it are all of the form "the control changed a label and
+  not the checkpoint" — `useTranslate` is the pure case, since a Marian pair *is* a
+  direction, so a hook that accepted `{ from, to }` and dropped them would keep translating
+  correctly in the direction it was built for and every output assertion would still pass.
+  Assert `useTextPipeline` was called with `(meta.task, meta.id, autoLoad, meta.dtypes)`,
+  across **every** catalogue entry rather than one. Two mechanics that matter: **hoist the
+  `load` mock so it is stable across renders** — returning a fresh `vi.fn()` from the mock
+  factory makes every re-render look like a new hook, and `setResult` re-renders, so "did
+  it load" becomes unanswerable and a call-count assertion fails for the wrong reason; and
+  **`expect.anything()` rejects `undefined`**, so an entry with no `dtypes` needs the real
+  value (`meta.dtypes`) rather than a wildcard — worth asserting explicitly, since "no
+  precision pin" is a catalogue answer and a pin arriving later should be a deliberate edit
+  with a measurement behind it.
 - **Reference implementations:** `routes/text-to-speech.tsx` (downloads weights),
   `routes/tensor.tsx` (compile-only), `routes/tasks.$slug.tsx` (the empty case).
   `routes/training.tsx` is the one **documented exception** — a full-bleed canvas HUD that keeps its
@@ -1175,7 +1201,14 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   through" failure from the other direction. **`combineProgress`** sums the bytes against
   the catalogue entry's *measured combined size* — a constant, so the percent is monotonic
   by construction rather than by a stored clamp. Use it for any load spread over two
-  workers.
+  workers. **The same split is why there is no `Promise.allSettled` teardown here**, and
+  the plan asking for one was reading across from `/pose`: one worker owning two models
+  can get a combined teardown wrong, so it needs the combinator. A worker each cannot —
+  the engine rule ("one model live at a time") holds per worker unmodified, each engine
+  disposes its single model with `disposeQuietly`, and `useModelWorker` terminates each
+  worker independently, so a dispose that throws in one is structurally unable to reach
+  the other. Read a borrowed bullet against the shape you actually built: `allSettled`
+  stays right for `/pose` and is dead code here.
 - **RRF does not have the property its name suggests.** "A document both lists rank second
   beats one first in one list and last in the other" is the intuitive reading and is false:
   `1/(k+r)` is convex, so by Jensen the extreme pair wins (at `k=60`, 0.032796 against

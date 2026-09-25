@@ -878,6 +878,20 @@ direction. `combineProgress` sums the bytes against the catalogue entry's **meas
 combined size**, which is a constant, so the percent is monotonic *by construction* rather
 than by a stored clamp.
 
+**The same split is why the plan's `Promise.allSettled` teardown is absent, and it is
+absent rather than forgotten.** That bullet was read across from `/pose`, where one worker
+owns both models: a combined teardown is then something a single engine performs, and
+`allSettled` is what stops a dispose that throws on the detector from skipping the larger
+pose model. A worker each has no combined teardown to perform. The engine rule — one model
+live at a time, null the reference first, then `disposeQuietly` — holds per worker
+unmodified, and `useModelWorker` terminates each worker independently, so a dispose that
+throws in one is *structurally* unable to reach the other. The property `allSettled` was
+wanted for is obtained by the architecture instead of by a combinator. The general lesson
+is the one `/link-prediction` taught about hyperparameters, in a different costume: **a
+bullet inherited from a sibling page describes that page's shape, so check it against the
+one you actually built** — `allSettled` stays correct for `/pose` and would be dead code
+here.
+
 **No new engine arm was needed for the cross-encoder, which is worth knowing before writing
 one.** A cross-encoder *is* a sequence classifier: the pipeline task is
 `text-classification` and the input is a `{ text, text_pair }` object, which `TextInput`
@@ -947,7 +961,7 @@ into the interesting part.
 | Question Answering | **Shipped**, extractive only | `Xenova/distilbert-base-cased-distilled-squad` | 62.8 MiB q8 / 124.5 MiB fp16 |
 | Zero-Shot Classification | Yes, **shipped** | `Xenova/nli-deberta-v3-xsmall` | 25.7 MiB q8 (mobilebert) |
 | Translation | Yes, **one pair at a time** | `Xenova/opus-mt-en-de` per pair | 101.1 MiB q8 |
-| Summarization | **Only if q8-on-WebGPU measures well** | `Xenova/distilbart-cnn-6-6` | 270.8 MiB q8 |
+| Summarization | **Shipped** — q8-on-WebGPU measured well, and is the only fit | `Xenova/t5-small` (floor) · `Xenova/distilbart-cnn-6-6` (better, GPU-only) | 154.4 MB fp16 / 202.5 MB seq2seq-pinned |
 | Feature Extraction | Yes, excellent | `Xenova/all-MiniLM-L6-v2` | **21.9 MiB q8** |
 | Text Generation | Yes, small models, streamed | `HuggingFaceTB/SmolLM2-360M-Instruct` | 260.1 MiB q4f16 |
 | Fill-Mask | **Shipped** | `Xenova/bert-base-uncased` — DistilBERT is cheaper and misses facts | 105.7 MiB q8 / 209.2 MiB fp16 |
@@ -975,7 +989,61 @@ into the interesting part.
 
 ---
 
-## 6. Reference
+## 6. What the tests pin, and what only a real load can
+
+Three layers, and the division between them is the category's most reusable finding:
+**a green unit suite says nothing about whether a model works**, because the unit tests
+mock the runtime away and the mocked Playwright run downloads no weights.
+
+**Unit — the pure parts, exhaustively.** `bm25.ts`, `rrf.ts`, `lead3.ts`, `offsets.ts`,
+`embed.ts`, `mask.ts`, `zeroShot.ts`, `qa/select.ts` and `model/progress.ts` are pure
+functions and are tested as such. This is where a *property* can be asserted rather than
+an example: `lead3` returns **slices of the input** (so joining split pieces can never
+lose the whitespace the split consumed), `highlight()`'s slices **concatenate back to the
+input exactly**, RRF is convex, `truncate()` leaves `‖v‖ = 1` at every width.
+
+**Unit — the hooks, on which model id reached the pipeline.** A task hook is a thin
+wrapper, so almost every bug available to it has the shape *the control changed a label
+and not the checkpoint*. `useTranslate` is the pure case: a Marian pair **is** a
+direction, so a hook that accepted `{ from, to }` and dropped them would keep translating
+correctly in the direction it was built for, and every assertion about the output would
+still pass. The assertion that catches it is
+`useTextPipeline` called with `(meta.task, meta.id, autoLoad, meta.dtypes)`, checked
+across **every** catalogue entry rather than one. Two mechanics, both of which cost a
+debugging cycle to find: hoist the `load` mock so it is **stable across renders** (a fresh
+`vi.fn()` per render makes every re-render look like a new hook, and `setResult`
+re-renders, so "did it load" stops being answerable), and remember that
+**`expect.anything()` rejects `undefined`** — an entry with no `dtypes` needs the real
+value, which is worth asserting explicitly so that a pin arriving later is a deliberate
+edit with a measurement behind it.
+
+**E2E `@slow` — the only layer that can catch a wrong model.** Every finding in §3 that
+cost real debugging was invisible to the other two: `token-classification` returning no
+character offsets at all (§3.2), the `qdq_actions.cc:137` session failure on four
+different seq2seq families (§3.5, §3.6), the `hypothesis_template` default silently
+replacing the prompt on screen (§3.4). Each spec therefore asserts **a known answer on a
+known input**, never "a result appeared":
+
+| recipe | the assertion that matters |
+|---|---|
+| `fe-e2e-text` | a known label on a known sentence; the head-to-head pinned *structurally* (SST-2 has two classes, FinBERT three) |
+| `fe-e2e-qa` | a **character range**, not a string — "the span reads Gustave Eiffel" passes while it marks the second mention of a name |
+| `fe-e2e-zeroshot-text` | a known ranking, then the same premise under a bare `{}` — the scores must **move**, or the page never sent its template |
+| `fe-e2e-fillmask` | the same question through two tokenizers; **the RoBERTa half is the test**, since a hard-coded `[MASK]` cannot pass it |
+| `fe-e2e-embed` | a **spread**, not a threshold — a collapsed embedding space passes any threshold |
+| `fe-e2e-translate` | content words, then the **reverse pair on the same page** |
+| `fe-e2e-summarize` | the key entity, shorter than the input, and the Phase 0 latency **logged not asserted** |
+| `fe-e2e-textgen` | greedy run twice must be **byte-identical** — the only proof the decoding parameters reach the model |
+| `fe-e2e-rank` | the four stages must **disagree**, in a named direction: BM25 must *fail* to find the planted answer |
+| `fe-e2e-models` | every id resolves, every declared dtype file exists, every NLI head's `entailment` index, every embedder's upstream pooling |
+
+The last row is the cheapest and catches the most: it runs in seconds, needs no GPU, and
+verifies the *files* rather than the repos — a repo publishing only an fp32 `model.onnx`
+resolves fine on the API and 404s at load.
+
+---
+
+## 7. Reference
 
 - **Transformers.js pipelines used here**: `text-classification`, `token-classification`,
   `question-answering`, `zero-shot-classification`, `translation`, `summarization`,
