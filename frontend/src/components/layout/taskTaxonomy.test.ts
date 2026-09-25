@@ -208,6 +208,12 @@ describe("Natural Language Processing", () => {
     // `/image-features` rather than taking the slug's own name.
     expect(at("feature-extraction")).toBe("/text-features");
     expect(at("sentence-similarity")).toBe("/sentence-similarity");
+    // §3.5, the category's first seq2seq page: one pair at a time, because a
+    // Marian checkpoint *is* its direction.
+    expect(at("translation")).toBe("/translation");
+    // §3.6, and the page that survived its own Phase 0 gate: distilbart opens a
+    // q8 WebGPU session, which is the only configuration inside the size bar.
+    expect(at("summarization")).toBe("/summarization");
   });
 
   it("leaves Table Question Answering on the placeholder", () => {

@@ -141,6 +141,17 @@ const REAL_ROUTES: Record<string, string> = {
   //
   // `feature-extraction` maps to `/text-features` rather than the slug's own
   // name, mirroring `/image-features`.
+  // §3.5, and the category's first seq2seq page. One language pair at a time,
+  // because a Marian checkpoint *is* its direction — so the direction control
+  // is a model selector in SELECT, and switching it is another ~200 MB
+  // download rather than a toggle.
+  "translation": "/translation",
+  // §3.6, and the page that exists because of one measurement: DistilBART opens
+  // a q8 session on WebGPU (283.9 MB) where every other configuration is over
+  // the size bar, and its q8 WASM session does not open at all. T5-small is the
+  // floor that keeps a CPU path. The lead-3 baseline ships as the output's empty
+  // state — it needs no model, and beating it is harder than it sounds.
+  "summarization": "/summarization",
   "feature-extraction": "/text-features",
   "sentence-similarity": "/sentence-similarity",
   // Three slugs deliberately have no route and fall through to the placeholder,

@@ -622,3 +622,147 @@ test.describe("@slow embeddings", () => {
     );
   });
 });
+
+// --- Translation (§3.5) ------------------------------------------------------
+
+test.describe("@slow translation", () => {
+  test.slow();
+
+  /**
+   * `just fe-e2e-translate`.
+   *
+   * **Content words, not an exact string.** A beam search is not pinned to one
+   * output, and asserting the whole sentence would fail on a decoder update
+   * that is not a regression. Asserting only that "some text appeared" would
+   * pass on a model translating in the wrong direction, which is this page's
+   * own hazard.
+   *
+   * The second half is the one that earns the minutes: **the reverse pair, on
+   * the same page.** A direction control that changed the label without changing
+   * the checkpoint keeps translating en→de, so a German output for a German
+   * input is what catches it — and nothing in the unit suite can, because it
+   * mocks the worker away.
+   */
+  test("translates one pair, and the reverse pair really reverses", async ({
+    page,
+  }) => {
+    test.setTimeout(20 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/translation");
+
+    // The page's own claim, before a byte moves: a direction is a download.
+    await expect(page.getByTestId("pair-is-a-download")).toContainText(
+      /separate checkpoint/i,
+    );
+
+    await model.load();
+    await model.waitForReady();
+
+    await page.locator("#tr-text").fill("The meeting is on Thursday.");
+    await model.run(/^Translate$/);
+
+    const out = page.getByTestId("translation-text");
+    await expect(out).toBeVisible({ timeout: 180_000 });
+    // German content words. "Donnerstag" is the one that cannot appear by
+    // accident in an English passthrough.
+    await expect(out).toContainText(/Donnerstag/i);
+    await expect(page.getByTestId("ran-source")).toContainText("Thursday");
+
+    // Now the reverse direction. It is a second checkpoint and a second
+    // download, which is the page's whole point — so it needs its own LOAD.
+    await page
+      .getByRole("button", { name: /^German → English/ })
+      .first()
+      .click();
+    // A SELECT change spends nothing: the LOAD slot must be back to idle
+    // rather than the page having started a download on its own.
+    await expect(model.loadButton).toBeVisible();
+
+    await model.load();
+    await model.waitForReady();
+
+    await page.locator("#tr-text").fill("Die Besprechung ist am Donnerstag.");
+    await model.run(/^Translate$/);
+
+    const back = page.getByTestId("translation-text");
+    await expect(back).toContainText(/Thursday/i, { timeout: 180_000 });
+    // And the label says which direction produced it, so a reader can tell the
+    // two results apart.
+    await expect(page.getByTestId("output-panel")).toContainText(
+      "German → English",
+    );
+  });
+});
+
+// --- Summarization (§3.6) ----------------------------------------------------
+
+test.describe("@slow summarization", () => {
+  test.slow();
+
+  /**
+   * `just fe-e2e-summarize`.
+   *
+   * Two assertions and one **measurement**.
+   *
+   * The assertions: the summary mentions the article's key entity, and it is
+   * shorter than the article. "Some text appeared" would pass while the model
+   * echoed its input back — which is a real failure mode for a seq2seq whose
+   * `min_length` fights its `max_new_tokens`.
+   *
+   * The measurement is the plan's Phase 0, re-taken where there is a real GPU:
+   * how long one summary takes. The gate was settled on a box with **no** GPU —
+   * only SwiftShader, whose 83 s per summary says nothing about hardware — so
+   * this is where that number comes from, and where a runtime upgrade that
+   * changes it becomes visible rather than silent. It is logged, not asserted:
+   * a latency threshold in CI is a flake, and the point is to have the figure.
+   */
+  test("beats nothing yet, but summarizes a known article and says how long it took", async ({
+    page,
+  }) => {
+    test.setTimeout(12 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/summarization");
+
+    // The baseline needs no model, so it is on screen before anything is
+    // downloaded — the page's best idea, and a correctness requirement rather
+    // than decoration.
+    await expect(page.getByTestId("baseline-preview")).toContainText(
+      /European Space Agency/,
+    );
+    await expect(model.loadButton).toBeVisible();
+
+    await model.load();
+    await model.waitForReady();
+
+    const started = Date.now();
+    await model.run(/^Summarize$/);
+    await expect(page.getByTestId("summary-text")).toBeVisible({
+      timeout: 300_000,
+    });
+    const elapsed = Date.now() - started;
+
+    const summary = (await page.getByTestId("summary-text").innerText()).trim();
+    const article = await page.locator("#sm-text").inputValue();
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[phase 0] one summary on ${await model.backend()}: ${elapsed} ms ` +
+        `(${summary.split(/\s+/).length} words)`,
+    );
+
+    // The article's subject survived into the summary. T5-small is weak — that
+    // is this page's point — but a summarizer that loses the subject entirely
+    // is broken rather than weak.
+    expect(summary.toLowerCase()).toMatch(/rocket|launch|satellite|agency/);
+    // And it actually shortened something.
+    expect(summary.length).toBeLessThan(article.length);
+
+    // The baseline is rendered beside it, from the same captured article — a
+    // metric owes its null model on screen wherever one exists.
+    await expect(page.getByTestId("baseline-text")).toContainText(
+      /European Space Agency/,
+    );
+  });
+});

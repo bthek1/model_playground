@@ -43,6 +43,8 @@ test.describe("@slow model catalogue", () => {
       QA_MODELS,
       FILL_MASK_MODELS,
       EMBED_MODELS,
+      TRANSLATION_MODELS,
+      SUMMARIZER_MODELS,
     } = await import("../../src/text/catalogue");
 
     const ids = [
@@ -71,6 +73,8 @@ test.describe("@slow model catalogue", () => {
       ...ZERO_SHOT_TEXT_MODELS,
       ...FILL_MASK_MODELS,
       ...EMBED_MODELS,
+      ...TRANSLATION_MODELS,
+      ...SUMMARIZER_MODELS,
       // An embedding entry also names the **upstream** repo its pooling is
       // read from, which is a different repo from the ONNX mirror it loads.
       // Both have to exist or the pooling check below cannot run.
@@ -193,6 +197,8 @@ test.describe("@slow model catalogue", () => {
       QA_MODELS,
       FILL_MASK_MODELS,
       EMBED_MODELS,
+      TRANSLATION_MODELS,
+      SUMMARIZER_MODELS,
     } = await import("../../src/text/catalogue");
 
     const SUFFIX: Record<string, string> = {
@@ -215,6 +221,8 @@ test.describe("@slow model catalogue", () => {
       ...ZERO_SHOT_TEXT_MODELS,
       ...FILL_MASK_MODELS,
       ...EMBED_MODELS,
+      ...TRANSLATION_MODELS,
+      ...SUMMARIZER_MODELS,
     ]) {
       const res = await request.get(
         `https://huggingface.co/api/models/${model.id}?blobs=true`,
@@ -228,11 +236,35 @@ test.describe("@slow model catalogue", () => {
       const graphs = model.graphs ?? (["model"] as const);
       for (const backend of backends) {
         const dtype = model.dtypes?.[backend] ?? DEFAULT_DTYPE[backend];
-        const suffix = SUFFIX[String(dtype)];
-        if (suffix === undefined) continue;
 
         let total = 0;
         for (const graph of graphs) {
+          // A dtype is either one precision for the whole model or **one per
+          // ONNX module**, and until the seq2seq pages arrived only the first
+          // shape existed here. The per-module form was silently *skipped*:
+          // `SUFFIX[String({…})]` is `SUFFIX["[object Object]"]`, which is
+          // `undefined`, which took the `continue` below — so every entry
+          // pinning a module-level precision went unchecked, including the
+          // download size it quotes. That is exactly the class of entry most
+          // worth checking, because it exists only because a file is missing
+          // or a session will not open.
+          const perGraph =
+            typeof dtype === "string"
+              ? dtype
+              : (dtype as Record<string, string>)[graph];
+          if (perGraph === undefined) {
+            problems.push(
+              `${model.id} (${backend}) -> dtype spec names no precision for graph "${graph}"`,
+            );
+            continue;
+          }
+          const suffix = SUFFIX[perGraph];
+          if (suffix === undefined) {
+            problems.push(
+              `${model.id} (${backend}) -> unknown dtype "${perGraph}"`,
+            );
+            continue;
+          }
           const file = `onnx/${graph}${suffix}.onnx`;
           const size = sizeOf(file);
           if (size == null) {

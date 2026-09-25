@@ -1,17 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import { isHeavyDownload, sizeEstimate } from "@/model/size";
+import { SEQ2SEQ_WASM_DTYPES } from "@/model/backend";
+import { HEAVY_MODEL_BYTES, isHeavyDownload, sizeEstimate } from "@/model/size";
 
 import { entitySlot } from "./highlight";
+import { lead, sentenceCount, wordCount } from "./lead3";
 import {
+  ARTICLE_SAMPLES,
   CLASSIFIER_SAMPLES,
   DEFAULT_EMBED_MODEL,
   DEFAULT_FILL_MASK,
   DEFAULT_NER_MODEL,
   DEFAULT_REDACTED,
+  DEFAULT_SUMMARIZER,
   DEFAULT_TEXT_CLASSIFIER,
+  DEFAULT_TRANSLATION_MODEL,
   DEFAULT_ZERO_SHOT_TEXT,
   EMBED_MODELS,
+  FAITHFULNESS_MODEL,
   FEATURE_TEXT_SAMPLES,
   FILL_MASK_MODELS,
   MASK_PROBES,
@@ -19,9 +25,14 @@ import {
   MASK_TOKENS,
   NER_MODELS,
   NER_SAMPLES,
+  LEAD_N,
+  NLLB_BYTES,
   PAIR_SAMPLES,
+  SUMMARIZER_MODELS,
   TEXT_CLASSIFIER_MODELS,
   TOP_K,
+  TRANSLATION_MODELS,
+  TRANSLATION_SAMPLES,
   ZERO_SHOT_SAMPLES,
   ZERO_SHOT_TEXT_MODELS,
 } from "./catalogue";
@@ -41,13 +52,31 @@ describe("the text catalogue", () => {
       ...ZERO_SHOT_TEXT_MODELS,
       ...FILL_MASK_MODELS,
       ...EMBED_MODELS,
+      ...TRANSLATION_MODELS,
+      ...SUMMARIZER_MODELS,
     ]) {
-      expect(m.bytes.webgpu, `${m.id} webgpu bytes`).toBeGreaterThan(0);
-      expect(m.bytes.wasm, `${m.id} wasm bytes`).toBeGreaterThan(0);
+      // Both numbers, **for the backends the entry claims**. Two summarization
+      // entries have no CPU path at all — a quantized seq2seq decoder will not
+      // open a WASM session and the unquantized build is past the size bar — so
+      // they declare `backends: ["webgpu"]`, and quoting a WASM figure for a
+      // download that is never offered would be a price for a thing that is not
+      // for sale. `model-ids.spec.ts` scopes its Hub check the same way.
+      for (const backend of m.backends ?? (["webgpu", "wasm"] as const)) {
+        expect(m.bytes[backend], `${m.id} ${backend} bytes`).toBeGreaterThan(0);
+      }
       // fp16 is two bytes a parameter and q8 is one, so the GPU download is
-      // the bigger of the pair. A pair the other way round is a transposed
-      // measurement, which reads as plausible and is not.
-      expect(m.bytes.webgpu!, `${m.id}`).toBeGreaterThan(m.bytes.wasm!);
+      // normally the bigger of the pair, and a transposed measurement reads as
+      // plausible. **Unless the entry pins a more expensive WASM precision** —
+      // which every seq2seq entry does, because a quantized decoder cannot
+      // open a session on the bundled WASM provider at all
+      // (`SEQ2SEQ_WASM_DTYPES`). So the invariant is not "webgpu is bigger", it
+      // is "an inversion is *explained by a pin*, never accidental".
+      if ((m.bytes.wasm ?? 0) > (m.bytes.webgpu ?? 0)) {
+        expect(
+          m.dtypes?.wasm,
+          `${m.id} quotes a bigger WASM download than WebGPU without pinning a WASM dtype — that is a transposed measurement, not a precision decision`,
+        ).toBeDefined();
+      }
     }
   });
 
@@ -405,5 +434,161 @@ describe("the embedding catalogue", () => {
       expect(s.text.length).toBeLessThan(200);
       expect(s.hint.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("the translation catalogue", () => {
+  it("gives every entry a distinct direction, labelled rather than repo-named", () => {
+    const directions = TRANSLATION_MODELS.map((m) => `${m.source}-${m.target}`);
+    expect(new Set(directions).size).toBe(TRANSLATION_MODELS.length);
+    for (const m of TRANSLATION_MODELS) {
+      // The row's name is the direction, not `Xenova/opus-mt-en-de`.
+      expect(m.label).toContain("→");
+      expect(m.direction).toBe(m.label);
+      expect(m.source).not.toBe(m.target);
+    }
+  });
+
+  // Six rather than two, so "a specialist beats one generalist" is visible: the
+  // whole catalogue is still comfortably more useful than one NLLB download,
+  // and each *individual* pair is a fraction of it.
+  it("ships enough pairs to make the specialists argument, and stays under NLLB per pair", () => {
+    expect(TRANSLATION_MODELS.length).toBeGreaterThanOrEqual(6);
+    for (const m of TRANSLATION_MODELS) {
+      expect(
+        Math.max(m.bytes.webgpu!, m.bytes.wasm!),
+        `${m.id} against one NLLB download`,
+      ).toBeLessThan(NLLB_BYTES / 2);
+    }
+  });
+
+  // A measurement, not a precaution: a Marian decoder's session does not open
+  // at all on the WASM provider bundled with 4.2.0. Every entry references the
+  // one spec in `model/backend.ts` rather than repeating the literal.
+  it("pins the WASM precision on every pair, via the shared seq2seq spec", () => {
+    for (const m of TRANSLATION_MODELS) {
+      expect(m.dtypes?.wasm, `${m.id} wasm dtype`).toEqual(SEQ2SEQ_WASM_DTYPES);
+      // And declares the two graphs it actually downloads, so the Hub check
+      // looks at the right files — `model.onnx` does not exist in these repos.
+      expect(m.graphs).toEqual(["encoder_model", "decoder_model_merged"]);
+    }
+  });
+
+  // The open question the plan left for Phase 2, and it resolves itself. The
+  // plan worried en↔de (199.6 MiB at fp16) would slip under LARGE_MODEL_BYTES
+  // while en→es (213.1 MiB) crossed it, leaving one warning on a page of
+  // identical models. With the WASM pin the CPU download is 271–289 MB for
+  // every pair and `large` keys off the bigger of the two, so every pair warns
+  // — consistently, about a number the user will actually pay.
+  it("warns consistently across every pair, not on some of them", () => {
+    const warns = TRANSLATION_MODELS.map(
+      (m) => sizeEstimate(m.params, m.bytes).large,
+    );
+    expect(warns.every(Boolean), "every pair warns").toBe(true);
+    // And none is heavy enough for the second opt-in — these are ~200-290 MB.
+    for (const m of TRANSLATION_MODELS) {
+      expect(isHeavyDownload(m.bytes), `${m.id}`).toBe(false);
+    }
+  });
+
+  it("defaults to a pair in its own list", () => {
+    expect(
+      TRANSLATION_MODELS.some((m) => m.id === DEFAULT_TRANSLATION_MODEL),
+    ).toBe(true);
+  });
+
+  // A pair with no sample text is a page that cannot be driven without typing
+  // in a language the user may not speak.
+  it("ships samples for every source language it offers", () => {
+    for (const m of TRANSLATION_MODELS) {
+      const samples = TRANSLATION_SAMPLES[m.source];
+      expect(samples, `samples for ${m.source}`).toBeDefined();
+      expect(samples.length).toBeGreaterThan(0);
+      for (const s of samples) {
+        expect(s.text.length).toBeGreaterThan(0);
+        expect(s.hint.length).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe("the summarization catalogue", () => {
+  // The whole page turns on one measurement: distilbart opens a q8 session on
+  // WebGPU. Every other configuration is over §0's bar, so the pin is not a
+  // preference and un-pinning it would quietly take the page over the bar.
+  it("pins q8 on WebGPU for the BART entries, which is what keeps them in budget", () => {
+    for (const m of SUMMARIZER_MODELS) {
+      if (!m.id.includes("bart")) continue;
+      expect(m.dtypes?.webgpu, `${m.id} webgpu dtype`).toBe("q8");
+      expect(
+        m.bytes.webgpu!,
+        `${m.id} must stay inside the ~500 MB feasibility bar`,
+      ).toBeLessThan(HEAVY_MODEL_BYTES);
+    }
+  });
+
+  // A quantized seq2seq decoder cannot open a WASM session at all, and unlike
+  // Marian the fp32-decoder fallback does not fit here (742.8 MB). So the BART
+  // entries have no CPU path and must say so, or the picker offers a download
+  // that fails at the end of itself.
+  it("declares the BART entries GPU-only rather than letting the load fail", () => {
+    for (const m of SUMMARIZER_MODELS) {
+      if (!m.id.includes("bart")) continue;
+      expect(m.backends, `${m.id} backends`).toEqual(["webgpu"]);
+      expect(m.bytes.wasm, `${m.id} must not quote a WASM price`).toBeUndefined();
+    }
+  });
+
+  // Which would leave the page with no floor at all — so the default is the
+  // entry that does run on both, and it is the cheap one.
+  it("keeps a floor that runs on CPU, and defaults to it", () => {
+    const def = SUMMARIZER_MODELS.find((m) => m.id === DEFAULT_SUMMARIZER);
+    expect(def, "the default is in its own list").toBeDefined();
+    expect(def!.backends, "the default must run everywhere").toBeUndefined();
+    expect(def!.bytes.wasm!).toBeLessThan(HEAVY_MODEL_BYTES);
+    expect(def!.dtypes?.wasm, "…which needs the seq2seq pin").toEqual(
+      SEQ2SEQ_WASM_DTYPES,
+    );
+  });
+
+  it("declares the two graphs every seq2seq entry downloads", () => {
+    for (const m of SUMMARIZER_MODELS) {
+      expect(m.graphs).toEqual(["encoder_model", "decoder_model_merged"]);
+    }
+  });
+
+  // The page's subject is the baseline, so the samples have to be ones where the
+  // baseline is *hard* — news, written answer-first. A sample set of rambling
+  // prose would flatter the model.
+  it("ships articles long enough for lead-3 to be a real baseline", () => {
+    expect(ARTICLE_SAMPLES.length).toBeGreaterThanOrEqual(3);
+    for (const s of ARTICLE_SAMPLES) {
+      expect(sentenceCount(s.text), `${s.id} sentences`).toBeGreaterThan(LEAD_N);
+      expect(wordCount(s.text), `${s.id} words`).toBeGreaterThan(60);
+      expect(s.hint.length).toBeGreaterThan(0);
+      // And lead-3 is a strict prefix of the article, never the whole thing —
+      // otherwise the comparison is against the input itself.
+      const baseline = lead(s.text, LEAD_N);
+      expect(s.text).toContain(baseline);
+      expect(baseline.length).toBeLessThan(s.text.length);
+    }
+  });
+
+  // The faithfulness model is borrowed rather than added: it is the zero-shot
+  // page's cheapest entry, so the second opt-in costs tens of megabytes rather
+  // than hundreds.
+  it("borrows its entailment model from the zero-shot catalogue", () => {
+    const borrowed = ZERO_SHOT_TEXT_MODELS.find(
+      (m) => m.id === FAITHFULNESS_MODEL,
+    );
+    expect(borrowed, "the faithfulness model is a zero-shot entry").toBeDefined();
+    expect(borrowed!.task).toBe("zero-shot-classification");
+    // The cheapest one, and by a distance — a second model is only honest here
+    // if it is small.
+    const cheapest = Math.min(
+      ...ZERO_SHOT_TEXT_MODELS.map((m) => m.bytes.wasm!),
+    );
+    expect(borrowed!.bytes.wasm!).toBe(cheapest);
+    expect(borrowed!.bytes.wasm!).toBeLessThan(50e6);
   });
 });

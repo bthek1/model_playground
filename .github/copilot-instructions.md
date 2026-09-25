@@ -850,7 +850,7 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   `data-testid` on a wrapper.
 - **OCR now has no page**, and **metric depth has no path** (ZoeDepth has no export).
 
-**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`, `/text-features`, `/sentence-similarity`) — the fourth modality, and the cheapest module in the app:**
+**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`, `/text-features`, `/sentence-similarity`, `/translation`, `/summarization`) — the fourth modality, and the cheapest module in the app:**
 
 - **There is no decode step, and that is the point.** No text equivalent of `audio/io.ts`
   or `vision/image.ts` exists: the input is already a string, so there is no
@@ -1035,6 +1035,65 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   Transformers.js fact and a unit vector has no modality. The text engine now flattens
   every result through `model/serialize.ts` exactly as vision's does — a `Tensor` does not
   arrive stripped of its methods, it refuses to be cloned at all.
+
+- **Translation is one pair at a time, and a pair is a model.** There is no language
+  argument in the task: a Marian checkpoint carries its own direction and `tr(text)` takes
+  nothing else. So the direction control is a *model selector* in SELECT, switching it is
+  another ~209 MB download, and `useTranslate` takes no language at all — a hook that
+  accepted `{ from, to }` and dropped them would look like it worked, because the model
+  keeps translating the way it was built. `just fe-e2e-translate` asserts the **reverse
+  pair on the same page**, which is the only thing that catches a control that changed the
+  label without changing the checkpoint.
+- **A quantized seq2seq decoder cannot open a WASM session, on any family.** Marian and
+  BART are the third and fourth to hit `qdq_actions.cc:137 … Missing required scale` after
+  Whisper and Donut, so the spec is now **`SEQ2SEQ_WASM_DTYPES`** in `model/backend.ts` —
+  `asrLoadOpts` is expressed in terms of it and every seq2seq entry references it, rather
+  than the literal being copied a fifth time. The encoder quantizes fine; only the decoder
+  pays full precision. It costs Marian 2.7x (101 MB → 271 MB) and it costs DistilBART its
+  **entire CPU path**, because there the fallback is 742.8 MB. Only a real in-browser load
+  catches it: the unit suite mocks the runtime, the mocked E2E run loads no bytes,
+  `fe-e2e-models` confirms the files exist, and the identical call loads under
+  `onnxruntime-node`.
+- **`/translation`'s `LARGE_MODEL_BYTES` inconsistency resolved itself.** The plan expected
+  en↔de (199.6 MiB fp16) to slip under the warning while en→es (213.1 MiB) crossed it. With
+  the WASM pin the CPU download is 271–289 MB for every pair and `sizeEstimate` keys `large`
+  off the **bigger** of the two, so every pair warns consistently. The inconsistency was an
+  artefact of a WASM path that does not exist — worth remembering before writing prose to
+  explain a threshold.
+- **NLLB is 1.76 GB, not the 894.6 MB the roadmap quotes** — that is its q8 figure, and a
+  seq2seq's q8 is unreachable on WASM and not what `loadOpts()` asks for on WebGPU. So
+  `/translation` states the trade-off **per pair** (one specialist ≈ an eighth of one NLLB)
+  rather than summing its catalogue, which comes to 1.6 GB and reads as an argument against
+  the design.
+- **`/summarization` survived its Phase 0 gate by exactly one configuration**, and the pin
+  is what keeps the page alive rather than a preference: `distilbart-cnn-6-6` at
+  `q8`/WebGPU is 283.9 MB and opens; fp16 is 563.6 MB, q8-on-WASM does not open, and the
+  fp32-decoder fallback is 742.8 MB. Un-pinning `dtypes.webgpu` takes the page over the
+  size bar silently, so a test asserts it. The **latency** half of Phase 0 is still open —
+  the measurement box had only SwiftShader, whose 83 s per summary says nothing about
+  hardware — so `just fe-e2e-summarize` logs the figure where there is a GPU.
+- **A page needs a floor, so `/summarization` opens with `Xenova/t5-small`** (154 MB
+  WebGPU / 202 MB WASM, both verified), which the plan did not consider. DistilBART is
+  GPU-only by declaration. T5-small is a *much* weaker summarizer and on this page that is
+  a feature: the subject is the lead-3 baseline, and a model that visibly loses to three
+  sentences of the article makes the lesson concrete.
+- **The lead-3 baseline is the OUTPUT slot's empty state.** It needs no model, so it is on
+  screen before anything downloads, already saying what the model will be measured
+  against — which keeps `output-empty` present for the four-slot contract *and* gives
+  Phase 1 its "rendered from idle". `text/lead3.ts` returns offsets and **slices**, never a
+  rebuild: joining split pieces loses whichever whitespace the split consumed, so the
+  baseline would quietly differ from the article it claims to quote. Its splitter gets
+  "Dr. Smith" wrong on purpose, and both the page and a test say so. The summary and the
+  baseline are captured from the **same** article inside the run, so editing the box
+  afterwards moves neither.
+- **The faithfulness check borrows a model rather than adding one.** Scoring a summary
+  sentence against the article *is* a one-label NLI call (`softmaxEach` is true when
+  `labels.length === 1`), so it reuses `/zero-shot-classification`'s cheapest entry
+  (27 MB on CPU) with its own opt-in and its own LOAD. **One pass per sentence**, and per
+  sentence rather than once for the whole summary because an aggregate hides the single
+  fabricated clause. It must pass `hypothesis_template: "{}"` — the third page to need
+  that — and it states its own caveat: MNLI premises are single sentences, so an article is
+  out of distribution and truncated at 512 tokens.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
