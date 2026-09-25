@@ -54,7 +54,7 @@ import {
 import { GALLERY_IMAGES, type GalleryImage } from "@/vision/gallery";
 import { downscale } from "@/vision/image";
 import { IMAGE_SAMPLES } from "@/vision/samples";
-import { topK, type Neighbour } from "@/vision/similarity";
+import { topK, type Neighbour } from "@/model/similarity";
 
 export const Route = createFileRoute("/image-features")({
   component: ImageFeaturesPage,

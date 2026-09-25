@@ -850,7 +850,7 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   `data-testid` on a wrapper.
 - **OCR now has no page**, and **metric depth has no path** (ZoeDepth has no export).
 
-**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`) — the fourth modality, and the cheapest module in the app:**
+**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`, `/text-features`, `/sentence-similarity`) — the fourth modality, and the cheapest module in the app:**
 
 - **There is no decode step, and that is the point.** No text equivalent of `audio/io.ts`
   or `vision/image.ts` exists: the input is already a string, so there is no
@@ -998,6 +998,43 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
 - **`just fe-e2e-fillmask` asserts *paris* on BERT and RoBERTa — never DistilBERT**, which
   genuinely does not know it (at fp32 it is worse: marseille, nantes, toulouse). **The
   RoBERTa half is the test**: the same question through a different tokenizer.
+- **Embeddings ship as two routes over one engine** (`/text-features`, `/sentence-similarity`),
+  and the pooling is **catalogue data, not a pinned constant**. The plan said to pin
+  `{ pooling: "mean", normalize: true }` in the engine; only the second half is right.
+  Which pooling a sentence embedding uses is part of how the checkpoint was trained —
+  mean for all-MiniLM/all-mpnet/Nomic, **CLS** for BGE and gte-modernbert — and
+  mean-pooling a CLS-trained model returns a vector of the right width that ranks
+  plausibly and is wrong, with nothing failing. So `EmbedModel.pooling` carries it,
+  `EmbedModel.upstream` names the repo whose `1_Pooling/config.json` is the authority
+  (**the `Xenova/*` ONNX mirrors do not publish that file**, so it cannot be read at load
+  time), and `just fe-e2e-models` checks the pair. `normalize: true` stays pinned in the
+  engine, because every consumer compares by cosine.
+- **The collapse is the failure, so the assertion is a spread.** Without pooling and
+  normalisation every similarity lands in a narrow band near 0.9 and each pair looks
+  alike — a page that appears to work. "The paraphrase scores above 0.5" passes
+  comfortably on exactly those vectors, so `just fe-e2e-embed` asserts the **gap** between
+  a paraphrase and an unrelated pair. A missing `pooling` now also fails loudly one layer
+  down: `toVector` throws on an unpooled `[1, T, D]` hidden state rather than taking row 0,
+  which is a real vector that would rank.
+- **Matryoshka truncation is a *measurement*, because four of the five entries are not
+  MRL-trained.** So `truncate()` returns `kept` — the fraction of the vector's length the
+  prefix held, which is exactly the factor a *missing* renormalisation would scale every
+  similarity by — and the pages report it instead of claiming the cut was free.
+  `nomic-embed-text-v1.5` is there so the genuine MRL case is one click away, and it is
+  the entry that needs a **task prefix**: `prefixes` is named by use (`symmetric`/`query`/
+  `document`) so a page cannot pick the wrong one, and the composed string is on screen
+  before the click. Truncation re-derives and spends nothing, like `/vad`'s threshold.
+- **Cache embeddings by the exact string, never by a hash.** A collision serves another
+  sentence's vector with nothing failing — a confident wrong number on a similarity page —
+  and the strings are the user's own input in one tab, so there is nothing to save. Keyed
+  on the **composed** string, because the same sentence as a query and as a document is two
+  different vectors. A model change clears it, asserted directly.
+- **`feature-extraction` is the first text task whose result is a `Tensor`**, so
+  `vision/serialize.ts` and `vision/similarity.ts` **moved** to `model/` rather than being
+  copied (the `backend.ts`/`size.ts` move out of `audio/`, again): a `Tensor` is a
+  Transformers.js fact and a unit vector has no modality. The text engine now flattens
+  every result through `model/serialize.ts` exactly as vision's does — a `Tensor` does not
+  arrive stripped of its methods, it refuses to be cloned at all.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 

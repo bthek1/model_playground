@@ -21,7 +21,7 @@
 | Zero-Shot Classification (§3.4) | [`/zero-shot-classification`](../../frontend/src/routes/zero-shot-classification.tsx) | **Shipped** — your own labels, N labels cost N passes, 26–816 MB |
 | Translation (§3.5) | — | Planned — [#45](https://github.com/bthek1/model_playground/issues/45) |
 | Summarization (§3.6) | — | Planned, **gated on a measurement** — [#46](https://github.com/bthek1/model_playground/issues/46) |
-| Feature Extraction · Sentence Similarity (§3.7) | — | Planned — [#43](https://github.com/bthek1/model_playground/issues/43) |
+| Feature Extraction · Sentence Similarity (§3.7) | [`/text-features`](../../frontend/src/routes/text-features.tsx) · [`/sentence-similarity`](../../frontend/src/routes/sentence-similarity.tsx) | **Shipped** — one engine, two rows; the pooling is catalogue data, 22–284 MB |
 | Text Generation (§3.8) | — | Planned — [#47](https://github.com/bthek1/model_playground/issues/47) |
 | Fill-Mask (§3.9) | [`/fill-mask`](../../frontend/src/routes/fill-mask.tsx) | **Shipped** — four base encoders, three tokenizer families, 68–300 MB |
 | Text Ranking (§3.10) | — | Planned — [#44](https://github.com/bthek1/model_playground/issues/44) |
@@ -509,20 +509,83 @@ a precaution.** q8-on-WebGPU is exactly the combination `/super-resolution` meas
 The lead-3 baseline (`text.split(/(?<=[.!?])\s/).slice(0, 3)`) travels beside every
 summary, per `/graph-classification`'s rule that a metric owes its null model on screen.
 
-### 3.7 Feature Extraction · Sentence Similarity — planned ([#43](https://github.com/bthek1/model_playground/issues/43))
+### 3.7 Feature Extraction · Sentence Similarity — **shipped**
 
-| entry | dim | q8 | fp16 |
-|---|---|---|---|
-| `Xenova/all-MiniLM-L6-v2` | 384 | **21.9 MiB** | 43.2 MiB |
-| `Xenova/all-mpnet-base-v2` | 768 | 105.0 MiB | 208.0 MiB |
-| `Xenova/bge-base-en-v1.5` | 768 | 105.0 MiB | 208.0 MiB |
-| `Alibaba-NLP/gte-modernbert-base` | 768 | 143.3 MiB | 284.5 MiB |
+Taxonomy tasks **Feature Extraction** → [`/text-features`](../../frontend/src/routes/text-features.tsx)
+(named for `/image-features`, not for the slug) and **Sentence Similarity** →
+[`/sentence-similarity`](../../frontend/src/routes/sentence-similarity.tsx) ·
+[#43](https://github.com/bthek1/model_playground/issues/43).
 
-The cheapest floor in the category. **`{ pooling: "mean", normalize: true }` is not
-optional**, and omitting it is the page's one silent failure: raw BERT is not an embedding
-model, and without the two arguments every similarity collapses into a narrow band near
-0.9 — a page that appears to work, with a number that means nothing. The E2E assertion is
-a **spread**, not a value.
+Two taxonomy rows, one engine, one catalogue, one hook — and two routes, because they are
+two questions and two Hub tags (the same argument that keeps `/visual-question-answering`
+out of `/image-text-to-text`). The cheapest floor in the app: the default download is
+**22 MiB**.
+
+| entry | dim | pooling | q8 (WASM) | fp16 (WebGPU) |
+|---|---|---|---|---|
+| `Xenova/all-MiniLM-L6-v2` | 384 | mean | **21.9 MiB** | 43.2 MiB |
+| `Xenova/bge-base-en-v1.5` | 768 | **cls** | 105.0 MiB | 208.0 MiB |
+| `Xenova/all-mpnet-base-v2` | 768 | mean | 105.0 MiB | 208.0 MiB |
+| `nomic-ai/nomic-embed-text-v1.5` | 768 | mean | 130.9 MiB | 261.2 MiB |
+| `Alibaba-NLP/gte-modernbert-base` | 768 | **cls** | 143.3 MiB | 284.5 MiB |
+
+Re-measured off the Hub and re-checked by `just fe-e2e-models`.
+`onnx-community/Qwen3-Embedding-0.6B-ONNX` measures 613.5 MB and stays cut — a 22 MB model
+does this page's job, and §0's bar is about the floor.
+
+**The pooling is a property of the checkpoint, and the plan was wrong to pin it.** The plan
+said to pin `{ pooling: "mean", normalize: true }` in the engine, and the second half is
+right: normalising is not a preference, every consumer here compares by cosine, so it is
+pinned and cannot be turned off. The first half is not. A sentence embedding *is* a pooling
+of the token rows, and which pooling is part of how the model was trained — mean for
+all-MiniLM, all-mpnet and Nomic; **CLS** for BGE and gte-modernbert, read from each
+upstream repo's own `1_Pooling/config.json`. Mean-pooling a CLS-trained checkpoint returns
+a vector of the right width that ranks plausibly and is wrong, with nothing failing
+anywhere. So `pooling` is catalogue data (`EmbedModel.pooling`), it is on screen in SELECT
+before a byte downloads, and it travels with `upstream` because **the `Xenova/*` ONNX
+mirrors do not publish that file** — there is no way to discover it at load time.
+`just fe-e2e-models` reads it back from the upstream repo and fails on a mismatch; the
+catalogue ships both poolings one click apart so the hazard is reachable rather than
+theoretical.
+
+**The plan's silent failure is real, and the guard is a spread rather than a threshold.**
+Without pooling and normalisation the similarities collapse into a narrow band near 0.9 and
+every pair looks alike — a page that appears to work with a number that means nothing. "The
+paraphrase scores above 0.5" passes comfortably on exactly those collapsed vectors, so
+`just fe-e2e-embed` asserts the **gap** between a paraphrase and an unrelated pair
+(measured on all-MiniLM: ~0.62 against ~0.02). Omitting `pooling` now also fails *loudly*
+one layer down — `toVector` throws on the unpooled `[1, T, D]` hidden state rather than
+taking row 0, which is a real vector that would rank plausibly.
+
+**Matryoshka truncation is a measurement here, not a demonstration, because four of the
+five entries are not Matryoshka-trained.** MRL is a claim about checkpoints whose *prefix*
+dimensions were explicitly optimised to stand alone; all-MiniLM, all-mpnet, BGE and
+gte-modernbert never were. Rather than assert the cut is free, the pages report what it
+cost: `truncate()` returns `kept`, the fraction of the vector's length the prefix held, and
+that is exactly the factor a *missing* renormalisation would scale every similarity by.
+`nomic-embed-text-v1.5` is in the catalogue so the genuine MRL case is one click away — and
+it is the entry that needs a **task prefix**, which is why `EmbedModel.prefixes` is not
+dead code. Prefixes are named by use (`symmetric` / `query` / `document`) rather than by
+string, so a page cannot reach for the wrong one; the composed string is on screen before
+the click, the `/zero-shot-classification` hypothesis-template rule one modality over.
+
+**Two modules moved rather than being copied.** `vision/serialize.ts` →
+[`model/serialize.ts`](../../frontend/src/model/serialize.ts) and `vision/similarity.ts` →
+[`model/similarity.ts`](../../frontend/src/model/similarity.ts): a `Tensor` is a
+Transformers.js fact and a unit vector has no modality, and this category needed all of
+both. Same move `backend.ts` and `size.ts` made out of `audio/`. That matters here because
+`feature-extraction` is the **first text task whose result is a `Tensor`** — which does not
+merely arrive stripped of its methods, it refuses to be cloned at all
+(`#<_Tensor> could not be cloned`), so the text engine now flattens every result exactly as
+vision's does.
+
+**Embed once, keyed by the exact string — not by a hash of it.** A hash is the obvious
+reach and is strictly worse: a collision serves *another sentence's* embedding with nothing
+failing, which on a similarity page is a confident wrong number. The strings are the user's
+own input, in a Map, in one tab. The cache is keyed on the **composed** string (prefix
+included), because the same sentence as a query and as a document is two different vectors.
+A model change clears it, asserted directly — a 384-d MiniLM vector served for a 768-d BGE
+query is a wrong answer with no error attached.
 
 ### 3.8 Text Generation — planned ([#47](https://github.com/bthek1/model_playground/issues/47))
 

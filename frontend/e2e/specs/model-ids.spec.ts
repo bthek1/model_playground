@@ -42,6 +42,7 @@ test.describe("@slow model catalogue", () => {
       ZERO_SHOT_TEXT_MODELS,
       QA_MODELS,
       FILL_MASK_MODELS,
+      EMBED_MODELS,
     } = await import("../../src/text/catalogue");
 
     const ids = [
@@ -69,6 +70,11 @@ test.describe("@slow model catalogue", () => {
       ...NER_MODELS,
       ...ZERO_SHOT_TEXT_MODELS,
       ...FILL_MASK_MODELS,
+      ...EMBED_MODELS,
+      // An embedding entry also names the **upstream** repo its pooling is
+      // read from, which is a different repo from the ONNX mirror it loads.
+      // Both have to exist or the pooling check below cannot run.
+      ...EMBED_MODELS.map((m) => ({ id: m.upstream })),
       // A pose entry is a *pair*, so its own `id` is a composite that resolves
       // to nothing on the Hub — the two halves are what get downloaded.
       ...POSE_MODELS.flatMap((m) => [m.detector, m.pose]),
@@ -186,6 +192,7 @@ test.describe("@slow model catalogue", () => {
       ZERO_SHOT_TEXT_MODELS,
       QA_MODELS,
       FILL_MASK_MODELS,
+      EMBED_MODELS,
     } = await import("../../src/text/catalogue");
 
     const SUFFIX: Record<string, string> = {
@@ -207,6 +214,7 @@ test.describe("@slow model catalogue", () => {
       ...NER_MODELS,
       ...ZERO_SHOT_TEXT_MODELS,
       ...FILL_MASK_MODELS,
+      ...EMBED_MODELS,
     ]) {
       const res = await request.get(
         `https://huggingface.co/api/models/${model.id}?blobs=true`,
@@ -445,5 +453,60 @@ test.describe("@slow model catalogue", () => {
       }
     }
     expect(wrong, "VLM sizes that have drifted from the Hub").toEqual([]);
+  });
+
+  test("every embedding entry declares the pooling its training config says", async ({
+    request,
+  }) => {
+    // The `/fill-mask` mask-token check, transplanted to the field that has the
+    // same shape: a fact about the checkpoint that the page needs *before* the
+    // download and that nothing at load time can discover.
+    //
+    // A sentence embedding is a pooling of the token rows, and which pooling is
+    // part of how the model was trained — mean for all-MiniLM and all-mpnet,
+    // CLS for BGE and gte-modernbert. Pool a CLS-trained model by the mean and
+    // you get a vector of the right width that ranks plausibly and is wrong,
+    // with nothing failing anywhere. No run tells you, so the Hub does.
+    //
+    // It has to be read from the **upstream** repo: the `Xenova/*` ONNX mirrors
+    // publish no `1_Pooling/config.json` at all, which is exactly why the
+    // catalogue carries `upstream` beside `pooling` rather than one of them.
+    const { EMBED_MODELS } = await import("../../src/text/catalogue");
+    expect(EMBED_MODELS.length).toBeGreaterThan(0);
+
+    const wrong: string[] = [];
+    for (const model of EMBED_MODELS) {
+      const res = await request.get(
+        `https://huggingface.co/${model.upstream}/resolve/main/1_Pooling/config.json`,
+      );
+      if (!res.ok()) {
+        wrong.push(
+          `${model.id} -> ${model.upstream}/1_Pooling/config.json ${res.status()}`,
+        );
+        continue;
+      }
+      const config = await res.json();
+      const declared =
+        config.pooling_mode_cls_token === true
+          ? "cls"
+          : config.pooling_mode_mean_tokens === true
+            ? "mean"
+            : `unsupported (${JSON.stringify(config)})`;
+      if (declared !== model.pooling) {
+        wrong.push(
+          `${model.id} -> declares ${model.pooling}, ${model.upstream} says ${declared}`,
+        );
+      }
+      // The width is on screen before the download too, so it is checked with
+      // the same call rather than trusted.
+      if (config.word_embedding_dimension !== model.dim) {
+        wrong.push(
+          `${model.id} -> declares dim ${model.dim}, upstream says ${config.word_embedding_dimension}`,
+        );
+      }
+    }
+    expect(wrong, "embedding entries whose pooling cannot be read back").toEqual(
+      [],
+    );
   });
 });

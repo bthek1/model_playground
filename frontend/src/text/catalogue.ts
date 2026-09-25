@@ -671,3 +671,214 @@ export const MASK_PROBES: MaskProbe[] = [
     hint: "Adjectives rather than nouns — the same effect in a different part of speech.",
   },
 ];
+
+// --- Embeddings: feature extraction and sentence similarity ------------------
+
+/**
+ * A sentence-embedding checkpoint.
+ *
+ * Two fields here are **facts about the checkpoint that the catalogue has to
+ * carry because nothing downstream can discover them**, which is the same
+ * reason `FillMaskModel.maskToken` exists:
+ *
+ *  - `pooling`. A sentence embedding is not "the model's output" — it is a
+ *    pooling of the token rows, and *which* pooling is part of how the model
+ *    was trained. all-MiniLM and all-mpnet are mean-pooled; BGE and
+ *    gte-modernbert are CLS-pooled. Getting it wrong produces a vector that is
+ *    the right width, ranks plausibly, and is wrong, and there is no error
+ *    anywhere. The upstream sentence-transformers repo states it in
+ *    `1_Pooling/config.json` — and the `Xenova/*` ONNX mirrors **do not carry
+ *    that file**, so it cannot be read at load time. `upstream` names the repo
+ *    the answer lives in, and `just fe-e2e-models` checks this field against
+ *    it.
+ *  - `prefixes`. Some models were trained with a task instruction glued to the
+ *    front of every input. Nomic is the one here that needs it, and omitting it
+ *    costs accuracy silently.
+ */
+export interface EmbedModel extends TextModel {
+  task: "feature-extraction";
+  /** Embedding width, so the page can state it before anything downloads. */
+  dim: number;
+  /** How the token rows become one vector. See above — not a free choice. */
+  pooling: "mean" | "cls";
+  /** The repo whose `1_Pooling/config.json` is the authority for `pooling`. */
+  upstream: string;
+  /**
+   * True only for a checkpoint trained with Matryoshka representation
+   * learning, i.e. one whose *prefix* dimensions were explicitly optimised to
+   * stand alone.
+   *
+   * It is catalogue data rather than an assumption because the truncation
+   * control means two different things depending on it: a demonstration on an
+   * MRL model, and a **measurement** on the others. Only one entry here is
+   * MRL-trained, which is why the page reports the cost rather than asserting
+   * there isn't one.
+   */
+  matryoshka?: boolean;
+  /**
+   * Task instructions this checkpoint expects, when it expects any.
+   *
+   * `symmetric` is for comparing two texts of the same kind (this category's
+   * two pages); `query` / `document` are the asymmetric retrieval pair that
+   * `/text-ranking` needs. Named by use rather than by string so a page cannot
+   * pick the wrong one by accident.
+   */
+  prefixes?: { symmetric: string; query: string; document: string };
+}
+
+/**
+ * §3.7's catalogue, and the cheapest floor in the app: the default is a
+ * **22 MiB** download.
+ *
+ * `onnx-community/Qwen3-Embedding-0.6B-ONNX` measures 613.5 MB and is cut per
+ * §3.7 — a 22 MB model does this page's job, and the roadmap's own bar is
+ * about the floor.
+ *
+ * Both poolings and both prefix regimes are represented deliberately, one
+ * click apart: a catalogue where every entry is mean-pooled and prefix-free
+ * makes those two fields look like decoration.
+ */
+export const EMBED_MODELS: EmbedModel[] = [
+  {
+    id: "Xenova/all-MiniLM-L6-v2",
+    label: "all-MiniLM-L6-v2",
+    hint: "The default, and the whole argument for this page: 22 MB, 384-d, and good enough for most retrieval.",
+    params: 23,
+    dim: 384,
+    pooling: "mean",
+    upstream: "sentence-transformers/all-MiniLM-L6-v2",
+    task: "feature-extraction",
+    bytes: { webgpu: 45_297_825, wasm: 22_972_370 },
+  },
+  {
+    id: "Xenova/bge-base-en-v1.5",
+    label: "BGE base v1.5",
+    hint: "Retrieval-tuned, 768-d — and CLS-pooled, not mean-pooled. Mean-pooling it looks fine and is wrong.",
+    params: 109,
+    dim: 768,
+    pooling: "cls",
+    upstream: "BAAI/bge-base-en-v1.5",
+    task: "feature-extraction",
+    bytes: { webgpu: 218_108_236, wasm: 110_083_337 },
+  },
+  {
+    id: "Xenova/all-mpnet-base-v2",
+    label: "all-mpnet-base-v2",
+    hint: "The sentence-transformers workhorse. 768-d, mean-pooled, stronger than MiniLM on paraphrase.",
+    params: 109,
+    dim: 768,
+    pooling: "mean",
+    upstream: "sentence-transformers/all-mpnet-base-v2",
+    task: "feature-extraction",
+    bytes: { webgpu: 218_117_164, wasm: 110_086_122 },
+  },
+  {
+    id: "nomic-ai/nomic-embed-text-v1.5",
+    label: "Nomic Embed v1.5",
+    hint: "The only Matryoshka-trained entry: its first 128 dimensions were optimised to stand alone. Needs a task prefix.",
+    params: 137,
+    dim: 768,
+    pooling: "mean",
+    upstream: "nomic-ai/nomic-embed-text-v1.5",
+    matryoshka: true,
+    // From the model card. Dropping these costs accuracy with nothing failing,
+    // which is why the page shows the composed string rather than only the text
+    // the user typed.
+    prefixes: {
+      symmetric: "clustering: ",
+      query: "search_query: ",
+      document: "search_document: ",
+    },
+    task: "feature-extraction",
+    bytes: { webgpu: 273_859_028, wasm: 137_296_292 },
+  },
+  {
+    id: "Alibaba-NLP/gte-modernbert-base",
+    label: "GTE ModernBERT",
+    hint: "The strongest here and the largest. CLS-pooled, 768-d, and past the large-download warning on WebGPU.",
+    params: 149,
+    dim: 768,
+    pooling: "cls",
+    upstream: "Alibaba-NLP/gte-modernbert-base",
+    task: "feature-extraction",
+    bytes: { webgpu: 298_363_618, wasm: 150_218_016 },
+  },
+];
+
+export const DEFAULT_EMBED_MODEL = EMBED_MODELS[0].id;
+
+/**
+ * Texts for `/text-features` — short, so the vector strip is about the model
+ * rather than about a wall of prose.
+ */
+export const FEATURE_TEXT_SAMPLES: TextSample[] = [
+  {
+    id: "webgpu",
+    label: "A technical sentence",
+    text: "WebGPU exposes the graphics card to a web page as a compute device.",
+    hint: "The page's own subject, and a useful anchor for the similarity page next door.",
+  },
+  {
+    id: "cooking",
+    label: "A recipe line",
+    text: "Fold the melted butter into the flour until no dry patches remain.",
+    hint: "Nothing to do with the other samples — its vector should sit far from all of them.",
+  },
+  {
+    id: "short",
+    label: "Two words",
+    text: "Heavy rain.",
+    hint: "A very short input. Mean pooling over two tokens is a different thing from mean pooling over forty.",
+  },
+];
+
+/** A pair for `/sentence-similarity`, and what it is a test of. */
+export interface PairSample {
+  id: string;
+  label: string;
+  a: string;
+  b: string;
+  /** What the honest answer looks like — including where the model is wrong. */
+  hint: string;
+}
+
+/**
+ * Pairs chosen so the page has something to say, including where these models
+ * fail.
+ *
+ * `negation` is the important one. Embedding models score a sentence and its
+ * negation as *very* similar — they share almost every token and the training
+ * objective never had to separate them — so a high score there is a real
+ * limitation of the whole approach rather than a bug in this page, and it is
+ * the single most useful thing a similarity demo can show.
+ */
+export const PAIR_SAMPLES: PairSample[] = [
+  {
+    id: "paraphrase",
+    label: "A paraphrase",
+    a: "A man is playing a guitar on the street.",
+    b: "A busker is performing with his guitar outdoors.",
+    hint: "Almost no words in common, the same meaning. This is what an embedding buys you over keyword matching.",
+  },
+  {
+    id: "unrelated",
+    label: "Unrelated",
+    a: "A man is playing a guitar on the street.",
+    b: "The quarterly figures were restated after the audit.",
+    hint: "The floor. If this does not sit far below the paraphrase, the embeddings have collapsed.",
+  },
+  {
+    id: "negation",
+    label: "A negation",
+    a: "The flight to Berlin was cancelled.",
+    b: "The flight to Berlin was not cancelled.",
+    hint: "Opposite meanings, one word apart. Expect a very high score — that is a limitation of embeddings, not of this page.",
+  },
+  {
+    id: "overlap",
+    label: "Shared words, different sense",
+    a: "The bank raised its interest rates again.",
+    b: "We sat on the bank and watched the river.",
+    hint: "Lexical overlap with no shared meaning — the case keyword search gets wrong and an embedding should not.",
+  },
+];

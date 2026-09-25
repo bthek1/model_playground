@@ -517,3 +517,108 @@ test.describe("@slow fill-mask", () => {
     await expect(page.getByTestId("mask-drift")).toHaveCount(0);
   });
 });
+
+// --- Embeddings (§3.7) -------------------------------------------------------
+
+test.describe("@slow embeddings", () => {
+  test.slow();
+
+  /**
+   * `just fe-e2e-embed`.
+   *
+   * **The assertion is a spread, not a threshold**, and that is the whole point
+   * of the test. Omitting `pooling`/`normalize` — or pooling a CLS-trained
+   * checkpoint by the mean — does not fail: it produces vectors whose cosines
+   * all sit in a narrow band near 0.9, so every pair looks alike and the page
+   * looks like it works. A single-threshold assertion ("the paraphrase scores
+   * above 0.5") passes comfortably on exactly those collapsed embeddings. A
+   * *gap* between the paraphrase and the unrelated pair does not.
+   */
+  test("a paraphrase scores far above an unrelated pair", async ({ page }) => {
+    test.setTimeout(6 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/sentence-similarity");
+    await model.load();
+    await model.waitForReady();
+
+    await model.run(/^Score all \d+ sample pairs$/);
+    await expect(page.getByTestId("similarity")).toBeVisible({
+      timeout: 120_000,
+    });
+
+    const scoreOf = async (id: string) =>
+      Number((await page.getByTestId(`score-${id}`).innerText()).trim());
+
+    const paraphrase = await scoreOf("paraphrase");
+    const unrelated = await scoreOf("unrelated");
+
+    // The gap. Measured on all-MiniLM-L6-v2: ~0.62 against ~0.02.
+    expect(paraphrase).toBeGreaterThan(0.45);
+    expect(unrelated).toBeLessThan(0.30);
+    expect(
+      paraphrase - unrelated,
+      "the spread between a paraphrase and an unrelated pair — a narrow band " +
+        "here means the embeddings collapsed, which a threshold would miss",
+    ).toBeGreaterThan(0.25);
+
+    // The negation pair is the page's honest half: these models score a
+    // sentence and its negation as very similar. Asserted so the caveat on
+    // screen stays true of the model actually shipped.
+    const negation = await scoreOf("negation");
+    expect(negation).toBeGreaterThan(0.75);
+
+    // Truncation re-derives: no second download, no second inference, and the
+    // ranking survives the cut — which is the Matryoshka claim, checked rather
+    // than asserted in prose.
+    await page.getByTestId("truncate-96").click();
+    await expect(page.getByTestId("strip-a-dim")).toContainText("96-d");
+    // Still unit length on both sides after the cut. A missing renormalisation
+    // would leave these below 1 and scale every cosine above by an arbitrary
+    // factor.
+    await expect(page.getByTestId("strip-a-norm")).toContainText("1.000");
+    await expect(page.getByTestId("strip-b-norm")).toContainText("1.000");
+
+    const cutParaphrase = await scoreOf("paraphrase");
+    const cutUnrelated = await scoreOf("unrelated");
+    expect(
+      cutParaphrase,
+      "the ranking must survive a truncation, or the control is misleading",
+    ).toBeGreaterThan(cutUnrelated);
+    // The model stayed ready and no inference ran — the page is still on the
+    // one load it started with.
+    await expect(model.readyStatus).toBeVisible();
+  });
+
+  test("a vector is drawn, unit length, and its truncation is measured", async ({
+    page,
+  }) => {
+    test.setTimeout(6 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/text-features");
+    // The pooling and width are catalogue facts, on screen before a byte moves.
+    await expect(page.getByTestId("embed-pooling")).toContainText("mean");
+    await expect(page.getByTestId("embed-dim")).toContainText("384");
+
+    await model.load();
+    await model.waitForReady();
+    await model.run(/^Embed$/);
+
+    await expect(page.getByTestId("embedding")).toBeVisible({
+      timeout: 120_000,
+    });
+    // `normalize: true` reaching the model, shown rather than claimed.
+    await expect(page.getByTestId("vector-strip-norm")).toContainText("1.000");
+    await expect(page.getByTestId("vector-strip-dim")).toContainText("384-d");
+
+    // And the cut's real cost, which is a measurement on a non-MRL checkpoint
+    // rather than the "it's free" the Matryoshka framing invites.
+    await page.getByTestId("truncate-96").click();
+    await expect(page.getByTestId("vector-strip-dim")).toContainText("96-d");
+    await expect(page.getByTestId("vector-strip-norm")).toContainText("1.000");
+    await expect(page.getByTestId("truncate-kept")).toContainText(
+      /first 96 of 384 dimensions hold/i,
+    );
+  });
+});

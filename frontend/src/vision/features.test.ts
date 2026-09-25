@@ -6,7 +6,7 @@ import {
   vectorKinds,
   type VectorKind,
 } from "./features";
-import { l2norm } from "./similarity";
+import { l2norm } from "@/model/similarity";
 
 /** `[1, tokens, dim]` in row-major order, the shape a ViT hands back. */
 function tokens(rows: number[][]) {

@@ -1,4 +1,10 @@
-// Cosine similarity and top-k over an in-memory index. Pure and synchronous, so
+// Cosine similarity and top-k over an in-memory index — shared by every
+// modality that embeds something, because a unit vector has no modality. It
+// started under `vision/` for `/image-features` and **moved** here when
+// `/text-features` and `/sentence-similarity` needed the same four functions;
+// a second copy is how two pages end up disagreeing about what cosine means.
+//
+// Pure and synchronous, so
 // re-ranking never re-runs a model: changing `k`, or switching which vector the
 // page is comparing, is arithmetic over numbers already in hand — the same
 // pure-derivation rule the detection threshold and the VAD threshold follow.

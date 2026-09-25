@@ -5,17 +5,21 @@ import { isHeavyDownload, sizeEstimate } from "@/model/size";
 import { entitySlot } from "./highlight";
 import {
   CLASSIFIER_SAMPLES,
+  DEFAULT_EMBED_MODEL,
   DEFAULT_FILL_MASK,
   DEFAULT_NER_MODEL,
   DEFAULT_REDACTED,
   DEFAULT_TEXT_CLASSIFIER,
   DEFAULT_ZERO_SHOT_TEXT,
+  EMBED_MODELS,
+  FEATURE_TEXT_SAMPLES,
   FILL_MASK_MODELS,
   MASK_PROBES,
   MASK_SAMPLES,
   MASK_TOKENS,
   NER_MODELS,
   NER_SAMPLES,
+  PAIR_SAMPLES,
   TEXT_CLASSIFIER_MODELS,
   TOP_K,
   ZERO_SHOT_SAMPLES,
@@ -36,6 +40,7 @@ describe("the text catalogue", () => {
       ...NER_MODELS,
       ...ZERO_SHOT_TEXT_MODELS,
       ...FILL_MASK_MODELS,
+      ...EMBED_MODELS,
     ]) {
       expect(m.bytes.webgpu, `${m.id} webgpu bytes`).toBeGreaterThan(0);
       expect(m.bytes.wasm, `${m.id} wasm bytes`).toBeGreaterThan(0);
@@ -303,6 +308,102 @@ describe("the fill-mask catalogue", () => {
   it("labels each probe column with the word that varies", () => {
     for (const p of MASK_PROBES) {
       expect(p.varies[0]).not.toBe(p.varies[1]);
+    }
+  });
+});
+
+describe("the embedding catalogue", () => {
+  // The cheapest floor in the app, and the reason §3.7's two pages exist at
+  // all: the default download is 22 MiB. `Qwen3-Embedding-0.6B` measures
+  // 613.5 MB and is cut, as the roadmap says.
+  it("keeps the floor tiny, which is the whole argument for the page", () => {
+    const smallest = Math.min(
+      ...EMBED_MODELS.map((m) => Math.min(m.bytes.webgpu!, m.bytes.wasm!)),
+    );
+    expect(smallest).toBeLessThan(30e6);
+    expect(
+      EMBED_MODELS.some((m) => m.id.includes("Qwen3-Embedding")),
+      "Qwen3-Embedding is 613.5 MB and cut per roadmap §3.7",
+    ).toBe(false);
+  });
+
+  // The field nothing downstream can discover, because the `Xenova/*` ONNX
+  // mirrors do not carry `1_Pooling/config.json`. Getting it wrong returns a
+  // vector of the right width that ranks plausibly and is wrong, with nothing
+  // failing — so every entry declares it, and names the repo that is the
+  // authority for it (`just fe-e2e-models` checks the pair).
+  it("declares a pooling and an upstream repo for every entry", () => {
+    for (const m of EMBED_MODELS) {
+      expect(["mean", "cls"], `${m.id} pooling`).toContain(m.pooling);
+      expect(m.upstream, `${m.id} upstream`).toMatch(/^[^/]+\/[^/]+$/);
+      expect(m.dim, `${m.id} dim`).toBeGreaterThan(0);
+    }
+  });
+
+  // Both poolings one click apart, deliberately: a catalogue where every entry
+  // is mean-pooled makes the field look like decoration.
+  it("ships both poolings, so the hazard is reachable rather than theoretical", () => {
+    const poolings = new Set(EMBED_MODELS.map((m) => m.pooling));
+    expect(poolings).toEqual(new Set(["mean", "cls"]));
+  });
+
+  // The truncation control means two different things depending on this flag —
+  // a demonstration on an MRL checkpoint and a *measurement* on the others — so
+  // it cannot be assumed, and the plan's four original entries are all
+  // non-MRL.
+  it("marks exactly the Matryoshka-trained entry, and has one", () => {
+    const mrl = EMBED_MODELS.filter((m) => m.matryoshka);
+    expect(mrl).toHaveLength(1);
+    expect(mrl[0].id).toBe("nomic-ai/nomic-embed-text-v1.5");
+    // And that entry is the one that needs a task prefix, which is why the
+    // prefix machinery is not dead code.
+    expect(mrl[0].prefixes).toBeDefined();
+  });
+
+  it("names a prefix per use, so a page cannot pick the wrong one", () => {
+    for (const m of EMBED_MODELS) {
+      if (!m.prefixes) continue;
+      for (const kind of ["symmetric", "query", "document"] as const) {
+        expect(m.prefixes[kind], `${m.id} ${kind}`).toBeTruthy();
+      }
+      // Asymmetric retrieval needs the two halves to differ, or the prefix is
+      // doing nothing on `/text-ranking`.
+      expect(m.prefixes.query).not.toBe(m.prefixes.document);
+    }
+  });
+
+  it("defaults to a model in its own list, and to the cheap one", () => {
+    const def = EMBED_MODELS.find((m) => m.id === DEFAULT_EMBED_MODEL);
+    expect(def).toBeDefined();
+    expect(def!.bytes.wasm!).toBeLessThan(30e6);
+  });
+
+  it("ships pair samples that span the range, including where the models fail", () => {
+    expect(PAIR_SAMPLES.length).toBeGreaterThanOrEqual(3);
+    for (const p of PAIR_SAMPLES) {
+      expect(p.a.length).toBeGreaterThan(0);
+      expect(p.b.length).toBeGreaterThan(0);
+      expect(p.a).not.toBe(p.b);
+      expect(p.hint.length).toBeGreaterThan(0);
+    }
+    // The negation pair is the honest one and ships with its own caveat: these
+    // models score a sentence and its negation as very similar, which is a
+    // limitation of embeddings rather than a bug in the page.
+    const negation = PAIR_SAMPLES.find((p) => p.id === "negation");
+    expect(negation, "the negation pair").toBeDefined();
+    expect(negation!.hint).toMatch(/limitation/i);
+
+    // And a floor to measure the others against — a page with no unrelated
+    // pair has no scale.
+    expect(PAIR_SAMPLES.some((p) => p.id === "unrelated")).toBe(true);
+  });
+
+  it("ships short feature samples rather than walls of prose", () => {
+    expect(FEATURE_TEXT_SAMPLES.length).toBeGreaterThan(0);
+    for (const s of FEATURE_TEXT_SAMPLES) {
+      expect(s.text.length).toBeGreaterThan(0);
+      expect(s.text.length).toBeLessThan(200);
+      expect(s.hint.length).toBeGreaterThan(0);
     }
   });
 });

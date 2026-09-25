@@ -202,6 +202,12 @@ describe("Natural Language Processing", () => {
     expect(at("token-classification")).toBe("/token-classification");
     expect(at("question-answering")).toBe("/question-answering");
     expect(at("zero-shot-classification")).toBe("/zero-shot-classification");
+    expect(at("fill-mask")).toBe("/fill-mask");
+    // §3.7 ships as a pair: one engine and one catalogue behind two rows.
+    // `feature-extraction` points at `/text-features`, mirroring
+    // `/image-features` rather than taking the slug's own name.
+    expect(at("feature-extraction")).toBe("/text-features");
+    expect(at("sentence-similarity")).toBe("/sentence-similarity");
   });
 
   it("leaves Table Question Answering on the placeholder", () => {

@@ -38,7 +38,7 @@ import {
 } from "@/vision/features";
 import type { GalleryImage } from "@/vision/gallery";
 import { downscale, fromUrl } from "@/vision/image";
-import type { PlainTensor } from "@/vision/serialize";
+import type { PlainTensor } from "@/model/serialize";
 
 /** One embedded gallery picture. */
 export interface IndexEntry {

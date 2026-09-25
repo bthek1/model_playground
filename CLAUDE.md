@@ -60,7 +60,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Computer Vision roadmap** (13 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | **Graph ML roadmap** (**complete, 4 of 4**; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
 | **Multimodal roadmap** (**complete as scoped, 3 of 3**; VLMs, `q4f16`, streaming, video frames) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
-| **NLP roadmap** (5 of 11 shipped; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
+| **NLP roadmap** (7 of 11 shipped; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -100,6 +100,7 @@ just fe-e2e-text    # @slow: text classification, pinned by a known label on a k
 just fe-e2e-qa      # @slow: extractive QA, pinned by a **character range** — not a string
 just fe-e2e-zeroshot-text # @slow: zero-shot text — a known ranking, and a template proven to reach the model
 just fe-e2e-fillmask # @slow: fill-mask — the same question through two tokenizers; the RoBERTa half is the test
+just fe-e2e-embed   # @slow: embeddings — a *spread*, not a threshold (a collapse passes a threshold)
 just fe-e2e-models  # check every model id (audio + vision + multimodal + text) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -743,7 +744,7 @@ behaviours, a thin `vlm.worker.ts` around it, a `client.ts`, and `useVlm` over
   produces a fluent answer about the wrong pictures, with no error anywhere. Both
   need a real GPU with `shader-f16`.
 
-### In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`)
+### In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`, `/text-features`, `/sentence-similarity`)
 
 The fourth modality on the Transformers.js path, and **the cheapest module in the
 app, for a reason worth knowing before planning a page**: there is no text
@@ -980,6 +981,55 @@ thin task hooks over `useTextPipeline`. See [`docs/roadmaps/nlp.md`](docs/roadma
   RoBERTa and never on DistilBERT, and **the RoBERTa half is the test** — the
   same question through a different tokenizer, which a hard-coded literal cannot
   pass.
+- **Embeddings are two routes over one engine** (`/text-features`,
+  `/sentence-similarity`) — one catalogue, one hook, two taxonomy rows, for the
+  same reason `/visual-question-answering` is not folded into
+  `/image-text-to-text`. The cheapest floor in the app: 22 MiB.
+- **The pooling is catalogue data, and the plan was wrong to pin it.** #43 said
+  to pin `{ pooling: "mean", normalize: true }` in the engine; only the second
+  half survives. A sentence embedding *is* a pooling of the token rows, and
+  which one is part of how the checkpoint was trained — mean for
+  all-MiniLM/all-mpnet/Nomic, **CLS** for BGE and gte-modernbert. Mean-pool a
+  CLS-trained model and you get a vector of the right width that ranks
+  plausibly and is wrong, with nothing failing. So `EmbedModel.pooling` carries
+  it, on screen in SELECT before a byte moves, and `EmbedModel.upstream` names
+  the repo whose `1_Pooling/config.json` is the authority — **the `Xenova/*`
+  ONNX mirrors do not publish that file**, so it cannot be read at load time.
+  `just fe-e2e-models` reads it back and fails on a mismatch. `normalize: true`
+  *is* pinned in the engine: every consumer here compares by cosine.
+- **The failure is a collapse, so the assertion is a spread.** Drop the pooling
+  or the normalisation and every similarity lands in a narrow band near 0.9 —
+  each pair looks like every other and the page appears to work. "The
+  paraphrase scores above 0.5" passes comfortably on exactly those vectors, so
+  `just fe-e2e-embed` asserts the **gap** between a paraphrase and an unrelated
+  pair (~0.62 against ~0.02 on all-MiniLM). A missing `pooling` also fails
+  loudly one layer down now: `toVector` throws on the unpooled `[1, T, D]`
+  hidden state rather than taking row 0, which is a real vector that would rank.
+- **Matryoshka truncation is a measurement, not a demonstration** — four of the
+  five entries were never MRL-trained, so the pages report what the cut cost
+  instead of implying it was free. `truncate()` returns `kept`, the fraction of
+  the vector's length the prefix held, which is precisely the factor a
+  *missing* renormalisation would scale every similarity by; `‖v‖ = 1.000`
+  under the strip at every width is what shows the renormalisation happened.
+  `nomic-embed-text-v1.5` is in the catalogue so the genuine MRL case is one
+  click away, and it is the entry that needs a **task prefix** —
+  `EmbedModel.prefixes` is named by *use* (`symmetric`/`query`/`document`) so a
+  page cannot reach for the wrong one, with the composed string on screen
+  before the click. Truncation re-derives and spends nothing.
+- **Cache embeddings by the exact string, never by a hash of it.** A hash is the
+  obvious reach and is strictly worse: a collision serves another sentence's
+  vector with nothing failing, which on a similarity page is a confident wrong
+  number — and the strings are the user's own input, in a Map, in one tab. Keyed
+  on the **composed** string, because the same sentence as a query and as a
+  document is two different vectors. A model change clears it, asserted
+  directly.
+- **`feature-extraction` is the first text task whose result is a `Tensor`**, so
+  `vision/serialize.ts` and `vision/similarity.ts` **moved** to `model/` rather
+  than being copied — the `backend.ts`/`size.ts` move out of `audio/` again. A
+  `Tensor` is a Transformers.js fact and a unit vector has no modality. The text
+  engine flattens every result through `model/serialize.ts` exactly as vision's
+  does: a `Tensor` does not merely arrive stripped of its methods, it refuses to
+  be cloned at all.
 
 ### Three routes were built and then cut for size — read this before adding one
 

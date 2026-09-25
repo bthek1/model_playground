@@ -134,6 +134,15 @@ const REAL_ROUTES: Record<string, string> = {
   // inserted by a button, rewritten on a model change, and reconciled against
   // the loaded tokenizer in the engine.
   "fill-mask": "/fill-mask",
+  // §3.7, shipped as a pair because the second page is the first with a cosine
+  // on the end: one engine, one catalogue, one hook, two taxonomy rows. They
+  // stay two routes for the same reason /visual-question-answering is not
+  // folded into /image-text-to-text — two Hub tags and two questions.
+  //
+  // `feature-extraction` maps to `/text-features` rather than the slug's own
+  // name, mirroring `/image-features`.
+  "feature-extraction": "/text-features",
+  "sentence-similarity": "/sentence-similarity",
   // Three slugs deliberately have no route and fall through to the placeholder,
   // for one reason each — every checkpoint the task has is too heavy to offer:
   //

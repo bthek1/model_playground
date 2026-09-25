@@ -363,10 +363,28 @@ fe-e2e-qa:
 fe-e2e-zeroshot-text:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "zero-shot"
 
+# Run only the @slow embedding specs: a real all-MiniLM-L6-v2 load (43 MB on
+# WebGPU / 22 MB on WASM — the cheapest floor in the app) and real cosines.
+#
+# **The assertion is a spread, not a threshold.** Dropping the pooling and
+# normalise options — or pooling a CLS-trained checkpoint by the mean — does not
+# fail: it produces embeddings whose cosines all sit in a narrow band near 0.9,
+# so every pair looks alike and the page looks like it works. "The paraphrase
+# scores above 0.5" passes comfortably on exactly those collapsed vectors; a
+# *gap* between the paraphrase and the unrelated pair does not.
+#
+# It also pins the truncation control, which has two halves that fail silently:
+# the ranking must survive the cut, and both vectors must still read
+# 1.000 afterwards — a missing renormalisation leaves a working-looking slider
+# that scales every similarity by an arbitrary factor.
+fe-e2e-embed:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "embedding"
+
 # Check every model id (audio + vision + multimodal + text) still resolves on
 # the Hugging Face Hub, that each vision entry publishes the dtypes both backends
 # ask for, that the VLM entries publish their three q4f16 graphs, and that the
-# VLM and text catalogues still match the download sizes they quote (seconds)
+# VLM and text catalogues still match the download sizes they quote, and that
+# each embedding entry's pooling matches its upstream training config (seconds)
 fe-e2e-models:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium model-ids.spec.ts
 
