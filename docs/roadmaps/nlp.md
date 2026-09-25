@@ -22,7 +22,7 @@
 | Translation (§3.5) | [`/translation`](../../frontend/src/routes/translation.tsx) | **Shipped** — six pairs, one at a time; a pair is a model, 209–289 MB |
 | Summarization (§3.6) | [`/summarization`](../../frontend/src/routes/summarization.tsx) | **Shipped** — the gate passed by one configuration; lead-3 is the empty state, 154–463 MB |
 | Feature Extraction · Sentence Similarity (§3.7) | [`/text-features`](../../frontend/src/routes/text-features.tsx) · [`/sentence-similarity`](../../frontend/src/routes/sentence-similarity.tsx) | **Shipped** — one engine, two rows; the pooling is catalogue data, 22–284 MB |
-| Text Generation (§3.8) | — | Planned — [#47](https://github.com/bthek1/model_playground/issues/47) |
+| Text Generation (§3.8) | [`/text-generation`](../../frontend/src/routes/text-generation.tsx) | **Shipped** — the decoding strategies, streamed; greedy twice must be identical, 251–483 MB |
 | Fill-Mask (§3.9) | [`/fill-mask`](../../frontend/src/routes/fill-mask.tsx) | **Shipped** — four base encoders, three tokenizer families, 68–300 MB |
 | Text Ranking (§3.10) | — | Planned — [#44](https://github.com/bthek1/model_playground/issues/44) |
 
@@ -700,17 +700,88 @@ included), because the same sentence as a query and as a document is two differe
 A model change clears it, asserted directly — a 384-d MiniLM vector served for a 768-d BGE
 query is a wrong answer with no error attached.
 
-### 3.8 Text Generation — planned ([#47](https://github.com/bthek1/model_playground/issues/47))
+### 3.8 Text Generation — **shipped**
 
-The category's only streaming page, and the payoff for putting `partial` in the **shared**
-`ModelResponse` envelope rather than in a private VLM protocol.
+Taxonomy task **Text Generation** ·
+[`/text-generation`](../../frontend/src/routes/text-generation.tsx) ·
+[#47](https://github.com/bthek1/model_playground/issues/47). The category's only streaming
+page, and the payoff for a decision taken in
+[#30](https://github.com/bthek1/model_playground/issues/30).
 
-**`Xenova/gpt2`'s "128.3 MB at q4f16" is not a file that exists.** Its `model_q4f16.onnx`
-is byte-for-byte the size of its fp16 build (GPT-2's `Conv1D` weights are skipped by the
-exporter), it publishes no `model_quantized.onnx` at all so `loadOpts("wasm")`'s q8 404s,
-and the 128.3 MB file the roadmap quoted belongs to a legacy graph family 4.2.0 only
-requests via `model_file_name`. `HuggingFaceTB/SmolLM2-360M-Instruct` at **272.7 MB**
-genuinely quantized is the default instead.
+| entry | WebGPU | WASM | notes |
+|---|---|---|---|
+| `HuggingFaceTB/SmolLM2-360M-Instruct` | **272.7 MB** q4f16 | **364.6 MB** q8 | the default, and the only CPU path |
+| `Xenova/gpt2` | 250.8 MB fp16 | — | the loop demonstration; GPU only |
+| `onnx-community/Qwen2.5-0.5B-Instruct` | 483.0 MB q4f16 | — | the heavy end |
+
+**Streaming needed nothing the shared envelope did not already have**, which is the claim
+#30 made when it put `partial` in `ModelResponse` rather than in a private VLM protocol
+("NLP text-generation will need exactly the same thing"). It does: `partial` carries the
+text so far against the request id, Machine A stays `ready`, `running` stays an inflight
+count, and a partial whose request has already settled is dropped — all three already in
+`useModelWorker`, and already asserted in `useModelWorker.test.ts`, which is where the rule
+lives. The only addition was a `TextGenPartial` shape, and it is deliberately **not** a
+stage union like the VLM's: a text-only decoder has no encode phase to announce, so a stage
+would tell the user nothing the arriving text does not.
+
+**Phase 0 asked whether GPT-2's legacy graph loads. It does not, and finding out corrected
+this repo's own account of a bug it has hit five times.** `model_file_name` *does* pass
+through `pipeline()` and `decoder_model_merged_quantized.onnx` *is* found — but the session
+fails to open with `qdq_actions.cc:137 … Missing required scale:
+transformer.wte.weight_merged_0_scale`. That is the Whisper/Donut/Marian/BART error, and
+GPT-2 is **decoder-only**, so the bug was never a property of encoder-decoders. Nor is it
+"models with tied embeddings": `SmolLM2-360M-Instruct` has `tie_word_embeddings: true` and
+its `model_quantized.onnx` loads and generates on WASM perfectly well (34 s to load,
+~180 ms a token, measured). **It is a property of the export** — the older `Xenova/*` q8
+builds fuse the embedding matmul into `MatMulNBits` with a merged scale the bundled
+provider cannot find, and newer exports do not. The per-module fp32 fallback only helps a
+*multi-graph* model, so a decoder-only one has nothing to pin: GPT-2's only unquantized
+build is 500 MB, over §0's bar, and it therefore has **no CPU path at all**. See
+`SEQ2SEQ_WASM_DTYPES`, whose note now says all of this.
+
+**So SmolLM2-360M-Instruct is the default rather than GPT-2**, against §3.8's preference.
+The roadmap wanted GPT-2 because it loops so readily and the lesson is the strategy rather
+than the model quality — an argument this page accepts for the *demonstration*, which is
+why GPT-2 ships as the second entry. It is not an argument for the default, now that GPT-2
+measures 251 MB with no CPU path while SmolLM2 measures 273 MB genuinely quantized and runs
+on both. The roadmap's "128.3 MB at q4f16" was wrong three ways over: the 4-bit builds are
+not quantized (`model_q4f16.onnx` is within 19 bytes of the fp16 build — GPT-2's `Conv1D`
+weights are skipped by the exporter), there is no `model_quantized.onnx` so a default `q8`
+404s, and the 128.3 MB file belongs to the graph family above.
+
+**`pickBackendForF16` is new, and the gap it closes was luck rather than design.**
+`useBackendProbe({ requireShaderF16: true })` answers "what would this load on" for the
+*picker*; the worker answered the same question with a plain `pickBackend()`. Until this
+page the two could not disagree, because every `q4f16` entry in the app declared
+`backends: ["webgpu"]` — so the picker disabled the row and the worker was never asked on a
+machine that would have got it wrong. The first entry with an f16 GPU path **and** a working
+CPU fallback breaks that: the row is legitimately enabled, the user clicks Load, and a plain
+`pickBackend()` sends them to an adapter that cannot run the weights — #30's worst outcome,
+because the download is paid for first. The engine now asks the f16-aware question too.
+
+**The decoding controls are INPUT and they spend.** None of temperature, `top_p`, `top_k`,
+greedy-vs-sampling or the repetition penalty can re-derive from a finished generation, so
+changing one runs nothing and the page says the next GENERATE is a real inference — the
+`/video-text-to-text` reverse-toggle shape. Under greedy decoding the sampling knobs are
+**disabled and not sent at all**, rather than sent and ignored: Transformers.js warns on a
+sampling parameter set for a greedy run, and a warning the user cannot see is worse than an
+option that is visibly absent.
+
+**`just fe-e2e-textgen` asserts that greedy, run twice, is byte-identical.** That is the
+only assertion available that proves the decoding parameters reach the model at all — a page
+that dropped them would still generate, still read correctly, and still pass a
+known-continuation check. It is also the property the page depends on: a repetition loop is
+attributable to greedy decoding only if greedy decoding is reproducible. The comparison test
+deliberately does **not** assert the two halves differ, because sampling at a low
+temperature can reproduce the greedy path and that would pin a property the model does not
+promise.
+
+**`/playground` lost this taxonomy row and gained one of its own.** `REAL_ROUTES` sent
+`text-generation` to `/playground`, which is a WebGPU demo surface and not a task page.
+Re-pointing the row would have left the demo reachable only by typing the URL, which is not
+what "stays reachable on its own terms" means — so it has a **GPU Playground** row under
+**Theory**, this repo's own non-Hub category, where the hand-written WGSL surfaces already
+live. `categoryForPath("/playground")` is now `"Theory"`, and a test pins both halves.
 
 ### 3.9 Fill-Mask — **shipped**
 

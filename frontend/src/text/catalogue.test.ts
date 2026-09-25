@@ -12,7 +12,9 @@ import {
   DEFAULT_FILL_MASK,
   DEFAULT_NER_MODEL,
   DEFAULT_REDACTED,
+  DECODING_PRESETS,
   DEFAULT_SUMMARIZER,
+  DEFAULT_TEXTGEN_MODEL,
   DEFAULT_TEXT_CLASSIFIER,
   DEFAULT_TRANSLATION_MODEL,
   DEFAULT_ZERO_SHOT_TEXT,
@@ -29,6 +31,8 @@ import {
   NLLB_BYTES,
   PAIR_SAMPLES,
   SUMMARIZER_MODELS,
+  TEXTGEN_MODELS,
+  TEXTGEN_SAMPLES,
   TEXT_CLASSIFIER_MODELS,
   TOP_K,
   TRANSLATION_MODELS,
@@ -590,5 +594,119 @@ describe("the summarization catalogue", () => {
     );
     expect(borrowed!.bytes.wasm!).toBe(cheapest);
     expect(borrowed!.bytes.wasm!).toBeLessThan(50e6);
+  });
+});
+
+describe("the text-generation catalogue", () => {
+  // The roadmap wanted GPT-2 as the default because it loops so readily. The
+  // demonstration is worth keeping; the default is not, now that GPT-2 measures
+  // 251 MB with no CPU path at all while SmolLM2 measures 273 MB genuinely
+  // quantized and runs on both.
+  it("defaults to the entry that has a CPU path", () => {
+    const def = TEXTGEN_MODELS.find((m) => m.id === DEFAULT_TEXTGEN_MODEL);
+    expect(def, "the default is in its own list").toBeDefined();
+    expect(def!.backends, "the default must run everywhere").toBeUndefined();
+    expect(def!.bytes.wasm, "…so it needs a measured WASM size").toBeGreaterThan(0);
+    // And it is instruction-tuned, so the page's default prompt is answered
+    // rather than continued.
+    expect(def!.instruct).toBe(true);
+  });
+
+  // GPT-2's three measured problems, pinned so the entry cannot drift back to a
+  // configuration that does not exist: `model_q4f16.onnx` is the same size as
+  // fp16 and not actually quantized, `model_quantized.onnx` is absent so a
+  // default `q8` 404s, and the 128.3 MB legacy graph fails to open a session
+  // (`transformer.wte.weight_merged_0_scale`).
+  it("keeps GPT-2 at fp16 on WebGPU only, which is its one loadable build", () => {
+    const gpt2 = TEXTGEN_MODELS.find((m) => m.id === "Xenova/gpt2");
+    expect(gpt2, "GPT-2 is kept for the loop demonstration").toBeDefined();
+    expect(gpt2!.dtypes?.webgpu).toBe("fp16");
+    expect(gpt2!.backends).toEqual(["webgpu"]);
+    expect(gpt2!.bytes.wasm, "there is no CPU path to quote").toBeUndefined();
+    // fp16 weights, so the adapter feature is a hard requirement rather than a
+    // preference — without it the download succeeds and every run fails.
+    expect(gpt2!.requireShaderF16).toBe(true);
+    // Not instruction-tuned: it continues text, it does not answer.
+    expect(gpt2!.instruct).toBe(false);
+  });
+
+  // #30's finding, applied as an invariant rather than remembered per entry: an
+  // f16 build without the adapter feature loads, reports ready, and fails on the
+  // first operator of every run — after the download is paid for.
+  it("requires shader-f16 on every entry that loads f16 weights", () => {
+    for (const m of TEXTGEN_MODELS) {
+      const f16 =
+        m.dtypes?.webgpu === "fp16" ||
+        m.dtypes?.webgpu === "q4f16" ||
+        // No pin means the family default, which is q4f16.
+        m.dtypes?.webgpu === undefined;
+      if (!f16) continue;
+      // The default entry is the exception and states why: it has a working
+      // WASM fallback, so its row stays enabled and the *worker* re-asks the
+      // question through `pickBackendForF16`.
+      if (!m.backends || m.backends.includes("wasm")) continue;
+      expect(m.requireShaderF16, `${m.id} loads f16 weights`).toBe(true);
+    }
+  });
+
+  it("measures the download for every backend each entry claims", () => {
+    for (const m of TEXTGEN_MODELS) {
+      for (const backend of m.backends ?? (["webgpu", "wasm"] as const)) {
+        expect(m.bytes[backend], `${m.id} ${backend}`).toBeGreaterThan(0);
+      }
+      // And stays inside the feasibility bar — this is a category of models
+      // where the next rung up is a gigabyte.
+      expect(
+        Math.max(m.bytes.webgpu ?? 0, m.bytes.wasm ?? 0),
+        `${m.id} against the ~500 MB bar`,
+      ).toBeLessThan(HEAVY_MODEL_BYTES);
+    }
+  });
+
+  describe("the decoding presets", () => {
+    // Greedy first and greedy by default: it is reproducible, which is the only
+    // thing that makes a repetition loop attributable to the *strategy* rather
+    // than blamed on the weights.
+    it("opens with a reproducible one", () => {
+      expect(DECODING_PRESETS.length).toBeGreaterThanOrEqual(3);
+      expect(DECODING_PRESETS[0].decoding.doSample).toBe(false);
+    });
+
+    it("ships both regimes, so the comparison has something to compare", () => {
+      expect(DECODING_PRESETS.some((p) => p.decoding.doSample)).toBe(true);
+      expect(DECODING_PRESETS.some((p) => !p.decoding.doSample)).toBe(true);
+    });
+
+    // The page's demonstration: greedy with no repetition penalty is where a
+    // small decoder degenerates. A preset set that quietly penalised repetition
+    // everywhere would hide the thing the page is about.
+    it("includes a preset with the repetition penalty off", () => {
+      const loop = DECODING_PRESETS.find((p) => p.id === "loop");
+      expect(loop).toBeDefined();
+      expect(loop!.decoding.repetitionPenalty).toBe(1.0);
+      expect(loop!.decoding.doSample).toBe(false);
+    });
+
+    it("gives every preset a distinct id and a reason", () => {
+      expect(new Set(DECODING_PRESETS.map((p) => p.id)).size).toBe(
+        DECODING_PRESETS.length,
+      );
+      for (const p of DECODING_PRESETS) {
+        expect(p.hint.length).toBeGreaterThan(0);
+        expect(p.decoding.maxNewTokens).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  // The `@slow` spec asserts a known continuation, so one sample has to have
+  // one — a page whose every prompt is open-ended cannot be checked at all.
+  it("ships a prompt with exactly one right continuation", () => {
+    const anchor = TEXTGEN_SAMPLES.find((s) => s.id === "unambiguous");
+    expect(anchor).toBeDefined();
+    expect(anchor!.text).toMatch(/capital of France/i);
+    for (const s of TEXTGEN_SAMPLES) {
+      expect(s.text.length).toBeGreaterThan(0);
+      expect(s.hint.length).toBeGreaterThan(0);
+    }
   });
 });

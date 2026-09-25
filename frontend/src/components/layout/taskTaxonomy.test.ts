@@ -47,7 +47,9 @@ describe("taskCategories", () => {
     const audioToAudio = all.find((t) => t.slug === "audio-to-audio")!;
     const vad = all.find((t) => t.slug === "voice-activity-detection")!;
 
-    expect(textGen.to).toBe("/playground");
+    // Was `/playground` until §3.8 shipped a real task page for it. The demo
+    // surface stays reachable on its own terms; it no longer owns the row.
+    expect(textGen.to).toBe("/text-generation");
     expect(textToSpeech.to).toBe("/text-to-speech");
     expect(audioToAudio.to).toBe("/audio-to-audio");
     expect(vad.to).toBe("/vad");
@@ -147,7 +149,12 @@ describe("tasksBySlug", () => {
 
 describe("categoryForPath", () => {
   it("returns the category owning a mapped route", () => {
-    expect(categoryForPath("/playground")).toBe(
+    // `/playground` belongs to **Theory** now, not to NLP. §3.8 took the
+    // Text Generation row off it — a WebGPU demo surface is not a task page —
+    // and gave the demo a Theory row of its own so it stays in the sidebar
+    // rather than becoming URL-only.
+    expect(categoryForPath("/playground")).toBe("Theory");
+    expect(categoryForPath("/text-generation")).toBe(
       "Natural Language Processing",
     );
     expect(categoryForPath("/tensor")).toBe("Theory");
@@ -214,6 +221,11 @@ describe("Natural Language Processing", () => {
     // §3.6, and the page that survived its own Phase 0 gate: distilbart opens a
     // q8 WebGPU session, which is the only configuration inside the size bar.
     expect(at("summarization")).toBe("/summarization");
+    // §3.8, and the row **moved**: it used to resolve to `/playground`, which
+    // is a WebGPU demo surface rather than a task page. A page that is not a
+    // task page should not claim a task row.
+    expect(at("text-generation")).toBe("/text-generation");
+    expect(at("text-generation")).not.toBe("/playground");
   });
 
   it("leaves Table Question Answering on the placeholder", () => {

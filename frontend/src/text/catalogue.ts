@@ -26,6 +26,9 @@
 
 import { SEQ2SEQ_WASM_DTYPES } from "@/model/backend";
 
+import { DEFAULT_DECODING } from "./textgenTypes";
+import type { Decoding, TextGenModel } from "./textgenTypes";
+
 import type { TextModel } from "./types";
 
 export interface TextClassifierModel extends TextModel {
@@ -1266,5 +1269,184 @@ export const ARTICLE_SAMPLES: ArticleSample[] = [
       "threshold had been raised the previous year. Keller said he had escalated every case he " +
       "was unsure about. The report recommends that both approval limits be reset and that a " +
       "second signature be required above 250,000 euros.",
+  },
+];
+
+// --- Text generation ---------------------------------------------------------
+
+/**
+ * §3.8's catalogue, and every entry in it is the result of a measurement rather
+ * than the roadmap's table — which was wrong about GPT-2 in three separate ways.
+ *
+ * **`Xenova/gpt2`'s "128.3 MB at q4f16" is not a file that exists**, and the way
+ * it does not exist is worth the paragraph. Its blob listing:
+ *
+ *   onnx/model.onnx                           500.8 MB
+ *   onnx/model_fp16.onnx                      250.8 MB
+ *   onnx/model_q4f16.onnx                     250.8 MB   <- to the byte, ±19
+ *   onnx/model_q4.onnx                        499.6 MB   <- ≈ the fp32 build
+ *   onnx/decoder_model_merged_quantized.onnx  128.3 MB   <- the roadmap's number
+ *
+ * So: the 4-bit builds are **not quantized** (GPT-2's `Conv1D` weights are
+ * skipped by the exporter — the same class as SmolVLM's `embed_tokens_q4f16`,
+ * but total rather than 30%); there is **no `model_quantized.onnx`**, so
+ * `loadOpts("wasm")`'s `q8` 404s; and the 128.3 MB file belongs to a legacy
+ * graph family that 4.2.0 reaches only via `model_file_name`.
+ *
+ * **Phase 0 asked whether that legacy graph loads. It does not.** The option
+ * *does* pass through `pipeline()` and the file *is* found — but the session
+ * fails to open with `qdq_actions.cc:137 … Missing required scale:
+ * transformer.wte.weight_merged_0_scale`, which is the same ONNX Runtime bug as
+ * Whisper's, Donut's, Marian's and BART's. GPT-2 is **decoder-only**, which is
+ * what proves that bug was never about encoder-decoders (see
+ * `SEQ2SEQ_WASM_DTYPES`); and because a decoder-only model has one graph, there
+ * is no per-module fallback to reach for. Its only unquantized build is 500 MB,
+ * over §0's bar. **So GPT-2 has no CPU path at all**, and ships at fp16 on
+ * WebGPU only.
+ *
+ * **SmolLM2-360M-Instruct is the default, and it is the entry that gives this
+ * page a CPU path.** 272.7 MB at q4f16 on WebGPU, genuinely quantized — and
+ * measured working at **q8 on WASM** (364.6 MB, 34 s to load, ~180 ms a token),
+ * which is what a `vlmLoadOpts`-style `q4` on WASM was not verified to do. That
+ * pin is therefore a measurement. The roadmap wanted GPT-2 as the default
+ * because it loops so readily; the demonstration is worth keeping and the
+ * default is not, now that GPT-2 measures 251 MB with no CPU path while SmolLM2
+ * measures 273 MB and runs on both.
+ */
+export const TEXTGEN_MODELS: TextGenModel[] = [
+  {
+    id: "HuggingFaceTB/SmolLM2-360M-Instruct",
+    label: "SmolLM2 360M Instruct",
+    hint: "The default, and the only entry with a CPU path — 273 MB on GPU, 365 MB on CPU at ~180 ms a token.",
+    domain: "instruction tuning over SmolLM2's own corpus",
+    params: 362,
+    instruct: true,
+    // A measurement, not a preference. `vlmLoadOpts()` would ask WASM for `q4`,
+    // which is unverified here; `q8` is the build that was actually loaded and
+    // generated from (34 s to load, 12 tokens in 2.19 s).
+    dtypes: { wasm: "q8" },
+    bytes: { webgpu: 272_737_275, wasm: 364_564_671 },
+  },
+  {
+    id: "Xenova/gpt2",
+    label: "GPT-2 (124M)",
+    hint: "The loop demonstration: greedy decoding degenerates on it within a sentence. GPU only, and fp16 — see the note above.",
+    domain: "WebText, 2019, no instruction tuning at all",
+    params: 124,
+    instruct: false,
+    // fp16 because nothing smaller exists that loads: `model_q4f16.onnx` is the
+    // same size as this file and is not actually quantized, `model_quantized`
+    // is absent, and the 128.3 MB legacy graph fails to open a session.
+    dtypes: { webgpu: "fp16" },
+    // fp16 weights, so the adapter must have `shader-f16` — without it the
+    // download succeeds and every run fails on its first operator.
+    requireShaderF16: true,
+    backends: ["webgpu"],
+    bytes: { webgpu: 250_753_380 },
+  },
+  {
+    id: "onnx-community/Qwen2.5-0.5B-Instruct",
+    label: "Qwen2.5 0.5B Instruct",
+    hint: "The heavy end: 483 MB, and the only one here that writes genuinely coherent paragraphs. GPU only.",
+    domain: "instruction tuning, multilingual",
+    params: 494,
+    instruct: true,
+    requireShaderF16: true,
+    // q8 on WASM is 512.1 MB, past §0's bar, so the CPU path is not offered
+    // rather than being offered and disappointing.
+    backends: ["webgpu"],
+    bytes: { webgpu: 483_003_582 },
+  },
+];
+
+export const DEFAULT_TEXTGEN_MODEL = TEXTGEN_MODELS[0].id;
+
+/**
+ * Presets, because the page's subject is the *strategies* and a row of sliders
+ * does not teach one.
+ *
+ * `greedy` is first and is the default: it is reproducible, which is what makes
+ * the loop attributable to the decoding rather than to the model. `loop` is
+ * greedy with the repetition penalty off and a long budget — the failure the
+ * page exists to show. `creative` is the one that reads best and is the least
+ * predictable.
+ */
+export interface DecodingPreset {
+  id: string;
+  label: string;
+  hint: string;
+  decoding: Decoding;
+}
+
+export const DECODING_PRESETS: DecodingPreset[] = [
+  {
+    id: "greedy",
+    label: "Greedy",
+    hint: "Always the likeliest token. Reproducible — run it twice and you get the same text.",
+    decoding: { ...DEFAULT_DECODING, doSample: false, maxNewTokens: 96 },
+  },
+  {
+    id: "loop",
+    label: "Greedy, long",
+    hint: "The same, with no repetition penalty and more room. This is where greedy decoding degenerates.",
+    decoding: {
+      ...DEFAULT_DECODING,
+      doSample: false,
+      repetitionPenalty: 1.0,
+      maxNewTokens: 200,
+    },
+  },
+  {
+    id: "balanced",
+    label: "Sampling",
+    hint: "Temperature 0.7 with nucleus sampling. The usual default in a chat app.",
+    decoding: {
+      ...DEFAULT_DECODING,
+      doSample: true,
+      temperature: 0.7,
+      topP: 0.9,
+      topK: 50,
+    },
+  },
+  {
+    id: "creative",
+    label: "Hot",
+    hint: "Temperature 1.4, wide nucleus. Reads best and goes off the rails soonest.",
+    decoding: {
+      ...DEFAULT_DECODING,
+      doSample: true,
+      temperature: 1.4,
+      topP: 0.98,
+      topK: 0,
+    },
+  },
+];
+
+/**
+ * Prompts chosen so the decoding strategy is what varies, not the difficulty.
+ *
+ * `unambiguous` has one obvious continuation, so a broken tokenizer or a wrong
+ * chat template is visible immediately — it is what the `@slow` spec asserts on.
+ * `listy` is the one that loops under greedy decoding, which is the page's whole
+ * demonstration.
+ */
+export const TEXTGEN_SAMPLES: TextSample[] = [
+  {
+    id: "unambiguous",
+    label: "One obvious answer",
+    text: "The capital of France is",
+    hint: "There is one right continuation. If this comes out wrong, nothing else on the page means anything.",
+  },
+  {
+    id: "listy",
+    label: "Invites a loop",
+    hint: "Greedy decoding degenerates here within a couple of sentences. Try it, then turn sampling on.",
+    text: "Here is a list of things to remember when travelling:",
+  },
+  {
+    id: "story",
+    label: "Open-ended",
+    text: "The lighthouse keeper had not spoken to anyone in three weeks when",
+    hint: "Nothing to be right about, so this is where temperature is visible rather than arguable.",
   },
 ];

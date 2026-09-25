@@ -65,14 +65,16 @@ describe("SidebarNav", () => {
   });
 
   it("auto-expands the category owning the active route", () => {
-    // pathname is mocked to /playground, which Text Generation (NLP) maps to
+    // pathname is mocked to /playground, which is Theory's GPU Playground row.
+    // It used to be Text Generation's (NLP) — §3.8 took that row for a real
+    // task page and left the demo a row of its own.
     render(<SidebarNav />);
-    expect(screen.getByText("Text Generation")).toBeInTheDocument();
+    expect(screen.getByText("GPU Playground")).toBeInTheDocument();
   });
 
   it('marks the active task with aria-current="page"', () => {
     render(<SidebarNav />);
-    const link = screen.getByText("Text Generation").closest("a");
+    const link = screen.getByText("GPU Playground").closest("a");
     expect(link).toHaveAttribute("aria-current", "page");
   });
 

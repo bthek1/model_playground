@@ -746,7 +746,6 @@ test.describe("@slow summarization", () => {
     const summary = (await page.getByTestId("summary-text").innerText()).trim();
     const article = await page.locator("#sm-text").inputValue();
 
-    // eslint-disable-next-line no-console
     console.log(
       `[phase 0] one summary on ${await model.backend()}: ${elapsed} ms ` +
         `(${summary.split(/\s+/).length} words)`,
@@ -764,5 +763,97 @@ test.describe("@slow summarization", () => {
     await expect(page.getByTestId("baseline-text")).toContainText(
       /European Space Agency/,
     );
+  });
+});
+
+// --- Text generation (§3.8) --------------------------------------------------
+
+test.describe("@slow text generation", () => {
+  test.slow();
+
+  /**
+   * `just fe-e2e-textgen`.
+   *
+   * Two assertions, and the second is the one that earns the minutes.
+   *
+   * The first is a known continuation on an unambiguous prompt. "Some text
+   * appeared" would pass while the chat template was wrong, or the tokenizer
+   * was, or the prompt was being handed back to the user — all of which produce
+   * fluent output.
+   *
+   * The second is that **greedy, run twice, produces identical text**. That is
+   * the only assertion here that proves the decoding parameters reach the model
+   * at all: a page that dropped them entirely would still generate, still look
+   * right, and still pass the first assertion. It is also the property the whole
+   * page depends on — a repetition loop is only attributable to greedy decoding
+   * if greedy decoding is reproducible.
+   *
+   * The default entry has a WASM path, so this does not need a GPU. On a machine
+   * with an adapter but no `shader-f16` the load resolves to WASM by itself:
+   * `pickBackendForF16` asks the same question in the worker that the picker
+   * asks in the page, which is why the two cannot disagree here.
+   */
+  test("continues a known prompt, and greedy twice is identical", async ({
+    page,
+  }) => {
+    test.setTimeout(15 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/text-generation");
+    await model.load();
+    await model.waitForReady();
+
+    // Greedy is the default preset, and the prompt has one right continuation.
+    await page.locator("#tg-prompt").fill("The capital of France is");
+    await model.run(/^Generate$/);
+
+    const out = page.getByTestId("generated-text");
+    await expect(out).toBeVisible({ timeout: 300_000 });
+    const first = (await out.innerText()).trim();
+    expect(first.length, "the model produced nothing").toBeGreaterThan(0);
+    expect(first).toMatch(/paris/i);
+
+    // The answer is labelled with the strategy that produced it.
+    await expect(page.getByTestId("ran-settings")).toContainText("greedy");
+
+    // Same prompt, same settings, again. Greedy decoding always takes the
+    // highest-probability token, so this must come back byte-identical — and if
+    // the decoding parameters never reached the model, it would not.
+    await model.run(/^Generate$/);
+    await expect(out).toBeVisible({ timeout: 300_000 });
+    await expect
+      .poll(async () => (await out.innerText()).trim(), { timeout: 300_000 })
+      .toBe(first);
+
+    // And the model stayed loaded across both runs: two inferences, one load.
+    await expect(model.readyStatus).toBeVisible();
+  });
+
+  test("the comparison really runs twice, and labels each half", async ({
+    page,
+  }) => {
+    test.setTimeout(15 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/text-generation");
+    await model.load();
+    await model.waitForReady();
+
+    await page.locator("#tg-prompt").fill("The capital of France is");
+    // Sampling on one side, greedy on the other — the comparison the page is
+    // built around.
+    await page.getByTestId("mode-sample").click();
+    await page.getByTestId("compare-run").click();
+
+    await expect(page.getByTestId("comparison-text")).toBeVisible({
+      timeout: 600_000,
+    });
+    // Two generations of one prompt, each labelled with its own strategy.
+    await expect(page.getByTestId("ran-settings")).toContainText("T=");
+    await expect(page.getByTestId("comparison")).toContainText("greedy");
+    // Deliberately **not** asserting the two texts differ: sampling at a low
+    // temperature can reproduce the greedy path, so that would pin a property
+    // the model does not promise — the mistake the video-text-to-text spec was
+    // written to avoid.
   });
 });

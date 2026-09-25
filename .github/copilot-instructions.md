@@ -850,7 +850,7 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   `data-testid` on a wrapper.
 - **OCR now has no page**, and **metric depth has no path** (ZoeDepth has no export).
 
-**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`, `/text-features`, `/sentence-similarity`, `/translation`, `/summarization`) — the fourth modality, and the cheapest module in the app:**
+**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`, `/text-features`, `/sentence-similarity`, `/translation`, `/summarization`, `/text-generation`) — the fourth modality, and the cheapest module in the app:**
 
 - **There is no decode step, and that is the point.** No text equivalent of `audio/io.ts`
   or `vision/image.ts` exists: the input is already a string, so there is no
@@ -1094,6 +1094,67 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   fabricated clause. It must pass `hypothesis_template: "{}"` — the third page to need
   that — and it states its own caveat: MNLI premises are single sentences, so an article is
   out of distribution and truncated at 512 tokens.
+
+- **`/text-generation` is the decoding strategies made interactive, not a chatbot** — and
+  it is the payoff for #30 putting `partial` in the **shared** `ModelResponse` envelope.
+  Streaming needed nothing the envelope did not have: `partial` carries the text so far
+  against the request id, Machine A stays `ready`, `running` stays an inflight count, and a
+  partial whose request already settled is dropped — all three already in
+  `useModelWorker`, and already asserted in `useModelWorker.test.ts`, which is where the
+  rule lives. `TextGenPartial` is deliberately **not** a stage union like the VLM's: a
+  text-only decoder has no encode phase, so a stage would say nothing the arriving text
+  does not. It gets its own worker (`textgen.worker.ts`) for the ASR reason — the task that
+  owns a loop owns its worker.
+- **The `qdq_actions.cc:137` bug is a property of the *export*, not of the architecture**,
+  and GPT-2 is what proved it. Its q8 `decoder_model_merged` graph fails with
+  `transformer.wte.weight_merged_0_scale` — the same error as Whisper, Donut, Marian and
+  BART — and GPT-2 is **decoder-only**, so "any encoder-decoder whose decoder is quantized"
+  was never the rule. Nor is it "tied embeddings": SmolLM2-360M has
+  `tie_word_embeddings: true` and its `model_quantized.onnx` loads and generates on WASM
+  fine (34 s, ~180 ms a token, measured). The older `Xenova/*` q8 builds fuse the embedding
+  matmul into `MatMulNBits` with a merged scale the bundled provider cannot find; newer
+  exports do not. **So: try q8, and if the session fails naming a `*_merged_0_scale`, pin
+  the graph holding the embeddings to fp32 or find a newer export.** The fp32 fallback only
+  exists for a *multi-graph* model — a decoder-only one has nothing to pin, which is why
+  GPT-2 has no CPU path at all (its only unquantized build is 500 MB).
+- **`model_file_name` does pass through `pipeline()`** — the file was found; the session is
+  what failed. That half of #47's Phase 0 is settled and worth keeping: a repo whose only
+  quantized build lives under a legacy `decoder_model_merged_*` name *is* reachable, via
+  `MODEL_SESSION_CONFIG[DecoderOnly]`'s `{ model: options.model_file_name ?? 'model' }`.
+- **SmolLM2-360M-Instruct is the default, against §3.8's own preference.** GPT-2 loops more
+  readily and stays as the demonstration, but it measures 251 MB with no CPU path while
+  SmolLM2 measures 273 MB genuinely quantized and runs on both. The roadmap's
+  "128.3 MB at q4f16" was wrong three ways: `model_q4f16.onnx` is within 19 bytes of the
+  fp16 build (`Conv1D` weights are skipped by the exporter), there is no
+  `model_quantized.onnx` so a default `q8` 404s, and the 128.3 MB file is the legacy graph
+  above.
+- **`pickBackendForF16` closes a gap that had been luck, not design.** The picker asks
+  "would this load on a GPU?" through `useBackendProbe({ requireShaderF16: true })`; the
+  worker asked it with a plain `pickBackend()`. The two could not disagree while every
+  `q4f16` entry declared `backends: ["webgpu"]` — the row was disabled, so the worker was
+  never asked on a bad machine. The first entry with an f16 GPU path **and** a working CPU
+  fallback breaks that: the row is legitimately enabled, and a plain `pickBackend()` then
+  sends the user to an adapter that loads the weights, reports `ready` and fails on the
+  first operator of every run. Use it wherever the resolved precision may be f16.
+- **Every decoding control is INPUT and spends.** Temperature, `top_p`, `top_k`,
+  greedy-vs-sampling and the repetition penalty cannot re-derive from a finished
+  generation, so changing one runs nothing and the page says the next GENERATE is real.
+  Under greedy the sampling knobs are **disabled and not sent at all** rather than sent and
+  ignored: Transformers.js warns on a sampling parameter in a greedy run, and a warning the
+  user cannot see is worse than an option that is visibly absent.
+- **`just fe-e2e-textgen` asserts greedy run twice is byte-identical.** It is the only
+  assertion that proves the decoding parameters reach the model — a page that dropped them
+  would still generate, still read correctly, and still pass a known-continuation check —
+  and it is the property the page depends on, since a repetition loop is attributable to
+  greedy decoding only if greedy decoding is reproducible. The comparison test deliberately
+  does **not** assert the two halves differ: low-temperature sampling can reproduce the
+  greedy path, and asserting otherwise would pin a property the model does not promise.
+- **`/playground` lost the Text Generation row and gained a Theory row of its own.** It is
+  a WebGPU demo surface, not a task page, so it should not claim a task row — but
+  re-pointing the row alone would have left it reachable only by URL, which is not what
+  "stays reachable on its own terms" means. It is now **GPU Playground** under **Theory**,
+  this repo's own non-Hub category, alongside the other hand-written WGSL surfaces;
+  `categoryForPath("/playground")` is `"Theory"` and a test pins both halves.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 

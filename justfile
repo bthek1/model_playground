@@ -396,6 +396,25 @@ fe-e2e-translate:
 fe-e2e-summarize:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "summarization"
 
+# Run only the @slow text-generation specs: a real SmolLM2-360M load (273 MB at
+# q4f16 on WebGPU, 365 MB at q8 on WASM) and real streamed generations.
+#
+# Two assertions. The first is a known continuation on an unambiguous prompt —
+# "some text appeared" passes while the chat template is wrong, or the tokenizer
+# is, or the user's own prompt is being handed back, all of which read fluently.
+#
+# The second is the one that earns the minutes: **greedy, run twice, must be
+# byte-identical.** It is the only assertion that proves the decoding parameters
+# reach the model at all — a page that dropped them would still generate, still
+# look right and still pass the first. It is also the property the page depends
+# on, since a repetition loop is only attributable to greedy decoding if greedy
+# decoding is reproducible.
+#
+# No GPU required: the default entry has a measured WASM path, and on an adapter
+# without shader-f16 the worker resolves to WASM by itself (pickBackendForF16).
+fe-e2e-textgen:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "text generation"
+
 # Run only the @slow embedding specs: a real all-MiniLM-L6-v2 load (43 MB on
 # WebGPU / 22 MB on WASM — the cheapest floor in the app) and real cosines.
 #

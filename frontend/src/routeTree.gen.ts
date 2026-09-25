@@ -20,6 +20,7 @@ import { Route as TranslationRouteImport } from './routes/translation'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TokenClassificationRouteImport } from './routes/token-classification'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
+import { Route as TextGenerationRouteImport } from './routes/text-generation'
 import { Route as TextFeaturesRouteImport } from './routes/text-features'
 import { Route as TextClassificationRouteImport } from './routes/text-classification'
 import { Route as TensorRouteImport } from './routes/tensor'
@@ -105,6 +106,11 @@ const TokenClassificationRoute = TokenClassificationRouteImport.update({
 const TextToSpeechRoute = TextToSpeechRouteImport.update({
   id: '/text-to-speech',
   path: '/text-to-speech',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TextGenerationRoute = TextGenerationRouteImport.update({
+  id: '/text-generation',
+  path: '/text-generation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TextFeaturesRoute = TextFeaturesRouteImport.update({
@@ -288,6 +294,7 @@ export interface FileRoutesByFullPath {
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
+  '/text-generation': typeof TextGenerationRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
@@ -331,6 +338,7 @@ export interface FileRoutesByTo {
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
+  '/text-generation': typeof TextGenerationRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
@@ -375,6 +383,7 @@ export interface FileRoutesById {
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
+  '/text-generation': typeof TextGenerationRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
@@ -420,6 +429,7 @@ export interface FileRouteTypes {
     | '/tensor'
     | '/text-classification'
     | '/text-features'
+    | '/text-generation'
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
@@ -463,6 +473,7 @@ export interface FileRouteTypes {
     | '/tensor'
     | '/text-classification'
     | '/text-features'
+    | '/text-generation'
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
@@ -506,6 +517,7 @@ export interface FileRouteTypes {
     | '/tensor'
     | '/text-classification'
     | '/text-features'
+    | '/text-generation'
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
@@ -550,6 +562,7 @@ export interface RootRouteChildren {
   TensorRoute: typeof TensorRoute
   TextClassificationRoute: typeof TextClassificationRoute
   TextFeaturesRoute: typeof TextFeaturesRoute
+  TextGenerationRoute: typeof TextGenerationRoute
   TextToSpeechRoute: typeof TextToSpeechRoute
   TokenClassificationRoute: typeof TokenClassificationRoute
   TrainingRoute: typeof TrainingRoute
@@ -641,6 +654,13 @@ declare module '@tanstack/react-router' {
       path: '/text-to-speech'
       fullPath: '/text-to-speech'
       preLoaderRoute: typeof TextToSpeechRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/text-generation': {
+      id: '/text-generation'
+      path: '/text-generation'
+      fullPath: '/text-generation'
+      preLoaderRoute: typeof TextGenerationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/text-features': {
@@ -886,6 +906,7 @@ const rootRouteChildren: RootRouteChildren = {
   TensorRoute: TensorRoute,
   TextClassificationRoute: TextClassificationRoute,
   TextFeaturesRoute: TextFeaturesRoute,
+  TextGenerationRoute: TextGenerationRoute,
   TextToSpeechRoute: TextToSpeechRoute,
   TokenClassificationRoute: TokenClassificationRoute,
   TrainingRoute: TrainingRoute,

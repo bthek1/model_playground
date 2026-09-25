@@ -45,6 +45,7 @@ test.describe("@slow model catalogue", () => {
       EMBED_MODELS,
       TRANSLATION_MODELS,
       SUMMARIZER_MODELS,
+      TEXTGEN_MODELS,
     } = await import("../../src/text/catalogue");
 
     const ids = [
@@ -75,6 +76,7 @@ test.describe("@slow model catalogue", () => {
       ...EMBED_MODELS,
       ...TRANSLATION_MODELS,
       ...SUMMARIZER_MODELS,
+      ...TEXTGEN_MODELS,
       // An embedding entry also names the **upstream** repo its pooling is
       // read from, which is a different repo from the ONNX mirror it loads.
       // Both have to exist or the pooling check below cannot run.
@@ -199,12 +201,17 @@ test.describe("@slow model catalogue", () => {
       EMBED_MODELS,
       TRANSLATION_MODELS,
       SUMMARIZER_MODELS,
+      TEXTGEN_MODELS,
     } = await import("../../src/text/catalogue");
 
     const SUFFIX: Record<string, string> = {
       fp16: "_fp16",
       q8: "_quantized",
       fp32: "",
+      // The generative entries. `q4f16` is the default precision for a decoder
+      // (`vlmLoadOpts`), not an override.
+      q4f16: "_q4f16",
+      q4: "_q4",
     };
     const DEFAULT_DTYPE: Record<string, string> = {
       webgpu: "fp16",
@@ -223,6 +230,15 @@ test.describe("@slow model catalogue", () => {
       ...EMBED_MODELS,
       ...TRANSLATION_MODELS,
       ...SUMMARIZER_MODELS,
+      // A text-generation entry's default precision is `q4f16`, not `fp16`, and
+      // one of them reads a **legacy graph name** rather than `model` — so the
+      // suffix map and the graph list both have to be told, or the check looks
+      // at a file the entry never requests and passes.
+      ...TEXTGEN_MODELS.map((m) => ({
+        ...m,
+        graphs: m.graphs ?? [m.modelFile ?? "model"],
+        dtypes: { webgpu: "q4f16" as const, ...m.dtypes },
+      })),
     ]) {
       const res = await request.get(
         `https://huggingface.co/api/models/${model.id}?blobs=true`,

@@ -45,7 +45,7 @@ function slugify(label: string): string {
  * generic `/tasks/$slug` placeholder.
  */
 const REAL_ROUTES: Record<string, string> = {
-  "text-generation": "/playground",
+  "gpu-playground": "/playground",
   "linear-model-training": "/training",
   "tensor-arithmetic": "/tensor",
   "automatic-speech-recognition": "/asr",
@@ -152,6 +152,14 @@ const REAL_ROUTES: Record<string, string> = {
   // floor that keeps a CPU path. The lead-3 baseline ships as the output's empty
   // state — it needs no model, and beating it is harder than it sounds.
   "summarization": "/summarization",
+  // §3.8, the category's only streaming page — and the one that takes this row
+  // back from `/playground`. `/playground` is a WebGPU demo surface, not a task
+  // page, and it should not claim a task row; it stays reachable on its own
+  // terms. The page is the **decoding strategies made interactive** rather than
+  // a chatbot: greedy against sampling on the same prompt, with the repetition
+  // loop visible. It is also the payoff for #30 putting `partial` in the shared
+  // `ModelResponse` envelope rather than in a private VLM protocol.
+  "text-generation": "/text-generation",
   "feature-extraction": "/text-features",
   "sentence-similarity": "/sentence-similarity",
   // Three slugs deliberately have no route and fall through to the placeholder,
@@ -294,6 +302,12 @@ export const taskCategories: TaskCategory[] = [
       "Linear Model Training",
       "Discrete Maths",
       "Tensor Arithmetic",
+      // Taking §3.8's task row away from `/playground` would have left it
+      // reachable only by typing the URL, which is not what "stays reachable on
+      // its own terms" means. Theory is this repo's own non-Hub category and is
+      // where the hand-written WGSL surfaces already live, so the demo gets a
+      // row of its own here instead of borrowing an NLP task's.
+      "GPU Playground",
     ]),
   },
 ];

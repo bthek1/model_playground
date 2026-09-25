@@ -382,3 +382,194 @@ test.describe("/fill-mask", () => {
     await expect(model.button(/fill the mask/i)).toBeDisabled();
   });
 });
+
+test.describe("/translation", () => {
+  test("renders four slots and downloads nothing on arrival @smoke", async ({
+    page,
+  }) => {
+    const model = new ModelPageObject(page);
+    let hubRequests = 0;
+    await page.route(
+      (url) => url.hostname.endsWith("huggingface.co"),
+      (route) => {
+        hubRequests += 1;
+        return route.abort();
+      },
+    );
+
+    await page.goto("/translation");
+    await expect(
+      page.getByRole("heading", { level: 1, name: /translation/i }),
+    ).toBeVisible();
+
+    await expect(model.slots).toHaveCount(4);
+    await expect(model.emptyOutput).toBeVisible();
+    await expect(model.loadButton).toBeVisible();
+    await expect(model.sizeNote).toContainText(/MB/);
+    expect(hubRequests, "Hub requests before the LOAD click").toBe(0);
+  });
+
+  // The rule this page is most likely to be read as breaking: a direction is a
+  // checkpoint, so the control that looks like a toggle is a model selector.
+  test("changing direction spends nothing and says it is a download", async ({
+    page,
+  }) => {
+    const model = new ModelPageObject(page);
+    await model.blockModelDownloads();
+    await page.goto("/translation");
+
+    await expect(page.getByTestId("pair-is-a-download")).toContainText(
+      /separate checkpoint/i,
+    );
+    await page
+      .getByRole("button", { name: /^German → English/ })
+      .first()
+      .click();
+
+    // Still idle: a SELECT change did not start a download.
+    await expect(model.loadButton).toBeVisible();
+    await expect(model.emptyOutput).toBeVisible();
+    await expect(model.button(/^Translate$/)).toBeDisabled();
+    await expect(page.locator("#tr-text")).toBeEnabled();
+  });
+});
+
+test.describe("/summarization", () => {
+  test("renders four slots and downloads nothing on arrival @smoke", async ({
+    page,
+  }) => {
+    const model = new ModelPageObject(page);
+    let hubRequests = 0;
+    await page.route(
+      (url) => url.hostname.endsWith("huggingface.co"),
+      (route) => {
+        hubRequests += 1;
+        return route.abort();
+      },
+    );
+
+    await page.goto("/summarization");
+    await expect(
+      page.getByRole("heading", { level: 1, name: /summarization/i }),
+    ).toBeVisible();
+
+    await expect(model.slots).toHaveCount(4);
+    await expect(model.emptyOutput).toBeVisible();
+    await expect(model.loadButton).toBeVisible();
+    expect(hubRequests, "Hub requests before the LOAD click").toBe(0);
+  });
+
+  // The page's best idea, and a correctness requirement rather than decoration:
+  // the baseline needs no model, so it is the empty state.
+  test("shows the lead-3 baseline with no model loaded at all", async ({
+    page,
+  }) => {
+    const model = new ModelPageObject(page);
+    await model.blockModelDownloads();
+    await page.goto("/summarization");
+
+    await expect(page.getByTestId("baseline-preview")).toContainText(
+      /European Space Agency/,
+    );
+    // Still idle, and the note says what the baseline is for.
+    await expect(model.loadButton).toBeVisible();
+    await expect(model.emptyOutput).toContainText(/no model, no download/i);
+
+    // Editing the article re-derives it, and spends nothing.
+    await page.locator("#sm-text").fill("One. Two. Three. Four is too far.");
+    await expect(page.getByTestId("baseline-preview")).toHaveText(
+      "One. Two. Three.",
+    );
+    await expect(model.button(/^Summarize$/)).toBeDisabled();
+  });
+
+  test("the faithfulness check is opt-in and downloads nothing until asked", async ({
+    page,
+  }) => {
+    let hubRequests = 0;
+    await page.route(
+      (url) => url.hostname.endsWith("huggingface.co"),
+      (route) => {
+        hubRequests += 1;
+        return route.abort();
+      },
+    );
+    await page.goto("/summarization");
+
+    await expect(page.getByTestId("faithful-load")).toHaveCount(0);
+    await page.getByTestId("enable-faithfulness").click();
+    // Revealing the second LOAD is not pressing it.
+    await expect(page.getByTestId("faithful-load")).toBeVisible();
+    expect(hubRequests, "Hub requests after opting in").toBe(0);
+  });
+});
+
+test.describe("/text-generation", () => {
+  test("renders four slots and downloads nothing on arrival @smoke", async ({
+    page,
+  }) => {
+    const model = new ModelPageObject(page);
+    let hubRequests = 0;
+    await page.route(
+      (url) => url.hostname.endsWith("huggingface.co"),
+      (route) => {
+        hubRequests += 1;
+        return route.abort();
+      },
+    );
+
+    await page.goto("/text-generation");
+    await expect(
+      page.getByRole("heading", { level: 1, name: /text generation/i }),
+    ).toBeVisible();
+
+    await expect(model.slots).toHaveCount(4);
+    await expect(model.emptyOutput).toBeVisible();
+    await expect(model.loadButton).toBeVisible();
+    expect(hubRequests, "Hub requests before the LOAD click").toBe(0);
+  });
+
+  // The page's defining rule. None of these can re-derive from a finished
+  // generation, so they are INPUT and they spend — but only on GENERATE.
+  //
+  // (That the stream *paints incrementally* is asserted in the route's Vitest
+  // test instead: the page's only seam for a partial is the worker, and there is
+  // no way to inject one from a real browser without a model. The mocked run
+  // here therefore checks the half that is checkable — that nothing runs.)
+  test("every decoding control is free, and the page says the next run is not", async ({
+    page,
+  }) => {
+    const model = new ModelPageObject(page);
+    await model.blockModelDownloads();
+    await page.goto("/text-generation");
+
+    await page.getByTestId("mode-sample").click();
+    await page.locator("#tg-temp").fill("1.5");
+    await page.getByTestId("preset-loop").click();
+    await page.locator("#tg-prompt").fill("Once upon a time");
+
+    await expect(model.emptyOutput).toBeVisible();
+    await expect(page.getByTestId("spend-note")).toContainText(
+      /a real inference/i,
+    );
+    // Both triggers gated on a model; every control that is a *choice* is not.
+    await expect(model.button(/^Generate$/)).toBeDisabled();
+    await expect(page.getByTestId("compare-run")).toBeDisabled();
+    await expect(page.getByTestId("mode-greedy")).toBeEnabled();
+    await expect(page.locator("#tg-prompt")).toBeEnabled();
+  });
+
+  test("the sampling knobs are inert under greedy decoding", async ({
+    page,
+  }) => {
+    const model = new ModelPageObject(page);
+    await model.blockModelDownloads();
+    await page.goto("/text-generation");
+
+    // Greedy is the default, so they start disabled and are not merely ignored.
+    await expect(page.locator("#tg-temp")).toBeDisabled();
+    await expect(page.locator("#tg-topp")).toBeDisabled();
+    await page.getByTestId("mode-sample").click();
+    await expect(page.locator("#tg-temp")).toBeEnabled();
+  });
+});
