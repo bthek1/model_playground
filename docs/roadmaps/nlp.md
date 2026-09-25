@@ -24,7 +24,7 @@
 | Feature Extraction · Sentence Similarity (§3.7) | [`/text-features`](../../frontend/src/routes/text-features.tsx) · [`/sentence-similarity`](../../frontend/src/routes/sentence-similarity.tsx) | **Shipped** — one engine, two rows; the pooling is catalogue data, 22–284 MB |
 | Text Generation (§3.8) | [`/text-generation`](../../frontend/src/routes/text-generation.tsx) | **Shipped** — the decoding strategies, streamed; greedy twice must be identical, 251–483 MB |
 | Fill-Mask (§3.9) | [`/fill-mask`](../../frontend/src/routes/fill-mask.tsx) | **Shipped** — four base encoders, three tokenizer families, 68–300 MB |
-| Text Ranking (§3.10) | — | Planned — [#44](https://github.com/bthek1/model_playground/issues/44) |
+| Text Ranking (§3.10) | [`/text-ranking`](../../frontend/src/routes/text-ranking.tsx) | **Shipped** — all four stages client-side, two with no model, 46–264 MB |
 
 **The browser is an encoder paradise and a decoder compromise.** BERT-family encoders are
 20 MB to 400 MB and run a single forward pass, so classification, NER, extractive QA,
@@ -846,20 +846,77 @@ pass. `just fe-e2e-models` additionally reads each repo's own `tokenizer_config.
 compares it to the declared `maskToken`, so a drifted entry is a red test rather than a
 note on a page.
 
-### 3.10 Text Ranking — planned ([#44](https://github.com/bthek1/model_playground/issues/44))
+### 3.10 Text Ranking — **shipped**
 
-The most complete page available in the category: **all four retrieval stages run
-client-side** over a corpus the user pastes in, and two of the four are arithmetic with no
-model at all (BM25, RRF). The cross-encoder is what makes it worth building — it scores a
-*pair*, so it cannot be precomputed per document, which is exactly why it reranks the top
-20 rather than the whole corpus. That cost is visible in a browser, so the architecture
-teaches itself.
+Taxonomy task **Text Ranking** ·
+[`/text-ranking`](../../frontend/src/routes/text-ranking.tsx) ·
+[#44](https://github.com/bthek1/model_playground/issues/44). The most complete page the
+category has, because **all four retrieval stages run client-side** over a corpus the user
+pastes in — and two of the four need no model at all.
 
-**This page holds two models live at once, and that is a declared exception** to the
-one-model rule, on `/pose`'s precedent: an embedder plus a reranker is 128 MiB together on
-WASM. It inherits `/pose`'s two obligations — one catalogue entry naming both models with
-the **combined** download quoted, and `model/progress.ts` keyed on **repo + file** so two
-repos publishing the same filename do not overwrite each other's progress row.
+| stage | implementation | cost |
+|---|---|---|
+| BM25 | `text/bm25.ts`, pure TypeScript | **no model** |
+| Dense | one of §3.7's embedders | N passes once, then a dot product |
+| Hybrid RRF | `text/rrf.ts`, pure TypeScript | **no model** |
+| Rerank | `Xenova/ms-marco-MiniLM-L-6-v2` | **one pass per candidate** |
+
+| pair | fp16 (WebGPU) | q8 (WASM) |
+|---|---|---|
+| MiniLM + ms-marco | 90.9 MB | **46.1 MB** |
+| BGE base + ms-marco | 263.7 MB | 133.2 MB |
+| MiniLM + mxbai | 132.5 MB | 110.2 MB |
+
+**Two models live at once, which is the declared exception `/pose` established** — and it
+carries the same two obligations. An entry names both halves and quotes the **combined**
+download, because a guardrail that quotes half the bytes is worse than none. And the
+progress bar must span both, which took a new piece: `/pose` loads its pair inside **one**
+worker, so the repo-keyed progress table covers it; this page loads its pair in a worker
+each, so there are two tables and keying does not help. Showing either one fills the bar to
+100% and restarts it — the same "100% halfway through" failure, reached from the other
+direction. `combineProgress` sums the bytes against the catalogue entry's **measured
+combined size**, which is a constant, so the percent is monotonic *by construction* rather
+than by a stored clamp.
+
+**No new engine arm was needed for the cross-encoder, which is worth knowing before writing
+one.** A cross-encoder *is* a sequence classifier: the pipeline task is
+`text-classification` and the input is a `{ text, text_pair }` object, which `TextInput`
+already described. The plan budgeted a branch for it; there was nothing to add.
+
+**`mixedbread-ai/mxbai-rerank-xsmall-v1` publishes no fp16 build**, so `loadOpts("webgpu")`
+asks for a file that 404s at load. It is pinned to q8 on both backends, and the pin is a
+**missing file, not a precision judgement** — a distinction that matters because a
+precision pin invites "try removing it".
+
+**The page's cost model is the thing it teaches, so it is on screen before every click.**
+Embedding the corpus is N forward passes **once**; every query after it is a dot product.
+Reranking is one pass **per candidate** and cannot be precomputed, because a cross-encoder
+scores a query and a document *together* — which is exactly why it reranks a shortlist of
+20 rather than a corpus. BM25 and RRF spend nothing at all: `k1`, `b` and RRF's `k`
+re-score from a held index on the main thread, and BM25 ranks before anything is downloaded
+at all.
+
+**RRF does not have the property its name suggests, and the plan asserted that it did.**
+The plan's test was "a document ranked first in one list and last in the other lands
+between" a document both lists rank second. It does not: `1/(k + r)` is **convex**, so by
+Jensen the extreme pair scores *higher* — at `k = 60`, `1/60 + 1/62 = 0.032796` against
+`1/61 + 1/61 = 0.032787`. The margin is tiny and shrinks as `k` grows, but the sign is
+fixed, and a page showing four rank lists side by side will display it. RRF rewards being
+loved by one retriever over being liked by both, which is defensible and simply not what
+the name implies. `rrf.test.ts` pins the real ordering.
+
+**And the E2E sample had to be chosen against the page's own call pattern, which is a
+finding rather than a detail.** The obvious query — "how do I stop my laptop fan running
+constantly" — reads like the perfect demonstration and is not one. Embedded the way this
+page embeds (the corpus as one batch, the query alone) all-MiniLM scores the literal
+*laptop fan* decoy at **0.4556** and the right answer at **0.4459**: the wrong one wins.
+Embedded the way a quick offline check does it — query and corpus in one batch — the same
+model, the same q8 weights and the same text give **0.4394** and **0.4538**: the right one
+wins. **At q8 a sentence's embedding depends on the batch it was embedded in**, and padding
+to a different length shifts the numbers enough to flip a near-tie. The shipped sample is
+"my machine is overheating under load", which wins by 0.13 rather than 0.01; the original
+query stays in the catalogue as a **labelled counter-example**, because a page that quietly
+dropped it would be claiming more than it measured. `just fe-e2e-rank` is what caught this.
 
 ### 3.11 Table Question Answering — **does not port**
 

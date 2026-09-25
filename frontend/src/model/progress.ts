@@ -160,3 +160,64 @@ export function summarize(s: ProgressState, elapsedMs: number): LoadProgress {
     elapsedMs,
   };
 }
+
+/**
+ * One bar for a load that is spread across **two workers**.
+ *
+ * `/text-ranking` is the first page where a single LOAD click starts two
+ * independent downloads — an embedder and a reranker, in a worker each — and
+ * each worker keeps its own `ProgressState`. Showing whichever is non-null means
+ * the bar fills to 100%, then restarts: exactly the failure the `/pose` note
+ * above describes, arrived at from the other direction. `/pose` loads its pair
+ * inside one worker, so the repo-keyed table is enough there; two workers have
+ * two tables and nothing to key together.
+ *
+ * The denominator is therefore **not** estimated from the events. It is the
+ * catalogue entry's own measured `bytes` for the resolved backend, which is a
+ * constant — so the combined percent is monotonic *by construction* rather than
+ * by a stored clamp, and a newly-announced file cannot move it backwards.
+ *
+ * Measured `bytes` counts the ONNX graphs only, so the tokenizer and config
+ * files push `loaded` slightly past it near the end; the percent is clamped to
+ * 100. Reporting 100% a moment early is a better failure than a bar that
+ * appears to stall at 97%.
+ */
+export function combineProgress(
+  parts: readonly (LoadProgress | null)[],
+  /** The pair's combined download, from the catalogue. 0 → indeterminate. */
+  totalBytes: number,
+  elapsedMs: number,
+): LoadProgress | null {
+  const live = parts.filter((p): p is LoadProgress => p != null);
+  if (live.length === 0) return null;
+
+  const loaded = live.reduce((sum, p) => sum + p.loaded, 0);
+  const files = live.reduce(
+    (acc, p) => ({
+      done: acc.done + p.files.done,
+      count: acc.count + p.files.count,
+    }),
+    { done: 0, count: 0 },
+  );
+
+  // Warm-up anywhere means at least one model is past downloading; the phase
+  // shown is the *least* advanced, because the pair is not ready until both are.
+  const phase: LoadProgress["phase"] = live.some((p) => p.phase === "connecting")
+    ? "connecting"
+    : live.some((p) => p.phase === "downloading")
+      ? "downloading"
+      : "warmup";
+
+  return {
+    phase,
+    percent:
+      phase === "warmup" || totalBytes <= 0
+        ? null
+        : Math.min(100, Math.round((loaded / totalBytes) * 100)),
+    loaded,
+    total: totalBytes,
+    files,
+    current: live.find((p) => p.current)?.current,
+    elapsedMs,
+  };
+}

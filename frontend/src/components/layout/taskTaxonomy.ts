@@ -162,6 +162,12 @@ const REAL_ROUTES: Record<string, string> = {
   "text-generation": "/text-generation",
   "feature-extraction": "/text-features",
   "sentence-similarity": "/sentence-similarity",
+  // §3.10, and the most complete page the category has: **all four retrieval
+  // stages run client-side** over a corpus the user pastes in — BM25, dense
+  // embeddings, hybrid RRF, and a cross-encoder rerank. Two of the four need no
+  // model at all. It is also the second route to hold two models live at once,
+  // after /pose, and for the same reason: neither half is useful alone.
+  "text-ranking": "/text-ranking",
   // Three slugs deliberately have no route and fall through to the placeholder,
   // for one reason each — every checkpoint the task has is too heavy to offer:
   //

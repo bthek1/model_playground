@@ -24,7 +24,12 @@
 // and `q4f16` is usually larger too. 4-bit is a decoder format. No encoder page
 // should reach past the `loadOpts()` default.
 
-import { SEQ2SEQ_WASM_DTYPES } from "@/model/backend";
+import {
+  SEQ2SEQ_WASM_DTYPES,
+  type Backend,
+  type DtypeSpec,
+} from "@/model/backend";
+import type { MeasuredBytes } from "@/model/size";
 
 import { DEFAULT_DECODING } from "./textgenTypes";
 import type { Decoding, TextGenModel } from "./textgenTypes";
@@ -1448,5 +1453,227 @@ export const TEXTGEN_SAMPLES: TextSample[] = [
     label: "Open-ended",
     text: "The lighthouse keeper had not spoken to anyone in three weeks when",
     hint: "Nothing to be right about, so this is where temperature is visible rather than arguable.",
+  },
+];
+
+// --- Text ranking (retrieval) ------------------------------------------------
+
+/** One half of a ranking pair: a repo plus the precision and graphs it needs. */
+export interface RankStage {
+  id: string;
+  label: string;
+  graphs?: readonly string[];
+  bytes: MeasuredBytes;
+  dtypes?: Partial<Record<Backend, DtypeSpec>>;
+}
+
+/**
+ * A retrieval pair: a bi-encoder to embed the corpus, and a cross-encoder to
+ * rerank the shortlist.
+ *
+ * **This page holds two models live at once, and that is a declared
+ * exception.** The engine rule is one model live at a time; the rule exists to
+ * stop hundreds of megabytes leaking, and an embedder plus a reranker is 128 MiB
+ * together on WASM. `/pose` is the precedent, and it carries the same two
+ * obligations: an entry names **both** models and quotes the **combined**
+ * download, because a size guardrail that quotes half the bytes is worse than
+ * none; and `model/progress.ts` must be keyed on **repo + file**, which it
+ * already is *because of* `/pose` — two repos both publishing
+ * `onnx/model_quantized.onnx` would otherwise overwrite each other's progress
+ * entry and the bar would reach 100% halfway through. A test re-pins that here
+ * rather than assuming the fix still holds.
+ */
+export interface RankingPair {
+  /** Composite id — the pair is what the user picks, not either half. */
+  id: string;
+  label: string;
+  hint: string;
+  /** Combined parameter count in millions, for the shared `ModelPicker`. */
+  params: number;
+  /** **Combined** download. The guardrail must fire on the sum. */
+  bytes: MeasuredBytes;
+  embedder: RankStage;
+  reranker: RankStage;
+  /** Which of `EMBED_MODELS` the embedder half is, so its pooling is reused. */
+  embedderPooling: EmbedModel["pooling"];
+  /** Task prefixes, when the embedder wants them. */
+  prefixes?: EmbedModel["prefixes"];
+}
+
+/**
+ * §3.10's pairs. Sizes are ONNX blob totals read off the Hub.
+ *
+ * **`mixedbread-ai/mxbai-rerank-xsmall-v1` publishes no fp16 build.** Its
+ * `onnx/` directory holds exactly `model.onnx` (271.0 MiB) and
+ * `model_quantized.onnx` (83.2 MiB), so `loadOpts("webgpu")` asks for
+ * `model_fp16.onnx` and **404s at load** — the repo resolves fine on the API,
+ * and `just fe-e2e-models` catches it only because that spec checks the file for
+ * the dtype each backend asks for. It is pinned to q8 on WebGPU, and the pin is
+ * a **missing file, not a precision judgement**.
+ */
+export const RANKING_PAIRS: RankingPair[] = [
+  {
+    id: "minilm+ms-marco",
+    label: "MiniLM + ms-marco reranker",
+    hint: "The cheap pair, and the default: 22 MB of embedder and 22 MB of reranker on CPU.",
+    params: 45,
+    // 45_297_825 + 45_609_313 fp16 · 22_972_370 + 23_143_499 q8
+    bytes: { webgpu: 90_907_138, wasm: 46_115_869 },
+    embedderPooling: "mean",
+    embedder: {
+      id: "Xenova/all-MiniLM-L6-v2",
+      label: "all-MiniLM-L6-v2",
+      bytes: { webgpu: 45_297_825, wasm: 22_972_370 },
+    },
+    reranker: {
+      id: "Xenova/ms-marco-MiniLM-L-6-v2",
+      label: "ms-marco MiniLM L-6",
+      bytes: { webgpu: 45_609_313, wasm: 23_143_499 },
+    },
+  },
+  {
+    id: "bge+ms-marco",
+    label: "BGE base + ms-marco reranker",
+    hint: "A much stronger retriever on the dense stage, and 250 MB live at once on a GPU.",
+    params: 132,
+    // 218_108_236 + 45_609_313 fp16 · 110_083_337 + 23_143_499 q8
+    bytes: { webgpu: 263_717_549, wasm: 133_226_836 },
+    // BGE is CLS-pooled — see `EmbedModel.pooling`. Mean-pooling it returns a
+    // vector of the right width that ranks plausibly and is wrong.
+    embedderPooling: "cls",
+    embedder: {
+      id: "Xenova/bge-base-en-v1.5",
+      label: "BGE base v1.5",
+      bytes: { webgpu: 218_108_236, wasm: 110_083_337 },
+    },
+    reranker: {
+      id: "Xenova/ms-marco-MiniLM-L-6-v2",
+      label: "ms-marco MiniLM L-6",
+      bytes: { webgpu: 45_609_313, wasm: 23_143_499 },
+    },
+  },
+  {
+    id: "minilm+mxbai",
+    label: "MiniLM + mxbai reranker",
+    hint: "The alternative reranker. It publishes no fp16 build at all, so it runs q8 on both backends.",
+    params: 94,
+    // 45_297_825 + 87_245_802 · 22_972_370 + 87_245_802
+    bytes: { webgpu: 132_543_627, wasm: 110_218_172 },
+    embedderPooling: "mean",
+    embedder: {
+      id: "Xenova/all-MiniLM-L6-v2",
+      label: "all-MiniLM-L6-v2",
+      bytes: { webgpu: 45_297_825, wasm: 22_972_370 },
+    },
+    reranker: {
+      id: "mixedbread-ai/mxbai-rerank-xsmall-v1",
+      label: "mxbai-rerank-xsmall",
+      // **A missing file, not a precision judgement.** The repo publishes
+      // exactly `model.onnx` and `model_quantized.onnx`; asking for
+      // `model_fp16.onnx` 404s at load time.
+      dtypes: { webgpu: "q8", wasm: "q8" },
+      bytes: { webgpu: 87_245_802, wasm: 87_245_802 },
+    },
+  },
+];
+
+export const DEFAULT_RANKING_PAIR = RANKING_PAIRS[0].id;
+
+/**
+ * How many dense/BM25 candidates the cross-encoder reranks.
+ *
+ * **The cross-encoder runs once per candidate, and that is the lesson.** It
+ * scores `{ text, text_pair }` — a *pair*, not a concatenated string — so its
+ * score cannot be precomputed per document the way an embedding can. That cost
+ * is visible in a browser, which is the argument for building the page: the
+ * architecture teaches itself. 20 is enough to change the top few and few enough
+ * that the wait is informative rather than annoying.
+ */
+export const RERANK_TOP_K = 20;
+
+/** How many rows each stage's column shows. */
+export const RANK_SHOW = 8;
+
+/**
+ * A corpus whose best answer shares almost **no vocabulary with the query**, so
+ * BM25 and the dense retriever genuinely disagree — which is the only way a page
+ * about four stages says anything about three of them.
+ *
+ * The headline query is "my machine is overheating under load" and the right
+ * answer is the thermal-throttling line. BM25 ranks two decoys above it (they
+ * share "my" and "machine"); the dense retriever puts it first by a wide margin.
+ *
+ * **The sample was chosen by measurement, and the measurement had to replicate
+ * the page's own call pattern** — see `RANKING_SAMPLES` for why that is not a
+ * pedantic distinction.
+ */
+export const RANKING_CORPUS: string[] = [
+  "Sustained CPU load raises the chassis temperature until the cooling system spins up to its maximum rate; reducing background compilation is the usual remedy.",
+  "The laptop fan is a 40 mm brushless unit rated at 5 volts and is held in place by three screws.",
+  "To stop a running container, send it a SIGTERM and wait for the grace period to elapse before escalating.",
+  "Our returns policy allows any fan or cooling accessory to be sent back within 30 days of purchase.",
+  "Dust accumulation on the heatsink fins reduces airflow, so the same workload produces a higher temperature over time.",
+  "The constantly running unit test suite is a good sign: it means the pre-commit hook is installed correctly.",
+  "Thermal paste degrades after a few years and reapplying it can lower peak temperatures by several degrees.",
+  "My laptop will not stop asking me to restart for updates, which is unrelated to any hardware issue.",
+  "WebGPU exposes the graphics card to a web page as a compute device, and compute shaders are what make that useful.",
+  "Battery health declines faster when a machine is kept plugged in at full charge in a warm room.",
+  "The fan curve can be edited in firmware on some models, trading noise for a higher steady-state temperature.",
+  "A constantly spinning disk is not the same problem as a constantly spinning fan, though both are audible.",
+];
+
+export interface RankingSample {
+  id: string;
+  label: string;
+  query: string;
+  hint: string;
+}
+
+/**
+ * Queries chosen **by measurement**, and the measurement is the finding.
+ *
+ * The obvious sample — "how do I stop my laptop fan running constantly" — reads
+ * like the perfect demonstration and is not one. Embedded the way this page
+ * embeds (the corpus as one batch, the query alone) all-MiniLM scores the
+ * literal *laptop fan* decoy at 0.4556 and the right answer at 0.4459: the
+ * wrong one wins. Embedded the way a quick offline check does — query and corpus
+ * in one batch — the same model, the same q8 weights and the same text give
+ * 0.4394 and 0.4538: the right one wins.
+ *
+ * **At q8, a sentence's embedding depends on the batch it was embedded in.**
+ * Padding to a different length shifts the numbers enough to flip a near-tie,
+ * so a sample chosen against an idealised call pattern can fail on the page that
+ * ships it — which is exactly what happened, and what `just fe-e2e-rank` caught.
+ * It is also a caveat worth knowing generally: two cosines from this app are
+ * comparable, and a cosine from here against one computed elsewhere is only
+ * approximately so.
+ *
+ * `overheat` is therefore the default, and it wins by 0.13 rather than by
+ * 0.01 — a margin that survives the difference.
+ */
+export const RANKING_SAMPLES: RankingSample[] = [
+  {
+    id: "overheat",
+    label: "Words the answer does not use",
+    query: "my machine is overheating under load",
+    hint: "BM25 ranks two decoys above the right answer, on “my” and “machine”. The dense stage finds it, by a distance.",
+  },
+  {
+    id: "lexical",
+    label: "Words the answer does use",
+    query: "thermal paste heatsink",
+    hint: "The easy case, where BM25 is already right and the neural stages add nothing. Worth seeing too.",
+  },
+  {
+    id: "ambiguous",
+    label: "An ambiguous word",
+    query: "how do I stop something that keeps running",
+    hint: "“Running” means three different things in this corpus. This is where the reranker earns its passes.",
+  },
+  {
+    id: "neartie",
+    label: "A near-tie",
+    query: "how do I stop my laptop fan running constantly",
+    hint: "The obvious demo, and it does not work: the literal “laptop fan” decoy edges out the right answer by 0.01. Kept because that is the honest picture.",
   },
 ];

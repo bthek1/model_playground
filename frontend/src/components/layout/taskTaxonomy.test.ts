@@ -226,6 +226,9 @@ describe("Natural Language Processing", () => {
     // task page should not claim a task row.
     expect(at("text-generation")).toBe("/text-generation");
     expect(at("text-generation")).not.toBe("/playground");
+    // §3.10, the most complete page in the category: all four retrieval stages
+    // client-side, two of them with no model at all.
+    expect(at("text-ranking")).toBe("/text-ranking");
   });
 
   it("leaves Table Question Answering on the placeholder", () => {

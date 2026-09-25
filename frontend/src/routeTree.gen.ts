@@ -20,6 +20,7 @@ import { Route as TranslationRouteImport } from './routes/translation'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TokenClassificationRouteImport } from './routes/token-classification'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
+import { Route as TextRankingRouteImport } from './routes/text-ranking'
 import { Route as TextGenerationRouteImport } from './routes/text-generation'
 import { Route as TextFeaturesRouteImport } from './routes/text-features'
 import { Route as TextClassificationRouteImport } from './routes/text-classification'
@@ -106,6 +107,11 @@ const TokenClassificationRoute = TokenClassificationRouteImport.update({
 const TextToSpeechRoute = TextToSpeechRouteImport.update({
   id: '/text-to-speech',
   path: '/text-to-speech',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TextRankingRoute = TextRankingRouteImport.update({
+  id: '/text-ranking',
+  path: '/text-ranking',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TextGenerationRoute = TextGenerationRouteImport.update({
@@ -295,6 +301,7 @@ export interface FileRoutesByFullPath {
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
   '/text-generation': typeof TextGenerationRoute
+  '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
@@ -339,6 +346,7 @@ export interface FileRoutesByTo {
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
   '/text-generation': typeof TextGenerationRoute
+  '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
@@ -384,6 +392,7 @@ export interface FileRoutesById {
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
   '/text-generation': typeof TextGenerationRoute
+  '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
@@ -430,6 +439,7 @@ export interface FileRouteTypes {
     | '/text-classification'
     | '/text-features'
     | '/text-generation'
+    | '/text-ranking'
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
@@ -474,6 +484,7 @@ export interface FileRouteTypes {
     | '/text-classification'
     | '/text-features'
     | '/text-generation'
+    | '/text-ranking'
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
@@ -518,6 +529,7 @@ export interface FileRouteTypes {
     | '/text-classification'
     | '/text-features'
     | '/text-generation'
+    | '/text-ranking'
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
@@ -563,6 +575,7 @@ export interface RootRouteChildren {
   TextClassificationRoute: typeof TextClassificationRoute
   TextFeaturesRoute: typeof TextFeaturesRoute
   TextGenerationRoute: typeof TextGenerationRoute
+  TextRankingRoute: typeof TextRankingRoute
   TextToSpeechRoute: typeof TextToSpeechRoute
   TokenClassificationRoute: typeof TokenClassificationRoute
   TrainingRoute: typeof TrainingRoute
@@ -654,6 +667,13 @@ declare module '@tanstack/react-router' {
       path: '/text-to-speech'
       fullPath: '/text-to-speech'
       preLoaderRoute: typeof TextToSpeechRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/text-ranking': {
+      id: '/text-ranking'
+      path: '/text-ranking'
+      fullPath: '/text-ranking'
+      preLoaderRoute: typeof TextRankingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/text-generation': {
@@ -907,6 +927,7 @@ const rootRouteChildren: RootRouteChildren = {
   TextClassificationRoute: TextClassificationRoute,
   TextFeaturesRoute: TextFeaturesRoute,
   TextGenerationRoute: TextGenerationRoute,
+  TextRankingRoute: TextRankingRoute,
   TextToSpeechRoute: TextToSpeechRoute,
   TokenClassificationRoute: TokenClassificationRoute,
   TrainingRoute: TrainingRoute,

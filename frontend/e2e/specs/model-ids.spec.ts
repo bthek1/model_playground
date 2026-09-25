@@ -46,6 +46,7 @@ test.describe("@slow model catalogue", () => {
       TRANSLATION_MODELS,
       SUMMARIZER_MODELS,
       TEXTGEN_MODELS,
+      RANKING_PAIRS,
     } = await import("../../src/text/catalogue");
 
     const ids = [
@@ -77,6 +78,9 @@ test.describe("@slow model catalogue", () => {
       ...TRANSLATION_MODELS,
       ...SUMMARIZER_MODELS,
       ...TEXTGEN_MODELS,
+      // A ranking entry is a *pair*, so its own composite id resolves to
+      // nothing on the Hub — the two halves are what get downloaded.
+      ...RANKING_PAIRS.flatMap((p) => [p.embedder, p.reranker]),
       // An embedding entry also names the **upstream** repo its pooling is
       // read from, which is a different repo from the ONNX mirror it loads.
       // Both have to exist or the pooling check below cannot run.
@@ -202,6 +206,7 @@ test.describe("@slow model catalogue", () => {
       TRANSLATION_MODELS,
       SUMMARIZER_MODELS,
       TEXTGEN_MODELS,
+      RANKING_PAIRS,
     } = await import("../../src/text/catalogue");
 
     const SUFFIX: Record<string, string> = {
@@ -239,6 +244,17 @@ test.describe("@slow model catalogue", () => {
         graphs: m.graphs ?? [m.modelFile ?? "model"],
         dtypes: { webgpu: "q4f16" as const, ...m.dtypes },
       })),
+      // Each half of a ranking pair separately, because the pair's own id is a
+      // composite. This is the check that catches the `mxbai` reranker
+      // publishing no fp16 build — the repo resolves fine on the API and the
+      // load 404s.
+      ...RANKING_PAIRS.flatMap((p) =>
+        [p.embedder, p.reranker].map((half) => ({
+          ...half,
+          backends: undefined,
+          graphs: half.graphs,
+        })),
+      ),
     ]) {
       const res = await request.get(
         `https://huggingface.co/api/models/${model.id}?blobs=true`,

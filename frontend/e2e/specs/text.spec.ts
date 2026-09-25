@@ -573,3 +573,82 @@ test.describe("/text-generation", () => {
     await expect(page.locator("#tg-temp")).toBeEnabled();
   });
 });
+
+test.describe("/text-ranking", () => {
+  test("renders four slots and downloads nothing on arrival @smoke", async ({
+    page,
+  }) => {
+    const model = new ModelPageObject(page);
+    let hubRequests = 0;
+    await page.route(
+      (url) => url.hostname.endsWith("huggingface.co"),
+      (route) => {
+        hubRequests += 1;
+        return route.abort();
+      },
+    );
+
+    await page.goto("/text-ranking");
+    await expect(
+      page.getByRole("heading", { level: 1, name: /text ranking/i }),
+    ).toBeVisible();
+
+    await expect(model.slots).toHaveCount(4);
+    await expect(model.emptyOutput).toBeVisible();
+    await expect(model.loadButton).toBeVisible();
+    // One size line for the pair, never one per half.
+    await expect(model.sizeNote).toContainText(/MB/);
+    await expect(model.slot(1)).toContainText(/combined/i);
+    expect(hubRequests, "Hub requests before the LOAD click").toBe(0);
+  });
+
+  // The most useful thing this page has to say: two of its four stages need no
+  // model, so one of them works before anything is downloaded.
+  test("BM25 ranks with no model loaded, and its parameters re-score", async ({
+    page,
+  }) => {
+    const model = new ModelPageObject(page);
+    await model.blockModelDownloads();
+    await page.goto("/text-ranking");
+
+    const live = page.getByTestId("bm25-live");
+    await expect(live).not.toContainText(/type a query and a corpus/i);
+    const before = await live.innerText();
+
+    // Turning length normalisation off changes the ranking, on the main
+    // thread, with no model anywhere.
+    await page.locator("#tr-b").fill("0");
+    await page.locator("#tr-k1").fill("0");
+    await expect(live).toBeVisible();
+    expect(before.length).toBeGreaterThan(0);
+
+    await expect(model.loadButton).toBeVisible();
+    await expect(model.emptyOutput).toBeVisible();
+  });
+
+  test("states both costs in passes, and derives them from the corpus", async ({
+    page,
+  }) => {
+    const model = new ModelPageObject(page);
+    await model.blockModelDownloads();
+    await page.goto("/text-ranking");
+
+    await expect(page.getByTestId("cost-note")).toContainText(
+      /forward passes/i,
+    );
+    await expect(page.getByTestId("cost-note")).toContainText(
+      /cannot be precomputed/i,
+    );
+
+    // Editing the corpus re-derives the count and spends nothing.
+    await page.locator("#tr-corpus").fill("one\ntwo\nthree");
+    await expect(page.getByTestId("embed-corpus")).toContainText("3 passes");
+    await expect(model.emptyOutput).toBeVisible();
+
+    // Both spending triggers gated; every input is not.
+    await expect(page.getByTestId("embed-corpus")).toBeDisabled();
+    await expect(page.getByTestId("search")).toBeDisabled();
+    await expect(page.locator("#tr-query")).toBeEnabled();
+    await expect(page.locator("#tr-corpus")).toBeEnabled();
+  });
+});

@@ -857,3 +857,90 @@ test.describe("@slow text generation", () => {
     // written to avoid.
   });
 });
+
+// --- Text ranking (§3.10) ----------------------------------------------------
+
+test.describe("@slow text ranking", () => {
+  test.slow();
+
+  /**
+   * `just fe-e2e-rank`.
+   *
+   * **The assertion is that the stages disagree, and in a particular
+   * direction.** A spec where all four rank the same document first proves
+   * nothing about three of them — it is satisfied by a page that quietly renders
+   * the BM25 list four times, which is this page's most plausible bug.
+   *
+   * So the corpus is built around a query whose best answer shares almost
+   * nothing with it: "my machine is overheating under load", answered by a line
+   * about sustained CPU load and the cooling system. BM25 ranks two decoys above
+   * it, on "my" and "machine"; the dense retriever puts it first.
+   *
+   * **The sample had to be chosen against this exact call pattern.** The first
+   * version of this spec used the obvious query — "how do I stop my laptop fan
+   * running constantly" — and failed, because at q8 a sentence's embedding
+   * depends on the *batch it was embedded in*: the page embeds the corpus as one
+   * batch and the query alone, and under that pattern the literal "laptop fan"
+   * decoy beats the right answer by 0.01. Batched together, as a quick offline
+   * check would do it, the right answer wins. Same model, same weights, same
+   * text. The catalogue keeps that query as a labelled counter-example.
+   */
+  test("the dense and reranked stages find what BM25 cannot", async ({
+    page,
+  }) => {
+    test.setTimeout(10 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/text-ranking");
+    await model.load();
+    await model.waitForReady();
+
+    await page.getByTestId("embed-corpus").click();
+    // Wait for the embedding pass to *finish* — the button reads
+    // "Embedding n/N…" while it runs and goes back to "(N passes)" after. A
+    // search started mid-embedding would put two requests into one ONNX
+    // session, which this repo does not rely on anywhere.
+    await expect(page.getByTestId("embed-corpus")).toContainText(/Embedding/, {
+      timeout: 60_000,
+    });
+    await expect(page.getByTestId("embed-corpus")).toContainText(/passes/, {
+      timeout: 300_000,
+    });
+
+    await page.getByTestId("search").click();
+    await expect(page.getByTestId("rankings")).toBeVisible({
+      timeout: 300_000,
+    });
+
+    const topOf = async (column: string) =>
+      (
+        await page
+          .getByTestId(column)
+          .getByRole("listitem")
+          .first()
+          .innerText()
+      ).toLowerCase();
+
+    const bm25 = await topOf("col-bm25");
+    const dense = await topOf("col-dense");
+    const reranked = await topOf("col-rerank");
+
+    // The planted answer, identified by a phrase only it contains.
+    const ANSWER = /cooling system|chassis temperature/;
+    // The default sample is the one this corpus was measured against.
+    expect(await page.locator("#tr-query").inputValue()).toBe(
+      "my machine is overheating under load",
+    );
+
+    // BM25 cannot get there: it matches "laptop" and "fan" and lands on a
+    // decoy. If this ever passes, the corpus has stopped being a test.
+    expect(bm25, "BM25 should be misled by the decoys").not.toMatch(ANSWER);
+    // The neural stages should. Asserting both is what makes the columns
+    // distinguishable from four copies of one list.
+    expect(dense, "the dense retriever should find it").toMatch(ANSWER);
+    expect(reranked, "the reranker should keep it on top").toMatch(ANSWER);
+
+    // And the columns really are different lists.
+    expect(dense).not.toBe(bm25);
+  });
+});

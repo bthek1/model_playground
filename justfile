@@ -415,6 +415,19 @@ fe-e2e-summarize:
 fe-e2e-textgen:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "text generation"
 
+# Run only the @slow text-ranking specs: a real pair load (91 MB on WebGPU,
+# 46 MB on WASM — an embedder *and* a cross-encoder, both live at once) and all
+# four retrieval stages over the page's own corpus.
+#
+# **The assertion is that the stages disagree, in a particular direction.** A
+# spec where all four rank the same document first proves nothing about three of
+# them, and would be satisfied by a page quietly rendering the BM25 list four
+# times — which is this page's most plausible bug. So the corpus is built around
+# a query whose best answer shares no vocabulary with it, and the spec asserts
+# that BM25 does **not** find it while the dense and reranked stages do.
+fe-e2e-rank:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "text ranking"
+
 # Run only the @slow embedding specs: a real all-MiniLM-L6-v2 load (43 MB on
 # WebGPU / 22 MB on WASM — the cheapest floor in the app) and real cosines.
 #

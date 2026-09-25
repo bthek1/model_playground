@@ -850,7 +850,7 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   `data-testid` on a wrapper.
 - **OCR now has no page**, and **metric depth has no path** (ZoeDepth has no export).
 
-**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`, `/text-features`, `/sentence-similarity`, `/translation`, `/summarization`, `/text-generation`) — the fourth modality, and the cheapest module in the app:**
+**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`, `/text-features`, `/sentence-similarity`, `/translation`, `/summarization`, `/text-generation`, `/text-ranking`) — the fourth modality, and the cheapest module in the app:**
 
 - **There is no decode step, and that is the point.** No text equivalent of `audio/io.ts`
   or `vision/image.ts` exists: the input is already a string, so there is no
@@ -1155,6 +1155,49 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   "stays reachable on its own terms" means. It is now **GPU Playground** under **Theory**,
   this repo's own non-Hub category, alongside the other hand-written WGSL surfaces;
   `categoryForPath("/playground")` is `"Theory"` and a test pins both halves.
+
+- **`/text-ranking` runs all four retrieval stages client-side**, and two of them need no
+  model: BM25 (`text/bm25.ts`) and reciprocal rank fusion (`text/rrf.ts`) are pure
+  TypeScript, so `k1`, `b` and RRF's `k` re-score from a held index on the main thread and
+  BM25 ranks before anything is downloaded. Only **embed corpus** (N passes, once) and
+  **search** (one for the query plus one **per rerank candidate**) spend, and the page
+  states each count before the click. A cross-encoder scores a query and a document
+  *together*, so unlike an embedding it cannot be precomputed — which is the whole reason
+  reranking is applied to a shortlist of 20 rather than to a corpus.
+- **No new engine arm was needed for the cross-encoder.** A cross-encoder *is* a sequence
+  classifier: the task is `text-classification` and the input is a `{ text, text_pair }`
+  object, which `TextInput` already described. The plan budgeted a branch; there was
+  nothing to add. Check the shape you already have before widening a union.
+- **Two models live at once — `/pose`'s declared exception, with a new obligation.**
+  `/pose` loads its pair inside one worker, so the repo-keyed progress table spans it.
+  `/text-ranking` loads its pair in a **worker each**, so there are two tables and keying
+  does not help: showing either bar fills to 100% and restarts, the same "100% halfway
+  through" failure from the other direction. **`combineProgress`** sums the bytes against
+  the catalogue entry's *measured combined size* — a constant, so the percent is monotonic
+  by construction rather than by a stored clamp. Use it for any load spread over two
+  workers.
+- **RRF does not have the property its name suggests.** "A document both lists rank second
+  beats one first in one list and last in the other" is the intuitive reading and is false:
+  `1/(k+r)` is convex, so by Jensen the extreme pair wins (at `k=60`, 0.032796 against
+  0.032787). Tiny margin, fixed sign, and visible on a page showing four rank lists. RRF
+  rewards being loved by one retriever over being liked by both.
+- **At q8, a sentence's embedding depends on the batch it was embedded in** — and it
+  matters enough to reorder near-ties. Measured on all-MiniLM with the same weights and the
+  same text: the page's pattern (corpus as one batch, query alone) scores a decoy 0.4556
+  and the right answer 0.4459; batching query and corpus together gives 0.4394 and 0.4538.
+  **So choose an E2E sample against the page's own call pattern**, not an idealised offline
+  one — the first version of `just fe-e2e-rank` was written the second way and failed on
+  the page that shipped it. The counter-example stays in the catalogue, labelled, because a
+  page that quietly dropped it would be claiming more than it measured.
+- **`mixedbread-ai/mxbai-rerank-xsmall-v1` publishes no fp16 build**, so `loadOpts("webgpu")`
+  asks for a file that 404s at load. Pinned to q8 on both backends — a **missing file, not
+  a precision judgement**, a distinction that matters because a precision pin invites "try
+  removing it".
+- **The sample corpus is built so the stages disagree**, which is the only way a spec about
+  four stages says anything about three of them: `just fe-e2e-rank` asserts that BM25 does
+  **not** find the planted answer while the dense and reranked stages do. A corpus every
+  stage ranks identically is satisfied by a page quietly rendering one list four times,
+  which is this page's most plausible bug.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 

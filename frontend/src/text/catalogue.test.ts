@@ -14,6 +14,7 @@ import {
   DEFAULT_REDACTED,
   DECODING_PRESETS,
   DEFAULT_SUMMARIZER,
+  DEFAULT_RANKING_PAIR,
   DEFAULT_TEXTGEN_MODEL,
   DEFAULT_TEXT_CLASSIFIER,
   DEFAULT_TRANSLATION_MODEL,
@@ -30,6 +31,10 @@ import {
   LEAD_N,
   NLLB_BYTES,
   PAIR_SAMPLES,
+  RANKING_CORPUS,
+  RANKING_PAIRS,
+  RANKING_SAMPLES,
+  RERANK_TOP_K,
   SUMMARIZER_MODELS,
   TEXTGEN_MODELS,
   TEXTGEN_SAMPLES,
@@ -706,6 +711,119 @@ describe("the text-generation catalogue", () => {
     expect(anchor!.text).toMatch(/capital of France/i);
     for (const s of TEXTGEN_SAMPLES) {
       expect(s.text.length).toBeGreaterThan(0);
+      expect(s.hint.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("the ranking catalogue", () => {
+  // The `/pose` obligation, carried over: an entry that names two models must
+  // quote the **sum**, because a size guardrail that quotes half the bytes is
+  // worse than none.
+  it("quotes the combined download, not either half", () => {
+    for (const p of RANKING_PAIRS) {
+      for (const backend of ["webgpu", "wasm"] as const) {
+        const sum =
+          (p.embedder.bytes[backend] ?? 0) + (p.reranker.bytes[backend] ?? 0);
+        expect(p.bytes[backend], `${p.id} ${backend}`).toBe(sum);
+      }
+      // And the combined figure is bigger than either half, which is the whole
+      // point of asserting it.
+      expect(p.bytes.wasm!).toBeGreaterThan(p.embedder.bytes.wasm!);
+      expect(p.bytes.wasm!).toBeGreaterThan(p.reranker.bytes.wasm!);
+    }
+  });
+
+  it("gives every pair a distinct composite id and both halves", () => {
+    expect(new Set(RANKING_PAIRS.map((p) => p.id)).size).toBe(
+      RANKING_PAIRS.length,
+    );
+    for (const p of RANKING_PAIRS) {
+      expect(p.embedder.id).not.toBe(p.reranker.id);
+      expect(p.embedder.label.length).toBeGreaterThan(0);
+      expect(p.reranker.label.length).toBeGreaterThan(0);
+    }
+  });
+
+  // A pair's embedder is one of §3.7's entries, so its pooling has to match —
+  // the page reuses `useTextEmbed`, and a mismatch would mean-pool a CLS-trained
+  // checkpoint and return a plausible wrong vector with nothing failing.
+  it("takes each embedder's pooling from the embedding catalogue", () => {
+    for (const p of RANKING_PAIRS) {
+      const entry = EMBED_MODELS.find((m) => m.id === p.embedder.id);
+      expect(entry, `${p.embedder.id} is an embedding entry`).toBeDefined();
+      expect(p.embedderPooling, `${p.id} pooling`).toBe(entry!.pooling);
+      // The measured bytes must agree too, or one page quotes a price the other
+      // does not.
+      expect(p.embedder.bytes).toEqual(entry!.bytes);
+    }
+  });
+
+  // **A missing file, not a precision judgement** — and the distinction matters
+  // because a precision pin invites "try removing it" while a missing file does
+  // not. `mxbai` publishes exactly `model.onnx` and `model_quantized.onnx`.
+  it("pins the mxbai reranker to q8 on both backends", () => {
+    const pair = RANKING_PAIRS.find((p) =>
+      p.reranker.id.includes("mxbai-rerank"),
+    );
+    expect(pair, "the alternative reranker ships").toBeDefined();
+    expect(pair!.reranker.dtypes).toEqual({ webgpu: "q8", wasm: "q8" });
+    // Same file on both backends, so the same number.
+    expect(pair!.reranker.bytes.webgpu).toBe(pair!.reranker.bytes.wasm);
+  });
+
+  it("keeps the floor cheap and defaults to it", () => {
+    const def = RANKING_PAIRS.find((p) => p.id === DEFAULT_RANKING_PAIR);
+    expect(def).toBeDefined();
+    // 46 MB for the whole retrieval stack on CPU is the page's argument.
+    expect(def!.bytes.wasm!).toBeLessThan(50e6);
+    expect(
+      Math.min(...RANKING_PAIRS.map((p) => p.bytes.wasm!)),
+    ).toBe(def!.bytes.wasm!);
+  });
+
+  it("reranks a shortlist, not the corpus", () => {
+    // A cross-encoder cannot be precomputed, so the shortlist is the design.
+    expect(RERANK_TOP_K).toBeGreaterThan(4);
+    expect(RERANK_TOP_K).toBeLessThan(RANKING_CORPUS.length * 4);
+  });
+
+  // The page compares four stages, so the sample corpus has to be one where
+  // they *disagree* — a corpus every stage ranks identically says nothing about
+  // three of them, which is the same rule §3.1's samples follow.
+  it("ships a corpus whose best answer shares no words with the query", () => {
+    // The default query, which is the one `just fe-e2e-rank` asserts on.
+    const sample = RANKING_SAMPLES[0];
+    expect(sample.id).toBe("overheat");
+
+    // The planted answer is the thermal-throttling line, and the point is that
+    // it shares almost nothing with the query.
+    const answer = RANKING_CORPUS[0].toLowerCase();
+    for (const word of ["machine", "overheating", "my"]) {
+      expect(answer, `the answer must not contain "${word}"`).not.toContain(
+        word,
+      );
+    }
+    // …while the decoys BM25 prefers do.
+    expect(
+      RANKING_CORPUS.filter((d) => /\bmy\b|\bmachine\b/i.test(d)).length,
+      "decoys that share the query's words",
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  // The near-tie sample is kept deliberately, and its hint has to keep saying
+  // so: the obvious demonstration does not work at q8, and a page that quietly
+  // dropped the counter-example would be claiming more than it measured.
+  it("keeps the sample that does not work, and says it does not", () => {
+    const nearTie = RANKING_SAMPLES.find((s) => s.id === "neartie");
+    expect(nearTie, "the honest counter-example ships").toBeDefined();
+    expect(nearTie!.hint).toMatch(/does not work/i);
+  });
+
+  it("gives every sample query a reason", () => {
+    expect(RANKING_SAMPLES.length).toBeGreaterThanOrEqual(3);
+    for (const s of RANKING_SAMPLES) {
+      expect(s.query.length).toBeGreaterThan(0);
       expect(s.hint.length).toBeGreaterThan(0);
     }
   });

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  combineProgress,
   initialProgress,
   reduceProgress,
   summarize,
+  type LoadProgress,
   type ProgressState,
 } from "./progress";
 
@@ -191,5 +193,153 @@ describe("two models loading into one bar", () => {
       event("onnx-community/vitpose-base-simple", 1, 2),
     );
     expect(summarize(state, 0).current).toBe("onnx/model_fp16.onnx");
+  });
+});
+
+// The `/pose` regression, re-pinned for the second route to hold two models
+// live — and it turns out to hold for a *different reason* there, which #44's
+// plan was right to ask about rather than assume.
+//
+// `/pose` loads its pair inside one worker, so one repo-keyed table covers both
+// and the assertions above apply directly. `/text-ranking` loads its pair in a
+// worker each, so there are two tables and nothing to key together: keeping the
+// repo in the key does not help, because the two states never meet.
+describe("aggregate progress across a ranking pair", () => {
+  const event = (name: string, loaded: number, total: number) => ({
+    status: "progress",
+    name,
+    // Both of these repos publish a file at exactly this path, which is the
+    // hazard when they share a table.
+    file: "onnx/model_quantized.onnx",
+    loaded,
+    total,
+  });
+
+  it("keeps two rows for two repos publishing the same filename", () => {
+    let state = reduceProgress(
+      initialProgress,
+      event("Xenova/all-MiniLM-L6-v2", 0, 22_972_370),
+    );
+    state = reduceProgress(
+      state,
+      event("Xenova/ms-marco-MiniLM-L-6-v2", 0, 23_143_499),
+    );
+
+    const out = summarize(state, 0);
+    expect(out.files.count, "two files, not one overwritten").toBe(2);
+    expect(out.total).toBe(46_115_869);
+  });
+
+  // The per-worker bar's own monotonic clamp is what makes this fail: the first
+  // model finishing sets `percent` to 100, and a later-announced file enlarges
+  // the denominator without being allowed to move the bar back. Within one
+  // model that clamp is right; across a pair it is exactly the "100% halfway
+  // through" failure.
+  it("shows why a stored monotonic percent cannot span two models", () => {
+    let state = reduceProgress(
+      initialProgress,
+      event("Xenova/all-MiniLM-L6-v2", 22_972_370, 22_972_370),
+    );
+    state = reduceProgress(
+      state,
+      event("Xenova/ms-marco-MiniLM-L-6-v2", 0, 23_143_499),
+    );
+
+    const out = summarize(state, 0);
+    // Not a bug in `reduceProgress` — a limit of what one clamped percent can
+    // mean. `combineProgress` below is the answer.
+    expect(out.percent).toBe(100);
+    expect(out.files.done).toBe(1);
+  });
+});
+
+describe("combineProgress", () => {
+  const PAIR_BYTES = 46_115_869; // MiniLM 22_972_370 + ms-marco 23_143_499
+
+  const bar = (over: Partial<LoadProgress> = {}): LoadProgress => ({
+    phase: "downloading",
+    percent: 0,
+    loaded: 0,
+    total: 0,
+    files: { done: 0, count: 1 },
+    elapsedMs: 0,
+    ...over,
+  });
+
+  // The failure this exists for: one model finished, the other untouched, must
+  // read about half rather than 100%.
+  it("does not report a half-downloaded pair as finished", () => {
+    const out = combineProgress(
+      [
+        bar({ percent: 100, loaded: 22_972_370, files: { done: 1, count: 1 } }),
+        bar({ percent: 0, loaded: 0 }),
+      ],
+      PAIR_BYTES,
+      0,
+    )!;
+    expect(out.percent).toBe(50);
+    expect(out.files).toEqual({ done: 1, count: 2 });
+    expect(out.total).toBe(PAIR_BYTES);
+  });
+
+  // Monotonic **by construction**: the denominator is the catalogue's constant,
+  // so a newly-announced file cannot move the bar backwards the way a summed
+  // estimate would.
+  it("is monotonic because the denominator is a constant", () => {
+    const at = (a: number, b: number) =>
+      combineProgress([bar({ loaded: a }), bar({ loaded: b })], PAIR_BYTES, 0)!
+        .percent!;
+    expect(at(0, 0)).toBe(0);
+    expect(at(10e6, 0)).toBeGreaterThan(at(0, 0));
+    expect(at(10e6, 10e6)).toBeGreaterThan(at(10e6, 0));
+    expect(at(22_972_370, 23_143_499)).toBe(100);
+  });
+
+  // Measured `bytes` counts ONNX graphs only, so the tokenizer and config files
+  // push `loaded` past it near the end. 100% a moment early beats a bar that
+  // appears to stall.
+  it("clamps at 100 rather than overshooting", () => {
+    const out = combineProgress(
+      [bar({ loaded: PAIR_BYTES }), bar({ loaded: 2e6 })],
+      PAIR_BYTES,
+      0,
+    )!;
+    expect(out.percent).toBe(100);
+  });
+
+  it("reports the least advanced phase, since the pair is not ready until both are", () => {
+    expect(
+      combineProgress(
+        [bar({ phase: "warmup" }), bar({ phase: "downloading" })],
+        PAIR_BYTES,
+        0,
+      )!.phase,
+    ).toBe("downloading");
+    expect(
+      combineProgress(
+        [bar({ phase: "warmup" }), bar({ phase: "connecting" })],
+        PAIR_BYTES,
+        0,
+      )!.phase,
+    ).toBe("connecting");
+    // Both warming up is indeterminate, as it is for a single model.
+    const both = combineProgress(
+      [bar({ phase: "warmup" }), bar({ phase: "warmup" })],
+      PAIR_BYTES,
+      0,
+    )!;
+    expect(both.phase).toBe("warmup");
+    expect(both.percent).toBeNull();
+  });
+
+  it("returns null when neither half has started, and ignores a null half", () => {
+    expect(combineProgress([null, null], PAIR_BYTES, 0)).toBeNull();
+    const one = combineProgress([bar({ loaded: 5e6 }), null], PAIR_BYTES, 0)!;
+    expect(one.loaded).toBe(5e6);
+    expect(one.files.count).toBe(1);
+  });
+
+  it("is indeterminate when the catalogue quotes no size", () => {
+    expect(combineProgress([bar({ loaded: 1 })], 0, 0)!.percent).toBeNull();
   });
 });
