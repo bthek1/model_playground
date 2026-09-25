@@ -25,15 +25,26 @@
 import { encodeOne, encodeRows, fitEncoder, type Encoder } from "./design";
 import { permutationImportance } from "./importance";
 import { fitLogistic, type LinearModel, type MatmulFn } from "./linear";
-import { classificationMetrics, predictedClasses } from "./metrics";
+import { classificationMetrics, predictedClasses, regressionMetrics } from "./metrics";
 import { fitMlp, type MlpModel } from "./mlp";
+import {
+  bandCoverage,
+  fitQuantiles,
+  predictQuantiles,
+  type QuantileModel,
+} from "./quantile";
+import { fitRidge, predictRidge, type RidgeResult } from "./ridge";
 import { splitRows } from "./split";
+import { forwardTarget, inverseTarget, makeTransform } from "./transform";
 import {
   applyBinning,
   binFeatures,
   fitBoostedClassifier,
+  fitBoostedRegressor,
   fitForestClassifier,
+  fitForestRegressor,
   predictProba,
+  predictValue,
   type Binning,
   type Forest,
 } from "./trees";
@@ -65,6 +76,8 @@ interface Fitted {
   forest: Forest | null;
   linear: LinearModel | null;
   mlp: MlpModel | null;
+  ridge: RidgeResult | null;
+  quantile: QuantileModel | null;
   labels: string[];
 }
 
@@ -115,6 +128,7 @@ export function createFitHandler(post: Post, deps: EngineDeps) {
   async function fit(id: number, spec: FitSpec): Promise<FitResult> {
     if (!dataset) throw new Error("No dataset loaded.");
     stopped = false;
+    if (spec.objective === "regression") return fitRegression(id, spec, dataset);
     const shouldStop = () => stopped;
     const started = performance.now();
     const target = dataset.columns[spec.targetIndex];
@@ -129,10 +143,25 @@ export function createFitHandler(post: Post, deps: EngineDeps) {
 
     progress(id, { done: 0, total: 1, phase: "Encoding", loss: null });
 
-    // The split comes first, and everything fitted from the data is fitted on
+    // Rows with no answer are dropped before anything else. A missing
+    // categorical code is 0, which is a real class — those rows would be
+    // trained on under the wrong label with nothing failing.
+    const usable = usableRows(target, dataset.rowCount);
+    const droppedRows = dataset.rowCount - usable.length;
+    if (usable.length < 4) {
+      throw new Error(`"${target.name}" has a value on only ${usable.length} rows.`);
+    }
+    const strata = new Int32Array(usable.length);
+    for (let i = 0; i < usable.length; i++) strata[i] = target.values[usable[i]];
+
+    // The split comes next, and everything fitted from the data is fitted on
     // its training half — see `design.ts`. Stratified on the target so a rare
     // class is present on both sides.
-    const split = splitRows(dataset.rowCount, spec.testFraction, spec.seed, target.values);
+    const positions = splitRows(usable.length, spec.testFraction, spec.seed, strata);
+    const split = {
+      train: mapRows(usable, positions.train),
+      test: mapRows(usable, positions.test),
+    };
     const encoder = fitEncoder(dataset, spec.featureIndices, split.train);
 
     const yTrain = new Uint8Array(split.train.length);
@@ -140,8 +169,7 @@ export function createFitHandler(post: Post, deps: EngineDeps) {
     const yTest = new Uint8Array(split.test.length);
     for (let i = 0; i < split.test.length; i++) yTest[i] = target.values[split.test[i]];
 
-    const info = spec.family === "logistic" || spec.family === "mlp";
-    const { matmul, compute } = await resolveMatmul(info);
+    const { matmul, compute } = await resolveMatmul(usesGpu(spec.family));
 
     const curve: { step: number; loss: number }[] = [];
     const record = (done: number, total: number, loss: number | null) => {
@@ -208,7 +236,7 @@ export function createFitHandler(post: Post, deps: EngineDeps) {
     const predicted = predictedClasses(probabilities, split.test.length, labels.length);
     const metrics = classificationMetrics(yTest, predicted, labels, yTrain);
 
-    fitted = { spec, encoder, binning, forest, linear, mlp, labels };
+    fitted = { spec, encoder, binning, forest, linear, mlp, ridge: null, quantile: null, labels };
 
     // Permutation importance, on the held-out half. Measuring it on the
     // training half would report what the model memorised rather than what it
@@ -250,6 +278,7 @@ export function createFitHandler(post: Post, deps: EngineDeps) {
       spec,
       trainRows: split.train.length,
       testRows: split.test.length,
+      droppedRows,
       fitMs,
       compute,
       classification: metrics,
@@ -262,18 +291,244 @@ export function createFitHandler(post: Post, deps: EngineDeps) {
     };
   }
 
+
+  /**
+   * The regression arm.
+   *
+   * Same split, same encoder, same permutation importance, same worker — only
+   * the model and the diagnostics differ, which is the whole reason
+   * `/tabular-regression` is a second route over this engine rather than a
+   * branch inside the classification page. A reviewer should be able to diff
+   * the two route files and see only the diagnostics.
+   */
+  async function fitRegression(
+    id: number,
+    spec: FitSpec,
+    frame: Dataset,
+  ): Promise<FitResult> {
+    const shouldStop = () => stopped;
+    const started = performance.now();
+    const target = frame.columns[spec.targetIndex];
+    if (!target) throw new Error("Pick a target column.");
+    if (target.kind !== "numeric") {
+      throw new Error(
+        `"${target.name}" is text — regression needs a numeric column to predict.`,
+      );
+    }
+    progress(id, { done: 0, total: 1, phase: "Encoding", loss: null });
+
+    // Rows with no answer are dropped, not imputed: imputing a target is
+    // inventing the thing being predicted.
+    const usable = usableRows(target, frame.rowCount);
+    const droppedRows = frame.rowCount - usable.length;
+    if (usable.length < 4) {
+      throw new Error(`"${target.name}" has a value on only ${usable.length} rows.`);
+    }
+
+    // Unstratified: a continuous target has no classes to preserve.
+    const positions = splitRows(usable.length, spec.testFraction, spec.seed);
+    const split = {
+      train: mapRows(usable, positions.train),
+      test: mapRows(usable, positions.test),
+    };
+    const encoder = fitEncoder(frame, spec.featureIndices, split.train);
+
+    // `transform.ts` owns the units, so the route is structurally unable to put
+    // an RMSE in log space beside one in the target's units unlabelled.
+    const transform = makeTransform(spec.logTarget ? "log" : "raw", target.name);
+
+    const yTrainRaw = new Float32Array(split.train.length);
+    for (let i = 0; i < split.train.length; i++) yTrainRaw[i] = target.values[split.train[i]];
+    const yTestRaw = new Float32Array(split.test.length);
+    for (let i = 0; i < split.test.length; i++) yTestRaw[i] = target.values[split.test[i]];
+    const yTrain = forwardTarget(yTrainRaw, transform);
+
+    const { matmul, compute } = await resolveMatmul(usesGpu(spec.family));
+    const curve: { step: number; loss: number }[] = [];
+    const record = (done: number, total: number, loss: number | null) => {
+      if (loss != null && Number.isFinite(loss)) curve.push({ step: done, loss });
+      progress(id, { done, total, phase: "Fitting", loss });
+    };
+
+    const standardise = usesGpu(spec.family);
+    const xTrain = encodeRows(frame, encoder, split.train, standardise);
+    const xTest = encodeRows(frame, encoder, split.test, standardise);
+    const width = encoder.columns.length;
+
+    let binning: Binning | null = null;
+    let forest: Forest | null = null;
+    let ridge: RidgeResult | null = null;
+    let quantile: QuantileModel | null = null;
+    /** Predictions in the *fitted* space, before any back-transform. */
+    let fittedPredictions: Float32Array;
+    let quantilePredictions: Float32Array | undefined;
+
+    if (spec.family === "forest" || spec.family === "boosting") {
+      binning = binFeatures(xTrain, split.train.length, width);
+      const rows = new Int32Array(split.train.length);
+      for (let i = 0; i < rows.length; i++) rows[i] = i;
+      forest =
+        spec.family === "forest"
+          ? fitForestRegressor(binning, rows, yTrain, spec.hp.nTrees, treeParams(spec), spec.seed, {
+              onProgress: record,
+              shouldStop,
+            })
+          : fitBoostedRegressor(binning, rows, yTrain, spec.hp.nTrees, spec.hp.shrinkage, treeParams(spec), spec.seed, {
+              onProgress: record,
+              shouldStop,
+            });
+      fittedPredictions = predictValue(
+        forest,
+        applyBinning(binning, xTest, split.test.length),
+        split.test.length,
+        width,
+      );
+    } else if (spec.family === "ridge") {
+      // No iterations to report: the closed form is one solve, which is worth
+      // saying in the phase rather than faking a counter for.
+      progress(id, { done: 0, total: 1, phase: "Solving the normal equations", loss: null });
+      ridge = await fitRidge(matmul, xTrain, yTrain, split.train.length, width, spec.hp.lambda);
+      fittedPredictions = predictRidge(ridge, xTest, split.test.length, width);
+      progress(id, { done: 1, total: 1, phase: "Solving the normal equations", loss: null });
+    } else {
+      const quantiles = spec.quantiles ?? [0.1, 0.5, 0.9];
+      quantile = await fitQuantiles(matmul, xTrain, yTrain, split.train.length, width, {
+        quantiles,
+        epochs: spec.hp.epochs,
+        learningRate: spec.hp.learningRate,
+        batchSize: spec.hp.batchSize,
+        seed: spec.seed,
+        onProgress: record,
+        shouldStop,
+      });
+      const bands = predictQuantiles(quantile, xTest, split.test.length);
+      // Back-transformed per element: `expm1` is monotone, so the band's edges
+      // stay its edges and the median line stays the median.
+      quantilePredictions = inverseTarget(bands, transform);
+      // The median line is the point prediction, so the metric block below
+      // describes the same model the band does.
+      const median = Math.floor(quantiles.length / 2);
+      fittedPredictions = bands.slice(
+        median * split.test.length,
+        (median + 1) * split.test.length,
+      );
+    }
+
+    const fitMs = performance.now() - started;
+    progress(id, { done: 1, total: 1, phase: "Scoring", loss: null });
+
+    // **Scored in the target's own units, always.** A fit on log1p(y) produces
+    // a smaller RMSE for the same reason a logarithm is smaller; comparing that
+    // with a raw fit's RMSE is the mistake this page exists to demonstrate, so
+    // the comparable numbers are the ones computed here and the log-space ones
+    // are reported separately and labelled.
+    const predictions = inverseTarget(fittedPredictions, transform);
+    const metrics = regressionMetrics(yTestRaw, predictions, yTrainRaw, target.name);
+    const fittedSpaceMetrics =
+      transform.space === "log"
+        ? regressionMetrics(
+            forwardTarget(yTestRaw, transform),
+            fittedPredictions,
+            yTrain,
+            transform.units,
+          )
+        : undefined;
+
+    fitted = { spec, encoder, binning, forest, linear: null, mlp: null, ridge, quantile, labels: [] };
+
+    const scoreMatrix = (matrix: Float32Array, n: number): Float32Array => {
+      if (forest && binning) {
+        return predictValue(forest, applyBinning(binning, matrix, n), n, width);
+      }
+      if (ridge) return predictRidge(ridge, matrix, n, width);
+      if (quantile) {
+        const bands = predictQuantiles(quantile, matrix, n);
+        const median = Math.floor(quantile.quantiles.length / 2);
+        return bands.slice(median * n, (median + 1) * n);
+      }
+      return new Float32Array(n);
+    };
+
+    const sourceNames = new Map<number, string>();
+    for (const source of encoder.used) sourceNames.set(source, frame.columns[source].name);
+    // Scored by R² rather than accuracy, so a bar reads "R² lost" — the same
+    // quantity the metric block above is denominated in.
+    const importance = await permutationImportance(
+      Float32Array.from(xTest),
+      split.test.length,
+      encoder.columns,
+      sourceNames,
+      async (matrix) =>
+        regressionMetrics(
+          yTestRaw,
+          inverseTarget(scoreMatrix(matrix, split.test.length), transform),
+          yTrainRaw,
+          target.name,
+        ).r2,
+      {
+        seed: spec.seed,
+        shouldStop,
+        onProgress: (done, total) =>
+          progress(id, { done, total, phase: "Permuting columns", loss: null }),
+      },
+    );
+
+    return {
+      spec,
+      trainRows: split.train.length,
+      testRows: split.test.length,
+      droppedRows,
+      fitMs,
+      compute,
+      regression: metrics,
+      logSpaceRegression: fittedSpaceMetrics,
+      predictions,
+      actuals: yTestRaw,
+      quantilePredictions,
+      quantileCoverage:
+        quantilePredictions && quantile
+          ? bandCoverage(quantilePredictions, yTestRaw, split.test.length, quantile.quantiles)
+          : undefined,
+      coefficients: ridge
+        ? encoder.columns.map((c, i) => ({ name: c.name, weight: ridge.weights[i] }))
+        : undefined,
+      rankDeficient: ridge?.rankDeficient,
+      importance,
+      curve,
+    };
+  }
+
   async function predict(req: PredictRequest): Promise<PredictResult> {
     if (!dataset || !fitted) throw new Error("Fit a model first.");
+    const frame = dataset;
     const { encoder, spec, labels } = fitted;
     const standardise = spec.family === "logistic" || spec.family === "mlp";
     const row = encodeOne(dataset, encoder, req.values, spec.featureIndices, standardise);
     let probs: Float32Array;
-    if (fitted.forest && fitted.binning) {
+    if (spec.objective === "classification" && fitted.forest && fitted.binning) {
       probs = predictProba(fitted.forest, applyBinning(fitted.binning, row, 1), 1, encoder.columns.length);
     } else if (fitted.linear) {
       probs = await fitted.linear.predict(row, 1);
     } else if (fitted.mlp) {
       probs = await fitted.mlp.predict(row, 1);
+    } else if (fitted.ridge) {
+      const value = predictRidge(fitted.ridge, row, 1, encoder.columns.length)[0];
+      return { scores: [restore(spec, frame, value)], labels: [], objective: "regression" };
+    } else if (fitted.quantile) {
+      const bands = predictQuantiles(fitted.quantile, row, 1);
+      return {
+        scores: Array.from(bands, (v) => restore(spec, frame, v)),
+        labels: fitted.quantile.quantiles.map((q) => `q${q}`),
+        objective: "regression",
+      };
+    } else if (fitted.forest && fitted.binning) {
+      const value = predictValue(
+        fitted.forest,
+        applyBinning(fitted.binning, row, 1),
+        1,
+        encoder.columns.length,
+      )[0];
+      return { scores: [restore(spec, frame, value)], labels: [], objective: "regression" };
     } else {
       throw new Error("Fit a model first.");
     }
@@ -321,6 +576,45 @@ export function createFitHandler(post: Post, deps: EngineDeps) {
       post({ type: "error", id, error: describe(error) });
     }
   };
+}
+
+/**
+ * Which rungs put their arithmetic on the GPU.
+ *
+ * Kept as one predicate rather than repeated at each call site, because it
+ * decides three things that must agree: which matmul is resolved, whether the
+ * design matrix is standardised, and what the page tells the user about where
+ * the work ran.
+ */
+/** Back-transform one predicted value into the target's own units. */
+function restore(spec: FitSpec, frame: Dataset, value: number): number {
+  const target = frame.columns[spec.targetIndex];
+  return makeTransform(spec.logTarget ? "log" : "raw", target?.name ?? "target").inverse(value);
+}
+
+/**
+ * Dataset rows whose target is present.
+ *
+ * Everything downstream indexes the dataset through this list, so a row with no
+ * answer never reaches a split, a fit or a score. It is not a convenience: a
+ * missing categorical target reads as code 0 — a real class — so those rows
+ * would otherwise be trained on under the wrong label with nothing failing.
+ */
+function usableRows(column: { missing: Uint8Array }, rowCount: number): Int32Array {
+  const out: number[] = [];
+  for (let i = 0; i < rowCount; i++) if (!column.missing[i]) out.push(i);
+  return Int32Array.from(out);
+}
+
+/** Map split positions (into `usable`) back to dataset row indices. */
+function mapRows(usable: Int32Array, positions: Int32Array): Int32Array {
+  const out = new Int32Array(positions.length);
+  for (let i = 0; i < positions.length; i++) out[i] = usable[positions[i]];
+  return out;
+}
+
+function usesGpu(family: FitSpec["family"]): boolean {
+  return family === "logistic" || family === "mlp" || family === "ridge" || family === "quantile";
 }
 
 function treeParams(spec: FitSpec) {

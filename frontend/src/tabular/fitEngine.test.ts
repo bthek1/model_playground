@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { cpuMatmul } from "@/webgpu/linearModel";
 
 import { parseCsv } from "./csv";
-import { FAMILIES, familyInfo } from "./families";
+import { FAMILIES, familyInfo, REGRESSION_FAMILIES } from "./families";
 import { createFitHandler } from "./fitEngine";
 import { SAMPLES } from "./samples";
 import type {
@@ -178,6 +178,17 @@ describe("createFitHandler", () => {
     expect(messages.find((m) => m.type === "result")).toBeDefined();
   });
 
+  it("never trains a row whose categorical target was missing", async () => {
+    // The dangerous half: a missing categorical code is 0, which is a real
+    // class, so those rows would silently join whichever level was seen first
+    // and the model would be fitted on labels nobody supplied.
+    const withGaps = CSV.replace("1,1,a", "1,1,").replace("2,1,a", "2,1,");
+    const { result } = await fitOn(withGaps, "forest");
+    const fit = (result as { result: FitResult }).result;
+    expect(fit.droppedRows).toBe(2);
+    expect(fit.trainRows + fit.testRows).toBe(10);
+  });
+
   it("ranks a genuinely unused column near zero", async () => {
     const withNoise = CSV.split("\n")
       .map((line, i) =>
@@ -240,5 +251,163 @@ describe("the privacy claim", () => {
     expect(opened).toEqual([]);
     expect(setItem).not.toHaveBeenCalled();
     vi.restoreAllMocks();
+  });
+});
+
+// --- The regression arm ------------------------------------------------------
+
+const NUMERIC = `x,z,y
+1,0,3.1
+2,0,5.0
+3,1,7.2
+4,1,9.1
+5,0,11.0
+6,1,12.9
+7,0,15.2
+8,1,17.1
+9,0,19.0
+10,1,20.8
+11,0,23.1
+12,1,25.0
+`;
+
+async function regressOn(
+  csv: string,
+  family: Family,
+  extra: Record<string, unknown> = {},
+) {
+  const { messages, handle } = harness();
+  const { dataset } = parseCsv(csv, { name: "numeric" });
+  await handle({ type: "load", dataset });
+  const target = dataset.columns.length - 1;
+  await handle({
+    type: "run",
+    id: 1,
+    spec: {
+      family,
+      objective: "regression",
+      targetIndex: target,
+      featureIndices: dataset.columns.map((_, i) => i).filter((i) => i !== target),
+      hp: familyInfo(family, "regression").defaults,
+      seed: 7,
+      testFraction: 0.3,
+      ...extra,
+    },
+  });
+  return {
+    messages,
+    handle,
+    dataset,
+    result: messages.find((m) => m.type === "result"),
+    error: messages.find((m) => m.type === "error"),
+  };
+}
+
+describe("the regression arm", () => {
+  it("fits every regression rung and beats the train-mean baseline", async () => {
+    for (const family of REGRESSION_FAMILIES) {
+      const { result, error } = await regressOn(NUMERIC, family.id);
+      expect(error, `${family.id}: ${(error as { error?: string })?.error}`).toBeUndefined();
+      const fit = (result as { result: FitResult }).result;
+      expect(fit.regression, family.id).toBeDefined();
+      expect(fit.regression?.rmse ?? Infinity).toBeLessThan(
+        fit.regression?.baselineRmse ?? 0,
+      );
+      // The baseline travels inside the metrics, in the target's own units.
+      expect(fit.regression?.units).toBe("y");
+    }
+  });
+
+  it("refuses a text target with a message that says what to do", async () => {
+    const { error } = await regressOn("a,b\nx,1\ny,2\nx,3\n", "ridge", {
+      targetIndex: 0,
+      featureIndices: [1],
+    });
+    expect((error as { error: string }).error).toMatch(/text/i);
+  });
+
+  it("drops rows with no answer rather than imputing or refusing", async () => {
+    // Imputing a target is inventing the thing being predicted; refusing the
+    // whole file over two blank cells makes the page unusable on real data (the
+    // Palmer penguins sample has exactly that). So the rows go, and the count
+    // is reported.
+    const { result, error } = await regressOn(
+      "x,y\n1,1\n2,\n3,3\n4,4\n5,5\n6,6\n7,7\n8,8\n",
+      "ridge",
+    );
+    expect(error).toBeUndefined();
+    const fit = (result as { result: FitResult }).result;
+    expect(fit.droppedRows).toBe(1);
+    expect(fit.trainRows + fit.testRows).toBe(7);
+  });
+
+  it("says so when almost nothing is left after dropping", async () => {
+    const { error } = await regressOn("x,y\n1,1\n2,\n3,\n4,\n5,\n6,\n", "ridge");
+    expect((error as { error: string }).error).toMatch(/only 1 rows/i);
+  });
+
+  it("reports rank deficiency instead of returning a plausible answer", async () => {
+    // Two identical columns. An inverse would return one of infinitely many
+    // coefficient vectors and look entirely fine.
+    const { result } = await regressOn(NUMERIC, "ridge", {
+      featureIndices: [0, 0],
+      hp: { ...familyInfo("ridge", "regression").defaults, lambda: 0 },
+    });
+    const fit = (result as { result: FitResult }).result;
+    expect(fit.rankDeficient).toBe(true);
+  });
+
+  it("returns coefficients for ridge and importances for a tree", async () => {
+    const ridge = (
+      (await regressOn(NUMERIC, "ridge")).result as { result: FitResult }
+    ).result;
+    expect(ridge.coefficients?.length).toBeGreaterThan(0);
+    const forest = (
+      (await regressOn(NUMERIC, "forest")).result as { result: FitResult }
+    ).result;
+    expect(forest.coefficients).toBeUndefined();
+    expect(forest.importance.length).toBeGreaterThan(0);
+  });
+
+  it("returns a band with its measured coverage", async () => {
+    const { result } = await regressOn(NUMERIC, "quantile", {
+      quantiles: [0.1, 0.5, 0.9],
+    });
+    const fit = (result as { result: FitResult }).result;
+    expect(fit.quantilePredictions?.length).toBe(3 * fit.testRows);
+    // A band of the wrong width looks entirely correct on screen, so the number
+    // is carried rather than left to be eyeballed.
+    expect(fit.quantileCoverage).toBeGreaterThanOrEqual(0);
+    expect(fit.quantileCoverage).toBeLessThanOrEqual(1);
+  });
+
+  it("scores a logged fit in the target's own units, and reports log space separately", async () => {
+    // The page's claim, and therefore a test: the comparable numbers are the
+    // back-transformed ones, and the log-space ones are labelled and kept apart.
+    const raw = ((await regressOn(NUMERIC, "ridge")).result as { result: FitResult }).result;
+    const { result } = await regressOn(NUMERIC, "ridge", { logTarget: true });
+    const logged = (result as { result: FitResult }).result;
+
+    expect(logged.regression?.units).toBe("y");
+    expect(logged.logSpaceRegression?.units).toBe("log(1 + y)");
+    // Smaller for the same reason a logarithm is smaller — which is exactly why
+    // it must not be rendered beside the raw fit's RMSE unlabelled.
+    expect(logged.logSpaceRegression?.rmse ?? 1).toBeLessThan(
+      logged.regression?.rmse ?? 0,
+    );
+    // Both fits are scored on the same scale, so they can be compared at all.
+    expect(raw.regression?.units).toBe(logged.regression?.units);
+  });
+
+  it("predicts one row back in the target's units", async () => {
+    const { handle, messages } = await regressOn(NUMERIC, "ridge", { logTarget: true });
+    messages.length = 0;
+    await handle({ type: "run", id: 2, predict: { values: [6, 1] } });
+    const predicted = (messages.find((m) => m.type === "result") as { result: PredictResult })
+      .result;
+    expect(predicted.objective).toBe("regression");
+    // ~13 on this line, not ~2.6 — a prediction left in log space would look
+    // like a perfectly ordinary number.
+    expect(predicted.scores[0]).toBeGreaterThan(8);
   });
 });

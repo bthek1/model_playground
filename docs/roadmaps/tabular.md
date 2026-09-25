@@ -14,13 +14,13 @@
 | Roadmap section | Route | Status |
 |---|---|---|
 | Tabular Classification (§3.1) | [`/tabular-classification`](../../frontend/src/routes/tabular-classification.tsx) | **Shipped** — the four-family ladder, fitted in the tab |
-| Tabular Regression (§3.2) | — | **Planned** — [#49](https://github.com/bthek1/model_playground/issues/49): closed-form ridge, quantile bands, the log-transform trap |
-| Time Series Forecasting (§3.3) | — | **Planned** — [#50](https://github.com/bthek1/model_playground/issues/50): baselines + backtesting; the two foundation models have no ONNX export |
+| Tabular Regression (§3.2) | [`/tabular-regression`](../../frontend/src/routes/tabular-regression.tsx) | **Shipped** — closed-form ridge, quantile bands, the log-transform trap |
+| Time Series Forecasting (§3.3) | [`/time-series-forecasting`](../../frontend/src/routes/time-series-forecasting.tsx) | **Shipped as baselines + backtesting** — the two foundation models have no ONNX export |
 
-**1 of 3 shipped.** [#48](https://github.com/bthek1/model_playground/issues/48) built
-`src/tabular/` and §3.1; [#49](https://github.com/bthek1/model_playground/issues/49) (§3.2)
-and [#50](https://github.com/bthek1/model_playground/issues/50) (§3.3) are open, and the
-decisions already taken for them are recorded below so they are not re-litigated.
+**The category is complete as scoped: 3 of 3.** The build-out is recorded in the closed
+plan issues [#48](https://github.com/bthek1/model_playground/issues/48) (`src/tabular/` +
+§3.1), [#49](https://github.com/bthek1/model_playground/issues/49) (§3.2) and
+[#50](https://github.com/bthek1/model_playground/issues/50) (§3.3).
 
 This category is the exception to the pattern the rest of the app follows, and the
 exception is good news. There are almost no Hugging Face checkpoints here: the reference
@@ -135,8 +135,8 @@ Three tiers, and where each one's compute goes:
 GPU.** Recursive splitting is branch-heavy and does not vectorise — every node asks a
 different question of a different subset of rows, which is the opposite of what a compute
 shader is for. Attempting it in WGSL is the wrong instinct, and a tabular page that says so
-is more honest than one that pretends. The shipped route renders that sentence beside the
-family the user picked, and §3.2 will.
+is more honest than one that pretends. Both shipped routes render that sentence beside the
+family the user picked.
 
 ---
 
@@ -262,9 +262,10 @@ looks like a better page: the `/link-prediction` leakage lesson in its cheapest 
 [`design.ts`](../../frontend/src/tabular/design.ts) takes the training indices explicitly so
 the rule is impossible to forget.
 
-### 3.2 Tabular Regression — planned (#49)
+### 3.2 Tabular Regression — shipped
 
-Plan: [#49](https://github.com/bthek1/model_playground/issues/49).
+Route: [`/tabular-regression`](../../frontend/src/routes/tabular-regression.tsx). Plan:
+[#49](https://github.com/bthek1/model_playground/issues/49).
 
 Same worker, same fit engine, same hook, same ladder — a reviewer should be able to diff the
 two route files and see only the diagnostics differing. Three things genuinely differ:
@@ -296,13 +297,31 @@ the second axis. A model with a fine R² and a funnel-shaped residual plot is th
 seeing, and it is why the plot is a main panel rather than an extra.
 
 **Do not inherit §3.1's hyperparameters.** A depth that suits a Gini split is not
-automatically right for variance reduction; the defaults here were measured on this page's
-own samples. (The `/link-prediction` lesson: reuse that looks like a decision is often an
-inheritance.)
+automatically right for variance reduction, so `REGRESSION_FAMILIES` is a separate list with
+its own defaults rather than an `objective` flag on the four classification entries. (The
+`/link-prediction` lesson: reuse that looks like a decision is often an inheritance.)
 
-### 3.3 Time Series Forecasting — planned (#50), as baselines and backtesting
+Two findings the build added to the plan:
 
-Plan: [#50](https://github.com/bthek1/model_playground/issues/50).
+- **The quantile lines are fitted independently, so they can cross**, and a band whose lower
+  edge is above its upper edge is not renderable. They are sorted per row, which is the
+  standard repair: it changes no line's level, only which is labelled which where they have
+  already crossed.
+- **Coverage is the assertion, not "a band was drawn".** A band of the wrong width looks
+  entirely correct on the chart. The measured fraction of held-out rows inside the 0.1–0.9
+  band travels in the result and is rendered beside it, and `just fe-e2e-tabular` pins it to
+  0.6–0.95 rather than to a floor.
+- **Ridge's rank-deficiency report is the page's proof that the choice mattered.** At `λ = 0`
+  on a design with two identical columns the Cholesky factorisation cannot complete — which is
+  the honest answer, where an inverse would have returned one of infinitely many coefficient
+  vectors and looked entirely fine. The page says so, adds the smallest penalty that makes the
+  matrix positive definite, and finishes the fit.
+
+### 3.3 Time Series Forecasting — shipped, as baselines and backtesting
+
+Route: [`/time-series-forecasting`](../../frontend/src/routes/time-series-forecasting.tsx).
+Module: [`src/forecast/`](../../frontend/src/forecast/). Plan:
+[#50](https://github.com/bthek1/model_playground/issues/50).
 
 This one splits.
 
@@ -346,6 +365,24 @@ worker to look consistent would add a protocol and a mock for no benefit. It is 
 **three-band page** — there is nothing to fit — which is written up in
 [`../standards/model-page-pattern.md`](../standards/model-page-pattern.md) §7 rather than
 quietly shipped, since §8's testid contract assumes four.
+
+Three findings the build added:
+
+- **The implied frequency is the *modal* step, not the median and not the mean.** A mean is
+  dragged by one long gap far enough to make every ordinary interval look irregular — but so is
+  a median on a short series: three monthly points with one month missing have two diffs,
+  `[1 month, 2 months]`, whose upper median is the gap itself, and the page then reports the
+  *regular* interval as the anomaly. The mode is the step that actually recurs, which is what
+  "the implied frequency" means.
+- **The sample had to be built so the spread is wide.** Measured on the shipped page, seasonal
+  naive on the airline series gives a single-split MAE of 47.8 against a window range of
+  12.6–53.1 — a 4× swing, which is far larger than the difference between the methods being
+  compared. That is the finding, and a series without a regime change or a strong seasonal
+  amplitude would give a tight spread and demonstrate nothing.
+- **The single split is one of the windows**, by construction: the last rolling origin *is* the
+  notebook split. So the E2E assertion cannot be "the spread straddles it" — that is true
+  trivially. It is that the spread is **wide**, `max > 1.5 × min`, which is exactly what a
+  backtest reusing one split's numbers for every window would fail.
 
 If a foundation forecaster is genuinely wanted in the browser, the path is to export PatchTST
 yourself with `torch.onnx.export` and host the artefact, then serve it through
@@ -408,13 +445,17 @@ the model**.
 ## 6. Reference
 
 - **[`src/tabular/`](../../frontend/src/tabular/)** — the columnar dataset, the CSV parser,
-  the design-matrix encoder, the tree/linear/MLP fitters, the metrics and the fit worker.
+  the design-matrix encoder, the tree/linear/MLP/ridge/quantile fitters, the metrics and the
+  fit worker.
+- **[`src/forecast/`](../../frontend/src/forecast/)** — the series parser, the baselines, the
+  metrics and the rolling-origin backtest. No worker, by decision.
 - **[`src/webgpu/`](../../frontend/src/webgpu/)**: the existing WGSL matmul, transpose, scale
   and elementwise shaders plus `linearModel.ts` — which is reused rather than reimplemented,
   softmax, cross-entropy, SGD loop and all. [`/training`](../../frontend/src/routes/training.tsx)
   and [`/tensor`](../../frontend/src/routes/tensor.tsx) are the two routes to read first.
 - **`just fe-e2e-tabular`** — the whole ladder fitted in a real browser, pinned above the
-  majority baseline. There is **no `fe-e2e-models` row for this category**: no checkpoint, no catalogue,
+  majority baseline. **`just fe-e2e-forecast`** — the window spread against the single-split
+  number, and a Worker count of zero. There is **no `fe-e2e-models` row for this category**: no checkpoint, no catalogue,
   nothing on the Hub to resolve.
 - **`node scripts/make-tabular-samples.mjs`** rebuilds the bundled sample CSVs and prints
   their row counts.

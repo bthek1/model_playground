@@ -61,7 +61,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Graph ML roadmap** (**complete, 4 of 4**; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
 | **Multimodal roadmap** (**complete as scoped, 3 of 3**; VLMs, `q4f16`, streaming, video frames) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
 | **NLP roadmap** (complete as scoped: **11 of the category's 12 taxonomy rows** shipped, across 10 of the file's 11 sections — §3.7 covers two rows with one engine — and Table QA does not port; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
-| **Tabular roadmap** (§3.1 shipped; the fit is the feasibility bar, not the download) | [`docs/roadmaps/tabular.md`](docs/roadmaps/tabular.md) |
+| **Tabular roadmap** (**complete as scoped, 3 of 3**; the fit is the feasibility bar, not the download) | [`docs/roadmaps/tabular.md`](docs/roadmaps/tabular.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -107,6 +107,7 @@ just fe-e2e-summarize # @slow: summarization — two assertions and the Phase 0 
 just fe-e2e-textgen # @slow: text generation — greedy twice must be **byte-identical**
 just fe-e2e-rank    # @slow: text ranking — the four stages must *disagree*, in a named direction
 just fe-e2e-tabular # the model ladder fitted in a real browser, pinned above the majority baseline
+just fe-e2e-forecast # the backtest spread against the single-split number (no model, no worker)
 just fe-e2e-models  # check every model id (audio + vision + multimodal + text) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -1209,7 +1210,7 @@ thin task hooks over `useTextPipeline`. See [`docs/roadmaps/nlp.md`](docs/roadma
   stage ranks identically is satisfied by a page quietly rendering one list four times,
   which is this page's most plausible bug.
 
-### In-browser tabular models (`src/tabular/` — `/tabular-classification`)
+### In-browser tabular models (`src/tabular/` — `/tabular-classification`, `/tabular-regression`)
 
 The fifth modality, and the one that inverts the question. Every other category asks
 whether the *weights* fit in a tab; here there are no weights at all — the model is
@@ -1301,6 +1302,106 @@ See [`docs/roadmaps/tabular.md`](docs/roadmaps/tabular.md).
   chunk — `npm run check:bundle` fails on exactly that. It works only because nothing imports
   them statically; one static importer anywhere and the dynamic import buys a microtask and
   nothing else.
+
+- **`/tabular-regression` is the same worker, engine, hook and ladder — only the diagnostics
+  differ**, and a reviewer should be able to diff the two route files and see exactly that. It
+  is a second route rather than a branch for the `/visual-question-answering` reason: same
+  engine, different question, separate Hub tags, and no shared diagnostics — residuals replace
+  the confusion matrix and an interval replaces a threshold.
+- **Ridge is a Cholesky *solve*, not an inverse, and that is the page's teaching point.**
+  `XᵀX` and `Xᵀy` are `O(n·d²)` and `O(n·d)` in the row count and go to the GPU; the `d×d`
+  factorisation is microseconds and stays on the CPU — dispatching a kernel to invert a matrix
+  smaller than one workgroup is the trees lesson pointing the other way. And `λ > 0` is exactly
+  what makes `XᵀX + λI` positive definite, which is what makes the factorisation legitimate:
+  that is what the penalty buys, and it is why this is ridge rather than plain least squares.
+  At `λ = 0` on a design with two identical columns the factorisation **cannot complete**, and
+  the page says so — an inverse would have returned one of infinitely many coefficient vectors
+  and looked entirely fine.
+- **`transform.ts` owns the units so the route cannot mislabel them.** A fit on `log1p(y)`
+  produces a smaller RMSE for the same reason a logarithm is smaller; reading it beside a raw
+  fit's RMSE and concluding the transform helped is the mistake the toggle exists to
+  demonstrate. So the comparable numbers are **always** the back-transformed ones in the
+  target's own units, the log-space ones are a *separate* labelled field, and the page renders
+  what it is handed. `forwardTarget` also refuses a target at or below −1 rather than emitting
+  `NaN`s a gradient loop then propagates through every weight while the fit still "completes".
+- **The log toggle spends, and the page says so before the click.** A fit on `log1p(y)` cannot
+  be re-derived from a fit on `y`, so flipping it runs nothing and the next FIT is a real second
+  fit — same class as `/video-text-to-text`'s reverse toggle and `/zero-shot-classification`'s
+  `multi_label`.
+- **A band of the wrong width looks entirely correct**, so the quantile route reports its
+  **measured coverage** of the held-out rows and the E2E spec pins that to a range rather than
+  asserting a band was drawn. The quantile lines are fitted independently and can cross; they
+  are sorted per row, which changes no line's level and only relabels which is which where they
+  had already crossed.
+- **The residual plot is a main panel because the aggregate number hides the failure.** A model
+  with a respectable R² and a funnel-shaped residual plot is systematically worse at one end,
+  and no scalar on the page says so.
+- **`REGRESSION_FAMILIES` is a separate list, not an `objective` flag on the classification
+  four.** A depth that suits a Gini split is not automatically right for variance reduction, and
+  the defaults here were measured on this page's own samples — `/link-prediction` paid 0.19 of
+  AUC for the lesson that reuse which looks like a decision is often an inheritance.
+
+### In-browser forecasting (`src/forecast/` — `/time-series-forecasting`)
+
+The one route in the app with **no model, no download and no worker**, and each of those is
+a decision rather than an omission. See [`docs/roadmaps/tabular.md`](docs/roadmaps/tabular.md) §3.3.
+
+- **Both foundation forecasters are unavailable, and it is a missing *export*.** Neither
+  `google/timesfm-2.0-500m-pytorch` nor `ibm-granite/granite-timeseries-patchtst` publishes ONNX
+  weights (re-checked 2026-09-25 — the check is one API call each and a plan that says "checked"
+  about someone else's repo owes a date). No amount of quantization reaches that, so it is
+  `adding-a-task-page.md` §0 **question 1** the row fails, not question 2. It does not stop the
+  page, because the baselines *are* the page.
+- **There is no worker, and the page asserts that it still has none.** Naive is `last`, seasonal
+  naive is `last season`, drift is a straight line through the first and last points, and a
+  rolling backtest is a loop over slices — the whole page is O(points × windows) on a few
+  thousand points. Wrapping that in a worker to look consistent would add a protocol, a mock and
+  an asynchronous boundary with nothing to put across it. "No worker" is invisible when a
+  refactor undoes it, so the E2E spec **counts `Worker` constructions** and the unit test stubs
+  the constructor.
+- **Three bands, and the fourth is explained where it would have been.** FIT is absent — nothing
+  to download, nothing to fit — and `DeviceStatus` would be wrong too, since the page raises no
+  GPU question. An unexplained gap reads as an oversight, and here the absence is the category's
+  point. `slot-4` genuinely is not rendered and a test asserts it; model-page-pattern §7 carries
+  the row, because four bands is the default precisely so that three is a decision someone wrote
+  down.
+- **The backtest must be rolling-origin, never k-fold, and the leakage fails *upward*.** Shuffled
+  cross-validation on a time series trains on the future and scores the past — the
+  `/link-prediction` lesson in its oldest form — and the metric *improves*. `noLeakage()` is a
+  function rather than a comment, and the most valuable test in the module calls it on every
+  window of every mode.
+- **One split's number is shown next to the distribution of numbers**, and both come out of **one**
+  backtest call. Two calls could differ in the season, the horizon or the method, and the gap the
+  page draws would be attributed to the splitting. A page that showed only the spread would be
+  correct and would not make the point; one that showed only the single number would be every
+  other forecasting tutorial.
+- **The single split *is* one of the windows** — the last rolling origin is the notebook split —
+  so "the spread straddles it" is trivially true and useless as an assertion. `just
+  fe-e2e-forecast` asserts the spread is **wide** (`max > 1.5 × min`), which is exactly what a
+  backtest reusing one split's numbers for every window would fail. Measured on the airline
+  sample: single 47.8 against a window range of 12.6–53.1.
+- **MASE is the column to read, and its denominator is where it goes wrong.** It divides by the
+  **in-sample** naive error, so 1.0 means "no better than repeating the last value". Scaled by the
+  test window instead, or with a season of 1 where the metric is meant to be seasonal, it is still
+  a small number near 1 and nothing looks broken. MAPE returns **null**, not `Infinity` and not an
+  average over the non-zero rows — that average describes a different test set from every other
+  number in the object.
+- **The season length is a control, never detected.** Guessing the period and being wrong produces
+  a confident, plausible forecast off by a phase, with no symptom. Same reason **gaps and irregular
+  spacing are reported rather than interpolated**: a filled gap gives a seasonal forecast off by a
+  phase and the error is then blamed on the method.
+- **Drift is the mean per-step change, `(last − first)/(n − 1)`, not the regression slope.** The two
+  agree exactly on a straight line — which is the series everyone checks a drift forecast against —
+  so the wrong one survives review. `regressionSlope` is exported *only* so a test can assert drift
+  is not it.
+- **The implied frequency is the *modal* step.** A mean is dragged by one long gap; so is a median
+  on a short series, where three monthly points with one month missing give diffs
+  `[1 month, 2 months]` whose upper median is the gap itself — and the page then reports the
+  regular interval as the anomaly.
+- **The honesty note is a correctness requirement**, the third of its kind after
+  `/video-classification`'s frame-level disclaimer and `/question-answering`'s cannot-abstain note:
+  the page says it has no learned model, in OUTPUT's **empty state** so it is read before a forecast
+  exists, and a test pins the copy.
 
 ### Three routes were built and then cut for size — read this before adding one
 

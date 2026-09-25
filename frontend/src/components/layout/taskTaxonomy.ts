@@ -79,6 +79,11 @@ const REAL_ROUTES: Record<string, string> = {
   // leaves the device" — and it is the stronger claim, because tabular data is
   // the kind people actually mind about.
   "tabular-classification": "/tabular-classification",
+  "tabular-regression": "/tabular-regression",
+  // The one route in the app with no model, no download and no worker: the
+  // baselines are the page, and the two foundation forecasters worth wanting
+  // publish no ONNX weights at all.
+  "time-series-forecasting": "/time-series-forecasting",
   // The only route on the raw-WebGPU path outside Theory: no checkpoint exists,
   // so the network is written as WGSL and trained in the tab. Covers node
   // classification and the oversmoothing demonstration; link prediction and

@@ -374,6 +374,15 @@ function FitNotes({ result }: { result: FitResult }) {
         fitted in {(result.fitMs / 1000).toFixed(1)}s on{" "}
         {result.compute === "gpu" ? "your GPU" : "your CPU"}.
       </p>
+      {result.droppedRows > 0 && (
+        <p data-testid="dropped-rows">
+          {result.droppedRows.toLocaleString()} row
+          {result.droppedRows === 1 ? " was" : "s were"} left out because the
+          target column was blank there. A row with no answer cannot be trained
+          on or scored, and imputing a target would be inventing the thing being
+          predicted.
+        </p>
+      )}
       <p>
         Fit the other three on the same seed and compare. The neural network is
         on this ladder because it usually <em>loses</em> — on tables of a few

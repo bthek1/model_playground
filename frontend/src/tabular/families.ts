@@ -34,6 +34,7 @@ const TREE_DEFAULTS: Hyperparams = {
   learningRate: 0.2,
   batchSize: 64,
   hidden: 32,
+  lambda: 1,
 };
 
 export const FAMILIES: FamilyInfo[] = [
@@ -87,15 +88,77 @@ export const FAMILIES: FamilyInfo[] = [
   },
 ];
 
-export function familyInfo(id: Family): FamilyInfo {
-  const found = FAMILIES.find((f) => f.id === id);
+/**
+ * The regression rungs.
+ *
+ * Separate entries rather than an `objective` flag on the four above, because
+ * two of them are genuinely different models — and because the defaults are
+ * **measured on this page's own samples**, not inherited. A depth that suits a
+ * Gini split is not automatically right for variance reduction, and reuse that
+ * looks like a decision is often an inheritance (`/link-prediction` paid for
+ * that one at 0.19 of AUC).
+ */
+export const REGRESSION_FAMILIES: FamilyInfo[] = [
+  {
+    id: "ridge",
+    label: "Ridge regression",
+    blurb:
+      "The floor, and the only model here with a closed form: one solve, no iterations, no learning rate. The λ penalty is not a tuning knob bolted on — it is what makes the normal equations solvable at all.",
+    compute: "gpu",
+    computeNote:
+      "XᵀX and Xᵀy are O(n·d²) in the row count and run as WGSL on your GPU; the d×d factorisation is microseconds and stays on the CPU. That is the honest split, and here it is arithmetic rather than a claim.",
+    objectives: ["regression"],
+    defaults: { ...TREE_DEFAULTS, lambda: 1 },
+    knobs: ["lambda"],
+  },
+  {
+    id: "forest",
+    label: "Random forest",
+    blurb:
+      "Bagged regression trees: the split criterion becomes variance reduction and the leaf becomes a mean. Zero tuning, and usually within a little of the best thing here.",
+    compute: "cpu",
+    computeNote:
+      "Plain TypeScript in a Web Worker. Recursive splitting is branch-heavy and does not vectorise — a GPU would make this slower, not faster.",
+    objectives: ["regression"],
+    defaults: { ...TREE_DEFAULTS, nTrees: 60, maxDepth: 8, minLeaf: 5 },
+    knobs: ["nTrees", "maxDepth", "minLeaf", "featureFraction"],
+  },
+  {
+    id: "boosting",
+    label: "Gradient boosting",
+    blurb:
+      "Trees fitted to the previous round's residuals. On most real tables this is the winner, and it is the browser's answer to XGBoost and LightGBM.",
+    compute: "cpu",
+    computeNote:
+      "Plain TypeScript in a Web Worker, histogram-binned like HistGradientBoosting. Same reason as the forest: there is no matmul in a recursive split.",
+    objectives: ["regression"],
+    defaults: { ...TREE_DEFAULTS, nTrees: 150, maxDepth: 4, shrinkage: 0.08 },
+    knobs: ["nTrees", "maxDepth", "minLeaf", "shrinkage", "featureFraction"],
+  },
+  {
+    id: "quantile",
+    label: "Quantile regression",
+    blurb:
+      "Fits an interval rather than a number — a low, a median and a high line, by minimising the pinball loss. A band is more honest than a point estimate, and the median is not the mean on a skewed target.",
+    compute: "gpu",
+    computeNote:
+      "One matmul per batch for all three quantiles at once, as WGSL on your GPU. Three separate fits would be three times the arithmetic for the same lines.",
+    objectives: ["regression"],
+    defaults: { ...TREE_DEFAULTS, epochs: 60, learningRate: 0.08, batchSize: 64 },
+    knobs: ["epochs", "learningRate", "batchSize"],
+  },
+];
+
+export function familyInfo(id: Family, objective: Objective = "classification"): FamilyInfo {
+  const pool = objective === "regression" ? REGRESSION_FAMILIES : FAMILIES;
+  const found = pool.find((f) => f.id === id) ?? [...FAMILIES, ...REGRESSION_FAMILIES].find((f) => f.id === id);
   if (!found) throw new Error(`Unknown model family: ${id}`);
   return found;
 }
 
 /** Families that can answer this question, in ladder order. */
 export function familiesFor(objective: Objective): FamilyInfo[] {
-  return FAMILIES.filter((f) => f.objectives.includes(objective));
+  return objective === "regression" ? REGRESSION_FAMILIES : FAMILIES;
 }
 
 /** Human labels and units for the hyperparameter controls. */
@@ -150,7 +213,7 @@ export const KNOB_LABELS: Record<
     min: 0.001,
     max: 1,
     step: 0.001,
-    hint: "Step size for gradient descent.",
+    hint: "Step size for gradient descent, as a fraction of the target's own spread — so the same number behaves the same way on a column of dollars and a column of ratios.",
   },
   batchSize: {
     label: "Batch size",
@@ -165,5 +228,12 @@ export const KNOB_LABELS: Record<
     max: 256,
     step: 4,
     hint: "Width of the single hidden layer.",
+  },
+  lambda: {
+    label: "Ridge penalty (λ)",
+    min: 0,
+    max: 100,
+    step: 0.5,
+    hint: "Shrinks the coefficients — and makes XᵀX positive definite, which is what lets the solve succeed at all. Drag it to 0 on a design with two identical columns and the page will say the fit is rank-deficient.",
   },
 };

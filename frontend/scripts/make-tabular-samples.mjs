@@ -22,13 +22,34 @@
 //                  linear boundary cannot represent, and is labelled synthetic
 //                  everywhere it appears.
 //
+// It also builds `src/forecast/data/`, whose three series are chosen for what
+// the forecasting page has to demonstrate rather than for realism:
+//
+//   airline.csv    International airline passengers, 1949-1960 (Box, Jenkins &
+//                  Reinsel). The canonical monthly series — trend plus an
+//                  unmistakable yearly period, so the season-length control has
+//                  something to be visibly right and wrong about. No explicit
+//                  licence is attached to it; it is 144 integers published in a
+//                  1976 textbook and redistributed in R, statsmodels and Keras.
+//   retail-synthetic.csv
+//                  Daily, weekly period, and a **level shift two thirds of the
+//                  way through**. The shift is the point: it is what makes the
+//                  single-split number land inside the backtest spread instead
+//                  of beside it, which is the page's whole argument.
+//   random-walk-synthetic.csv
+//                  Nothing to learn. Every method lands near MASE 1.0, which is
+//                  what makes that number readable as "no better than naive".
+//
 // Usage:  node scripts/make-tabular-samples.mjs
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const OUT = join(import.meta.dirname, "..", "src", "tabular", "data");
+const FORECAST_OUT = join(import.meta.dirname, "..", "src", "forecast", "data");
 
+const AIRLINE =
+  "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv";
 const PENGUINS =
   "https://raw.githubusercontent.com/allisonhorst/palmerpenguins/main/inst/extdata/penguins.csv";
 const WINE =
@@ -159,7 +180,84 @@ function creditRisk(rows = 1800, seed = 20260925) {
   return rows;
 }
 
+/**
+ * The canonical monthly series: international airline passengers, 1949–1960.
+ *
+ * Trend plus an unmistakable yearly period, which is what makes it the right
+ * sample for a page whose season length is a *control*: set it to 12 and
+ * seasonal naive is excellent, set it to 11 and the forecast is confidently off
+ * by a phase with nothing on screen to say so.
+ */
+async function airline() {
+  const text = await fetchText(AIRLINE);
+  const rows = text
+    .trimEnd()
+    .split("\n")
+    .slice(1)
+    .map((line) => line.replace(/"/g, ""))
+    .filter((line) => line.length > 0)
+    // Month resolution only; the page's date parser wants a full date.
+    .map((line) => {
+      const [month, value] = line.split(",");
+      return `${month}-01,${value}`;
+    });
+  writeFileSync(join(FORECAST_OUT, "airline.csv"), ["date,passengers", ...rows].join("\n") + "\n");
+  return rows.length;
+}
+
+/**
+ * A daily series with a weekly period **and a level shift two thirds of the way
+ * through**.
+ *
+ * The shift is the point. A single train/test split that falls after it reports
+ * one number; windows that straddle it report much worse ones — so the
+ * single-split metric sits *inside* the spread rather than next to it, which is
+ * the page's entire argument made visible. A series without a regime change
+ * would give a tight spread and demonstrate nothing.
+ */
+function retail(days = 420, seed = 20260925) {
+  const rand = mulberry32(seed);
+  const start = Date.UTC(2024, 0, 1);
+  const weekly = [1.18, 0.92, 0.9, 0.95, 1.05, 1.25, 0.75];
+  const out = ["date,units"];
+  for (let i = 0; i < days; i++) {
+    const level = 200 + 0.22 * i + (i > days * 0.66 ? 70 : 0);
+    const value = level * weekly[i % 7] * (1 + gaussian(rand) * 0.045);
+    const date = new Date(start + i * 86400000).toISOString().slice(0, 10);
+    out.push(`${date},${Math.round(value)}`);
+  }
+  writeFileSync(join(FORECAST_OUT, "retail-synthetic.csv"), out.join("\n") + "\n");
+  return days;
+}
+
+/**
+ * A pure random walk — no trend, no season, nothing to learn.
+ *
+ * It is here so the page can show MASE doing its job: on a random walk nothing
+ * beats "the last value, repeated", so every method lands near 1.0 and the
+ * number is readable as "no better than naive" rather than as a small error.
+ */
+function randomWalk(days = 300, seed = 4242) {
+  const rand = mulberry32(seed);
+  const start = Date.UTC(2024, 0, 1);
+  const out = ["date,price"];
+  let v = 100;
+  for (let i = 0; i < days; i++) {
+    v += gaussian(rand) * 1.4;
+    const date = new Date(start + i * 86400000).toISOString().slice(0, 10);
+    out.push(`${date},${v.toFixed(2)}`);
+  }
+  writeFileSync(join(FORECAST_OUT, "random-walk-synthetic.csv"), out.join("\n") + "\n");
+  return days;
+}
+
 const n1 = await penguins();
 const n2 = await wine();
 const n3 = creditRisk();
-console.log(`penguins.csv ${n1} rows · wine.csv ${n2} rows · credit-risk-synthetic.csv ${n3} rows`);
+const n4 = await airline();
+const n5 = retail();
+const n6 = randomWalk();
+console.log(
+  `tabular: penguins.csv ${n1} · wine.csv ${n2} · credit-risk-synthetic.csv ${n3}\n` +
+    `forecast: airline.csv ${n4} · retail-synthetic.csv ${n5} · random-walk-synthetic.csv ${n6}`,
+);

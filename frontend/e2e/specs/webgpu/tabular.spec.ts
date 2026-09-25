@@ -135,3 +135,96 @@ test.describe("Tabular classification", () => {
     await expect(page.getByTestId("model-ready")).toContainText("GPU");
   });
 });
+
+test.describe("Tabular regression", () => {
+  test("beats the train-mean baseline, and draws what a score cannot say", async ({
+    page,
+    mockApi,
+  }) => {
+    test.setTimeout(300_000);
+    await mockApi();
+    await page.goto("/tabular-regression");
+    await expect(
+      page.getByRole("heading", { name: /tabular regression/i }),
+    ).toBeVisible();
+    await expect(page.getByTestId("output-empty")).toBeVisible();
+
+    await page.getByRole("button", { name: /palmer penguins/i }).click();
+    await expect(page.getByTestId("dataset-summary")).toBeVisible();
+    await page.getByRole("button", { name: /ridge regression/i }).click();
+    await page.getByTestId("fit-button").click();
+    await expect(page.getByTestId("model-ready")).toBeVisible({ timeout: 180_000 });
+
+    // **An R² band above the train-mean baseline, not a floor.** A floor alone
+    // passes on a model that predicts the mean — which is exactly what a broken
+    // solve produces, since the intercept alone already gets there.
+    const text = await page.getByTestId("regression-metrics").innerText();
+    const r2 = Number(/R²\s+([\d.-]+)/.exec(text)?.[1]);
+    expect(r2).toBeGreaterThan(0.5);
+    expect(r2).toBeLessThanOrEqual(1);
+
+    const baseline = await page.getByTestId("regression-baseline").innerText();
+    const baselineRmse = Number(/scores\s+([\d.]+)/.exec(baseline)?.[1]);
+    const rmse = Number(/RMSE\s+([\d.]+)/.exec(text)?.[1]);
+    expect(rmse).toBeLessThan(baselineRmse);
+
+    await expect(page.getByTestId("predicted-vs-actual")).toBeVisible();
+    await expect(page.getByTestId("residual-plot")).toBeVisible();
+    await expect(page.getByTestId("coefficients")).toBeVisible();
+
+    // The page's own claim about where ridge runs.
+    await expect(page.getByTestId("model-ready")).toContainText("GPU");
+  });
+
+  test("the log toggle costs a second fit, and the two metric blocks name their units", async ({
+    page,
+    mockApi,
+  }) => {
+    test.setTimeout(300_000);
+    await mockApi();
+    await page.goto("/tabular-regression");
+    await page.getByRole("button", { name: /palmer penguins/i }).click();
+    await expect(page.getByTestId("dataset-summary")).toBeVisible();
+    await page.getByRole("button", { name: /ridge regression/i }).click();
+
+    await page.getByTestId("fit-button").click();
+    await expect(page.getByTestId("model-ready")).toBeVisible({ timeout: 180_000 });
+    const rawUnits = await page.getByTestId("regression-metrics").innerText();
+    expect(rawUnits).toContain("body_mass_g");
+    await expect(page.getByTestId("log-space-metrics")).toHaveCount(0);
+
+    // Flipping it runs nothing…
+    await page.getByLabel(/fit on log/i).check();
+    await expect(page.getByTestId("log-space-metrics")).toHaveCount(0);
+
+    // …and the next Fit is a real second fit.
+    await page.getByTestId("fit-button").click();
+    await expect(page.getByTestId("log-space-metrics")).toBeVisible({ timeout: 180_000 });
+
+    // Both blocks say which units they are in. That is the whole demonstration:
+    // the log-space RMSE is smaller for the same reason a logarithm is smaller,
+    // and reading it as an improvement is the mistake.
+    await expect(page.getByTestId("log-space-metrics")).toContainText("log(1 + body_mass_g)");
+    await expect(page.getByTestId("regression-metrics")).toContainText("body_mass_g");
+    await expect(page.getByTestId("log-space-metrics")).toContainText(/not comparable/i);
+  });
+
+  test("the quantile band reports its measured coverage", async ({ page, mockApi }) => {
+    test.setTimeout(300_000);
+    await mockApi();
+    await page.goto("/tabular-regression");
+    await page.getByRole("button", { name: /credit risk/i }).click();
+    await expect(page.getByTestId("dataset-summary")).toBeVisible();
+    await page.getByRole("button", { name: /quantile regression/i }).click();
+    await page.getByTestId("fit-button").click();
+    await expect(page.getByTestId("model-ready")).toBeVisible({ timeout: 180_000 });
+
+    // **Coverage, not "a band was drawn".** A band of the wrong width looks
+    // entirely correct on the chart, so the assertion is the fraction of
+    // held-out rows it actually contains.
+    const note = await page.getByTestId("band-coverage").innerText();
+    const coverage = Number(/([\d.]+)%/.exec(note)?.[1]) / 100;
+    expect(coverage).toBeGreaterThan(0.6);
+    expect(coverage).toBeLessThan(0.95);
+  });
+});

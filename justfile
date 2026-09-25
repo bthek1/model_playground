@@ -459,6 +459,17 @@ fe-e2e-embed:
 fe-e2e-tabular:
     cd frontend && npx playwright test --project=webgpu --workers=1 webgpu/tabular.spec.ts
 
+# Run the forecasting spec. Not @slow and not in the webgpu project: the page
+# downloads nothing, fits nothing and constructs no Worker — which is the first
+# thing the spec asserts, because a later refactor could quietly add one.
+#
+# **The assertion is that the window spread is wide around the single split.**
+# "A chart appeared" would pass while the backtest reused one split's numbers
+# for every window, which is this page's most plausible bug and renders as a
+# perfectly flat strip. It is part of `just fe-e2e`; this recipe runs it alone.
+fe-e2e-forecast:
+    cd frontend && npx playwright test --project=chromium --workers=1 forecast.spec.ts
+
 # Check every model id (audio + vision + multimodal + text) still resolves on
 # the Hugging Face Hub, that each vision entry publishes the dtypes both backends
 # ask for, that the VLM entries publish their three q4f16 graphs, and that the

@@ -78,7 +78,16 @@ export interface ParseResult {
  * believe until they watch it happen on their own file, and it only lands if
  * the MLP is genuinely fitted rather than described.
  */
-export type Family = "logistic" | "forest" | "boosting" | "mlp";
+export type Family =
+  | "logistic"
+  | "forest"
+  | "boosting"
+  | "mlp"
+  // Regression-only rungs. `ridge` is the closed-form solve — the one place the
+  // GPU/CPU split is exact rather than rhetorical — and `quantile` fits a band
+  // instead of a number, which is both more honest and the better thing to draw.
+  | "ridge"
+  | "quantile";
 
 /** What the page is asking of the target column. */
 export type Objective = "classification" | "regression";
@@ -98,6 +107,8 @@ export interface Hyperparams {
   batchSize: number;
   /** MLP hidden width. One hidden layer — a second buys nothing here. */
   hidden: number;
+  /** Ridge's L2 penalty. It is what makes the normal equations solvable. */
+  lambda: number;
 }
 
 export interface FitSpec {
@@ -171,12 +182,36 @@ export interface FitResult {
   /** Rows used to fit, and rows held out. */
   trainRows: number;
   testRows: number;
+  /**
+   * Rows excluded because the **target** was missing.
+   *
+   * Dropped rather than imputed or refused. A row with no answer cannot be
+   * trained on and cannot be scored — but refusing the whole file over two
+   * blank cells is unusable (the Palmer penguins sample has exactly that), and
+   * imputing a target is inventing the thing being predicted. A missing
+   * *categorical* target is the dangerous case: its code is 0, which is a real
+   * class, so the row would silently join whichever class happened to be
+   * encountered first.
+   */
+  droppedRows: number;
   /** Wall-clock of the fit itself, excluding the design-matrix build. */
   fitMs: number;
   /** Where the arithmetic ran, and why — rendered on the page. */
   compute: "gpu" | "cpu";
   classification?: ClassificationMetrics;
+  /** Scored in the target's own units — always, whatever the fit was on. */
   regression?: RegressionMetrics;
+  /**
+   * The same scores in the space the model was actually fitted in, present only
+   * when that differs (the log-transform toggle).
+   *
+   * They are a *separate field* rather than a replacement because the page's
+   * whole subject is that the two are not comparable: putting an RMSE in log
+   * units where an RMSE in dollars is expected is the mistake being
+   * demonstrated, so both are carried and both are labelled with the units
+   * `transform.ts` gave them.
+   */
+  logSpaceRegression?: RegressionMetrics;
   /**
    * Held-out class probabilities, `testRows × classes`, row-major. The
    * threshold slider re-derives precision, recall and the matrix from these on

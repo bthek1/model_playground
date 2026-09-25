@@ -474,6 +474,8 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Super Resolution | model catalogue | weight download | an image, **plus the tile count and time it will cost** | a draggable split against a bicubic baseline |
 | Image to 3D | depth catalogue, reused | weight download **and** a GPU probe | image / camera, focal + density sliders | an orbitable point cloud, or the depth map and why not |
 | Tabular Classification | the **model family** and its hyperparameters | **FIT** — there are no weights, so the band holds the fit and its determinate iteration counter | the CSV, the target column, the feature set, and a row to predict | accuracy **against the majority baseline**, the confusion matrix, permutation importance, and a threshold slider that only re-reads |
+| Tabular Regression | the **regression** ladder — ridge, trees, quantile — with its own defaults, not §3.1's | **FIT**, as above | the CSV, a numeric target, and a **log-transform toggle that spends** | RMSE/MAE/R² against the train-mean baseline **in named units**, predicted-vs-actual, the residual plot, and a quantile band with its measured coverage |
+| Time Series Forecasting | the baseline and the **season length** | **absent** — nothing to download and nothing to fit, and the page says so where the band would have been | the series, the horizon, and the backtest settings | the forecast over a marked held-out region, MASE beside MAE and RMSE, and the window spread with the single split drawn across it |
 | `/tasks/$slug` placeholder | — | — | — | "not available yet" |
 
 Where LOAD is fast and free (a shader compile), it may auto-run — pass `autoLoad`. The
@@ -563,6 +565,26 @@ file, picking the target, toggling a feature, moving a hyperparameter — is a *
 and spends nothing. This is the page where §1.2 is easiest to break: "pick a target
 column and it fits" feels responsive, and is the five-samples-five-inferences failure
 with a dropdown in front of it.
+
+**A page may have three bands, and the missing one has to be explained.**
+`/time-series-forecasting` has no model, no download and no worker: naive, seasonal
+naive and drift are closed-form arithmetic over one array, and a rolling backtest is a
+loop over slices. There is nothing to fit, so FIT is **absent** rather than empty —
+and `DeviceStatus` would be wrong too, because the page raises no GPU question. What
+the pattern requires in exchange is that the absence is *stated where the band would
+have been*: an unexplained gap reads as an oversight, and here the absence is the
+category's whole point. Three consequences for §8's contract, which assumes four
+bands: `slot-4` is genuinely not rendered and a test asserts that; `output-empty`,
+`output-panel` and `error-note` are unchanged; and there is no `model-ready`, because
+nothing ever becomes ready. **No route may drop a band without adding a row to the
+table above and a paragraph here** — four bands is the default precisely so that
+three is a decision someone had to write down.
+
+**A page with no worker owes an assertion that it still has none.** "No worker" is a
+design decision that a later refactor can quietly undo, and nothing visible changes
+when it does. `/time-series-forecasting` counts `Worker` constructions in its E2E spec
+and stubs the constructor in its unit tests, the same way the pages that must not fetch
+assert zero Hub requests.
 
 **A run whose cost the user cannot guess must be quoted before it starts.**
 `/super-resolution` is many inferences, and how many depends on the picture: the RUN

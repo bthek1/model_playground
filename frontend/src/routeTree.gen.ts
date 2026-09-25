@@ -19,12 +19,14 @@ import { Route as VadRouteImport } from './routes/vad'
 import { Route as TranslationRouteImport } from './routes/translation'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TokenClassificationRouteImport } from './routes/token-classification'
+import { Route as TimeSeriesForecastingRouteImport } from './routes/time-series-forecasting'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
 import { Route as TextRankingRouteImport } from './routes/text-ranking'
 import { Route as TextGenerationRouteImport } from './routes/text-generation'
 import { Route as TextFeaturesRouteImport } from './routes/text-features'
 import { Route as TextClassificationRouteImport } from './routes/text-classification'
 import { Route as TensorRouteImport } from './routes/tensor'
+import { Route as TabularRegressionRouteImport } from './routes/tabular-regression'
 import { Route as TabularClassificationRouteImport } from './routes/tabular-classification'
 import { Route as SuperResolutionRouteImport } from './routes/super-resolution'
 import { Route as SummarizationRouteImport } from './routes/summarization'
@@ -105,6 +107,11 @@ const TokenClassificationRoute = TokenClassificationRouteImport.update({
   path: '/token-classification',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TimeSeriesForecastingRoute = TimeSeriesForecastingRouteImport.update({
+  id: '/time-series-forecasting',
+  path: '/time-series-forecasting',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TextToSpeechRoute = TextToSpeechRouteImport.update({
   id: '/text-to-speech',
   path: '/text-to-speech',
@@ -133,6 +140,11 @@ const TextClassificationRoute = TextClassificationRouteImport.update({
 const TensorRoute = TensorRouteImport.update({
   id: '/tensor',
   path: '/tensor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TabularRegressionRoute = TabularRegressionRouteImport.update({
+  id: '/tabular-regression',
+  path: '/tabular-regression',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TabularClassificationRoute = TabularClassificationRouteImport.update({
@@ -304,12 +316,14 @@ export interface FileRoutesByFullPath {
   '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tabular-classification': typeof TabularClassificationRoute
+  '/tabular-regression': typeof TabularRegressionRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
   '/text-generation': typeof TextGenerationRoute
   '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
+  '/time-series-forecasting': typeof TimeSeriesForecastingRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
   '/translation': typeof TranslationRoute
@@ -350,12 +364,14 @@ export interface FileRoutesByTo {
   '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tabular-classification': typeof TabularClassificationRoute
+  '/tabular-regression': typeof TabularRegressionRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
   '/text-generation': typeof TextGenerationRoute
   '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
+  '/time-series-forecasting': typeof TimeSeriesForecastingRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
   '/translation': typeof TranslationRoute
@@ -397,12 +413,14 @@ export interface FileRoutesById {
   '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tabular-classification': typeof TabularClassificationRoute
+  '/tabular-regression': typeof TabularRegressionRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
   '/text-generation': typeof TextGenerationRoute
   '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
+  '/time-series-forecasting': typeof TimeSeriesForecastingRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
   '/translation': typeof TranslationRoute
@@ -445,12 +463,14 @@ export interface FileRouteTypes {
     | '/summarization'
     | '/super-resolution'
     | '/tabular-classification'
+    | '/tabular-regression'
     | '/tensor'
     | '/text-classification'
     | '/text-features'
     | '/text-generation'
     | '/text-ranking'
     | '/text-to-speech'
+    | '/time-series-forecasting'
     | '/token-classification'
     | '/training'
     | '/translation'
@@ -491,12 +511,14 @@ export interface FileRouteTypes {
     | '/summarization'
     | '/super-resolution'
     | '/tabular-classification'
+    | '/tabular-regression'
     | '/tensor'
     | '/text-classification'
     | '/text-features'
     | '/text-generation'
     | '/text-ranking'
     | '/text-to-speech'
+    | '/time-series-forecasting'
     | '/token-classification'
     | '/training'
     | '/translation'
@@ -537,12 +559,14 @@ export interface FileRouteTypes {
     | '/summarization'
     | '/super-resolution'
     | '/tabular-classification'
+    | '/tabular-regression'
     | '/tensor'
     | '/text-classification'
     | '/text-features'
     | '/text-generation'
     | '/text-ranking'
     | '/text-to-speech'
+    | '/time-series-forecasting'
     | '/token-classification'
     | '/training'
     | '/translation'
@@ -584,12 +608,14 @@ export interface RootRouteChildren {
   SummarizationRoute: typeof SummarizationRoute
   SuperResolutionRoute: typeof SuperResolutionRoute
   TabularClassificationRoute: typeof TabularClassificationRoute
+  TabularRegressionRoute: typeof TabularRegressionRoute
   TensorRoute: typeof TensorRoute
   TextClassificationRoute: typeof TextClassificationRoute
   TextFeaturesRoute: typeof TextFeaturesRoute
   TextGenerationRoute: typeof TextGenerationRoute
   TextRankingRoute: typeof TextRankingRoute
   TextToSpeechRoute: typeof TextToSpeechRoute
+  TimeSeriesForecastingRoute: typeof TimeSeriesForecastingRoute
   TokenClassificationRoute: typeof TokenClassificationRoute
   TrainingRoute: typeof TrainingRoute
   TranslationRoute: typeof TranslationRoute
@@ -675,6 +701,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TokenClassificationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/time-series-forecasting': {
+      id: '/time-series-forecasting'
+      path: '/time-series-forecasting'
+      fullPath: '/time-series-forecasting'
+      preLoaderRoute: typeof TimeSeriesForecastingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/text-to-speech': {
       id: '/text-to-speech'
       path: '/text-to-speech'
@@ -715,6 +748,13 @@ declare module '@tanstack/react-router' {
       path: '/tensor'
       fullPath: '/tensor'
       preLoaderRoute: typeof TensorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tabular-regression': {
+      id: '/tabular-regression'
+      path: '/tabular-regression'
+      fullPath: '/tabular-regression'
+      preLoaderRoute: typeof TabularRegressionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tabular-classification': {
@@ -944,12 +984,14 @@ const rootRouteChildren: RootRouteChildren = {
   SummarizationRoute: SummarizationRoute,
   SuperResolutionRoute: SuperResolutionRoute,
   TabularClassificationRoute: TabularClassificationRoute,
+  TabularRegressionRoute: TabularRegressionRoute,
   TensorRoute: TensorRoute,
   TextClassificationRoute: TextClassificationRoute,
   TextFeaturesRoute: TextFeaturesRoute,
   TextGenerationRoute: TextGenerationRoute,
   TextRankingRoute: TextRankingRoute,
   TextToSpeechRoute: TextToSpeechRoute,
+  TimeSeriesForecastingRoute: TimeSeriesForecastingRoute,
   TokenClassificationRoute: TokenClassificationRoute,
   TrainingRoute: TrainingRoute,
   TranslationRoute: TranslationRoute,

@@ -9,7 +9,11 @@
 // null model is not a number. Carrying the two together is what stops them
 // coming from different runs, which is the way the pairing actually breaks.
 
-import type { ClassificationMetrics, ConfusionMatrix } from "./types";
+import type {
+  ClassificationMetrics,
+  ConfusionMatrix,
+  RegressionMetrics,
+} from "./types";
 
 /** Argmax of one row of a probability matrix. */
 export function argmaxRow(
@@ -152,4 +156,68 @@ export function metricsAtThreshold(
   const rows = actual.length;
   const predicted = predictedClasses(probabilities, rows, k, threshold);
   return classificationMetrics(actual, predicted, labels, trainLabels);
+}
+
+// --- Regression ---------------------------------------------------------------
+
+/**
+ * RMSE, MAE, R² — and the null model, which for regression is **predicting the
+ * training mean**.
+ *
+ * R² is that comparison already (it is `1 − SSE/SST` against the *test* mean),
+ * but the page still shows the baseline's own RMSE and MAE beside the model's,
+ * for two reasons. It puts the null model in the same units as the score, which
+ * R² is not; and R² computed against the test mean flatters a model on a split
+ * whose held-out half happens to be less variable than the training half. Both
+ * numbers come out of the same call so they cannot describe different splits.
+ *
+ * `units` is carried, not derived: `transform.ts` owns it precisely so an RMSE
+ * in log space can never be rendered beside one in the target's units without
+ * both being labelled.
+ */
+export function regressionMetrics(
+  actual: Float32Array,
+  predicted: Float32Array,
+  trainTargets: Float32Array,
+  units: string,
+): RegressionMetrics {
+  const n = actual.length;
+  if (n === 0) {
+    return { rmse: 0, mae: 0, r2: 0, baselineRmse: 0, baselineMae: 0, units };
+  }
+
+  let trainMean = 0;
+  for (let i = 0; i < trainTargets.length; i++) trainMean += trainTargets[i];
+  trainMean /= Math.max(1, trainTargets.length);
+
+  let testMean = 0;
+  for (let i = 0; i < n; i++) testMean += actual[i];
+  testMean /= n;
+
+  let sse = 0;
+  let sae = 0;
+  let sst = 0;
+  let baseSse = 0;
+  let baseSae = 0;
+  for (let i = 0; i < n; i++) {
+    const e = predicted[i] - actual[i];
+    sse += e * e;
+    sae += Math.abs(e);
+    const t = actual[i] - testMean;
+    sst += t * t;
+    const b = trainMean - actual[i];
+    baseSse += b * b;
+    baseSae += Math.abs(b);
+  }
+
+  return {
+    rmse: Math.sqrt(sse / n),
+    mae: sae / n,
+    // A constant target makes SST zero, and 1 − 0/0 is NaN. A model that
+    // predicts a constant target exactly has explained everything there was.
+    r2: sst === 0 ? (sse === 0 ? 1 : 0) : 1 - sse / sst,
+    baselineRmse: Math.sqrt(baseSse / n),
+    baselineMae: baseSae / n,
+    units,
+  };
 }
