@@ -16,6 +16,7 @@ import { Route as VisualQuestionAnsweringRouteImport } from './routes/visual-que
 import { Route as VideoTextToTextRouteImport } from './routes/video-text-to-text'
 import { Route as VideoClassificationRouteImport } from './routes/video-classification'
 import { Route as VadRouteImport } from './routes/vad'
+import { Route as TranslationRouteImport } from './routes/translation'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TokenClassificationRouteImport } from './routes/token-classification'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
@@ -83,6 +84,11 @@ const VideoClassificationRoute = VideoClassificationRouteImport.update({
 const VadRoute = VadRouteImport.update({
   id: '/vad',
   path: '/vad',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TranslationRoute = TranslationRouteImport.update({
+  id: '/translation',
+  path: '/translation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TrainingRoute = TrainingRouteImport.update({
@@ -278,6 +284,7 @@ export interface FileRoutesByFullPath {
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
+  '/translation': typeof TranslationRoute
   '/vad': typeof VadRoute
   '/video-classification': typeof VideoClassificationRoute
   '/video-text-to-text': typeof VideoTextToTextRoute
@@ -319,6 +326,7 @@ export interface FileRoutesByTo {
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
+  '/translation': typeof TranslationRoute
   '/vad': typeof VadRoute
   '/video-classification': typeof VideoClassificationRoute
   '/video-text-to-text': typeof VideoTextToTextRoute
@@ -361,6 +369,7 @@ export interface FileRoutesById {
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
+  '/translation': typeof TranslationRoute
   '/vad': typeof VadRoute
   '/video-classification': typeof VideoClassificationRoute
   '/video-text-to-text': typeof VideoTextToTextRoute
@@ -404,6 +413,7 @@ export interface FileRouteTypes {
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
+    | '/translation'
     | '/vad'
     | '/video-classification'
     | '/video-text-to-text'
@@ -445,6 +455,7 @@ export interface FileRouteTypes {
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
+    | '/translation'
     | '/vad'
     | '/video-classification'
     | '/video-text-to-text'
@@ -486,6 +497,7 @@ export interface FileRouteTypes {
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
+    | '/translation'
     | '/vad'
     | '/video-classification'
     | '/video-text-to-text'
@@ -528,6 +540,7 @@ export interface RootRouteChildren {
   TextToSpeechRoute: typeof TextToSpeechRoute
   TokenClassificationRoute: typeof TokenClassificationRoute
   TrainingRoute: typeof TrainingRoute
+  TranslationRoute: typeof TranslationRoute
   VadRoute: typeof VadRoute
   VideoClassificationRoute: typeof VideoClassificationRoute
   VideoTextToTextRoute: typeof VideoTextToTextRoute
@@ -587,6 +600,13 @@ declare module '@tanstack/react-router' {
       path: '/vad'
       fullPath: '/vad'
       preLoaderRoute: typeof VadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/translation': {
+      id: '/translation'
+      path: '/translation'
+      fullPath: '/translation'
+      preLoaderRoute: typeof TranslationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/training': {
@@ -848,6 +868,7 @@ const rootRouteChildren: RootRouteChildren = {
   TextToSpeechRoute: TextToSpeechRoute,
   TokenClassificationRoute: TokenClassificationRoute,
   TrainingRoute: TrainingRoute,
+  TranslationRoute: TranslationRoute,
   VadRoute: VadRoute,
   VideoClassificationRoute: VideoClassificationRoute,
   VideoTextToTextRoute: VideoTextToTextRoute,

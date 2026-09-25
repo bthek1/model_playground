@@ -363,6 +363,22 @@ fe-e2e-qa:
 fe-e2e-zeroshot-text:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "zero-shot"
 
+# Run only the @slow translation specs: two real Marian loads (~209 MB each on
+# WebGPU, ~271 MB on WASM) in one run, and real translations both ways.
+#
+# Asserted on **content words, not an exact string** — a beam search is not
+# pinned to one output, so a whole-sentence assertion fails on a decoder update
+# that is not a regression. And "some text appeared" would pass on a model
+# translating in the wrong direction.
+#
+# The second half is what earns the minutes: **the reverse pair, on the same
+# page.** A direction is a checkpoint, so a control that changed the label
+# without changing the model keeps translating en->de — and a German output for
+# a German input is the only thing that catches it. The unit suite cannot: it
+# mocks the worker away.
+fe-e2e-translate:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "translation"
+
 # Run only the @slow embedding specs: a real all-MiniLM-L6-v2 load (43 MB on
 # WebGPU / 22 MB on WASM — the cheapest floor in the app) and real cosines.
 #

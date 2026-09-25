@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { SEQ2SEQ_WASM_DTYPES } from "@/model/backend";
 import { isHeavyDownload, sizeEstimate } from "@/model/size";
 
 import { entitySlot } from "./highlight";
@@ -10,6 +11,7 @@ import {
   DEFAULT_NER_MODEL,
   DEFAULT_REDACTED,
   DEFAULT_TEXT_CLASSIFIER,
+  DEFAULT_TRANSLATION_MODEL,
   DEFAULT_ZERO_SHOT_TEXT,
   EMBED_MODELS,
   FEATURE_TEXT_SAMPLES,
@@ -19,9 +21,12 @@ import {
   MASK_TOKENS,
   NER_MODELS,
   NER_SAMPLES,
+  NLLB_BYTES,
   PAIR_SAMPLES,
   TEXT_CLASSIFIER_MODELS,
   TOP_K,
+  TRANSLATION_MODELS,
+  TRANSLATION_SAMPLES,
   ZERO_SHOT_SAMPLES,
   ZERO_SHOT_TEXT_MODELS,
 } from "./catalogue";
@@ -41,13 +46,23 @@ describe("the text catalogue", () => {
       ...ZERO_SHOT_TEXT_MODELS,
       ...FILL_MASK_MODELS,
       ...EMBED_MODELS,
+      ...TRANSLATION_MODELS,
     ]) {
       expect(m.bytes.webgpu, `${m.id} webgpu bytes`).toBeGreaterThan(0);
       expect(m.bytes.wasm, `${m.id} wasm bytes`).toBeGreaterThan(0);
       // fp16 is two bytes a parameter and q8 is one, so the GPU download is
-      // the bigger of the pair. A pair the other way round is a transposed
-      // measurement, which reads as plausible and is not.
-      expect(m.bytes.webgpu!, `${m.id}`).toBeGreaterThan(m.bytes.wasm!);
+      // normally the bigger of the pair, and a transposed measurement reads as
+      // plausible. **Unless the entry pins a more expensive WASM precision** —
+      // which every seq2seq entry does, because a quantized decoder cannot
+      // open a session on the bundled WASM provider at all
+      // (`SEQ2SEQ_WASM_DTYPES`). So the invariant is not "webgpu is bigger", it
+      // is "an inversion is *explained by a pin*, never accidental".
+      if ((m.bytes.wasm ?? 0) > (m.bytes.webgpu ?? 0)) {
+        expect(
+          m.dtypes?.wasm,
+          `${m.id} quotes a bigger WASM download than WebGPU without pinning a WASM dtype — that is a transposed measurement, not a precision decision`,
+        ).toBeDefined();
+      }
     }
   });
 
@@ -404,6 +419,81 @@ describe("the embedding catalogue", () => {
       expect(s.text.length).toBeGreaterThan(0);
       expect(s.text.length).toBeLessThan(200);
       expect(s.hint.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("the translation catalogue", () => {
+  it("gives every entry a distinct direction, labelled rather than repo-named", () => {
+    const directions = TRANSLATION_MODELS.map((m) => `${m.source}-${m.target}`);
+    expect(new Set(directions).size).toBe(TRANSLATION_MODELS.length);
+    for (const m of TRANSLATION_MODELS) {
+      // The row's name is the direction, not `Xenova/opus-mt-en-de`.
+      expect(m.label).toContain("→");
+      expect(m.direction).toBe(m.label);
+      expect(m.source).not.toBe(m.target);
+    }
+  });
+
+  // Six rather than two, so "a specialist beats one generalist" is visible: the
+  // whole catalogue is still comfortably more useful than one NLLB download,
+  // and each *individual* pair is a fraction of it.
+  it("ships enough pairs to make the specialists argument, and stays under NLLB per pair", () => {
+    expect(TRANSLATION_MODELS.length).toBeGreaterThanOrEqual(6);
+    for (const m of TRANSLATION_MODELS) {
+      expect(
+        Math.max(m.bytes.webgpu!, m.bytes.wasm!),
+        `${m.id} against one NLLB download`,
+      ).toBeLessThan(NLLB_BYTES / 2);
+    }
+  });
+
+  // A measurement, not a precaution: a Marian decoder's session does not open
+  // at all on the WASM provider bundled with 4.2.0. Every entry references the
+  // one spec in `model/backend.ts` rather than repeating the literal.
+  it("pins the WASM precision on every pair, via the shared seq2seq spec", () => {
+    for (const m of TRANSLATION_MODELS) {
+      expect(m.dtypes?.wasm, `${m.id} wasm dtype`).toEqual(SEQ2SEQ_WASM_DTYPES);
+      // And declares the two graphs it actually downloads, so the Hub check
+      // looks at the right files — `model.onnx` does not exist in these repos.
+      expect(m.graphs).toEqual(["encoder_model", "decoder_model_merged"]);
+    }
+  });
+
+  // The open question the plan left for Phase 2, and it resolves itself. The
+  // plan worried en↔de (199.6 MiB at fp16) would slip under LARGE_MODEL_BYTES
+  // while en→es (213.1 MiB) crossed it, leaving one warning on a page of
+  // identical models. With the WASM pin the CPU download is 271–289 MB for
+  // every pair and `large` keys off the bigger of the two, so every pair warns
+  // — consistently, about a number the user will actually pay.
+  it("warns consistently across every pair, not on some of them", () => {
+    const warns = TRANSLATION_MODELS.map(
+      (m) => sizeEstimate(m.params, m.bytes).large,
+    );
+    expect(warns.every(Boolean), "every pair warns").toBe(true);
+    // And none is heavy enough for the second opt-in — these are ~200-290 MB.
+    for (const m of TRANSLATION_MODELS) {
+      expect(isHeavyDownload(m.bytes), `${m.id}`).toBe(false);
+    }
+  });
+
+  it("defaults to a pair in its own list", () => {
+    expect(
+      TRANSLATION_MODELS.some((m) => m.id === DEFAULT_TRANSLATION_MODEL),
+    ).toBe(true);
+  });
+
+  // A pair with no sample text is a page that cannot be driven without typing
+  // in a language the user may not speak.
+  it("ships samples for every source language it offers", () => {
+    for (const m of TRANSLATION_MODELS) {
+      const samples = TRANSLATION_SAMPLES[m.source];
+      expect(samples, `samples for ${m.source}`).toBeDefined();
+      expect(samples.length).toBeGreaterThan(0);
+      for (const s of samples) {
+        expect(s.text.length).toBeGreaterThan(0);
+        expect(s.hint.length).toBeGreaterThan(0);
+      }
     }
   });
 });

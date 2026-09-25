@@ -141,6 +141,11 @@ const REAL_ROUTES: Record<string, string> = {
   //
   // `feature-extraction` maps to `/text-features` rather than the slug's own
   // name, mirroring `/image-features`.
+  // §3.5, and the category's first seq2seq page. One language pair at a time,
+  // because a Marian checkpoint *is* its direction — so the direction control
+  // is a model selector in SELECT, and switching it is another ~200 MB
+  // download rather than a toggle.
+  "translation": "/translation",
   "feature-extraction": "/text-features",
   "sentence-similarity": "/sentence-similarity",
   // Three slugs deliberately have no route and fall through to the placeholder,

@@ -84,6 +84,13 @@ function warmupArgs(task: TextTask): unknown[] {
     // the selected entry's own choice. `normalize` is pinned below anyway.
     case "feature-extraction":
       return [{ pooling: "mean", normalize: true }];
+    // The category's first **generative** warm-up, so it is capped: without a
+    // cap a seq2seq decodes until it emits EOS, which on a throwaway input is
+    // a few hundred tokens of nothing on the critical path to `ready`. Four is
+    // enough to compile the decoder's kernels, which is the whole job.
+    case "translation":
+    case "summarization":
+      return [{ max_new_tokens: 4 }];
   }
 }
 

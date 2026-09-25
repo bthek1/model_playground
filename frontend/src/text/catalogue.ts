@@ -24,6 +24,8 @@
 // and `q4f16` is usually larger too. 4-bit is a decoder format. No encoder page
 // should reach past the `loadOpts()` default.
 
+import { SEQ2SEQ_WASM_DTYPES } from "@/model/backend";
+
 import type { TextModel } from "./types";
 
 export interface TextClassifierModel extends TextModel {
@@ -880,5 +882,389 @@ export const PAIR_SAMPLES: PairSample[] = [
     a: "The bank raised its interest rates again.",
     b: "We sat on the bank and watched the river.",
     hint: "Lexical overlap with no shared meaning — the case keyword search gets wrong and an embedding should not.",
+  },
+];
+
+// --- Translation -------------------------------------------------------------
+
+/**
+ * One Marian language pair.
+ *
+ * **A pair is a model, so changing the pair is a LOAD.** There is no language
+ * argument anywhere in this task: a Marian checkpoint carries its own direction
+ * and `tr(text)` takes nothing else. So the direction control is a *model
+ * selector*, it lives in SELECT, and the page says that switching direction is
+ * another ~200 MB download. Getting that wrong would make en→de and de→en look
+ * free, which is the single most likely misreading of the page.
+ */
+export interface TranslationModel extends TextModel {
+  task: "translation";
+  /** BCP-47-ish source and target, for the direction label and the samples. */
+  source: string;
+  target: string;
+  /** "English → German". The row's name, rather than the repo id. */
+  direction: string;
+}
+
+/**
+ * §3.5's six pairs — en↔de, en↔fr, en→es, en→zh.
+ *
+ * Six rather than two so the "specialists beat one generalist" argument is
+ * visible: the whole catalogue here is 1.25 GB across six directions, against
+ * `Xenova/nllb-200-distilled-600M` at **894.6 MB for one download** (and
+ * `mbart-large-50-many-to-many-mmt` at 872.5 MB). A user who wants one pair
+ * pays a quarter of NLLB and gets a better translation for it. Neither
+ * multilingual model is offered, because both are over §0's bar.
+ *
+ * **Every entry pins its WASM precision, and that is a measurement.** A Marian
+ * decoder cannot be quantized on the WASM provider bundled with 4.2.0 — the
+ * session simply does not open (`qdq_actions.cc:137 … Missing required scale:
+ * model.shared.weight_merged_0_scale`, measured 2026-09-25 in Chromium). Marian
+ * is the *third* family to hit it after Whisper and Donut, so the spec lives in
+ * `model/backend.ts` as `SEQ2SEQ_WASM_DTYPES` rather than being written out
+ * again here. It costs 2.7x on the CPU path — 101 MB at a uniform q8 against
+ * 271 MB like this — and the alternative is no CPU path at all.
+ *
+ * That also settles the open question the plan left for Phase 2. The plan
+ * worried that en↔de (199.6 MiB at fp16) would slip under `LARGE_MODEL_BYTES`
+ * while en→es (213.1 MiB) crossed it, leaving one warning on a page of
+ * identical models. With the pin, the WASM download is 271–289 MB for every
+ * pair and `sizeEstimate` keys `large` off the **bigger** of the two — so every
+ * pair warns, consistently, and the number it warns about is one the user will
+ * actually pay. The inconsistency was an artefact of a WASM path that does not
+ * exist.
+ */
+export const TRANSLATION_MODELS: TranslationModel[] = [
+  {
+    id: "Xenova/opus-mt-en-de",
+    label: "English → German",
+    direction: "English → German",
+    source: "en",
+    target: "de",
+    hint: "The default. A Marian specialist: one direction, ~200 MB, and no language argument.",
+    params: 74,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 209_271_625, wasm: 271_047_378 },
+  },
+  {
+    id: "Xenova/opus-mt-de-en",
+    label: "German → English",
+    direction: "German → English",
+    source: "de",
+    target: "en",
+    hint: "The reverse direction, and a second download — not a toggle on the one above.",
+    params: 74,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 209_271_625, wasm: 271_047_378 },
+  },
+  {
+    id: "Xenova/opus-mt-en-fr",
+    label: "English → French",
+    direction: "English → French",
+    source: "en",
+    target: "fr",
+    hint: "Same architecture, a different pair of vocabularies.",
+    params: 74,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 212_168_275, wasm: 274_670_310 },
+  },
+  {
+    id: "Xenova/opus-mt-fr-en",
+    label: "French → English",
+    direction: "French → English",
+    source: "fr",
+    target: "en",
+    hint: "The reverse of the pair above, and again a separate checkpoint.",
+    params: 74,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 212_168_275, wasm: 274_670_310 },
+  },
+  {
+    id: "Xenova/opus-mt-en-es",
+    label: "English → Spanish",
+    direction: "English → Spanish",
+    source: "en",
+    target: "es",
+    hint: "A larger target vocabulary, so a slightly larger download for the same architecture.",
+    params: 78,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 223_416_625, wasm: 288_738_978 },
+  },
+  {
+    id: "Xenova/opus-mt-en-zh",
+    label: "English → Chinese",
+    direction: "English → Chinese",
+    source: "en",
+    target: "zh",
+    hint: "A non-Latin script, which is where a specialist's own tokenizer earns its place.",
+    params: 78,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 223_416_625, wasm: 288_738_978 },
+  },
+];
+
+export const DEFAULT_TRANSLATION_MODEL = TRANSLATION_MODELS[0].id;
+
+/**
+ * What one Marian download buys against what a multilingual model would cost,
+ * in bytes, so the page can state the trade-off rather than describe it.
+ *
+ * `Xenova/nllb-200-distilled-600M`, summing `encoder_model` +
+ * `decoder_model_merged` only — never the alternative `decoder_model` /
+ * `decoder_with_past_model` the same repo also publishes.
+ *
+ * **1.76 GB, not the 894.6 MB §3.5 quotes**, and the difference is §1.1's
+ * finding one more time: 894.6 MB is NLLB's *q8* size, and q8 is not what this
+ * page loads. `loadOpts()` asks WebGPU for fp16 — 1 760 444 340 bytes — and the
+ * CPU path cannot use a quantized decoder at all (`SEQ2SEQ_WASM_DTYPES`), so
+ * there is no configuration in which a browser pays 895 MB for it. The
+ * multilingual option is further over §0's bar than the roadmap thought, which
+ * makes the one-pair-at-a-time design more clearly right rather than less.
+ */
+export const NLLB_BYTES = 1_760_444_340;
+
+/** Sample text per source language, so a pair always has something to run. */
+export const TRANSLATION_SAMPLES: Record<string, TextSample[]> = {
+  en: [
+    {
+      id: "en-webgpu",
+      label: "Technical",
+      text: "WebGPU lets a web page run compute shaders directly on the graphics card.",
+      hint: "Domain vocabulary a general model tends to paraphrase away.",
+    },
+    {
+      id: "en-idiom",
+      label: "An idiom",
+      text: "They decided to bite the bullet and rewrite the whole thing from scratch.",
+      hint: "Idioms are where a small specialist and a large generalist part company.",
+    },
+    {
+      id: "en-plain",
+      label: "Plain",
+      text: "The meeting has been moved to Thursday at eleven, in the small room.",
+      hint: "The easy case, and the one worth checking first.",
+    },
+  ],
+  de: [
+    {
+      id: "de-plain",
+      label: "Plain",
+      text: "Die Besprechung wurde auf Donnerstag um elf Uhr verlegt.",
+      hint: "The reverse of the English plain sample — useful for checking a round trip.",
+    },
+    {
+      id: "de-compound",
+      label: "A compound",
+      text: "Die Geschwindigkeitsbeschränkung auf der Autobahn wurde nicht aufgehoben.",
+      hint: "German compounds test the tokenizer more than the model.",
+    },
+  ],
+  fr: [
+    {
+      id: "fr-plain",
+      label: "Plain",
+      text: "La réunion a été déplacée à jeudi onze heures, dans la petite salle.",
+      hint: "The reverse of the English plain sample.",
+    },
+    {
+      id: "fr-negation",
+      label: "A negation",
+      text: "Il n'a jamais dit qu'il ne viendrait pas à la conférence.",
+      hint: "Double negation, which small models routinely flatten.",
+    },
+  ],
+};
+
+// --- Summarization -----------------------------------------------------------
+
+/**
+ * A summarization checkpoint.
+ *
+ * `hint` carries the quality caveat where there is one, because on this page
+ * "worse than three sentences of the article" is a real and common outcome and
+ * the page is built to show it rather than hide it.
+ */
+export interface SummarizerModel extends TextModel {
+  task: "summarization";
+  /** What it was fine-tuned on — which is what its output will sound like. */
+  domain: string;
+}
+
+/**
+ * §3.6's catalogue, and the outcome of the plan's Phase 0 gate.
+ *
+ * **The gate: does distilbart open a q8 session on WebGPU?** Measured in
+ * Chromium on 2026-09-25 — **yes**, and it produces a correct summary. Which is
+ * the only reason this page exists, because every other configuration is over
+ * §0's ~500 MB bar:
+ *
+ *   distilbart-cnn-6-6, q8 on WebGPU    283.9 MB   opens, correct output  ✓
+ *   distilbart-cnn-6-6, fp16 on WebGPU  563.6 MB   over the bar
+ *   distilbart-cnn-6-6, q8 on WASM      283.9 MB   **session will not open**
+ *   distilbart-cnn-6-6, enc q8 + dec fp32 on WASM  742.8 MB   over the bar
+ *
+ * The third line is `SEQ2SEQ_WASM_DTYPES` again: BART is the **fourth** family
+ * to hit the bundled WASM provider's quantized-decoder failure, after Whisper,
+ * Donut and Marian. Unlike Marian, the fp32-decoder fallback does not fit — so
+ * **distilbart has no CPU path at all** and declares `backends: ["webgpu"]`,
+ * which `useBackendProbe` turns into a disabled row with the reason on it
+ * rather than a failed download.
+ *
+ * That would have left the page with no floor, so the catalogue opens with
+ * **`Xenova/t5-small`**, which the plan did not consider: 154.4 MB at fp16 on
+ * WebGPU and 202.5 MB on WASM with the seq2seq pin, both inside the bar, and
+ * measured working on the CPU path at ~220 ms a summary. It is a *much* weaker
+ * summarizer than distilbart — and on this page that is not a drawback. The
+ * page's subject is the lead-3 baseline, and a model that visibly loses to three
+ * sentences of the article makes that lesson concrete rather than hypothetical.
+ *
+ * The plan's `distilbart-xsum-12-1` and `distilbart-cnn-12-6` are left out: both
+ * are over the bar at fp16 and neither adds anything t5-small and
+ * distilbart-cnn-6-6 do not already cover between them.
+ */
+export const SUMMARIZER_MODELS: SummarizerModel[] = [
+  {
+    id: "Xenova/t5-small",
+    label: "T5-small",
+    hint: "The default and the floor — 154 MB, runs on CPU too. Genuinely weak, which is this page's point.",
+    domain: "a multi-task mixture (the `summarize:` prefix is one of its tasks)",
+    params: 60,
+    task: "summarization",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    // A measurement: a quantized seq2seq decoder cannot open a session on the
+    // bundled WASM provider (`SEQ2SEQ_WASM_DTYPES`). Verified working in this
+    // configuration — 23.5 s to load, 218–277 ms a summary.
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 154_350_057, wasm: 202_472_616 },
+  },
+  {
+    id: "Xenova/distilbart-cnn-6-6",
+    label: "DistilBART CNN 6-6",
+    hint: "A real news summarizer, and GPU-only: its CPU session cannot be quantized and the unquantized one is 743 MB.",
+    domain: "CNN/DailyMail news articles",
+    params: 306,
+    task: "summarization",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    // **A measurement, and the plan's Phase 0 gate.** q8 on WebGPU opens and
+    // summarizes correctly; fp16 would be 563.6 MB, over §0's bar. Latency on a
+    // real GPU is still unmeasured — the measurement box had no GPU with
+    // `shader-f16`, only SwiftShader — so `just fe-e2e-summarize` re-measures it
+    // where there is one.
+    dtypes: { webgpu: "q8" },
+    // No WASM path: q8 will not open, and encoder-q8 + decoder-fp32 is 742.8 MB.
+    backends: ["webgpu"],
+    bytes: { webgpu: 283_921_904 },
+  },
+  {
+    id: "Xenova/bart-large-cnn",
+    label: "BART-large CNN",
+    hint: "The model everyone benchmarks against, at 463 MB and GPU-only. The quality ceiling this page can reach.",
+    domain: "CNN/DailyMail news articles",
+    params: 406,
+    task: "summarization",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    // Same pin, same reason, and it is worth being exact about what kind of
+    // claim it is: q8-on-WebGPU was **measured on distilbart**, which is the
+    // same architecture from the same export tooling, and is an *inference*
+    // here rather than a second measurement. `just fe-e2e-summarize` on a real
+    // GPU is what would turn it into one.
+    dtypes: { webgpu: "q8" },
+    backends: ["webgpu"],
+    bytes: { webgpu: 462_535_837 },
+  },
+];
+
+export const DEFAULT_SUMMARIZER = SUMMARIZER_MODELS[0].id;
+
+/** Sentences of article to quote as the baseline. Three, as the name says. */
+export const LEAD_N = 3;
+
+/** Generation defaults. Both are **run** parameters — changing one re-runs. */
+export const SUMMARY_MAX_TOKENS = 130;
+export const SUMMARY_MIN_TOKENS = 30;
+
+/**
+ * The entailment model the faithfulness check borrows.
+ *
+ * Not a new download for the category — it is `/zero-shot-classification`'s
+ * cheapest entry, reused, which is why the second opt-in here costs 27–50 MB
+ * rather than another 300. Scoring a summary sentence against the article is
+ * exactly a one-label NLI call: `softmaxEach` is true when `labels.length === 1`,
+ * so the pipeline returns entailment-against-contradiction for that single
+ * hypothesis, which is the number wanted.
+ */
+export const FAITHFULNESS_MODEL = "Xenova/mobilebert-uncased-mnli";
+
+/**
+ * Articles chosen so the lead-3 baseline is *hard*.
+ *
+ * News is the genre every one of these checkpoints was fine-tuned on, and the
+ * inverted-pyramid convention puts the answer in the first three sentences — so
+ * a sample set of rambling prose would make the neural summary look better than
+ * it is. `fabricated` is the one that exists to be failed: it contains a number
+ * and a name close enough together that small summarizers routinely attach the
+ * wrong one to the other, which is what the faithfulness check is for.
+ */
+export interface ArticleSample {
+  id: string;
+  label: string;
+  text: string;
+  hint: string;
+}
+
+export const ARTICLE_SAMPLES: ArticleSample[] = [
+  {
+    id: "launch",
+    label: "A news report",
+    hint: "Inverted pyramid: the answer is in sentence one. The hardest case for a neural summarizer to beat.",
+    text:
+      "The European Space Agency confirmed on Tuesday that its Ariane 6 rocket had completed a " +
+      "second successful commercial launch, placing four satellites into low Earth orbit. " +
+      "Officials said the flight validated the upper-stage restart sequence that had failed " +
+      "during a demonstration mission last year. The agency expects to raise the launch cadence " +
+      "to roughly one flight a month by the end of next year. That would ease a shortage of " +
+      "European launch capacity which had forced several operators to book rides on American " +
+      "rockets. Arianespace said three further commercial payloads are already contracted for " +
+      "the first half of next year, including two Earth-observation satellites for the " +
+      "Copernicus programme.",
+  },
+  {
+    id: "buried",
+    label: "The point is buried",
+    hint: "The lead is scene-setting and the news is in the fourth sentence — where lead-3 finally loses.",
+    text:
+      "The conference hall in Lisbon filled slowly on Thursday morning, delegates drifting in " +
+      "with paper cups of coffee. Panels on grid storage and permitting had drawn modest " +
+      "crowds all week. The mood had been one of cautious routine. Then, shortly before lunch, " +
+      "the Portuguese energy minister announced that the government would abandon its planned " +
+      "auction for two gigawatts of offshore wind, citing costs that had risen by more than " +
+      "forty per cent since the tender was drafted. Developers who had spent two years " +
+      "preparing bids learned of the decision from the stage. Shares in the two largest " +
+      "bidders fell sharply within the hour.",
+  },
+  {
+    id: "fabricated",
+    label: "A name and a number",
+    hint: "Two people and two figures, close together. Small summarizers attach the wrong number to the wrong name — which is what the faithfulness check is for.",
+    text:
+      "The audit found that Marta Reyes, the department's procurement lead, approved 14 " +
+      "contracts above the delegated threshold during the period under review. Her deputy, " +
+      "Tomas Keller, approved 3. Investigators said the 14 approvals accounted for 8.2 million " +
+      "euros of the 9.1 million euros examined. Reyes told the panel she had believed the " +
+      "threshold had been raised the previous year. Keller said he had escalated every case he " +
+      "was unsure about. The report recommends that both approval limits be reset and that a " +
+      "second signature be required above 250,000 euros.",
   },
 ];

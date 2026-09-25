@@ -19,7 +19,7 @@
 | Table Question Answering (§3.11) | — | **Does not port** — no export for TAPAS or TAPEX; text-to-SQL needs ~1 GB *and* a database |
 | Question Answering (§3.3) | [`/question-answering`](../../frontend/src/routes/question-answering.tsx) | **Shipped** — extractive, the answer marked in the passage, 63–125 MB |
 | Zero-Shot Classification (§3.4) | [`/zero-shot-classification`](../../frontend/src/routes/zero-shot-classification.tsx) | **Shipped** — your own labels, N labels cost N passes, 26–816 MB |
-| Translation (§3.5) | — | Planned — [#45](https://github.com/bthek1/model_playground/issues/45) |
+| Translation (§3.5) | [`/translation`](../../frontend/src/routes/translation.tsx) | **Shipped** — six pairs, one at a time; a pair is a model, 209–289 MB |
 | Summarization (§3.6) | — | Planned, **gated on a measurement** — [#46](https://github.com/bthek1/model_playground/issues/46) |
 | Feature Extraction · Sentence Similarity (§3.7) | [`/text-features`](../../frontend/src/routes/text-features.tsx) · [`/sentence-similarity`](../../frontend/src/routes/sentence-similarity.tsx) | **Shipped** — one engine, two rows; the pooling is catalogue data, 22–284 MB |
 | Text Generation (§3.8) | — | Planned — [#47](https://github.com/bthek1/model_playground/issues/47) |
@@ -491,12 +491,64 @@ templates producing identical numbers is exactly what a page that lets the pipel
 its own default looks like, and nothing else can catch it. It asserts the scores move
 rather than that the ranking flips, which would pin a property the model does not promise.
 
-### 3.5 Translation — planned ([#45](https://github.com/bthek1/model_playground/issues/45))
+### 3.5 Translation — **shipped**
 
-One Marian pair at a time, ~101 MiB q8 / ~200 MiB fp16 each. **A pair is a model, so
-changing the pair is a LOAD** — a Marian checkpoint carries its own language pair and
-`tr(text)` takes nothing else. Getting that wrong would make en→de and de→en look free,
-which is the single most likely misreading of the page.
+Taxonomy task **Translation** · [`/translation`](../../frontend/src/routes/translation.tsx) ·
+[#45](https://github.com/bthek1/model_playground/issues/45). The category's first seq2seq
+page, and the one that turned a suspicion in `model/backend.ts` into a rule.
+
+| pair | fp16 (WebGPU) | WASM — enc q8 + dec fp32 |
+|---|---|---|
+| `Xenova/opus-mt-en-de` · `opus-mt-de-en` | 199.6 MiB | **258.5 MiB** |
+| `Xenova/opus-mt-en-fr` · `opus-mt-fr-en` | 202.3 MiB | **261.9 MiB** |
+| `Xenova/opus-mt-en-es` · `opus-mt-en-zh` | 213.1 MiB | **275.4 MiB** |
+
+**A pair is a model, so changing the pair is a LOAD.** A Marian checkpoint carries its own
+language pair and `tr(text)` takes nothing else — there is no language argument anywhere in
+the task. So the direction control is a *model selector*, it lives in SELECT beside the
+download it costs, and the page says so before the click. A hook that accepted `{ from, to }`
+and dropped them would look like it worked, because the model would keep translating in the
+direction it was built for; `useTranslate` therefore takes no language at all. The route
+test asserts that a SELECT change calls neither `load` nor `run`, and `just fe-e2e-translate`
+asserts the reverse pair really reverses on a real load — a control that changed the label
+without changing the checkpoint is invisible to every other test in the repo.
+
+**The plan said no `dtypes` pin was needed here. That was wrong, and it is the page's most
+useful finding.** A Marian decoder cannot be quantized on the WASM provider bundled with
+Transformers.js 4.2.0: the session does not open at all, with
+
+```
+Can't create a session. ERROR_CODE: 1, ERROR_MESSAGE: qdq_actions.cc:137
+TransposeDQWeightsForMatMulNBits Missing required scale:
+model.shared.weight_merged_0_scale for node: model.shared.weight_transposed_DequantizeLinear
+```
+
+— the same error from the same line as Whisper's and Donut's. Marian is the **third** family
+to hit it (BART, in §3.6, is the fourth), which is the point at which `model/backend.ts`'s
+own note said to generalise rather than copy the literal again. It is now
+`SEQ2SEQ_WASM_DTYPES` there, `asrLoadOpts` is expressed in terms of it, and every seq2seq
+catalogue entry references it. Measured in Chromium on 2026-09-25; `encoder_model` quantizes
+fine, so only the decoder pays full precision (101 MiB → 258.5 MiB per pair), and the
+alternative is no CPU path at all. The fallback configuration was verified end to end: 26 s
+to load, 126–163 ms per translation, correct German out.
+
+**That also settles the question the plan left open for Phase 2.** The plan worried that
+en↔de (199.6 MiB at fp16) would slip under `LARGE_MODEL_BYTES` while en→es (213.1 MiB)
+crossed it, leaving one warning on a page of otherwise identical models — an inconsistency
+to explain or document. It does not arise: `sizeEstimate` keys `large` off the **bigger** of
+the two downloads, and with the pin the WASM side is 271–289 MB for every pair, so every
+pair warns, consistently, about a number the user will actually pay. The inconsistency was
+an artefact of a WASM path that does not exist. A test pins it so a future un-pinning cannot
+reintroduce it quietly.
+
+**NLLB is further over the bar than the roadmap thought — §1.1's finding, one more time.**
+`Xenova/nllb-200-distilled-600M` was quoted at 894.6 MB, which is its **q8** size; it is a
+seq2seq, so `loadOpts()` asks WebGPU for fp16 (**1 760 444 340 bytes, 1.68 GiB**) and its
+CPU path cannot use a quantized decoder either. There is no configuration in which a browser
+pays 895 MB for it. So the page states the comparison **per pair** — one specialist is about
+an eighth of one NLLB — rather than summing the catalogue, which comes to 1.6 GB and reads
+as an argument against the design rather than for it. `mbart-large-50-many-to-many-mmt` is
+1.62 GiB at fp16 and stays cut for the same reason.
 
 ### 3.6 Summarization — planned, and **gated on a measurement** ([#46](https://github.com/bthek1/model_playground/issues/46))
 
