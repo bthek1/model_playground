@@ -24,6 +24,16 @@
 // and `q4f16` is usually larger too. 4-bit is a decoder format. No encoder page
 // should reach past the `loadOpts()` default.
 
+import {
+  SEQ2SEQ_WASM_DTYPES,
+  type Backend,
+  type DtypeSpec,
+} from "@/model/backend";
+import type { MeasuredBytes } from "@/model/size";
+
+import { DEFAULT_DECODING } from "./textgenTypes";
+import type { Decoding, TextGenModel } from "./textgenTypes";
+
 import type { TextModel } from "./types";
 
 export interface TextClassifierModel extends TextModel {
@@ -669,5 +679,1001 @@ export const MASK_PROBES: MaskProbe[] = [
     templates: ["The young man is very {}.", "The old man is very {}."],
     varies: ["young", "old"],
     hint: "Adjectives rather than nouns — the same effect in a different part of speech.",
+  },
+];
+
+// --- Embeddings: feature extraction and sentence similarity ------------------
+
+/**
+ * A sentence-embedding checkpoint.
+ *
+ * Two fields here are **facts about the checkpoint that the catalogue has to
+ * carry because nothing downstream can discover them**, which is the same
+ * reason `FillMaskModel.maskToken` exists:
+ *
+ *  - `pooling`. A sentence embedding is not "the model's output" — it is a
+ *    pooling of the token rows, and *which* pooling is part of how the model
+ *    was trained. all-MiniLM and all-mpnet are mean-pooled; BGE and
+ *    gte-modernbert are CLS-pooled. Getting it wrong produces a vector that is
+ *    the right width, ranks plausibly, and is wrong, and there is no error
+ *    anywhere. The upstream sentence-transformers repo states it in
+ *    `1_Pooling/config.json` — and the `Xenova/*` ONNX mirrors **do not carry
+ *    that file**, so it cannot be read at load time. `upstream` names the repo
+ *    the answer lives in, and `just fe-e2e-models` checks this field against
+ *    it.
+ *  - `prefixes`. Some models were trained with a task instruction glued to the
+ *    front of every input. Nomic is the one here that needs it, and omitting it
+ *    costs accuracy silently.
+ */
+export interface EmbedModel extends TextModel {
+  task: "feature-extraction";
+  /** Embedding width, so the page can state it before anything downloads. */
+  dim: number;
+  /** How the token rows become one vector. See above — not a free choice. */
+  pooling: "mean" | "cls";
+  /** The repo whose `1_Pooling/config.json` is the authority for `pooling`. */
+  upstream: string;
+  /**
+   * True only for a checkpoint trained with Matryoshka representation
+   * learning, i.e. one whose *prefix* dimensions were explicitly optimised to
+   * stand alone.
+   *
+   * It is catalogue data rather than an assumption because the truncation
+   * control means two different things depending on it: a demonstration on an
+   * MRL model, and a **measurement** on the others. Only one entry here is
+   * MRL-trained, which is why the page reports the cost rather than asserting
+   * there isn't one.
+   */
+  matryoshka?: boolean;
+  /**
+   * Task instructions this checkpoint expects, when it expects any.
+   *
+   * `symmetric` is for comparing two texts of the same kind (this category's
+   * two pages); `query` / `document` are the asymmetric retrieval pair that
+   * `/text-ranking` needs. Named by use rather than by string so a page cannot
+   * pick the wrong one by accident.
+   */
+  prefixes?: { symmetric: string; query: string; document: string };
+}
+
+/**
+ * §3.7's catalogue, and the cheapest floor in the app: the default is a
+ * **22 MiB** download.
+ *
+ * `onnx-community/Qwen3-Embedding-0.6B-ONNX` measures 613.5 MB and is cut per
+ * §3.7 — a 22 MB model does this page's job, and the roadmap's own bar is
+ * about the floor.
+ *
+ * Both poolings and both prefix regimes are represented deliberately, one
+ * click apart: a catalogue where every entry is mean-pooled and prefix-free
+ * makes those two fields look like decoration.
+ */
+export const EMBED_MODELS: EmbedModel[] = [
+  {
+    id: "Xenova/all-MiniLM-L6-v2",
+    label: "all-MiniLM-L6-v2",
+    hint: "The default, and the whole argument for this page: 22 MB, 384-d, and good enough for most retrieval.",
+    params: 23,
+    dim: 384,
+    pooling: "mean",
+    upstream: "sentence-transformers/all-MiniLM-L6-v2",
+    task: "feature-extraction",
+    bytes: { webgpu: 45_297_825, wasm: 22_972_370 },
+  },
+  {
+    id: "Xenova/bge-base-en-v1.5",
+    label: "BGE base v1.5",
+    hint: "Retrieval-tuned, 768-d — and CLS-pooled, not mean-pooled. Mean-pooling it looks fine and is wrong.",
+    params: 109,
+    dim: 768,
+    pooling: "cls",
+    upstream: "BAAI/bge-base-en-v1.5",
+    task: "feature-extraction",
+    bytes: { webgpu: 218_108_236, wasm: 110_083_337 },
+  },
+  {
+    id: "Xenova/all-mpnet-base-v2",
+    label: "all-mpnet-base-v2",
+    hint: "The sentence-transformers workhorse. 768-d, mean-pooled, stronger than MiniLM on paraphrase.",
+    params: 109,
+    dim: 768,
+    pooling: "mean",
+    upstream: "sentence-transformers/all-mpnet-base-v2",
+    task: "feature-extraction",
+    bytes: { webgpu: 218_117_164, wasm: 110_086_122 },
+  },
+  {
+    id: "nomic-ai/nomic-embed-text-v1.5",
+    label: "Nomic Embed v1.5",
+    hint: "The only Matryoshka-trained entry: its first 128 dimensions were optimised to stand alone. Needs a task prefix.",
+    params: 137,
+    dim: 768,
+    pooling: "mean",
+    upstream: "nomic-ai/nomic-embed-text-v1.5",
+    matryoshka: true,
+    // From the model card. Dropping these costs accuracy with nothing failing,
+    // which is why the page shows the composed string rather than only the text
+    // the user typed.
+    prefixes: {
+      symmetric: "clustering: ",
+      query: "search_query: ",
+      document: "search_document: ",
+    },
+    task: "feature-extraction",
+    bytes: { webgpu: 273_859_028, wasm: 137_296_292 },
+  },
+  {
+    id: "Alibaba-NLP/gte-modernbert-base",
+    label: "GTE ModernBERT",
+    hint: "The strongest here and the largest. CLS-pooled, 768-d, and past the large-download warning on WebGPU.",
+    params: 149,
+    dim: 768,
+    pooling: "cls",
+    upstream: "Alibaba-NLP/gte-modernbert-base",
+    task: "feature-extraction",
+    bytes: { webgpu: 298_363_618, wasm: 150_218_016 },
+  },
+];
+
+export const DEFAULT_EMBED_MODEL = EMBED_MODELS[0].id;
+
+/**
+ * Texts for `/text-features` — short, so the vector strip is about the model
+ * rather than about a wall of prose.
+ */
+export const FEATURE_TEXT_SAMPLES: TextSample[] = [
+  {
+    id: "webgpu",
+    label: "A technical sentence",
+    text: "WebGPU exposes the graphics card to a web page as a compute device.",
+    hint: "The page's own subject, and a useful anchor for the similarity page next door.",
+  },
+  {
+    id: "cooking",
+    label: "A recipe line",
+    text: "Fold the melted butter into the flour until no dry patches remain.",
+    hint: "Nothing to do with the other samples — its vector should sit far from all of them.",
+  },
+  {
+    id: "short",
+    label: "Two words",
+    text: "Heavy rain.",
+    hint: "A very short input. Mean pooling over two tokens is a different thing from mean pooling over forty.",
+  },
+];
+
+/** A pair for `/sentence-similarity`, and what it is a test of. */
+export interface PairSample {
+  id: string;
+  label: string;
+  a: string;
+  b: string;
+  /** What the honest answer looks like — including where the model is wrong. */
+  hint: string;
+}
+
+/**
+ * Pairs chosen so the page has something to say, including where these models
+ * fail.
+ *
+ * `negation` is the important one. Embedding models score a sentence and its
+ * negation as *very* similar — they share almost every token and the training
+ * objective never had to separate them — so a high score there is a real
+ * limitation of the whole approach rather than a bug in this page, and it is
+ * the single most useful thing a similarity demo can show.
+ */
+export const PAIR_SAMPLES: PairSample[] = [
+  {
+    id: "paraphrase",
+    label: "A paraphrase",
+    a: "A man is playing a guitar on the street.",
+    b: "A busker is performing with his guitar outdoors.",
+    hint: "Almost no words in common, the same meaning. This is what an embedding buys you over keyword matching.",
+  },
+  {
+    id: "unrelated",
+    label: "Unrelated",
+    a: "A man is playing a guitar on the street.",
+    b: "The quarterly figures were restated after the audit.",
+    hint: "The floor. If this does not sit far below the paraphrase, the embeddings have collapsed.",
+  },
+  {
+    id: "negation",
+    label: "A negation",
+    a: "The flight to Berlin was cancelled.",
+    b: "The flight to Berlin was not cancelled.",
+    hint: "Opposite meanings, one word apart. Expect a very high score — that is a limitation of embeddings, not of this page.",
+  },
+  {
+    id: "overlap",
+    label: "Shared words, different sense",
+    a: "The bank raised its interest rates again.",
+    b: "We sat on the bank and watched the river.",
+    hint: "Lexical overlap with no shared meaning — the case keyword search gets wrong and an embedding should not.",
+  },
+];
+
+// --- Translation -------------------------------------------------------------
+
+/**
+ * One Marian language pair.
+ *
+ * **A pair is a model, so changing the pair is a LOAD.** There is no language
+ * argument anywhere in this task: a Marian checkpoint carries its own direction
+ * and `tr(text)` takes nothing else. So the direction control is a *model
+ * selector*, it lives in SELECT, and the page says that switching direction is
+ * another ~200 MB download. Getting that wrong would make en→de and de→en look
+ * free, which is the single most likely misreading of the page.
+ */
+export interface TranslationModel extends TextModel {
+  task: "translation";
+  /** BCP-47-ish source and target, for the direction label and the samples. */
+  source: string;
+  target: string;
+  /** "English → German". The row's name, rather than the repo id. */
+  direction: string;
+}
+
+/**
+ * §3.5's six pairs — en↔de, en↔fr, en→es, en→zh.
+ *
+ * Six rather than two so the "specialists beat one generalist" argument is
+ * visible: the whole catalogue here is 1.25 GB across six directions, against
+ * `Xenova/nllb-200-distilled-600M` at **894.6 MB for one download** (and
+ * `mbart-large-50-many-to-many-mmt` at 872.5 MB). A user who wants one pair
+ * pays a quarter of NLLB and gets a better translation for it. Neither
+ * multilingual model is offered, because both are over §0's bar.
+ *
+ * **Every entry pins its WASM precision, and that is a measurement.** A Marian
+ * decoder cannot be quantized on the WASM provider bundled with 4.2.0 — the
+ * session simply does not open (`qdq_actions.cc:137 … Missing required scale:
+ * model.shared.weight_merged_0_scale`, measured 2026-09-25 in Chromium). Marian
+ * is the *third* family to hit it after Whisper and Donut, so the spec lives in
+ * `model/backend.ts` as `SEQ2SEQ_WASM_DTYPES` rather than being written out
+ * again here. It costs 2.7x on the CPU path — 101 MB at a uniform q8 against
+ * 271 MB like this — and the alternative is no CPU path at all.
+ *
+ * That also settles the open question the plan left for Phase 2. The plan
+ * worried that en↔de (199.6 MiB at fp16) would slip under `LARGE_MODEL_BYTES`
+ * while en→es (213.1 MiB) crossed it, leaving one warning on a page of
+ * identical models. With the pin, the WASM download is 271–289 MB for every
+ * pair and `sizeEstimate` keys `large` off the **bigger** of the two — so every
+ * pair warns, consistently, and the number it warns about is one the user will
+ * actually pay. The inconsistency was an artefact of a WASM path that does not
+ * exist.
+ */
+export const TRANSLATION_MODELS: TranslationModel[] = [
+  {
+    id: "Xenova/opus-mt-en-de",
+    label: "English → German",
+    direction: "English → German",
+    source: "en",
+    target: "de",
+    hint: "The default. A Marian specialist: one direction, ~200 MB, and no language argument.",
+    params: 74,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 209_271_625, wasm: 271_047_378 },
+  },
+  {
+    id: "Xenova/opus-mt-de-en",
+    label: "German → English",
+    direction: "German → English",
+    source: "de",
+    target: "en",
+    hint: "The reverse direction, and a second download — not a toggle on the one above.",
+    params: 74,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 209_271_625, wasm: 271_047_378 },
+  },
+  {
+    id: "Xenova/opus-mt-en-fr",
+    label: "English → French",
+    direction: "English → French",
+    source: "en",
+    target: "fr",
+    hint: "Same architecture, a different pair of vocabularies.",
+    params: 74,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 212_168_275, wasm: 274_670_310 },
+  },
+  {
+    id: "Xenova/opus-mt-fr-en",
+    label: "French → English",
+    direction: "French → English",
+    source: "fr",
+    target: "en",
+    hint: "The reverse of the pair above, and again a separate checkpoint.",
+    params: 74,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 212_168_275, wasm: 274_670_310 },
+  },
+  {
+    id: "Xenova/opus-mt-en-es",
+    label: "English → Spanish",
+    direction: "English → Spanish",
+    source: "en",
+    target: "es",
+    hint: "A larger target vocabulary, so a slightly larger download for the same architecture.",
+    params: 78,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 223_416_625, wasm: 288_738_978 },
+  },
+  {
+    id: "Xenova/opus-mt-en-zh",
+    label: "English → Chinese",
+    direction: "English → Chinese",
+    source: "en",
+    target: "zh",
+    hint: "A non-Latin script, which is where a specialist's own tokenizer earns its place.",
+    params: 78,
+    task: "translation",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 223_416_625, wasm: 288_738_978 },
+  },
+];
+
+export const DEFAULT_TRANSLATION_MODEL = TRANSLATION_MODELS[0].id;
+
+/**
+ * What one Marian download buys against what a multilingual model would cost,
+ * in bytes, so the page can state the trade-off rather than describe it.
+ *
+ * `Xenova/nllb-200-distilled-600M`, summing `encoder_model` +
+ * `decoder_model_merged` only — never the alternative `decoder_model` /
+ * `decoder_with_past_model` the same repo also publishes.
+ *
+ * **1.76 GB, not the 894.6 MB §3.5 quotes**, and the difference is §1.1's
+ * finding one more time: 894.6 MB is NLLB's *q8* size, and q8 is not what this
+ * page loads. `loadOpts()` asks WebGPU for fp16 — 1 760 444 340 bytes — and the
+ * CPU path cannot use a quantized decoder at all (`SEQ2SEQ_WASM_DTYPES`), so
+ * there is no configuration in which a browser pays 895 MB for it. The
+ * multilingual option is further over §0's bar than the roadmap thought, which
+ * makes the one-pair-at-a-time design more clearly right rather than less.
+ */
+export const NLLB_BYTES = 1_760_444_340;
+
+/** Sample text per source language, so a pair always has something to run. */
+export const TRANSLATION_SAMPLES: Record<string, TextSample[]> = {
+  en: [
+    {
+      id: "en-webgpu",
+      label: "Technical",
+      text: "WebGPU lets a web page run compute shaders directly on the graphics card.",
+      hint: "Domain vocabulary a general model tends to paraphrase away.",
+    },
+    {
+      id: "en-idiom",
+      label: "An idiom",
+      text: "They decided to bite the bullet and rewrite the whole thing from scratch.",
+      hint: "Idioms are where a small specialist and a large generalist part company.",
+    },
+    {
+      id: "en-plain",
+      label: "Plain",
+      text: "The meeting has been moved to Thursday at eleven, in the small room.",
+      hint: "The easy case, and the one worth checking first.",
+    },
+  ],
+  de: [
+    {
+      id: "de-plain",
+      label: "Plain",
+      text: "Die Besprechung wurde auf Donnerstag um elf Uhr verlegt.",
+      hint: "The reverse of the English plain sample — useful for checking a round trip.",
+    },
+    {
+      id: "de-compound",
+      label: "A compound",
+      text: "Die Geschwindigkeitsbeschränkung auf der Autobahn wurde nicht aufgehoben.",
+      hint: "German compounds test the tokenizer more than the model.",
+    },
+  ],
+  fr: [
+    {
+      id: "fr-plain",
+      label: "Plain",
+      text: "La réunion a été déplacée à jeudi onze heures, dans la petite salle.",
+      hint: "The reverse of the English plain sample.",
+    },
+    {
+      id: "fr-negation",
+      label: "A negation",
+      text: "Il n'a jamais dit qu'il ne viendrait pas à la conférence.",
+      hint: "Double negation, which small models routinely flatten.",
+    },
+  ],
+};
+
+// --- Summarization -----------------------------------------------------------
+
+/**
+ * A summarization checkpoint.
+ *
+ * `hint` carries the quality caveat where there is one, because on this page
+ * "worse than three sentences of the article" is a real and common outcome and
+ * the page is built to show it rather than hide it.
+ */
+export interface SummarizerModel extends TextModel {
+  task: "summarization";
+  /** What it was fine-tuned on — which is what its output will sound like. */
+  domain: string;
+}
+
+/**
+ * §3.6's catalogue, and the outcome of the plan's Phase 0 gate.
+ *
+ * **The gate: does distilbart open a q8 session on WebGPU?** Measured in
+ * Chromium on 2026-09-25 — **yes**, and it produces a correct summary. Which is
+ * the only reason this page exists, because every other configuration is over
+ * §0's ~500 MB bar:
+ *
+ *   distilbart-cnn-6-6, q8 on WebGPU    283.9 MB   opens, correct output  ✓
+ *   distilbart-cnn-6-6, fp16 on WebGPU  563.6 MB   over the bar
+ *   distilbart-cnn-6-6, q8 on WASM      283.9 MB   **session will not open**
+ *   distilbart-cnn-6-6, enc q8 + dec fp32 on WASM  742.8 MB   over the bar
+ *
+ * The third line is `SEQ2SEQ_WASM_DTYPES` again: BART is the **fourth** family
+ * to hit the bundled WASM provider's quantized-decoder failure, after Whisper,
+ * Donut and Marian. Unlike Marian, the fp32-decoder fallback does not fit — so
+ * **distilbart has no CPU path at all** and declares `backends: ["webgpu"]`,
+ * which `useBackendProbe` turns into a disabled row with the reason on it
+ * rather than a failed download.
+ *
+ * That would have left the page with no floor, so the catalogue opens with
+ * **`Xenova/t5-small`**, which the plan did not consider: 154.4 MB at fp16 on
+ * WebGPU and 202.5 MB on WASM with the seq2seq pin, both inside the bar, and
+ * measured working on the CPU path at ~220 ms a summary. It is a *much* weaker
+ * summarizer than distilbart — and on this page that is not a drawback. The
+ * page's subject is the lead-3 baseline, and a model that visibly loses to three
+ * sentences of the article makes that lesson concrete rather than hypothetical.
+ *
+ * The plan's `distilbart-xsum-12-1` and `distilbart-cnn-12-6` are left out: both
+ * are over the bar at fp16 and neither adds anything t5-small and
+ * distilbart-cnn-6-6 do not already cover between them.
+ */
+export const SUMMARIZER_MODELS: SummarizerModel[] = [
+  {
+    id: "Xenova/t5-small",
+    label: "T5-small",
+    hint: "The default and the floor — 154 MB, runs on CPU too. Genuinely weak, which is this page's point.",
+    domain: "a multi-task mixture (the `summarize:` prefix is one of its tasks)",
+    params: 60,
+    task: "summarization",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    // A measurement: a quantized seq2seq decoder cannot open a session on the
+    // bundled WASM provider (`SEQ2SEQ_WASM_DTYPES`). Verified working in this
+    // configuration — 23.5 s to load, 218–277 ms a summary.
+    dtypes: { wasm: SEQ2SEQ_WASM_DTYPES },
+    bytes: { webgpu: 154_350_057, wasm: 202_472_616 },
+  },
+  {
+    id: "Xenova/distilbart-cnn-6-6",
+    label: "DistilBART CNN 6-6",
+    hint: "A real news summarizer, and GPU-only: its CPU session cannot be quantized and the unquantized one is 743 MB.",
+    domain: "CNN/DailyMail news articles",
+    params: 306,
+    task: "summarization",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    // **A measurement, and the plan's Phase 0 gate.** q8 on WebGPU opens and
+    // summarizes correctly; fp16 would be 563.6 MB, over §0's bar. Latency on a
+    // real GPU is still unmeasured — the measurement box had no GPU with
+    // `shader-f16`, only SwiftShader — so `just fe-e2e-summarize` re-measures it
+    // where there is one.
+    dtypes: { webgpu: "q8" },
+    // No WASM path: q8 will not open, and encoder-q8 + decoder-fp32 is 742.8 MB.
+    backends: ["webgpu"],
+    bytes: { webgpu: 283_921_904 },
+  },
+  {
+    id: "Xenova/bart-large-cnn",
+    label: "BART-large CNN",
+    hint: "The model everyone benchmarks against, at 463 MB and GPU-only. The quality ceiling this page can reach.",
+    domain: "CNN/DailyMail news articles",
+    params: 406,
+    task: "summarization",
+    graphs: ["encoder_model", "decoder_model_merged"],
+    // Same pin, same reason, and it is worth being exact about what kind of
+    // claim it is: q8-on-WebGPU was **measured on distilbart**, which is the
+    // same architecture from the same export tooling, and is an *inference*
+    // here rather than a second measurement. `just fe-e2e-summarize` on a real
+    // GPU is what would turn it into one.
+    dtypes: { webgpu: "q8" },
+    backends: ["webgpu"],
+    bytes: { webgpu: 462_535_837 },
+  },
+];
+
+export const DEFAULT_SUMMARIZER = SUMMARIZER_MODELS[0].id;
+
+/** Sentences of article to quote as the baseline. Three, as the name says. */
+export const LEAD_N = 3;
+
+/** Generation defaults. Both are **run** parameters — changing one re-runs. */
+export const SUMMARY_MAX_TOKENS = 130;
+export const SUMMARY_MIN_TOKENS = 30;
+
+/**
+ * The entailment model the faithfulness check borrows.
+ *
+ * Not a new download for the category — it is `/zero-shot-classification`'s
+ * cheapest entry, reused, which is why the second opt-in here costs 27–50 MB
+ * rather than another 300. Scoring a summary sentence against the article is
+ * exactly a one-label NLI call: `softmaxEach` is true when `labels.length === 1`,
+ * so the pipeline returns entailment-against-contradiction for that single
+ * hypothesis, which is the number wanted.
+ */
+export const FAITHFULNESS_MODEL = "Xenova/mobilebert-uncased-mnli";
+
+/**
+ * Articles chosen so the lead-3 baseline is *hard*.
+ *
+ * News is the genre every one of these checkpoints was fine-tuned on, and the
+ * inverted-pyramid convention puts the answer in the first three sentences — so
+ * a sample set of rambling prose would make the neural summary look better than
+ * it is. `fabricated` is the one that exists to be failed: it contains a number
+ * and a name close enough together that small summarizers routinely attach the
+ * wrong one to the other, which is what the faithfulness check is for.
+ */
+export interface ArticleSample {
+  id: string;
+  label: string;
+  text: string;
+  hint: string;
+}
+
+export const ARTICLE_SAMPLES: ArticleSample[] = [
+  {
+    id: "launch",
+    label: "A news report",
+    hint: "Inverted pyramid: the answer is in sentence one. The hardest case for a neural summarizer to beat.",
+    text:
+      "The European Space Agency confirmed on Tuesday that its Ariane 6 rocket had completed a " +
+      "second successful commercial launch, placing four satellites into low Earth orbit. " +
+      "Officials said the flight validated the upper-stage restart sequence that had failed " +
+      "during a demonstration mission last year. The agency expects to raise the launch cadence " +
+      "to roughly one flight a month by the end of next year. That would ease a shortage of " +
+      "European launch capacity which had forced several operators to book rides on American " +
+      "rockets. Arianespace said three further commercial payloads are already contracted for " +
+      "the first half of next year, including two Earth-observation satellites for the " +
+      "Copernicus programme.",
+  },
+  {
+    id: "buried",
+    label: "The point is buried",
+    hint: "The lead is scene-setting and the news is in the fourth sentence — where lead-3 finally loses.",
+    text:
+      "The conference hall in Lisbon filled slowly on Thursday morning, delegates drifting in " +
+      "with paper cups of coffee. Panels on grid storage and permitting had drawn modest " +
+      "crowds all week. The mood had been one of cautious routine. Then, shortly before lunch, " +
+      "the Portuguese energy minister announced that the government would abandon its planned " +
+      "auction for two gigawatts of offshore wind, citing costs that had risen by more than " +
+      "forty per cent since the tender was drafted. Developers who had spent two years " +
+      "preparing bids learned of the decision from the stage. Shares in the two largest " +
+      "bidders fell sharply within the hour.",
+  },
+  {
+    id: "fabricated",
+    label: "A name and a number",
+    hint: "Two people and two figures, close together. Small summarizers attach the wrong number to the wrong name — which is what the faithfulness check is for.",
+    text:
+      "The audit found that Marta Reyes, the department's procurement lead, approved 14 " +
+      "contracts above the delegated threshold during the period under review. Her deputy, " +
+      "Tomas Keller, approved 3. Investigators said the 14 approvals accounted for 8.2 million " +
+      "euros of the 9.1 million euros examined. Reyes told the panel she had believed the " +
+      "threshold had been raised the previous year. Keller said he had escalated every case he " +
+      "was unsure about. The report recommends that both approval limits be reset and that a " +
+      "second signature be required above 250,000 euros.",
+  },
+];
+
+// --- Text generation ---------------------------------------------------------
+
+/**
+ * §3.8's catalogue, and every entry in it is the result of a measurement rather
+ * than the roadmap's table — which was wrong about GPT-2 in three separate ways.
+ *
+ * **`Xenova/gpt2`'s "128.3 MB at q4f16" is not a file that exists**, and the way
+ * it does not exist is worth the paragraph. Its blob listing:
+ *
+ *   onnx/model.onnx                           500.8 MB
+ *   onnx/model_fp16.onnx                      250.8 MB
+ *   onnx/model_q4f16.onnx                     250.8 MB   <- to the byte, ±19
+ *   onnx/model_q4.onnx                        499.6 MB   <- ≈ the fp32 build
+ *   onnx/decoder_model_merged_quantized.onnx  128.3 MB   <- the roadmap's number
+ *
+ * So: the 4-bit builds are **not quantized** (GPT-2's `Conv1D` weights are
+ * skipped by the exporter — the same class as SmolVLM's `embed_tokens_q4f16`,
+ * but total rather than 30%); there is **no `model_quantized.onnx`**, so
+ * `loadOpts("wasm")`'s `q8` 404s; and the 128.3 MB file belongs to a legacy
+ * graph family that 4.2.0 reaches only via `model_file_name`.
+ *
+ * **Phase 0 asked whether that legacy graph loads. It does not.** The option
+ * *does* pass through `pipeline()` and the file *is* found — but the session
+ * fails to open with `qdq_actions.cc:137 … Missing required scale:
+ * transformer.wte.weight_merged_0_scale`, which is the same ONNX Runtime bug as
+ * Whisper's, Donut's, Marian's and BART's. GPT-2 is **decoder-only**, which is
+ * what proves that bug was never about encoder-decoders (see
+ * `SEQ2SEQ_WASM_DTYPES`); and because a decoder-only model has one graph, there
+ * is no per-module fallback to reach for. Its only unquantized build is 500 MB,
+ * over §0's bar. **So GPT-2 has no CPU path at all**, and ships at fp16 on
+ * WebGPU only.
+ *
+ * **SmolLM2-360M-Instruct is the default, and it is the entry that gives this
+ * page a CPU path.** 272.7 MB at q4f16 on WebGPU, genuinely quantized — and
+ * measured working at **q8 on WASM** (364.6 MB, 34 s to load, ~180 ms a token),
+ * which is what a `vlmLoadOpts`-style `q4` on WASM was not verified to do. That
+ * pin is therefore a measurement. The roadmap wanted GPT-2 as the default
+ * because it loops so readily; the demonstration is worth keeping and the
+ * default is not, now that GPT-2 measures 251 MB with no CPU path while SmolLM2
+ * measures 273 MB and runs on both.
+ */
+export const TEXTGEN_MODELS: TextGenModel[] = [
+  {
+    id: "HuggingFaceTB/SmolLM2-360M-Instruct",
+    label: "SmolLM2 360M Instruct",
+    hint: "The default, and the only entry with a CPU path — 273 MB on GPU, 365 MB on CPU at ~180 ms a token.",
+    domain: "instruction tuning over SmolLM2's own corpus",
+    params: 362,
+    instruct: true,
+    // A measurement, not a preference. `vlmLoadOpts()` would ask WASM for `q4`,
+    // which is unverified here; `q8` is the build that was actually loaded and
+    // generated from (34 s to load, 12 tokens in 2.19 s).
+    dtypes: { wasm: "q8" },
+    bytes: { webgpu: 272_737_275, wasm: 364_564_671 },
+  },
+  {
+    id: "Xenova/gpt2",
+    label: "GPT-2 (124M)",
+    hint: "The loop demonstration: greedy decoding degenerates on it within a sentence. GPU only, and fp16 — see the note above.",
+    domain: "WebText, 2019, no instruction tuning at all",
+    params: 124,
+    instruct: false,
+    // fp16 because nothing smaller exists that loads: `model_q4f16.onnx` is the
+    // same size as this file and is not actually quantized, `model_quantized`
+    // is absent, and the 128.3 MB legacy graph fails to open a session.
+    dtypes: { webgpu: "fp16" },
+    // fp16 weights, so the adapter must have `shader-f16` — without it the
+    // download succeeds and every run fails on its first operator.
+    requireShaderF16: true,
+    backends: ["webgpu"],
+    bytes: { webgpu: 250_753_380 },
+  },
+  {
+    id: "onnx-community/Qwen2.5-0.5B-Instruct",
+    label: "Qwen2.5 0.5B Instruct",
+    hint: "The heavy end: 483 MB, and the only one here that writes genuinely coherent paragraphs. GPU only.",
+    domain: "instruction tuning, multilingual",
+    params: 494,
+    instruct: true,
+    requireShaderF16: true,
+    // q8 on WASM is 512.1 MB, past §0's bar, so the CPU path is not offered
+    // rather than being offered and disappointing.
+    backends: ["webgpu"],
+    bytes: { webgpu: 483_003_582 },
+  },
+];
+
+export const DEFAULT_TEXTGEN_MODEL = TEXTGEN_MODELS[0].id;
+
+/**
+ * Presets, because the page's subject is the *strategies* and a row of sliders
+ * does not teach one.
+ *
+ * `greedy` is first and is the default: it is reproducible, which is what makes
+ * the loop attributable to the decoding rather than to the model. `loop` is
+ * greedy with the repetition penalty off and a long budget — the failure the
+ * page exists to show. `creative` is the one that reads best and is the least
+ * predictable.
+ */
+export interface DecodingPreset {
+  id: string;
+  label: string;
+  hint: string;
+  decoding: Decoding;
+}
+
+export const DECODING_PRESETS: DecodingPreset[] = [
+  {
+    id: "greedy",
+    label: "Greedy",
+    hint: "Always the likeliest token. Reproducible — run it twice and you get the same text.",
+    decoding: { ...DEFAULT_DECODING, doSample: false, maxNewTokens: 96 },
+  },
+  {
+    id: "loop",
+    label: "Greedy, long",
+    hint: "The same, with no repetition penalty and more room. This is where greedy decoding degenerates.",
+    decoding: {
+      ...DEFAULT_DECODING,
+      doSample: false,
+      repetitionPenalty: 1.0,
+      maxNewTokens: 200,
+    },
+  },
+  {
+    id: "balanced",
+    label: "Sampling",
+    hint: "Temperature 0.7 with nucleus sampling. The usual default in a chat app.",
+    decoding: {
+      ...DEFAULT_DECODING,
+      doSample: true,
+      temperature: 0.7,
+      topP: 0.9,
+      topK: 50,
+    },
+  },
+  {
+    id: "creative",
+    label: "Hot",
+    hint: "Temperature 1.4, wide nucleus. Reads best and goes off the rails soonest.",
+    decoding: {
+      ...DEFAULT_DECODING,
+      doSample: true,
+      temperature: 1.4,
+      topP: 0.98,
+      topK: 0,
+    },
+  },
+];
+
+/**
+ * Prompts chosen so the decoding strategy is what varies, not the difficulty.
+ *
+ * `unambiguous` has one obvious continuation, so a broken tokenizer or a wrong
+ * chat template is visible immediately — it is what the `@slow` spec asserts on.
+ * `listy` is the one that loops under greedy decoding, which is the page's whole
+ * demonstration.
+ */
+export const TEXTGEN_SAMPLES: TextSample[] = [
+  {
+    id: "unambiguous",
+    label: "One obvious answer",
+    text: "The capital of France is",
+    hint: "There is one right continuation. If this comes out wrong, nothing else on the page means anything.",
+  },
+  {
+    id: "listy",
+    label: "Invites a loop",
+    hint: "Greedy decoding degenerates here within a couple of sentences. Try it, then turn sampling on.",
+    text: "Here is a list of things to remember when travelling:",
+  },
+  {
+    id: "story",
+    label: "Open-ended",
+    text: "The lighthouse keeper had not spoken to anyone in three weeks when",
+    hint: "Nothing to be right about, so this is where temperature is visible rather than arguable.",
+  },
+];
+
+// --- Text ranking (retrieval) ------------------------------------------------
+
+/** One half of a ranking pair: a repo plus the precision and graphs it needs. */
+export interface RankStage {
+  id: string;
+  label: string;
+  graphs?: readonly string[];
+  bytes: MeasuredBytes;
+  dtypes?: Partial<Record<Backend, DtypeSpec>>;
+}
+
+/**
+ * A retrieval pair: a bi-encoder to embed the corpus, and a cross-encoder to
+ * rerank the shortlist.
+ *
+ * **This page holds two models live at once, and that is a declared
+ * exception.** The engine rule is one model live at a time; the rule exists to
+ * stop hundreds of megabytes leaking, and an embedder plus a reranker is 128 MiB
+ * together on WASM. `/pose` is the precedent, and it carries the same two
+ * obligations: an entry names **both** models and quotes the **combined**
+ * download, because a size guardrail that quotes half the bytes is worse than
+ * none; and `model/progress.ts` must be keyed on **repo + file**, which it
+ * already is *because of* `/pose` — two repos both publishing
+ * `onnx/model_quantized.onnx` would otherwise overwrite each other's progress
+ * entry and the bar would reach 100% halfway through. A test re-pins that here
+ * rather than assuming the fix still holds.
+ */
+export interface RankingPair {
+  /** Composite id — the pair is what the user picks, not either half. */
+  id: string;
+  label: string;
+  hint: string;
+  /** Combined parameter count in millions, for the shared `ModelPicker`. */
+  params: number;
+  /** **Combined** download. The guardrail must fire on the sum. */
+  bytes: MeasuredBytes;
+  embedder: RankStage;
+  reranker: RankStage;
+  /** Which of `EMBED_MODELS` the embedder half is, so its pooling is reused. */
+  embedderPooling: EmbedModel["pooling"];
+  /** Task prefixes, when the embedder wants them. */
+  prefixes?: EmbedModel["prefixes"];
+}
+
+/**
+ * §3.10's pairs. Sizes are ONNX blob totals read off the Hub.
+ *
+ * **`mixedbread-ai/mxbai-rerank-xsmall-v1` publishes no fp16 build.** Its
+ * `onnx/` directory holds exactly `model.onnx` (271.0 MiB) and
+ * `model_quantized.onnx` (83.2 MiB), so `loadOpts("webgpu")` asks for
+ * `model_fp16.onnx` and **404s at load** — the repo resolves fine on the API,
+ * and `just fe-e2e-models` catches it only because that spec checks the file for
+ * the dtype each backend asks for. It is pinned to q8 on WebGPU, and the pin is
+ * a **missing file, not a precision judgement**.
+ */
+export const RANKING_PAIRS: RankingPair[] = [
+  {
+    id: "minilm+ms-marco",
+    label: "MiniLM + ms-marco reranker",
+    hint: "The cheap pair, and the default: 22 MB of embedder and 22 MB of reranker on CPU.",
+    params: 45,
+    // 45_297_825 + 45_609_313 fp16 · 22_972_370 + 23_143_499 q8
+    bytes: { webgpu: 90_907_138, wasm: 46_115_869 },
+    embedderPooling: "mean",
+    embedder: {
+      id: "Xenova/all-MiniLM-L6-v2",
+      label: "all-MiniLM-L6-v2",
+      bytes: { webgpu: 45_297_825, wasm: 22_972_370 },
+    },
+    reranker: {
+      id: "Xenova/ms-marco-MiniLM-L-6-v2",
+      label: "ms-marco MiniLM L-6",
+      bytes: { webgpu: 45_609_313, wasm: 23_143_499 },
+    },
+  },
+  {
+    id: "bge+ms-marco",
+    label: "BGE base + ms-marco reranker",
+    hint: "A much stronger retriever on the dense stage, and 250 MB live at once on a GPU.",
+    params: 132,
+    // 218_108_236 + 45_609_313 fp16 · 110_083_337 + 23_143_499 q8
+    bytes: { webgpu: 263_717_549, wasm: 133_226_836 },
+    // BGE is CLS-pooled — see `EmbedModel.pooling`. Mean-pooling it returns a
+    // vector of the right width that ranks plausibly and is wrong.
+    embedderPooling: "cls",
+    embedder: {
+      id: "Xenova/bge-base-en-v1.5",
+      label: "BGE base v1.5",
+      bytes: { webgpu: 218_108_236, wasm: 110_083_337 },
+    },
+    reranker: {
+      id: "Xenova/ms-marco-MiniLM-L-6-v2",
+      label: "ms-marco MiniLM L-6",
+      bytes: { webgpu: 45_609_313, wasm: 23_143_499 },
+    },
+  },
+  {
+    id: "minilm+mxbai",
+    label: "MiniLM + mxbai reranker",
+    hint: "The alternative reranker. It publishes no fp16 build at all, so it runs q8 on both backends.",
+    params: 94,
+    // 45_297_825 + 87_245_802 · 22_972_370 + 87_245_802
+    bytes: { webgpu: 132_543_627, wasm: 110_218_172 },
+    embedderPooling: "mean",
+    embedder: {
+      id: "Xenova/all-MiniLM-L6-v2",
+      label: "all-MiniLM-L6-v2",
+      bytes: { webgpu: 45_297_825, wasm: 22_972_370 },
+    },
+    reranker: {
+      id: "mixedbread-ai/mxbai-rerank-xsmall-v1",
+      label: "mxbai-rerank-xsmall",
+      // **A missing file, not a precision judgement.** The repo publishes
+      // exactly `model.onnx` and `model_quantized.onnx`; asking for
+      // `model_fp16.onnx` 404s at load time.
+      dtypes: { webgpu: "q8", wasm: "q8" },
+      bytes: { webgpu: 87_245_802, wasm: 87_245_802 },
+    },
+  },
+];
+
+export const DEFAULT_RANKING_PAIR = RANKING_PAIRS[0].id;
+
+/**
+ * How many dense/BM25 candidates the cross-encoder reranks.
+ *
+ * **The cross-encoder runs once per candidate, and that is the lesson.** It
+ * scores `{ text, text_pair }` — a *pair*, not a concatenated string — so its
+ * score cannot be precomputed per document the way an embedding can. That cost
+ * is visible in a browser, which is the argument for building the page: the
+ * architecture teaches itself. 20 is enough to change the top few and few enough
+ * that the wait is informative rather than annoying.
+ */
+export const RERANK_TOP_K = 20;
+
+/** How many rows each stage's column shows. */
+export const RANK_SHOW = 8;
+
+/**
+ * A corpus whose best answer shares almost **no vocabulary with the query**, so
+ * BM25 and the dense retriever genuinely disagree — which is the only way a page
+ * about four stages says anything about three of them.
+ *
+ * The headline query is "my machine is overheating under load" and the right
+ * answer is the thermal-throttling line. BM25 ranks two decoys above it (they
+ * share "my" and "machine"); the dense retriever puts it first by a wide margin.
+ *
+ * **The sample was chosen by measurement, and the measurement had to replicate
+ * the page's own call pattern** — see `RANKING_SAMPLES` for why that is not a
+ * pedantic distinction.
+ */
+export const RANKING_CORPUS: string[] = [
+  "Sustained CPU load raises the chassis temperature until the cooling system spins up to its maximum rate; reducing background compilation is the usual remedy.",
+  "The laptop fan is a 40 mm brushless unit rated at 5 volts and is held in place by three screws.",
+  "To stop a running container, send it a SIGTERM and wait for the grace period to elapse before escalating.",
+  "Our returns policy allows any fan or cooling accessory to be sent back within 30 days of purchase.",
+  "Dust accumulation on the heatsink fins reduces airflow, so the same workload produces a higher temperature over time.",
+  "The constantly running unit test suite is a good sign: it means the pre-commit hook is installed correctly.",
+  "Thermal paste degrades after a few years and reapplying it can lower peak temperatures by several degrees.",
+  "My laptop will not stop asking me to restart for updates, which is unrelated to any hardware issue.",
+  "WebGPU exposes the graphics card to a web page as a compute device, and compute shaders are what make that useful.",
+  "Battery health declines faster when a machine is kept plugged in at full charge in a warm room.",
+  "The fan curve can be edited in firmware on some models, trading noise for a higher steady-state temperature.",
+  "A constantly spinning disk is not the same problem as a constantly spinning fan, though both are audible.",
+];
+
+export interface RankingSample {
+  id: string;
+  label: string;
+  query: string;
+  hint: string;
+}
+
+/**
+ * Queries chosen **by measurement**, and the measurement is the finding.
+ *
+ * The obvious sample — "how do I stop my laptop fan running constantly" — reads
+ * like the perfect demonstration and is not one. Embedded the way this page
+ * embeds (the corpus as one batch, the query alone) all-MiniLM scores the
+ * literal *laptop fan* decoy at 0.4556 and the right answer at 0.4459: the
+ * wrong one wins. Embedded the way a quick offline check does — query and corpus
+ * in one batch — the same model, the same q8 weights and the same text give
+ * 0.4394 and 0.4538: the right one wins.
+ *
+ * **At q8, a sentence's embedding depends on the batch it was embedded in.**
+ * Padding to a different length shifts the numbers enough to flip a near-tie,
+ * so a sample chosen against an idealised call pattern can fail on the page that
+ * ships it — which is exactly what happened, and what `just fe-e2e-rank` caught.
+ * It is also a caveat worth knowing generally: two cosines from this app are
+ * comparable, and a cosine from here against one computed elsewhere is only
+ * approximately so.
+ *
+ * `overheat` is therefore the default, and it wins by 0.13 rather than by
+ * 0.01 — a margin that survives the difference.
+ */
+export const RANKING_SAMPLES: RankingSample[] = [
+  {
+    id: "overheat",
+    label: "Words the answer does not use",
+    query: "my machine is overheating under load",
+    hint: "BM25 ranks two decoys above the right answer, on “my” and “machine”. The dense stage finds it, by a distance.",
+  },
+  {
+    id: "lexical",
+    label: "Words the answer does use",
+    query: "thermal paste heatsink",
+    hint: "The easy case, where BM25 is already right and the neural stages add nothing. Worth seeing too.",
+  },
+  {
+    id: "ambiguous",
+    label: "An ambiguous word",
+    query: "how do I stop something that keeps running",
+    hint: "“Running” means three different things in this corpus. This is where the reranker earns its passes.",
+  },
+  {
+    id: "neartie",
+    label: "A near-tie",
+    query: "how do I stop my laptop fan running constantly",
+    hint: "The obvious demo, and it does not work: the literal “laptop fan” decoy edges out the right answer by 0.01. Kept because that is the honest picture.",
   },
 ];

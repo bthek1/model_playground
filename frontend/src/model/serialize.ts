@@ -1,5 +1,11 @@
 // Making a pipeline's output survive `postMessage`.
 //
+// It lived in `vision/` until the NLP category's `feature-extraction` arm
+// arrived, which is the whole reason it moved rather than being copied: a
+// `Tensor` is a Transformers.js fact, not a vision one, and `/text-features`
+// posts exactly the same shape back from the text worker. Same move
+// `backend.ts` and `size.ts` made out of `audio/`.
+//
 // The same trap as `RawImage` on the way *in*, on the way back out and one level
 // worse. A Transformers.js `Tensor` exposes `data` and `dims` as **getters on its
 // prototype**, over an internal ONNX Runtime tensor; the structured-clone

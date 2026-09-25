@@ -75,7 +75,7 @@ just fe-e2e-slow      # audio: sets E2E_SLOW=1 — ~2.5 min, needs network
 just fe-e2e-models    # the cheap half: every id, dtype file and sample URL (~45 s)
 just fe-e2e-enhance   # speech enhancement on both backends (~20 s + download)
 just fe-e2e-vad       # voice activity detection (~10 s, 2 MB download)
-just fe-e2e-vision    # all fourteen vision routes — tens of minutes on a cold cache
+just fe-e2e-vision    # all thirteen vision routes — tens of minutes on a cold cache
 just fe-e2e-vision-one /pose      # one vision route at a time
 just fe-e2e-zeroshot  # split-tower scoring parity against the full CLIP graph
 just fe-e2e-superres  # Swin2SR against a bicubic baseline, by PSNR
@@ -84,6 +84,10 @@ just fe-e2e-link      # link prediction on Cora, pinned by an AUC band
 just fe-e2e-graphcls  # graph classification on PROTEINS, pinned above its baseline
 just fe-e2e-vlm       # a real SmolVLM load + generation — needs a real GPU
 just fe-e2e-videovlm  # a real SmolVLM2-Video load — the multi-image template, same GPU requirement
+just fe-e2e-text      # text classification by a known label, and the head-to-head
+just fe-e2e-qa        # extractive QA, pinned by a character range rather than a string
+just fe-e2e-zeroshot-text  # a known ranking, and a template proven to reach the model
+just fe-e2e-fillmask  # the same question through two tokenizers — the RoBERTa half is the test
 ```
 
 `fe-e2e-graph` is the odd one: it is `@slow` without downloading anything, because
@@ -194,7 +198,7 @@ Add a new catalogue module — and any new sample list — to its import list in
 commit as the page.
 
 **The vision routes raised the bar a third time, and in a way worth generalising.**
-Nine of the fourteen have a failure mode that produces *plausible output* rather than an
+Nine of the thirteen have a failure mode that produces *plausible output* rather than an
 error, so "a result appeared" and "N rows rendered" are both worthless there. Each one's
 `@slow` spec asserts a **property** instead:
 
@@ -239,6 +243,30 @@ own TypeScript) rather than the UI, because the route offers no way to read
 samples back out and "a waveform appeared" cannot tell good audio from metallic.
 The WebGPU half lives in `webgpu/enhance.spec.ts` and skips without a real GPU.
 
+**The five NLP routes needed the bar raised once more, and this time the thing the
+unit suite mocked away was the *runtime's own output shape*.** `text-models.spec.ts`
+covers all of them, and it exists because **Transformers.js 4.2.0 returns no
+character offsets** — `question-answering` and `token-classification` both declare
+`start`/`end` as optional in their types and never populate them, past a literal
+`// TODO` in each pipeline's source. A caller reading `result.start` type-checks
+cleanly and gets `undefined` at runtime. `/token-classification` shipped that way:
+every span was dropped as invalid and the page rendered the user's text with nothing
+marked, which is indistinguishable from a model that found nothing. It passed the
+unit suite (the mock supplied offsets the real pipeline never produces) and the
+mocked E2E run (which loads no bytes). **Only `just fe-e2e-text` caught it.**
+
+| Route | The property, and the bug it catches |
+|---|---|
+| `/text-classification` | a known label on a known sentence, **over 0.9** — a broken tokenizer also produces a ranked list of the right length. The head-to-head is pinned *structurally* (SST-2 has two classes, FinBERT three), because asserting the two rankings differ would pin a property neither model promises |
+| `/token-classification` | the marked **characters**, per entity type — that `PER` is `Priya Raman` and not `P`, that no span text starts with `##`, and that redaction removes the names while keeping `Siemens` and `flew from`. A count of marks passes while every one of them is off by a subword |
+| `/question-answering` | `data-start=30`, `data-end=44` — a **character range**, not a string. "A span appeared" passes while the alignment is off by a token; "the span reads Gustave Eiffel" passes while it marks the *second* mention of a name. A second test pins the span whose own decode (`general - purpose compute shaders`) is not in the passage, which is what `context.indexOf(answer)` returns -1 on; a third asserts the model answers an unanswerable question, which is the page's subject rather than a failure |
+| `/zero-shot-classification` | a known ranking on labels the model was never trained on, then the **same premise under a bare `{}` template** with the scores asserted to *move* — two templates producing identical numbers is exactly what a page that lets the pipeline apply its own default looks like. Movement rather than a flipped ranking, which the model does not promise. Multi-label is pinned by its arithmetic: the single-label scores sum to 1 and the multi-label ones do not |
+| `/fill-mask` | *paris* on BERT **and on RoBERTa**, never on DistilBERT — which at fp32 is worse than at q8 and answers marseille. **The RoBERTa half is the test**: its mask is `<mask>`, so a page that hard-codes `[MASK]` passes the BERT half and fails this one. The spliced sentence keeps the user's own capitalisation (`The CAPITAL of France is paris.`), which is what proves the page slices their string rather than rendering the uncased model's own decode |
+
+The sub-recipes (`fe-e2e-qa`, `fe-e2e-zeroshot-text`, `fe-e2e-fillmask`) all grep the
+same file by test title — reach for them while iterating, and run `fe-e2e-text` whole
+before a merge.
+
 ---
 
 ## Layout
@@ -265,9 +293,11 @@ frontend/
       audio.spec.ts        # audio routes with downloads blocked — fast, default run
       audio-models.spec.ts # @slow: real weights, real ONNX sessions
       vision.spec.ts       # /image-classification, weights blocked — default run
-      vision-models.spec.ts# @slow: real loads across all fourteen vision routes
-      model-ids.spec.ts    # @slow, seconds: every catalogue id + vision/VLM dtypes
+      vision-models.spec.ts# @slow: real loads across all thirteen vision routes
+      model-ids.spec.ts    # @slow, seconds: every catalogue id + vision/VLM/text dtypes
       multimodal.spec.ts   # all three VLM routes, weights blocked — default run
+      text.spec.ts         # all five NLP routes, weights blocked — default run
+      text-models.spec.ts  # @slow: real encoder loads for all five NLP routes
       webgpu/              # the GPU-only project (vlm.spec.ts, video-vlm.spec.ts …)
     utils/
       enhance.ts           # in-page enhancement run + SDR measurement

@@ -28,8 +28,8 @@
 // the same class of failure as the missing `mobilevitv2` fp16 export, and
 // `just fe-e2e-models` is what catches it.
 
-import type { PlainTensor } from "./serialize";
-import { l2norm, normalize } from "./similarity";
+import type { PlainTensor } from "@/model/serialize";
+import { l2norm, normalize } from "@/model/similarity";
 import type { VisionModel } from "./types";
 
 export interface FeatureModel extends VisionModel {

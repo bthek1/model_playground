@@ -519,14 +519,14 @@ it is the only test in the suite that would have caught a 512-sample window.
 
 ## 10. When the pipeline is the wrong abstraction
 
-§8 assumes `pipeline(task, model)` fits. Four vision routes and one multimodal one
-found it did not, and they all failed the same test: **is this a plain
+§8 assumes `pipeline(task, model)` fits. Four vision routes, one multimodal one and
+one NLP route found it did not, and they all failed the same test: **is this a plain
 `pipeline()` call?** If the answer is no, the task owns an engine — `engine.ts` (pure, testable with fakes),
 `*.worker.ts` (the only file that imports the runtime), `client.ts` (so the hook
 can mock worker creation). The plumbing above it does not change: `useModelWorker`,
 the three engine duties, `ModelPicker`, `ModelStatus`, the four slots.
 
-The five reasons, each a different shape:
+The six reasons, each a different shape:
 
 **a. The pipeline throws away work you want to keep.**
 `/zero-shot-image-classification` — the pipeline re-encodes the labels on every
@@ -595,13 +595,18 @@ node -e "const s=require('fs').readFileSync(
     .map(m=>m[1]).join(', '))"
 ```
 
-This is the **third** page in the repo planned around a pipeline that could not
+This was the **third** page in the repo planned around a pipeline that could not
 carry it — MusicGen (§3.4 of the audio roadmap) and Florence-2 (reason **c**
 above) were the first two. Three is enough to make it a step rather than a
 lesson. (Both of those routes were later cut for size; the check still earns
 its place, and `/document-question-answering` is the one page that *passed* it
 — the pipeline, the registry entry and the default model all lined up, and it
 was cut for a different reason entirely.)
+
+`/question-answering` is the fourth, and the one that shows the check is
+necessary but not sufficient: it *passed* this grep and failed anyway, because
+the task being supported says nothing about which of its declared fields the
+runtime fills in. That is reason **f**.
 
 Driving the model directly means owning the prompt, and for a VLM that is
 `apply_chat_template`. It is not decoration: each checkpoint has its own image
@@ -635,9 +640,49 @@ stays an inflight count. A page that shows a spinner for four seconds and then
 streams text reads as broken; one that says "encoding image" and then generates
 reads as working.
 
+**f. The pipeline exists, and does not populate the field you need.**
+`/question-answering` — `question-answering` *is* in `SUPPORTED_TASKS`, and its
+result type declares `{ answer, score, start?, end? }`. It returns `{ answer,
+score }`. `start` and `end` are **never populated**, past a literal `// TODO add
+start and end?` in the pipeline's own source, and `token-classification` carries
+the same unwritten TODO in the same place — 4.2.0 has no
+`return_offsets_mapping` anywhere. A caller reading `result.start` type-checks
+cleanly and gets `undefined` at runtime, so every span is dropped as invalid and
+the page renders the user's text with nothing marked, which is indistinguishable
+from a model that found nothing.
+
+So **check the fields a pipeline actually populates, not only that the task
+exists**. An optional field in a `.d.ts` is a claim about the type, not about the
+runtime, and the cheapest way to settle it is to run the thing:
+
+```bash
+cd frontend && node -e "import('@huggingface/transformers').then(async t => {
+  const p = await t.pipeline('question-answering',
+    'Xenova/distilbert-base-cased-distilled-squad');
+  console.log(await p('Who built it?', 'It was built by Gustave Eiffel in 1889.'));
+})"
+```
+
+`src/text/qa/` then drives `AutoTokenizer` + `AutoModelForQuestionAnswering` so the
+token indices survive, with `text/offsets.ts` walking the tokenizer's pieces back
+along the passage to recover character ranges — and **returning `null` rather than
+guessing** on any mismatch (`[UNK]`, a lowercasing tokenizer, an accent-stripping
+normaliser). The honest fallback is "no highlight, answer quoted": a near-miss mark
+lands beside the word it means and reads as a styling bug. `/token-classification`
+stayed on the generic worker and recovers its offsets the same way, because there
+the pipeline's *answer* is fine and only its bookkeeping is missing.
+
+Owning the span selection means transcribing it rather than improving it:
+`qa/select.ts` is the pipeline's own choice step, same masking, same two softmaxes,
+same `p(start)·p(end)` sweep, **no maximum answer length** — HF's Python caps at 15
+tokens and Transformers.js does not, and a cap changes the answer on exactly the
+unsure questions the page is about. Verified against the real pipeline on nine
+question/passage pairs: same answer, same score to six decimals. A rewrite that
+"fixes" the model while adding offsets cannot be reviewed as either change.
+
 ### The rule these share
 
-Every one of the five introduced a failure that **produces plausible output**
+Every one of the six introduced a failure that **produces plausible output**
 rather than an error — a cached embedding that is silently recomputed, a scale
 that leaves the ranking intact, a task token a model has never seen answered with
 a fluent unrelated sentence, a skeleton offset by a crop's origin. So each one
@@ -656,6 +701,8 @@ owes a `@slow` spec that measures a **property**, never a count:
 | `/image-text-to-text` | a **known answer on a known image** — a broken chat template returns fluent, confident, unrelated prose |
 | `/visual-question-answering` | the terse answer is **materially shorter in words** than the verbose one, same question and same picture |
 | `/video-text-to-text` | a **known answer about a known clip**, and reversing the frames is a real **second inference** — not that the answer changed, which at this size it usually does not |
+| `/question-answering` | a **character range** (`data-start`, `data-end`), not a string — "the span reads Gustave Eiffel" passes while the mark sits on the *second* mention of the name |
+| `/token-classification` | the marked **characters** per entity type, and that no span text starts with `##` — a count of marks passes while every one is off by a subword |
 
 "Five rows appeared" passes for all of them.
 

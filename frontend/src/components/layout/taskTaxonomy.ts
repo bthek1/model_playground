@@ -45,7 +45,7 @@ function slugify(label: string): string {
  * generic `/tasks/$slug` placeholder.
  */
 const REAL_ROUTES: Record<string, string> = {
-  "text-generation": "/playground",
+  "gpu-playground": "/playground",
   "linear-model-training": "/training",
   "tensor-arithmetic": "/tensor",
   "automatic-speech-recognition": "/asr",
@@ -134,6 +134,40 @@ const REAL_ROUTES: Record<string, string> = {
   // inserted by a button, rewritten on a model change, and reconciled against
   // the loaded tokenizer in the engine.
   "fill-mask": "/fill-mask",
+  // §3.7, shipped as a pair because the second page is the first with a cosine
+  // on the end: one engine, one catalogue, one hook, two taxonomy rows. They
+  // stay two routes for the same reason /visual-question-answering is not
+  // folded into /image-text-to-text — two Hub tags and two questions.
+  //
+  // `feature-extraction` maps to `/text-features` rather than the slug's own
+  // name, mirroring `/image-features`.
+  // §3.5, and the category's first seq2seq page. One language pair at a time,
+  // because a Marian checkpoint *is* its direction — so the direction control
+  // is a model selector in SELECT, and switching it is another ~200 MB
+  // download rather than a toggle.
+  "translation": "/translation",
+  // §3.6, and the page that exists because of one measurement: DistilBART opens
+  // a q8 session on WebGPU (283.9 MB) where every other configuration is over
+  // the size bar, and its q8 WASM session does not open at all. T5-small is the
+  // floor that keeps a CPU path. The lead-3 baseline ships as the output's empty
+  // state — it needs no model, and beating it is harder than it sounds.
+  "summarization": "/summarization",
+  // §3.8, the category's only streaming page — and the one that takes this row
+  // back from `/playground`. `/playground` is a WebGPU demo surface, not a task
+  // page, and it should not claim a task row; it stays reachable on its own
+  // terms. The page is the **decoding strategies made interactive** rather than
+  // a chatbot: greedy against sampling on the same prompt, with the repetition
+  // loop visible. It is also the payoff for #30 putting `partial` in the shared
+  // `ModelResponse` envelope rather than in a private VLM protocol.
+  "text-generation": "/text-generation",
+  "feature-extraction": "/text-features",
+  "sentence-similarity": "/sentence-similarity",
+  // §3.10, and the most complete page the category has: **all four retrieval
+  // stages run client-side** over a corpus the user pastes in — BM25, dense
+  // embeddings, hybrid RRF, and a cross-encoder rerank. Two of the four need no
+  // model at all. It is also the second route to hold two models live at once,
+  // after /pose, and for the same reason: neither half is useful alone.
+  "text-ranking": "/text-ranking",
   // Three slugs deliberately have no route and fall through to the placeholder,
   // for one reason each — every checkpoint the task has is too heavy to offer:
   //
@@ -274,6 +308,12 @@ export const taskCategories: TaskCategory[] = [
       "Linear Model Training",
       "Discrete Maths",
       "Tensor Arithmetic",
+      // Taking §3.8's task row away from `/playground` would have left it
+      // reachable only by typing the URL, which is not what "stays reachable on
+      // its own terms" means. Theory is this repo's own non-Hub category and is
+      // where the hand-written WGSL surfaces already live, so the demo gets a
+      // row of its own here instead of borrowing an NLP task's.
+      "GPU Playground",
     ]),
   },
 ];

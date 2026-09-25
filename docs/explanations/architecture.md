@@ -122,6 +122,15 @@ frontend/
 │   │   ├── engine.ts        Pure message handler (one model live, warm-up, dispose)
 │   │   ├── vision.worker.ts Thin worker wrapper + the Transformers.js factory
 │   │   └── classification.ts, samples.ts, types.ts, client.ts
+│   ├── multimodal/        Vision-language models: one streaming engine, three routes
+│   │   ├── engine.ts        AutoModelForImageTextToText + AutoProcessor (no pipeline)
+│   │   ├── prompt.ts        The composed prompt, shown before the click
+│   │   └── frames.ts        N frames sampled by count, not by rate
+│   ├── text/              Pretrained NLP models (a string needs no decode step)
+│   │   ├── engine.ts        The generic pipeline worker's pure message handler
+│   │   ├── offsets.ts       The character offsets Transformers.js does not return
+│   │   ├── highlight.ts, mask.ts, zeroShot.ts  Pure derivations over a result in hand
+│   │   └── qa/              Its own engine: the span survives only if the tokens do
 │   ├── model/             Shared across modalities: backend probe, size guardrail,
 │   │                        worker lifecycle, aggregate progress, weight cache
 │   ├── telemetry/         The system panel's samplers, ring buffer and 1 Hz loop
@@ -184,8 +193,8 @@ suite stays green on a GPU-less machine, while the graceful-degradation specs ru
 everywhere. See [`../guides/e2e-testing.md`](../guides/e2e-testing.md).
 
 **Every task page is Select → Load → Run → Output.** The routes under `src/routes/` that
-run a model — text-to-speech, ASR, audio classification, speech
-enhancement, tensor arithmetic, training —
+run a model — the audio, vision, vision-language and NLP routes, plus tensor
+arithmetic and training —
 share one four-stage pipeline: pick a model, load its weights, run it on an input, show
 the result. Two orthogonal state machines back it: a *load* machine per worker
 (`idle → loading → ready | error`) and a *run* machine of id-correlated requests. Task
@@ -204,22 +213,26 @@ responsive. See `docs/explanations/webgpu-inference.md` for the full pipeline an
 
 **Two client-side runtimes, kept apart.** The rule above scopes to the
 hand-written runtime. Running *pretrained* checkpoints is a separate concern with
-its own dependencies, and lives in the per-modality folders `src/audio/` and
-`src/vision/`:
+its own dependencies, and lives in the per-modality folders `src/audio/`,
+`src/vision/`, `src/multimodal/` and `src/text/`:
 
 | Runtime | Where | Used by |
 |---|---|---|
 | Hand-written WGSL | `src/webgpu/` | tensor arithmetic, linear/MNIST training, **graph neural networks**, benchmarks |
 | Transformers.js (`@huggingface/transformers`, `kokoro-js`) | `src/audio/` | ASR, audio classification, TTS |
-| Transformers.js | `src/vision/` | fourteen of the twenty Computer Vision tasks — classification, depth, detection, segmentation, both zero-shot tasks, embeddings, SAM, captioning/OCR, pose, a frame-level video baseline, background removal, super-resolution and depth-to-point-cloud |
+| Transformers.js | `src/vision/` | thirteen of the twenty Computer Vision tasks — classification, depth, detection, segmentation, both zero-shot tasks, embeddings, SAM, pose, a frame-level video baseline, background removal, super-resolution and depth-to-point-cloud |
+| Transformers.js (model classes, not a pipeline) | `src/multimodal/` | the three vision-language routes — image+text, VQA and video+text, over one engine |
+| Transformers.js | `src/text/` | five of the eleven NLP tasks — classification, NER, extractive QA, zero-shot and fill-mask |
 | `onnxruntime-web` **directly** | `src/audio/enhance/`, `src/audio/vad/` | speech enhancement (DeepFilterNet3), voice activity detection (Silero VAD) |
 
 Inside `src/vision/` there is a second split, on a different axis. Ten routes are plain
-`pipeline()` calls and share one generic worker; four own an engine, because the
-pipeline abstraction fails them in four different ways — it re-encodes work worth
-keeping (`zeroshot/`), it hides a split worth exploiting (`sam/`), it cannot load the
-model at all, or the task is two models (`pose/`). The criterion and the
-four cases are in `docs/guides/adding-a-model.md` §10. An engine is always the same
+`pipeline()` calls and share one generic worker; three own an engine, because the
+pipeline abstraction fails them in different ways — it re-encodes work worth
+keeping (`zeroshot/`), it hides a split worth exploiting (`sam/`), or the task is two
+models at once (`pose/`). `src/text/qa/` is the same criterion one modality over: the
+`question-answering` pipeline returns an answer string and **not** the character
+offsets its own types declare, so the route drives the tokenizer and model directly to
+keep the span. The criterion and the cases are in `docs/guides/adding-a-model.md` §10. An engine is always the same
 three files — a pure `engine.ts`, a thin `*.worker.ts` that is the only importer of the
 runtime, and a `client.ts` so the hook can be tested without `new Worker`.
 
@@ -232,6 +245,14 @@ behind image-to-3D), `matte.ts` (alpha compositing for background removal) and
 `resample.ts` (the bicubic baseline). Every one of them fails by producing a
 *plausible picture* rather than an error, so an assertion over the arithmetic is
 the only thing that catches it — see `docs/roadmaps/vision.md` §3.13–§3.15.
+
+`src/text/` is almost entirely that kind of module, because an NLP page's own
+arithmetic outweighs its model plumbing: `offsets.ts` (walking a tokenizer's pieces
+back along the source, and returning `null` rather than guessing on a mismatch),
+`highlight.ts` (slicing the original string by character offset — never rebuilding it
+from tokens), `mask.ts` (the mask token as data, never a literal) and `zeroShot.ts`
+(label parsing and the derived pass count). Same failure shape as vision's: a
+near-miss highlight reads as a styling bug rather than a wrong answer.
 
 The same split holds outside vision, and for the same reason: `lib/cora.ts`
 (decoding a CSR graph), `lib/graphLayout.ts` (force-directed placement),

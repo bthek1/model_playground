@@ -850,7 +850,7 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   `data-testid` on a wrapper.
 - **OCR now has no page**, and **metric depth has no path** (ZoeDepth has no export).
 
-**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`) — the fourth modality, and the cheapest module in the app:**
+**In-browser NLP (`src/text/` — `/text-classification`, `/token-classification`, `/zero-shot-classification`, `/fill-mask`, `/question-answering`, `/text-features`, `/sentence-similarity`, `/translation`, `/summarization`, `/text-generation`, `/text-ranking`) — the fourth modality, and the cheapest module in the app:**
 
 - **There is no decode step, and that is the point.** No text equivalent of `audio/io.ts`
   or `vision/image.ts` exists: the input is already a string, so there is no
@@ -998,6 +998,206 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
 - **`just fe-e2e-fillmask` asserts *paris* on BERT and RoBERTa — never DistilBERT**, which
   genuinely does not know it (at fp32 it is worse: marseille, nantes, toulouse). **The
   RoBERTa half is the test**: the same question through a different tokenizer.
+- **Embeddings ship as two routes over one engine** (`/text-features`, `/sentence-similarity`),
+  and the pooling is **catalogue data, not a pinned constant**. The plan said to pin
+  `{ pooling: "mean", normalize: true }` in the engine; only the second half is right.
+  Which pooling a sentence embedding uses is part of how the checkpoint was trained —
+  mean for all-MiniLM/all-mpnet/Nomic, **CLS** for BGE and gte-modernbert — and
+  mean-pooling a CLS-trained model returns a vector of the right width that ranks
+  plausibly and is wrong, with nothing failing. So `EmbedModel.pooling` carries it,
+  `EmbedModel.upstream` names the repo whose `1_Pooling/config.json` is the authority
+  (**the `Xenova/*` ONNX mirrors do not publish that file**, so it cannot be read at load
+  time), and `just fe-e2e-models` checks the pair. `normalize: true` stays pinned in the
+  engine, because every consumer compares by cosine.
+- **The collapse is the failure, so the assertion is a spread.** Without pooling and
+  normalisation every similarity lands in a narrow band near 0.9 and each pair looks
+  alike — a page that appears to work. "The paraphrase scores above 0.5" passes
+  comfortably on exactly those vectors, so `just fe-e2e-embed` asserts the **gap** between
+  a paraphrase and an unrelated pair. A missing `pooling` now also fails loudly one layer
+  down: `toVector` throws on an unpooled `[1, T, D]` hidden state rather than taking row 0,
+  which is a real vector that would rank.
+- **Matryoshka truncation is a *measurement*, because four of the five entries are not
+  MRL-trained.** So `truncate()` returns `kept` — the fraction of the vector's length the
+  prefix held, which is exactly the factor a *missing* renormalisation would scale every
+  similarity by — and the pages report it instead of claiming the cut was free.
+  `nomic-embed-text-v1.5` is there so the genuine MRL case is one click away, and it is
+  the entry that needs a **task prefix**: `prefixes` is named by use (`symmetric`/`query`/
+  `document`) so a page cannot pick the wrong one, and the composed string is on screen
+  before the click. Truncation re-derives and spends nothing, like `/vad`'s threshold.
+- **Cache embeddings by the exact string, never by a hash.** A collision serves another
+  sentence's vector with nothing failing — a confident wrong number on a similarity page —
+  and the strings are the user's own input in one tab, so there is nothing to save. Keyed
+  on the **composed** string, because the same sentence as a query and as a document is two
+  different vectors. A model change clears it, asserted directly.
+- **`feature-extraction` is the first text task whose result is a `Tensor`**, so
+  `vision/serialize.ts` and `vision/similarity.ts` **moved** to `model/` rather than being
+  copied (the `backend.ts`/`size.ts` move out of `audio/`, again): a `Tensor` is a
+  Transformers.js fact and a unit vector has no modality. The text engine now flattens
+  every result through `model/serialize.ts` exactly as vision's does — a `Tensor` does not
+  arrive stripped of its methods, it refuses to be cloned at all.
+
+- **Translation is one pair at a time, and a pair is a model.** There is no language
+  argument in the task: a Marian checkpoint carries its own direction and `tr(text)` takes
+  nothing else. So the direction control is a *model selector* in SELECT, switching it is
+  another ~209 MB download, and `useTranslate` takes no language at all — a hook that
+  accepted `{ from, to }` and dropped them would look like it worked, because the model
+  keeps translating the way it was built. `just fe-e2e-translate` asserts the **reverse
+  pair on the same page**, which is the only thing that catches a control that changed the
+  label without changing the checkpoint.
+- **A quantized seq2seq decoder cannot open a WASM session, on any family.** Marian and
+  BART are the third and fourth to hit `qdq_actions.cc:137 … Missing required scale` after
+  Whisper and Donut, so the spec is now **`SEQ2SEQ_WASM_DTYPES`** in `model/backend.ts` —
+  `asrLoadOpts` is expressed in terms of it and every seq2seq entry references it, rather
+  than the literal being copied a fifth time. The encoder quantizes fine; only the decoder
+  pays full precision. It costs Marian 2.7x (101 MB → 271 MB) and it costs DistilBART its
+  **entire CPU path**, because there the fallback is 742.8 MB. Only a real in-browser load
+  catches it: the unit suite mocks the runtime, the mocked E2E run loads no bytes,
+  `fe-e2e-models` confirms the files exist, and the identical call loads under
+  `onnxruntime-node`.
+- **`/translation`'s `LARGE_MODEL_BYTES` inconsistency resolved itself.** The plan expected
+  en↔de (199.6 MiB fp16) to slip under the warning while en→es (213.1 MiB) crossed it. With
+  the WASM pin the CPU download is 271–289 MB for every pair and `sizeEstimate` keys `large`
+  off the **bigger** of the two, so every pair warns consistently. The inconsistency was an
+  artefact of a WASM path that does not exist — worth remembering before writing prose to
+  explain a threshold.
+- **NLLB is 1.76 GB, not the 894.6 MB the roadmap quotes** — that is its q8 figure, and a
+  seq2seq's q8 is unreachable on WASM and not what `loadOpts()` asks for on WebGPU. So
+  `/translation` states the trade-off **per pair** (one specialist ≈ an eighth of one NLLB)
+  rather than summing its catalogue, which comes to 1.6 GB and reads as an argument against
+  the design.
+- **`/summarization` survived its Phase 0 gate by exactly one configuration**, and the pin
+  is what keeps the page alive rather than a preference: `distilbart-cnn-6-6` at
+  `q8`/WebGPU is 283.9 MB and opens; fp16 is 563.6 MB, q8-on-WASM does not open, and the
+  fp32-decoder fallback is 742.8 MB. Un-pinning `dtypes.webgpu` takes the page over the
+  size bar silently, so a test asserts it. The **latency** half of Phase 0 is still open —
+  the measurement box had only SwiftShader, whose 83 s per summary says nothing about
+  hardware — so `just fe-e2e-summarize` logs the figure where there is a GPU.
+- **A page needs a floor, so `/summarization` opens with `Xenova/t5-small`** (154 MB
+  WebGPU / 202 MB WASM, both verified), which the plan did not consider. DistilBART is
+  GPU-only by declaration. T5-small is a *much* weaker summarizer and on this page that is
+  a feature: the subject is the lead-3 baseline, and a model that visibly loses to three
+  sentences of the article makes the lesson concrete.
+- **The lead-3 baseline is the OUTPUT slot's empty state.** It needs no model, so it is on
+  screen before anything downloads, already saying what the model will be measured
+  against — which keeps `output-empty` present for the four-slot contract *and* gives
+  Phase 1 its "rendered from idle". `text/lead3.ts` returns offsets and **slices**, never a
+  rebuild: joining split pieces loses whichever whitespace the split consumed, so the
+  baseline would quietly differ from the article it claims to quote. Its splitter gets
+  "Dr. Smith" wrong on purpose, and both the page and a test say so. The summary and the
+  baseline are captured from the **same** article inside the run, so editing the box
+  afterwards moves neither.
+- **The faithfulness check borrows a model rather than adding one.** Scoring a summary
+  sentence against the article *is* a one-label NLI call (`softmaxEach` is true when
+  `labels.length === 1`), so it reuses `/zero-shot-classification`'s cheapest entry
+  (27 MB on CPU) with its own opt-in and its own LOAD. **One pass per sentence**, and per
+  sentence rather than once for the whole summary because an aggregate hides the single
+  fabricated clause. It must pass `hypothesis_template: "{}"` — the third page to need
+  that — and it states its own caveat: MNLI premises are single sentences, so an article is
+  out of distribution and truncated at 512 tokens.
+
+- **`/text-generation` is the decoding strategies made interactive, not a chatbot** — and
+  it is the payoff for #30 putting `partial` in the **shared** `ModelResponse` envelope.
+  Streaming needed nothing the envelope did not have: `partial` carries the text so far
+  against the request id, Machine A stays `ready`, `running` stays an inflight count, and a
+  partial whose request already settled is dropped — all three already in
+  `useModelWorker`, and already asserted in `useModelWorker.test.ts`, which is where the
+  rule lives. `TextGenPartial` is deliberately **not** a stage union like the VLM's: a
+  text-only decoder has no encode phase, so a stage would say nothing the arriving text
+  does not. It gets its own worker (`textgen.worker.ts`) for the ASR reason — the task that
+  owns a loop owns its worker.
+- **The `qdq_actions.cc:137` bug is a property of the *export*, not of the architecture**,
+  and GPT-2 is what proved it. Its q8 `decoder_model_merged` graph fails with
+  `transformer.wte.weight_merged_0_scale` — the same error as Whisper, Donut, Marian and
+  BART — and GPT-2 is **decoder-only**, so "any encoder-decoder whose decoder is quantized"
+  was never the rule. Nor is it "tied embeddings": SmolLM2-360M has
+  `tie_word_embeddings: true` and its `model_quantized.onnx` loads and generates on WASM
+  fine (34 s, ~180 ms a token, measured). The older `Xenova/*` q8 builds fuse the embedding
+  matmul into `MatMulNBits` with a merged scale the bundled provider cannot find; newer
+  exports do not. **So: try q8, and if the session fails naming a `*_merged_0_scale`, pin
+  the graph holding the embeddings to fp32 or find a newer export.** The fp32 fallback only
+  exists for a *multi-graph* model — a decoder-only one has nothing to pin, which is why
+  GPT-2 has no CPU path at all (its only unquantized build is 500 MB).
+- **`model_file_name` does pass through `pipeline()`** — the file was found; the session is
+  what failed. That half of #47's Phase 0 is settled and worth keeping: a repo whose only
+  quantized build lives under a legacy `decoder_model_merged_*` name *is* reachable, via
+  `MODEL_SESSION_CONFIG[DecoderOnly]`'s `{ model: options.model_file_name ?? 'model' }`.
+- **SmolLM2-360M-Instruct is the default, against §3.8's own preference.** GPT-2 loops more
+  readily and stays as the demonstration, but it measures 251 MB with no CPU path while
+  SmolLM2 measures 273 MB genuinely quantized and runs on both. The roadmap's
+  "128.3 MB at q4f16" was wrong three ways: `model_q4f16.onnx` is within 19 bytes of the
+  fp16 build (`Conv1D` weights are skipped by the exporter), there is no
+  `model_quantized.onnx` so a default `q8` 404s, and the 128.3 MB file is the legacy graph
+  above.
+- **`pickBackendForF16` closes a gap that had been luck, not design.** The picker asks
+  "would this load on a GPU?" through `useBackendProbe({ requireShaderF16: true })`; the
+  worker asked it with a plain `pickBackend()`. The two could not disagree while every
+  `q4f16` entry declared `backends: ["webgpu"]` — the row was disabled, so the worker was
+  never asked on a bad machine. The first entry with an f16 GPU path **and** a working CPU
+  fallback breaks that: the row is legitimately enabled, and a plain `pickBackend()` then
+  sends the user to an adapter that loads the weights, reports `ready` and fails on the
+  first operator of every run. Use it wherever the resolved precision may be f16.
+- **Every decoding control is INPUT and spends.** Temperature, `top_p`, `top_k`,
+  greedy-vs-sampling and the repetition penalty cannot re-derive from a finished
+  generation, so changing one runs nothing and the page says the next GENERATE is real.
+  Under greedy the sampling knobs are **disabled and not sent at all** rather than sent and
+  ignored: Transformers.js warns on a sampling parameter in a greedy run, and a warning the
+  user cannot see is worse than an option that is visibly absent.
+- **`just fe-e2e-textgen` asserts greedy run twice is byte-identical.** It is the only
+  assertion that proves the decoding parameters reach the model — a page that dropped them
+  would still generate, still read correctly, and still pass a known-continuation check —
+  and it is the property the page depends on, since a repetition loop is attributable to
+  greedy decoding only if greedy decoding is reproducible. The comparison test deliberately
+  does **not** assert the two halves differ: low-temperature sampling can reproduce the
+  greedy path, and asserting otherwise would pin a property the model does not promise.
+- **`/playground` lost the Text Generation row and gained a Theory row of its own.** It is
+  a WebGPU demo surface, not a task page, so it should not claim a task row — but
+  re-pointing the row alone would have left it reachable only by URL, which is not what
+  "stays reachable on its own terms" means. It is now **GPU Playground** under **Theory**,
+  this repo's own non-Hub category, alongside the other hand-written WGSL surfaces;
+  `categoryForPath("/playground")` is `"Theory"` and a test pins both halves.
+
+- **`/text-ranking` runs all four retrieval stages client-side**, and two of them need no
+  model: BM25 (`text/bm25.ts`) and reciprocal rank fusion (`text/rrf.ts`) are pure
+  TypeScript, so `k1`, `b` and RRF's `k` re-score from a held index on the main thread and
+  BM25 ranks before anything is downloaded. Only **embed corpus** (N passes, once) and
+  **search** (one for the query plus one **per rerank candidate**) spend, and the page
+  states each count before the click. A cross-encoder scores a query and a document
+  *together*, so unlike an embedding it cannot be precomputed — which is the whole reason
+  reranking is applied to a shortlist of 20 rather than to a corpus.
+- **No new engine arm was needed for the cross-encoder.** A cross-encoder *is* a sequence
+  classifier: the task is `text-classification` and the input is a `{ text, text_pair }`
+  object, which `TextInput` already described. The plan budgeted a branch; there was
+  nothing to add. Check the shape you already have before widening a union.
+- **Two models live at once — `/pose`'s declared exception, with a new obligation.**
+  `/pose` loads its pair inside one worker, so the repo-keyed progress table spans it.
+  `/text-ranking` loads its pair in a **worker each**, so there are two tables and keying
+  does not help: showing either bar fills to 100% and restarts, the same "100% halfway
+  through" failure from the other direction. **`combineProgress`** sums the bytes against
+  the catalogue entry's *measured combined size* — a constant, so the percent is monotonic
+  by construction rather than by a stored clamp. Use it for any load spread over two
+  workers.
+- **RRF does not have the property its name suggests.** "A document both lists rank second
+  beats one first in one list and last in the other" is the intuitive reading and is false:
+  `1/(k+r)` is convex, so by Jensen the extreme pair wins (at `k=60`, 0.032796 against
+  0.032787). Tiny margin, fixed sign, and visible on a page showing four rank lists. RRF
+  rewards being loved by one retriever over being liked by both.
+- **At q8, a sentence's embedding depends on the batch it was embedded in** — and it
+  matters enough to reorder near-ties. Measured on all-MiniLM with the same weights and the
+  same text: the page's pattern (corpus as one batch, query alone) scores a decoy 0.4556
+  and the right answer 0.4459; batching query and corpus together gives 0.4394 and 0.4538.
+  **So choose an E2E sample against the page's own call pattern**, not an idealised offline
+  one — the first version of `just fe-e2e-rank` was written the second way and failed on
+  the page that shipped it. The counter-example stays in the catalogue, labelled, because a
+  page that quietly dropped it would be claiming more than it measured.
+- **`mixedbread-ai/mxbai-rerank-xsmall-v1` publishes no fp16 build**, so `loadOpts("webgpu")`
+  asks for a file that 404s at load. Pinned to q8 on both backends — a **missing file, not
+  a precision judgement**, a distinction that matters because a precision pin invites "try
+  removing it".
+- **The sample corpus is built so the stages disagree**, which is the only way a spec about
+  four stages says anything about three of them: `just fe-e2e-rank` asserts that BM25 does
+  **not** find the planted answer while the dense and reranked stages do. A corpus every
+  stage ranks identically is satisfied by a page quietly rendering one list four times,
+  which is this page's most plausible bug.
 
 **Env vars:** Prefix with `VITE_`. Access via `import.meta.env.VITE_*`.
 
@@ -1088,6 +1288,8 @@ Key commands:
 │   │   ├── webgpu/            # Raw-WebGPU runtime (device, buffers, pipeline, worker, shaders/)
 │   │   ├── audio/             # Pretrained audio models (Transformers.js; enhance/ + vad/ on bare ONNX)
 │   │   ├── vision/            # Pretrained vision models (image I/O, canvas overlays, one worker)
+│   │   ├── multimodal/        # Vision-language models (one streaming engine, three routes)
+│   │   ├── text/              # Pretrained NLP models (one worker; qa/ owns its own engine)
 │   │   ├── model/             # Shared task-page plumbing (backend probe, size, worker lifecycle)
 │   │   ├── hooks/             # Custom hooks (business logic)
 │   │   ├── lib/               # Shared utilities: cn(), date wrappers

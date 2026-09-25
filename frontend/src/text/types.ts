@@ -31,7 +31,10 @@ export type TextTask =
   | "text-classification"
   | "token-classification"
   | "zero-shot-classification"
-  | "fill-mask";
+  | "fill-mask"
+  | "feature-extraction"
+  | "translation"
+  | "summarization";
 
 /**
  * Every task in the NLP category, whether or not it rides the generic worker.

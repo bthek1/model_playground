@@ -8,3 +8,17 @@ export function createTextWorker(): Worker {
     type: "module",
   });
 }
+
+/**
+ * The **streaming** worker, for `/text-generation` alone.
+ *
+ * A second factory rather than a parameter on the one above: they load
+ * different modules, and the generic worker's bundle has no business pulling in
+ * `TextStreamer` and the generation machinery for the four pages that never
+ * stream.
+ */
+export function createTextGenWorker(): Worker {
+  return new Worker(new URL("./textgen.worker.ts", import.meta.url), {
+    type: "module",
+  });
+}

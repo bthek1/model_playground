@@ -18,13 +18,13 @@
 | Token Classification (§3.2) | [`/token-classification`](../../frontend/src/routes/token-classification.tsx) | **Shipped** — NER + redaction, and the multilingual head the roadmap thought was lost |
 | Table Question Answering (§3.11) | — | **Does not port** — no export for TAPAS or TAPEX; text-to-SQL needs ~1 GB *and* a database |
 | Question Answering (§3.3) | [`/question-answering`](../../frontend/src/routes/question-answering.tsx) | **Shipped** — extractive, the answer marked in the passage, 63–125 MB |
-| Zero-Shot Classification (§3.4) | — | Planned — [#42](https://github.com/bthek1/model_playground/issues/42) |
-| Translation (§3.5) | — | Planned — [#45](https://github.com/bthek1/model_playground/issues/45) |
-| Summarization (§3.6) | — | Planned, **gated on a measurement** — [#46](https://github.com/bthek1/model_playground/issues/46) |
-| Feature Extraction · Sentence Similarity (§3.7) | — | Planned — [#43](https://github.com/bthek1/model_playground/issues/43) |
-| Text Generation (§3.8) | — | Planned — [#47](https://github.com/bthek1/model_playground/issues/47) |
+| Zero-Shot Classification (§3.4) | [`/zero-shot-classification`](../../frontend/src/routes/zero-shot-classification.tsx) | **Shipped** — your own labels, N labels cost N passes, 26–816 MB |
+| Translation (§3.5) | [`/translation`](../../frontend/src/routes/translation.tsx) | **Shipped** — six pairs, one at a time; a pair is a model, 209–289 MB |
+| Summarization (§3.6) | [`/summarization`](../../frontend/src/routes/summarization.tsx) | **Shipped** — the gate passed by one configuration; lead-3 is the empty state, 154–463 MB |
+| Feature Extraction · Sentence Similarity (§3.7) | [`/text-features`](../../frontend/src/routes/text-features.tsx) · [`/sentence-similarity`](../../frontend/src/routes/sentence-similarity.tsx) | **Shipped** — one engine, two rows; the pooling is catalogue data, 22–284 MB |
+| Text Generation (§3.8) | [`/text-generation`](../../frontend/src/routes/text-generation.tsx) | **Shipped** — the decoding strategies, streamed; greedy twice must be identical, 251–483 MB |
 | Fill-Mask (§3.9) | [`/fill-mask`](../../frontend/src/routes/fill-mask.tsx) | **Shipped** — four base encoders, three tokenizer families, 68–300 MB |
-| Text Ranking (§3.10) | — | Planned — [#44](https://github.com/bthek1/model_playground/issues/44) |
+| Text Ranking (§3.10) | [`/text-ranking`](../../frontend/src/routes/text-ranking.tsx) | **Shipped** — all four stages client-side, two with no model, 46–264 MB |
 
 **The browser is an encoder paradise and a decoder compromise.** BERT-family encoders are
 20 MB to 400 MB and run a single forward pass, so classification, NER, extractive QA,
@@ -491,50 +491,297 @@ templates producing identical numbers is exactly what a page that lets the pipel
 its own default looks like, and nothing else can catch it. It asserts the scores move
 rather than that the ranking flips, which would pin a property the model does not promise.
 
-### 3.5 Translation — planned ([#45](https://github.com/bthek1/model_playground/issues/45))
+### 3.5 Translation — **shipped**
 
-One Marian pair at a time, ~101 MiB q8 / ~200 MiB fp16 each. **A pair is a model, so
-changing the pair is a LOAD** — a Marian checkpoint carries its own language pair and
-`tr(text)` takes nothing else. Getting that wrong would make en→de and de→en look free,
-which is the single most likely misreading of the page.
+Taxonomy task **Translation** · [`/translation`](../../frontend/src/routes/translation.tsx) ·
+[#45](https://github.com/bthek1/model_playground/issues/45). The category's first seq2seq
+page, and the one that turned a suspicion in `model/backend.ts` into a rule.
 
-### 3.6 Summarization — planned, and **gated on a measurement** ([#46](https://github.com/bthek1/model_playground/issues/46))
+| pair | fp16 (WebGPU) | WASM — enc q8 + dec fp32 |
+|---|---|---|
+| `Xenova/opus-mt-en-de` · `opus-mt-de-en` | 199.6 MiB | **258.5 MiB** |
+| `Xenova/opus-mt-en-fr` · `opus-mt-fr-en` | 202.3 MiB | **261.9 MiB** |
+| `Xenova/opus-mt-en-es` · `opus-mt-en-zh` | 213.1 MiB | **275.4 MiB** |
 
-Every BART summarizer exported for the browser is over the bar at fp16
-(`distilbart-cnn-6-6`: 537.5 MiB). The page exists only if its WebGPU entries pin
-`dtype: "q8"` — 283.9 MB, comfortably inside — **and that pin is a measurement rather than
-a precaution.** q8-on-WebGPU is exactly the combination `/super-resolution` measured as
-*worse than not running the model at all*.
+**A pair is a model, so changing the pair is a LOAD.** A Marian checkpoint carries its own
+language pair and `tr(text)` takes nothing else — there is no language argument anywhere in
+the task. So the direction control is a *model selector*, it lives in SELECT beside the
+download it costs, and the page says so before the click. A hook that accepted `{ from, to }`
+and dropped them would look like it worked, because the model would keep translating in the
+direction it was built for; `useTranslate` therefore takes no language at all. The route
+test asserts that a SELECT change calls neither `load` nor `run`, and `just fe-e2e-translate`
+asserts the reverse pair really reverses on a real load — a control that changed the label
+without changing the checkpoint is invisible to every other test in the repo.
 
-The lead-3 baseline (`text.split(/(?<=[.!?])\s/).slice(0, 3)`) travels beside every
-summary, per `/graph-classification`'s rule that a metric owes its null model on screen.
+**The plan said no `dtypes` pin was needed here. That was wrong, and it is the page's most
+useful finding.** A Marian decoder cannot be quantized on the WASM provider bundled with
+Transformers.js 4.2.0: the session does not open at all, with
 
-### 3.7 Feature Extraction · Sentence Similarity — planned ([#43](https://github.com/bthek1/model_playground/issues/43))
+```
+Can't create a session. ERROR_CODE: 1, ERROR_MESSAGE: qdq_actions.cc:137
+TransposeDQWeightsForMatMulNBits Missing required scale:
+model.shared.weight_merged_0_scale for node: model.shared.weight_transposed_DequantizeLinear
+```
 
-| entry | dim | q8 | fp16 |
+— the same error from the same line as Whisper's and Donut's. Marian is the **third** family
+to hit it (BART, in §3.6, is the fourth), which is the point at which `model/backend.ts`'s
+own note said to generalise rather than copy the literal again. It is now
+`SEQ2SEQ_WASM_DTYPES` there, `asrLoadOpts` is expressed in terms of it, and every seq2seq
+catalogue entry references it. Measured in Chromium on 2026-09-25; `encoder_model` quantizes
+fine, so only the decoder pays full precision (101 MiB → 258.5 MiB per pair), and the
+alternative is no CPU path at all. The fallback configuration was verified end to end: 26 s
+to load, 126–163 ms per translation, correct German out.
+
+**That also settles the question the plan left open for Phase 2.** The plan worried that
+en↔de (199.6 MiB at fp16) would slip under `LARGE_MODEL_BYTES` while en→es (213.1 MiB)
+crossed it, leaving one warning on a page of otherwise identical models — an inconsistency
+to explain or document. It does not arise: `sizeEstimate` keys `large` off the **bigger** of
+the two downloads, and with the pin the WASM side is 271–289 MB for every pair, so every
+pair warns, consistently, about a number the user will actually pay. The inconsistency was
+an artefact of a WASM path that does not exist. A test pins it so a future un-pinning cannot
+reintroduce it quietly.
+
+**NLLB is further over the bar than the roadmap thought — §1.1's finding, one more time.**
+`Xenova/nllb-200-distilled-600M` was quoted at 894.6 MB, which is its **q8** size; it is a
+seq2seq, so `loadOpts()` asks WebGPU for fp16 (**1 760 444 340 bytes, 1.68 GiB**) and its
+CPU path cannot use a quantized decoder either. There is no configuration in which a browser
+pays 895 MB for it. So the page states the comparison **per pair** — one specialist is about
+an eighth of one NLLB — rather than summing the catalogue, which comes to 1.6 GB and reads
+as an argument against the design rather than for it. `mbart-large-50-many-to-many-mmt` is
+1.62 GiB at fp16 and stays cut for the same reason.
+
+### 3.6 Summarization — **shipped, and it nearly wasn't**
+
+Taxonomy task **Summarization** ·
+[`/summarization`](../../frontend/src/routes/summarization.tsx) ·
+[#46](https://github.com/bthek1/model_playground/issues/46). The plan opened with a
+measurement that could have cancelled the page. Here is how it came out.
+
+| configuration | download | outcome |
+|---|---|---|
+| `distilbart-cnn-6-6` q8 / WebGPU | **283.9 MB** | **opens, correct summary** ✓ |
+| `distilbart-cnn-6-6` fp16 / WebGPU | 563.6 MB | over §0's bar |
+| `distilbart-cnn-6-6` q8 / WASM | 283.9 MB | **session will not open** |
+| `distilbart-cnn-6-6` enc q8 + dec fp32 / WASM | 742.8 MB | over §0's bar |
+| `t5-small` fp16 / WebGPU | 154.4 MB | inside the bar |
+| `t5-small` enc q8 + dec fp32 / WASM | **202.5 MB** | **opens, ~220 ms a summary** ✓ |
+
+Measured in Chromium on 2026-09-25.
+
+**The gate passed, and it passed by exactly one configuration.** q8-on-WebGPU is the only
+way DistilBART fits, so `dtypes: { webgpu: "q8" }` is the pin that keeps the page alive
+rather than a precision preference — and un-pinning it takes the page over the bar
+silently, which is why a test asserts it. The **latency** half of Phase 0 is *not* answered:
+the measurement box had no GPU with `shader-f16`, only SwiftShader, whose 83 s per summary
+says nothing about real hardware. `just fe-e2e-summarize` logs the figure where there is a
+GPU, so the number has a home rather than being guessed.
+
+**The WASM row is `SEQ2SEQ_WASM_DTYPES` again, and BART is the fourth family.** After
+Whisper, Donut and Marian (§3.5), the same `qdq_actions.cc:137 … Missing required scale`
+from the same line. Unlike Marian, the fp32-decoder fallback does **not** fit — 742.8 MB —
+so DistilBART has no CPU path at all and declares `backends: ["webgpu"]`, which
+`useBackendProbe` turns into a disabled row with the reason on it rather than a download
+that fails at the end of itself.
+
+**That would have left the page with no floor, so the catalogue opens with a model the plan
+did not consider.** `Xenova/t5-small` is 154.4 MB on WebGPU and 202.5 MB on WASM with the
+seq2seq pin — both inside the bar, both verified — and it is the default. It is a much
+weaker summarizer than DistilBART, and on *this* page that is not a drawback: the page's
+subject is the lead-3 baseline, and a model that visibly loses to three sentences of the
+article makes the lesson concrete rather than hypothetical. The plan's
+`distilbart-xsum-12-1` and `distilbart-cnn-12-6` are left out — both over the bar at fp16,
+and neither adds anything the other two do not cover between them.
+
+**The lead-3 baseline is the OUTPUT slot's *empty state*, which is the page's best idea.**
+It needs no model, so before anything is downloaded OUTPUT already shows the article's
+first three sentences and says that this is what the model will be measured against. That
+satisfies the four-slot contract (`output-empty` is present, as every route test requires)
+while making the baseline available from `idle` as Phase 1 asked. After a run the two sit
+side by side, both derived from the **same captured article** — editing the box afterwards
+moves neither, so the page can never show a summary of one text beside three sentences of
+another. `text/lead3.ts` returns character offsets and **slices**, never a rebuild: joining
+split pieces back together loses whichever whitespace the split consumed, so a baseline
+assembled that way quietly differs from the article it claims to quote. Its splitter gets
+"Dr. Smith" wrong on purpose, and the page and a test both say so.
+
+**The faithfulness check is a second model that costs the category nothing new.** Scoring a
+summary sentence against the article *is* a one-label NLI call — the zero-shot pipeline's
+`softmaxEach` is true when `labels.length === 1`, so a single hypothesis is scored
+entailment-against-contradiction rather than softmaxed against siblings — so it borrows
+§3.4's cheapest entry (`mobilebert-uncased-mnli`, 27 MB on CPU) instead of adding a
+checkpoint. It is **one pass per sentence**, and per sentence rather than once for the whole
+summary because an aggregate hides the one fabricated clause, which is the thing being
+looked for. It has its own opt-in and its own LOAD in slot 2, the `/text-classification`
+head-to-head's shape, and it passes `hypothesis_template: "{}"` — without that the pipeline
+wraps each sentence in "This example is {}." and scores something nobody wrote, the
+`hypothesis_template` trap for the third page running. The honest caveat travels with the
+result: MNLI premises are single sentences, so a whole article is out of distribution and
+truncated at 512 tokens.
+
+**`max_new_tokens` and `min_length` re-run.** They change the generation, not a view of it,
+so editing them spends nothing and the page says the next GENERATE is a real second
+inference — the `/video-text-to-text` reverse-toggle shape.
+
+### 3.7 Feature Extraction · Sentence Similarity — **shipped**
+
+Taxonomy tasks **Feature Extraction** → [`/text-features`](../../frontend/src/routes/text-features.tsx)
+(named for `/image-features`, not for the slug) and **Sentence Similarity** →
+[`/sentence-similarity`](../../frontend/src/routes/sentence-similarity.tsx) ·
+[#43](https://github.com/bthek1/model_playground/issues/43).
+
+Two taxonomy rows, one engine, one catalogue, one hook — and two routes, because they are
+two questions and two Hub tags (the same argument that keeps `/visual-question-answering`
+out of `/image-text-to-text`). The cheapest floor in the app: the default download is
+**22 MiB**.
+
+| entry | dim | pooling | q8 (WASM) | fp16 (WebGPU) |
+|---|---|---|---|---|
+| `Xenova/all-MiniLM-L6-v2` | 384 | mean | **21.9 MiB** | 43.2 MiB |
+| `Xenova/bge-base-en-v1.5` | 768 | **cls** | 105.0 MiB | 208.0 MiB |
+| `Xenova/all-mpnet-base-v2` | 768 | mean | 105.0 MiB | 208.0 MiB |
+| `nomic-ai/nomic-embed-text-v1.5` | 768 | mean | 130.9 MiB | 261.2 MiB |
+| `Alibaba-NLP/gte-modernbert-base` | 768 | **cls** | 143.3 MiB | 284.5 MiB |
+
+Re-measured off the Hub and re-checked by `just fe-e2e-models`.
+`onnx-community/Qwen3-Embedding-0.6B-ONNX` measures 613.5 MB and stays cut — a 22 MB model
+does this page's job, and §0's bar is about the floor.
+
+**The pooling is a property of the checkpoint, and the plan was wrong to pin it.** The plan
+said to pin `{ pooling: "mean", normalize: true }` in the engine, and the second half is
+right: normalising is not a preference, every consumer here compares by cosine, so it is
+pinned and cannot be turned off. The first half is not. A sentence embedding *is* a pooling
+of the token rows, and which pooling is part of how the model was trained — mean for
+all-MiniLM, all-mpnet and Nomic; **CLS** for BGE and gte-modernbert, read from each
+upstream repo's own `1_Pooling/config.json`. Mean-pooling a CLS-trained checkpoint returns
+a vector of the right width that ranks plausibly and is wrong, with nothing failing
+anywhere. So `pooling` is catalogue data (`EmbedModel.pooling`), it is on screen in SELECT
+before a byte downloads, and it travels with `upstream` because **the `Xenova/*` ONNX
+mirrors do not publish that file** — there is no way to discover it at load time.
+`just fe-e2e-models` reads it back from the upstream repo and fails on a mismatch; the
+catalogue ships both poolings one click apart so the hazard is reachable rather than
+theoretical.
+
+**The plan's silent failure is real, and the guard is a spread rather than a threshold.**
+Without pooling and normalisation the similarities collapse into a narrow band near 0.9 and
+every pair looks alike — a page that appears to work with a number that means nothing. "The
+paraphrase scores above 0.5" passes comfortably on exactly those collapsed vectors, so
+`just fe-e2e-embed` asserts the **gap** between a paraphrase and an unrelated pair
+(measured on all-MiniLM: ~0.62 against ~0.02). Omitting `pooling` now also fails *loudly*
+one layer down — `toVector` throws on the unpooled `[1, T, D]` hidden state rather than
+taking row 0, which is a real vector that would rank plausibly.
+
+**Matryoshka truncation is a measurement here, not a demonstration, because four of the
+five entries are not Matryoshka-trained.** MRL is a claim about checkpoints whose *prefix*
+dimensions were explicitly optimised to stand alone; all-MiniLM, all-mpnet, BGE and
+gte-modernbert never were. Rather than assert the cut is free, the pages report what it
+cost: `truncate()` returns `kept`, the fraction of the vector's length the prefix held, and
+that is exactly the factor a *missing* renormalisation would scale every similarity by.
+`nomic-embed-text-v1.5` is in the catalogue so the genuine MRL case is one click away — and
+it is the entry that needs a **task prefix**, which is why `EmbedModel.prefixes` is not
+dead code. Prefixes are named by use (`symmetric` / `query` / `document`) rather than by
+string, so a page cannot reach for the wrong one; the composed string is on screen before
+the click, the `/zero-shot-classification` hypothesis-template rule one modality over.
+
+**Two modules moved rather than being copied.** `vision/serialize.ts` →
+[`model/serialize.ts`](../../frontend/src/model/serialize.ts) and `vision/similarity.ts` →
+[`model/similarity.ts`](../../frontend/src/model/similarity.ts): a `Tensor` is a
+Transformers.js fact and a unit vector has no modality, and this category needed all of
+both. Same move `backend.ts` and `size.ts` made out of `audio/`. That matters here because
+`feature-extraction` is the **first text task whose result is a `Tensor`** — which does not
+merely arrive stripped of its methods, it refuses to be cloned at all
+(`#<_Tensor> could not be cloned`), so the text engine now flattens every result exactly as
+vision's does.
+
+**Embed once, keyed by the exact string — not by a hash of it.** A hash is the obvious
+reach and is strictly worse: a collision serves *another sentence's* embedding with nothing
+failing, which on a similarity page is a confident wrong number. The strings are the user's
+own input, in a Map, in one tab. The cache is keyed on the **composed** string (prefix
+included), because the same sentence as a query and as a document is two different vectors.
+A model change clears it, asserted directly — a 384-d MiniLM vector served for a 768-d BGE
+query is a wrong answer with no error attached.
+
+### 3.8 Text Generation — **shipped**
+
+Taxonomy task **Text Generation** ·
+[`/text-generation`](../../frontend/src/routes/text-generation.tsx) ·
+[#47](https://github.com/bthek1/model_playground/issues/47). The category's only streaming
+page, and the payoff for a decision taken in
+[#30](https://github.com/bthek1/model_playground/issues/30).
+
+| entry | WebGPU | WASM | notes |
 |---|---|---|---|
-| `Xenova/all-MiniLM-L6-v2` | 384 | **21.9 MiB** | 43.2 MiB |
-| `Xenova/all-mpnet-base-v2` | 768 | 105.0 MiB | 208.0 MiB |
-| `Xenova/bge-base-en-v1.5` | 768 | 105.0 MiB | 208.0 MiB |
-| `Alibaba-NLP/gte-modernbert-base` | 768 | 143.3 MiB | 284.5 MiB |
+| `HuggingFaceTB/SmolLM2-360M-Instruct` | **272.7 MB** q4f16 | **364.6 MB** q8 | the default, and the only CPU path |
+| `Xenova/gpt2` | 250.8 MB fp16 | — | the loop demonstration; GPU only |
+| `onnx-community/Qwen2.5-0.5B-Instruct` | 483.0 MB q4f16 | — | the heavy end |
 
-The cheapest floor in the category. **`{ pooling: "mean", normalize: true }` is not
-optional**, and omitting it is the page's one silent failure: raw BERT is not an embedding
-model, and without the two arguments every similarity collapses into a narrow band near
-0.9 — a page that appears to work, with a number that means nothing. The E2E assertion is
-a **spread**, not a value.
+**Streaming needed nothing the shared envelope did not already have**, which is the claim
+#30 made when it put `partial` in `ModelResponse` rather than in a private VLM protocol
+("NLP text-generation will need exactly the same thing"). It does: `partial` carries the
+text so far against the request id, Machine A stays `ready`, `running` stays an inflight
+count, and a partial whose request has already settled is dropped — all three already in
+`useModelWorker`, and already asserted in `useModelWorker.test.ts`, which is where the rule
+lives. The only addition was a `TextGenPartial` shape, and it is deliberately **not** a
+stage union like the VLM's: a text-only decoder has no encode phase to announce, so a stage
+would tell the user nothing the arriving text does not.
 
-### 3.8 Text Generation — planned ([#47](https://github.com/bthek1/model_playground/issues/47))
+**Phase 0 asked whether GPT-2's legacy graph loads. It does not, and finding out corrected
+this repo's own account of a bug it has hit five times.** `model_file_name` *does* pass
+through `pipeline()` and `decoder_model_merged_quantized.onnx` *is* found — but the session
+fails to open with `qdq_actions.cc:137 … Missing required scale:
+transformer.wte.weight_merged_0_scale`. That is the Whisper/Donut/Marian/BART error, and
+GPT-2 is **decoder-only**, so the bug was never a property of encoder-decoders. Nor is it
+"models with tied embeddings": `SmolLM2-360M-Instruct` has `tie_word_embeddings: true` and
+its `model_quantized.onnx` loads and generates on WASM perfectly well (34 s to load,
+~180 ms a token, measured). **It is a property of the export** — the older `Xenova/*` q8
+builds fuse the embedding matmul into `MatMulNBits` with a merged scale the bundled
+provider cannot find, and newer exports do not. The per-module fp32 fallback only helps a
+*multi-graph* model, so a decoder-only one has nothing to pin: GPT-2's only unquantized
+build is 500 MB, over §0's bar, and it therefore has **no CPU path at all**. See
+`SEQ2SEQ_WASM_DTYPES`, whose note now says all of this.
 
-The category's only streaming page, and the payoff for putting `partial` in the **shared**
-`ModelResponse` envelope rather than in a private VLM protocol.
+**So SmolLM2-360M-Instruct is the default rather than GPT-2**, against §3.8's preference.
+The roadmap wanted GPT-2 because it loops so readily and the lesson is the strategy rather
+than the model quality — an argument this page accepts for the *demonstration*, which is
+why GPT-2 ships as the second entry. It is not an argument for the default, now that GPT-2
+measures 251 MB with no CPU path while SmolLM2 measures 273 MB genuinely quantized and runs
+on both. The roadmap's "128.3 MB at q4f16" was wrong three ways over: the 4-bit builds are
+not quantized (`model_q4f16.onnx` is within 19 bytes of the fp16 build — GPT-2's `Conv1D`
+weights are skipped by the exporter), there is no `model_quantized.onnx` so a default `q8`
+404s, and the 128.3 MB file belongs to the graph family above.
 
-**`Xenova/gpt2`'s "128.3 MB at q4f16" is not a file that exists.** Its `model_q4f16.onnx`
-is byte-for-byte the size of its fp16 build (GPT-2's `Conv1D` weights are skipped by the
-exporter), it publishes no `model_quantized.onnx` at all so `loadOpts("wasm")`'s q8 404s,
-and the 128.3 MB file the roadmap quoted belongs to a legacy graph family 4.2.0 only
-requests via `model_file_name`. `HuggingFaceTB/SmolLM2-360M-Instruct` at **272.7 MB**
-genuinely quantized is the default instead.
+**`pickBackendForF16` is new, and the gap it closes was luck rather than design.**
+`useBackendProbe({ requireShaderF16: true })` answers "what would this load on" for the
+*picker*; the worker answered the same question with a plain `pickBackend()`. Until this
+page the two could not disagree, because every `q4f16` entry in the app declared
+`backends: ["webgpu"]` — so the picker disabled the row and the worker was never asked on a
+machine that would have got it wrong. The first entry with an f16 GPU path **and** a working
+CPU fallback breaks that: the row is legitimately enabled, the user clicks Load, and a plain
+`pickBackend()` sends them to an adapter that cannot run the weights — #30's worst outcome,
+because the download is paid for first. The engine now asks the f16-aware question too.
+
+**The decoding controls are INPUT and they spend.** None of temperature, `top_p`, `top_k`,
+greedy-vs-sampling or the repetition penalty can re-derive from a finished generation, so
+changing one runs nothing and the page says the next GENERATE is a real inference — the
+`/video-text-to-text` reverse-toggle shape. Under greedy decoding the sampling knobs are
+**disabled and not sent at all**, rather than sent and ignored: Transformers.js warns on a
+sampling parameter set for a greedy run, and a warning the user cannot see is worse than an
+option that is visibly absent.
+
+**`just fe-e2e-textgen` asserts that greedy, run twice, is byte-identical.** That is the
+only assertion available that proves the decoding parameters reach the model at all — a page
+that dropped them would still generate, still read correctly, and still pass a
+known-continuation check. It is also the property the page depends on: a repetition loop is
+attributable to greedy decoding only if greedy decoding is reproducible. The comparison test
+deliberately does **not** assert the two halves differ, because sampling at a low
+temperature can reproduce the greedy path and that would pin a property the model does not
+promise.
+
+**`/playground` lost this taxonomy row and gained one of its own.** `REAL_ROUTES` sent
+`text-generation` to `/playground`, which is a WebGPU demo surface and not a task page.
+Re-pointing the row would have left the demo reachable only by typing the URL, which is not
+what "stays reachable on its own terms" means — so it has a **GPU Playground** row under
+**Theory**, this repo's own non-Hub category, where the hand-written WGSL surfaces already
+live. `categoryForPath("/playground")` is now `"Theory"`, and a test pins both halves.
 
 ### 3.9 Fill-Mask — **shipped**
 
@@ -599,20 +846,77 @@ pass. `just fe-e2e-models` additionally reads each repo's own `tokenizer_config.
 compares it to the declared `maskToken`, so a drifted entry is a red test rather than a
 note on a page.
 
-### 3.10 Text Ranking — planned ([#44](https://github.com/bthek1/model_playground/issues/44))
+### 3.10 Text Ranking — **shipped**
 
-The most complete page available in the category: **all four retrieval stages run
-client-side** over a corpus the user pastes in, and two of the four are arithmetic with no
-model at all (BM25, RRF). The cross-encoder is what makes it worth building — it scores a
-*pair*, so it cannot be precomputed per document, which is exactly why it reranks the top
-20 rather than the whole corpus. That cost is visible in a browser, so the architecture
-teaches itself.
+Taxonomy task **Text Ranking** ·
+[`/text-ranking`](../../frontend/src/routes/text-ranking.tsx) ·
+[#44](https://github.com/bthek1/model_playground/issues/44). The most complete page the
+category has, because **all four retrieval stages run client-side** over a corpus the user
+pastes in — and two of the four need no model at all.
 
-**This page holds two models live at once, and that is a declared exception** to the
-one-model rule, on `/pose`'s precedent: an embedder plus a reranker is 128 MiB together on
-WASM. It inherits `/pose`'s two obligations — one catalogue entry naming both models with
-the **combined** download quoted, and `model/progress.ts` keyed on **repo + file** so two
-repos publishing the same filename do not overwrite each other's progress row.
+| stage | implementation | cost |
+|---|---|---|
+| BM25 | `text/bm25.ts`, pure TypeScript | **no model** |
+| Dense | one of §3.7's embedders | N passes once, then a dot product |
+| Hybrid RRF | `text/rrf.ts`, pure TypeScript | **no model** |
+| Rerank | `Xenova/ms-marco-MiniLM-L-6-v2` | **one pass per candidate** |
+
+| pair | fp16 (WebGPU) | q8 (WASM) |
+|---|---|---|
+| MiniLM + ms-marco | 90.9 MB | **46.1 MB** |
+| BGE base + ms-marco | 263.7 MB | 133.2 MB |
+| MiniLM + mxbai | 132.5 MB | 110.2 MB |
+
+**Two models live at once, which is the declared exception `/pose` established** — and it
+carries the same two obligations. An entry names both halves and quotes the **combined**
+download, because a guardrail that quotes half the bytes is worse than none. And the
+progress bar must span both, which took a new piece: `/pose` loads its pair inside **one**
+worker, so the repo-keyed progress table covers it; this page loads its pair in a worker
+each, so there are two tables and keying does not help. Showing either one fills the bar to
+100% and restarts it — the same "100% halfway through" failure, reached from the other
+direction. `combineProgress` sums the bytes against the catalogue entry's **measured
+combined size**, which is a constant, so the percent is monotonic *by construction* rather
+than by a stored clamp.
+
+**No new engine arm was needed for the cross-encoder, which is worth knowing before writing
+one.** A cross-encoder *is* a sequence classifier: the pipeline task is
+`text-classification` and the input is a `{ text, text_pair }` object, which `TextInput`
+already described. The plan budgeted a branch for it; there was nothing to add.
+
+**`mixedbread-ai/mxbai-rerank-xsmall-v1` publishes no fp16 build**, so `loadOpts("webgpu")`
+asks for a file that 404s at load. It is pinned to q8 on both backends, and the pin is a
+**missing file, not a precision judgement** — a distinction that matters because a
+precision pin invites "try removing it".
+
+**The page's cost model is the thing it teaches, so it is on screen before every click.**
+Embedding the corpus is N forward passes **once**; every query after it is a dot product.
+Reranking is one pass **per candidate** and cannot be precomputed, because a cross-encoder
+scores a query and a document *together* — which is exactly why it reranks a shortlist of
+20 rather than a corpus. BM25 and RRF spend nothing at all: `k1`, `b` and RRF's `k`
+re-score from a held index on the main thread, and BM25 ranks before anything is downloaded
+at all.
+
+**RRF does not have the property its name suggests, and the plan asserted that it did.**
+The plan's test was "a document ranked first in one list and last in the other lands
+between" a document both lists rank second. It does not: `1/(k + r)` is **convex**, so by
+Jensen the extreme pair scores *higher* — at `k = 60`, `1/60 + 1/62 = 0.032796` against
+`1/61 + 1/61 = 0.032787`. The margin is tiny and shrinks as `k` grows, but the sign is
+fixed, and a page showing four rank lists side by side will display it. RRF rewards being
+loved by one retriever over being liked by both, which is defensible and simply not what
+the name implies. `rrf.test.ts` pins the real ordering.
+
+**And the E2E sample had to be chosen against the page's own call pattern, which is a
+finding rather than a detail.** The obvious query — "how do I stop my laptop fan running
+constantly" — reads like the perfect demonstration and is not one. Embedded the way this
+page embeds (the corpus as one batch, the query alone) all-MiniLM scores the literal
+*laptop fan* decoy at **0.4556** and the right answer at **0.4459**: the wrong one wins.
+Embedded the way a quick offline check does it — query and corpus in one batch — the same
+model, the same q8 weights and the same text give **0.4394** and **0.4538**: the right one
+wins. **At q8 a sentence's embedding depends on the batch it was embedded in**, and padding
+to a different length shifts the numbers enough to flip a near-tie. The shipped sample is
+"my machine is overheating under load", which wins by 0.13 rather than 0.01; the original
+query stays in the catalogue as a **labelled counter-example**, because a page that quietly
+dropped it would be claiming more than it measured. `just fe-e2e-rank` is what caught this.
 
 ### 3.11 Table Question Answering — **does not port**
 

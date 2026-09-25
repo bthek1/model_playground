@@ -11,7 +11,7 @@
 import { loadOpts, pickBackend, type DtypeSpec } from "@/model/backend";
 
 import type { ImagePayload } from "./image";
-import { toCloneable } from "./serialize";
+import { toCloneable } from "@/model/serialize";
 import type {
   VisionProgress,
   VisionRequest,

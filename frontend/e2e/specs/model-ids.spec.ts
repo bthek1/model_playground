@@ -42,6 +42,11 @@ test.describe("@slow model catalogue", () => {
       ZERO_SHOT_TEXT_MODELS,
       QA_MODELS,
       FILL_MASK_MODELS,
+      EMBED_MODELS,
+      TRANSLATION_MODELS,
+      SUMMARIZER_MODELS,
+      TEXTGEN_MODELS,
+      RANKING_PAIRS,
     } = await import("../../src/text/catalogue");
 
     const ids = [
@@ -69,6 +74,17 @@ test.describe("@slow model catalogue", () => {
       ...NER_MODELS,
       ...ZERO_SHOT_TEXT_MODELS,
       ...FILL_MASK_MODELS,
+      ...EMBED_MODELS,
+      ...TRANSLATION_MODELS,
+      ...SUMMARIZER_MODELS,
+      ...TEXTGEN_MODELS,
+      // A ranking entry is a *pair*, so its own composite id resolves to
+      // nothing on the Hub — the two halves are what get downloaded.
+      ...RANKING_PAIRS.flatMap((p) => [p.embedder, p.reranker]),
+      // An embedding entry also names the **upstream** repo its pooling is
+      // read from, which is a different repo from the ONNX mirror it loads.
+      // Both have to exist or the pooling check below cannot run.
+      ...EMBED_MODELS.map((m) => ({ id: m.upstream })),
       // A pose entry is a *pair*, so its own `id` is a composite that resolves
       // to nothing on the Hub — the two halves are what get downloaded.
       ...POSE_MODELS.flatMap((m) => [m.detector, m.pose]),
@@ -186,12 +202,21 @@ test.describe("@slow model catalogue", () => {
       ZERO_SHOT_TEXT_MODELS,
       QA_MODELS,
       FILL_MASK_MODELS,
+      EMBED_MODELS,
+      TRANSLATION_MODELS,
+      SUMMARIZER_MODELS,
+      TEXTGEN_MODELS,
+      RANKING_PAIRS,
     } = await import("../../src/text/catalogue");
 
     const SUFFIX: Record<string, string> = {
       fp16: "_fp16",
       q8: "_quantized",
       fp32: "",
+      // The generative entries. `q4f16` is the default precision for a decoder
+      // (`vlmLoadOpts`), not an override.
+      q4f16: "_q4f16",
+      q4: "_q4",
     };
     const DEFAULT_DTYPE: Record<string, string> = {
       webgpu: "fp16",
@@ -207,6 +232,29 @@ test.describe("@slow model catalogue", () => {
       ...NER_MODELS,
       ...ZERO_SHOT_TEXT_MODELS,
       ...FILL_MASK_MODELS,
+      ...EMBED_MODELS,
+      ...TRANSLATION_MODELS,
+      ...SUMMARIZER_MODELS,
+      // A text-generation entry's default precision is `q4f16`, not `fp16`, and
+      // one of them reads a **legacy graph name** rather than `model` — so the
+      // suffix map and the graph list both have to be told, or the check looks
+      // at a file the entry never requests and passes.
+      ...TEXTGEN_MODELS.map((m) => ({
+        ...m,
+        graphs: m.graphs ?? [m.modelFile ?? "model"],
+        dtypes: { webgpu: "q4f16" as const, ...m.dtypes },
+      })),
+      // Each half of a ranking pair separately, because the pair's own id is a
+      // composite. This is the check that catches the `mxbai` reranker
+      // publishing no fp16 build — the repo resolves fine on the API and the
+      // load 404s.
+      ...RANKING_PAIRS.flatMap((p) =>
+        [p.embedder, p.reranker].map((half) => ({
+          ...half,
+          backends: undefined,
+          graphs: half.graphs,
+        })),
+      ),
     ]) {
       const res = await request.get(
         `https://huggingface.co/api/models/${model.id}?blobs=true`,
@@ -220,11 +268,35 @@ test.describe("@slow model catalogue", () => {
       const graphs = model.graphs ?? (["model"] as const);
       for (const backend of backends) {
         const dtype = model.dtypes?.[backend] ?? DEFAULT_DTYPE[backend];
-        const suffix = SUFFIX[String(dtype)];
-        if (suffix === undefined) continue;
 
         let total = 0;
         for (const graph of graphs) {
+          // A dtype is either one precision for the whole model or **one per
+          // ONNX module**, and until the seq2seq pages arrived only the first
+          // shape existed here. The per-module form was silently *skipped*:
+          // `SUFFIX[String({…})]` is `SUFFIX["[object Object]"]`, which is
+          // `undefined`, which took the `continue` below — so every entry
+          // pinning a module-level precision went unchecked, including the
+          // download size it quotes. That is exactly the class of entry most
+          // worth checking, because it exists only because a file is missing
+          // or a session will not open.
+          const perGraph =
+            typeof dtype === "string"
+              ? dtype
+              : (dtype as Record<string, string>)[graph];
+          if (perGraph === undefined) {
+            problems.push(
+              `${model.id} (${backend}) -> dtype spec names no precision for graph "${graph}"`,
+            );
+            continue;
+          }
+          const suffix = SUFFIX[perGraph];
+          if (suffix === undefined) {
+            problems.push(
+              `${model.id} (${backend}) -> unknown dtype "${perGraph}"`,
+            );
+            continue;
+          }
           const file = `onnx/${graph}${suffix}.onnx`;
           const size = sizeOf(file);
           if (size == null) {
@@ -445,5 +517,60 @@ test.describe("@slow model catalogue", () => {
       }
     }
     expect(wrong, "VLM sizes that have drifted from the Hub").toEqual([]);
+  });
+
+  test("every embedding entry declares the pooling its training config says", async ({
+    request,
+  }) => {
+    // The `/fill-mask` mask-token check, transplanted to the field that has the
+    // same shape: a fact about the checkpoint that the page needs *before* the
+    // download and that nothing at load time can discover.
+    //
+    // A sentence embedding is a pooling of the token rows, and which pooling is
+    // part of how the model was trained — mean for all-MiniLM and all-mpnet,
+    // CLS for BGE and gte-modernbert. Pool a CLS-trained model by the mean and
+    // you get a vector of the right width that ranks plausibly and is wrong,
+    // with nothing failing anywhere. No run tells you, so the Hub does.
+    //
+    // It has to be read from the **upstream** repo: the `Xenova/*` ONNX mirrors
+    // publish no `1_Pooling/config.json` at all, which is exactly why the
+    // catalogue carries `upstream` beside `pooling` rather than one of them.
+    const { EMBED_MODELS } = await import("../../src/text/catalogue");
+    expect(EMBED_MODELS.length).toBeGreaterThan(0);
+
+    const wrong: string[] = [];
+    for (const model of EMBED_MODELS) {
+      const res = await request.get(
+        `https://huggingface.co/${model.upstream}/resolve/main/1_Pooling/config.json`,
+      );
+      if (!res.ok()) {
+        wrong.push(
+          `${model.id} -> ${model.upstream}/1_Pooling/config.json ${res.status()}`,
+        );
+        continue;
+      }
+      const config = await res.json();
+      const declared =
+        config.pooling_mode_cls_token === true
+          ? "cls"
+          : config.pooling_mode_mean_tokens === true
+            ? "mean"
+            : `unsupported (${JSON.stringify(config)})`;
+      if (declared !== model.pooling) {
+        wrong.push(
+          `${model.id} -> declares ${model.pooling}, ${model.upstream} says ${declared}`,
+        );
+      }
+      // The width is on screen before the download too, so it is checked with
+      // the same call rather than trusted.
+      if (config.word_embedding_dimension !== model.dim) {
+        wrong.push(
+          `${model.id} -> declares dim ${model.dim}, upstream says ${config.word_embedding_dimension}`,
+        );
+      }
+    }
+    expect(wrong, "embedding entries whose pooling cannot be read back").toEqual(
+      [],
+    );
   });
 });

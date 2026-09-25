@@ -5,12 +5,18 @@
 // this deliberately mirrors them: same three obligations, same disposal order,
 // same warm-up rule.
 //
-// It is the simplest of the three, and for one reason: there is nothing to
-// convert. A vision engine speaks `ImagePayload` because a `RawImage` does not
-// survive `postMessage`; an audio engine hands over a detached `Float32Array`.
-// A string crosses the wire as itself.
+// It is the simplest of the three on the way **in**, and for one reason: there
+// is nothing to convert. A vision engine speaks `ImagePayload` because a
+// `RawImage` does not survive `postMessage`; an audio engine hands over a
+// detached `Float32Array`. A string crosses the wire as itself.
+//
+// On the way **out** that stopped being true with `feature-extraction`, whose
+// result is a `Tensor` — and a `Tensor` does not merely arrive stripped of its
+// methods, it refuses to be cloned at all. So results go through
+// `model/serialize.ts` exactly as vision's do.
 
 import { loadOpts, pickBackend, type DtypeSpec } from "@/model/backend";
+import { toCloneable } from "@/model/serialize";
 
 import type {
   FillMaskResult,
@@ -73,6 +79,23 @@ function warmupArgs(task: TextTask): unknown[] {
       return [["yes", "no"]];
     case "fill-mask":
       return [{ top_k: 1 }];
+    // Any pooling compiles the same graph — the pooling itself is a reduction
+    // over the model's output, not part of it — so the warm-up does not need
+    // the selected entry's own choice. `normalize` is pinned below anyway.
+    case "feature-extraction":
+      return [{ pooling: "mean", normalize: true }];
+    // The category's first **generative** warm-up, so it is capped: without a
+    // cap a seq2seq decodes until it emits EOS, which on a throwaway input is
+    // a few hundred tokens of nothing on the critical path to `ready`. Four is
+    // enough to compile the decoder's kernels, which is the whole job.
+    case "translation":
+      return [{ max_new_tokens: 4 }];
+    // `min_length` is explicit and zero. Every summarization config carries one
+    // (56 for bart-large-cnn), and it suppresses EOS until it is reached — so a
+    // warm-up that only caps `max_new_tokens` relies on the cap winning the
+    // race between two stopping criteria in a dependency. Say what is wanted.
+    case "summarization":
+      return [{ max_new_tokens: 4, min_length: 0 }];
   }
 }
 
@@ -135,6 +158,15 @@ function pinnedArgs(task: TextTask): Record<string, unknown> | null {
   switch (task) {
     case "token-classification":
       return { aggregation_strategy: "simple" };
+    // Normalising is not a preference: every consumer of an embedding in this
+    // app compares them by cosine, and `truncate()` renormalises for the same
+    // reason. `pooling` is deliberately **not** pinned here — it is a property
+    // of the checkpoint (`EmbedModel.pooling`), so the hook sends it. Omitting
+    // it leaves the pipeline's own default of `"none"`, which returns the
+    // unpooled `[1, T, D]` hidden state — and `text/embed.ts`'s `toVector`
+    // throws on that shape rather than quietly taking row 0.
+    case "feature-extraction":
+      return { normalize: true };
     default:
       return null;
   }
@@ -234,7 +266,13 @@ export function createTextHandler(
         task === "fill-mask"
           ? ({ mask, fills: output } as FillMaskResult)
           : output;
-      post({ type: "result", id: msg.id, result });
+      // Unconditionally, as `vision/engine.ts` does. Most text tasks return
+      // plain objects that need nothing done to them, but `feature-extraction`
+      // returns a **`Tensor`** — whose `data`/`dims` are prototype getters, so
+      // `postMessage` refuses it outright with `#<_Tensor> could not be
+      // cloned`. Doing it per-task would leave the next tensor-returning arm to
+      // rediscover that, and only a real model load surfaces it.
+      post({ type: "result", id: msg.id, result: toCloneable(result) });
     } catch (error) {
       post({ type: "error", id: msg.id, error: errMessage(error) });
     }

@@ -517,3 +517,430 @@ test.describe("@slow fill-mask", () => {
     await expect(page.getByTestId("mask-drift")).toHaveCount(0);
   });
 });
+
+// --- Embeddings (§3.7) -------------------------------------------------------
+
+test.describe("@slow embeddings", () => {
+  test.slow();
+
+  /**
+   * `just fe-e2e-embed`.
+   *
+   * **The assertion is a spread, not a threshold**, and that is the whole point
+   * of the test. Omitting `pooling`/`normalize` — or pooling a CLS-trained
+   * checkpoint by the mean — does not fail: it produces vectors whose cosines
+   * all sit in a narrow band near 0.9, so every pair looks alike and the page
+   * looks like it works. A single-threshold assertion ("the paraphrase scores
+   * above 0.5") passes comfortably on exactly those collapsed embeddings. A
+   * *gap* between the paraphrase and the unrelated pair does not.
+   */
+  test("a paraphrase scores far above an unrelated pair", async ({ page }) => {
+    test.setTimeout(6 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/sentence-similarity");
+    await model.load();
+    await model.waitForReady();
+
+    await model.run(/^Score all \d+ sample pairs$/);
+    await expect(page.getByTestId("similarity")).toBeVisible({
+      timeout: 120_000,
+    });
+
+    const scoreOf = async (id: string) =>
+      Number((await page.getByTestId(`score-${id}`).innerText()).trim());
+
+    const paraphrase = await scoreOf("paraphrase");
+    const unrelated = await scoreOf("unrelated");
+
+    // The gap. Measured on all-MiniLM-L6-v2: ~0.62 against ~0.02.
+    expect(paraphrase).toBeGreaterThan(0.45);
+    expect(unrelated).toBeLessThan(0.30);
+    expect(
+      paraphrase - unrelated,
+      "the spread between a paraphrase and an unrelated pair — a narrow band " +
+        "here means the embeddings collapsed, which a threshold would miss",
+    ).toBeGreaterThan(0.25);
+
+    // The negation pair is the page's honest half: these models score a
+    // sentence and its negation as very similar. Asserted so the caveat on
+    // screen stays true of the model actually shipped.
+    const negation = await scoreOf("negation");
+    expect(negation).toBeGreaterThan(0.75);
+
+    // Truncation re-derives: no second download, no second inference, and the
+    // ranking survives the cut — which is the Matryoshka claim, checked rather
+    // than asserted in prose.
+    await page.getByTestId("truncate-96").click();
+    await expect(page.getByTestId("strip-a-dim")).toContainText("96-d");
+    // Still unit length on both sides after the cut. A missing renormalisation
+    // would leave these below 1 and scale every cosine above by an arbitrary
+    // factor.
+    await expect(page.getByTestId("strip-a-norm")).toContainText("1.000");
+    await expect(page.getByTestId("strip-b-norm")).toContainText("1.000");
+
+    const cutParaphrase = await scoreOf("paraphrase");
+    const cutUnrelated = await scoreOf("unrelated");
+    expect(
+      cutParaphrase,
+      "the ranking must survive a truncation, or the control is misleading",
+    ).toBeGreaterThan(cutUnrelated);
+    // The model stayed ready and no inference ran — the page is still on the
+    // one load it started with.
+    await expect(model.readyStatus).toBeVisible();
+  });
+
+  test("a vector is drawn, unit length, and its truncation is measured", async ({
+    page,
+  }) => {
+    test.setTimeout(6 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/text-features");
+    // The pooling and width are catalogue facts, on screen before a byte moves.
+    await expect(page.getByTestId("embed-pooling")).toContainText("mean");
+    await expect(page.getByTestId("embed-dim")).toContainText("384");
+
+    await model.load();
+    await model.waitForReady();
+    await model.run(/^Embed$/);
+
+    await expect(page.getByTestId("embedding")).toBeVisible({
+      timeout: 120_000,
+    });
+    // `normalize: true` reaching the model, shown rather than claimed.
+    await expect(page.getByTestId("vector-strip-norm")).toContainText("1.000");
+    await expect(page.getByTestId("vector-strip-dim")).toContainText("384-d");
+
+    // And the cut's real cost, which is a measurement on a non-MRL checkpoint
+    // rather than the "it's free" the Matryoshka framing invites.
+    await page.getByTestId("truncate-96").click();
+    await expect(page.getByTestId("vector-strip-dim")).toContainText("96-d");
+    await expect(page.getByTestId("vector-strip-norm")).toContainText("1.000");
+    await expect(page.getByTestId("truncate-kept")).toContainText(
+      /first 96 of 384 dimensions hold/i,
+    );
+  });
+});
+
+// --- Translation (§3.5) ------------------------------------------------------
+
+test.describe("@slow translation", () => {
+  test.slow();
+
+  /**
+   * `just fe-e2e-translate`.
+   *
+   * **Content words, not an exact string.** A beam search is not pinned to one
+   * output, and asserting the whole sentence would fail on a decoder update
+   * that is not a regression. Asserting only that "some text appeared" would
+   * pass on a model translating in the wrong direction, which is this page's
+   * own hazard.
+   *
+   * The second half is the one that earns the minutes: **the reverse pair, on
+   * the same page.** A direction control that changed the label without changing
+   * the checkpoint keeps translating en→de, so a German output for a German
+   * input is what catches it — and nothing in the unit suite can, because it
+   * mocks the worker away.
+   */
+  test("translates one pair, and the reverse pair really reverses", async ({
+    page,
+  }) => {
+    test.setTimeout(20 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/translation");
+
+    // The page's own claim, before a byte moves: a direction is a download.
+    await expect(page.getByTestId("pair-is-a-download")).toContainText(
+      /separate checkpoint/i,
+    );
+
+    await model.load();
+    await model.waitForReady();
+
+    await page.locator("#tr-text").fill("The meeting is on Thursday.");
+    await model.run(/^Translate$/);
+
+    const out = page.getByTestId("translation-text");
+    await expect(out).toBeVisible({ timeout: 180_000 });
+    // German content words. "Donnerstag" is the one that cannot appear by
+    // accident in an English passthrough.
+    await expect(out).toContainText(/Donnerstag/i);
+    await expect(page.getByTestId("ran-source")).toContainText("Thursday");
+
+    // Now the reverse direction. It is a second checkpoint and a second
+    // download, which is the page's whole point — so it needs its own LOAD.
+    await page
+      .getByRole("button", { name: /^German → English/ })
+      .first()
+      .click();
+    // A SELECT change spends nothing: the LOAD slot must be back to idle
+    // rather than the page having started a download on its own.
+    await expect(model.loadButton).toBeVisible();
+
+    await model.load();
+    await model.waitForReady();
+
+    await page.locator("#tr-text").fill("Die Besprechung ist am Donnerstag.");
+    await model.run(/^Translate$/);
+
+    const back = page.getByTestId("translation-text");
+    await expect(back).toContainText(/Thursday/i, { timeout: 180_000 });
+    // And the label says which direction produced it, so a reader can tell the
+    // two results apart.
+    await expect(page.getByTestId("output-panel")).toContainText(
+      "German → English",
+    );
+  });
+});
+
+// --- Summarization (§3.6) ----------------------------------------------------
+
+test.describe("@slow summarization", () => {
+  test.slow();
+
+  /**
+   * `just fe-e2e-summarize`.
+   *
+   * Two assertions and one **measurement**.
+   *
+   * The assertions: the summary mentions the article's key entity, and it is
+   * shorter than the article. "Some text appeared" would pass while the model
+   * echoed its input back — which is a real failure mode for a seq2seq whose
+   * `min_length` fights its `max_new_tokens`.
+   *
+   * The measurement is the plan's Phase 0, re-taken where there is a real GPU:
+   * how long one summary takes. The gate was settled on a box with **no** GPU —
+   * only SwiftShader, whose 83 s per summary says nothing about hardware — so
+   * this is where that number comes from, and where a runtime upgrade that
+   * changes it becomes visible rather than silent. It is logged, not asserted:
+   * a latency threshold in CI is a flake, and the point is to have the figure.
+   */
+  test("beats nothing yet, but summarizes a known article and says how long it took", async ({
+    page,
+  }) => {
+    test.setTimeout(12 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/summarization");
+
+    // The baseline needs no model, so it is on screen before anything is
+    // downloaded — the page's best idea, and a correctness requirement rather
+    // than decoration.
+    await expect(page.getByTestId("baseline-preview")).toContainText(
+      /European Space Agency/,
+    );
+    await expect(model.loadButton).toBeVisible();
+
+    await model.load();
+    await model.waitForReady();
+
+    const started = Date.now();
+    await model.run(/^Summarize$/);
+    await expect(page.getByTestId("summary-text")).toBeVisible({
+      timeout: 300_000,
+    });
+    const elapsed = Date.now() - started;
+
+    const summary = (await page.getByTestId("summary-text").innerText()).trim();
+    const article = await page.locator("#sm-text").inputValue();
+
+    console.log(
+      `[phase 0] one summary on ${await model.backend()}: ${elapsed} ms ` +
+        `(${summary.split(/\s+/).length} words)`,
+    );
+
+    // The article's subject survived into the summary. T5-small is weak — that
+    // is this page's point — but a summarizer that loses the subject entirely
+    // is broken rather than weak.
+    expect(summary.toLowerCase()).toMatch(/rocket|launch|satellite|agency/);
+    // And it actually shortened something.
+    expect(summary.length).toBeLessThan(article.length);
+
+    // The baseline is rendered beside it, from the same captured article — a
+    // metric owes its null model on screen wherever one exists.
+    await expect(page.getByTestId("baseline-text")).toContainText(
+      /European Space Agency/,
+    );
+  });
+});
+
+// --- Text generation (§3.8) --------------------------------------------------
+
+test.describe("@slow text generation", () => {
+  test.slow();
+
+  /**
+   * `just fe-e2e-textgen`.
+   *
+   * Two assertions, and the second is the one that earns the minutes.
+   *
+   * The first is a known continuation on an unambiguous prompt. "Some text
+   * appeared" would pass while the chat template was wrong, or the tokenizer
+   * was, or the prompt was being handed back to the user — all of which produce
+   * fluent output.
+   *
+   * The second is that **greedy, run twice, produces identical text**. That is
+   * the only assertion here that proves the decoding parameters reach the model
+   * at all: a page that dropped them entirely would still generate, still look
+   * right, and still pass the first assertion. It is also the property the whole
+   * page depends on — a repetition loop is only attributable to greedy decoding
+   * if greedy decoding is reproducible.
+   *
+   * The default entry has a WASM path, so this does not need a GPU. On a machine
+   * with an adapter but no `shader-f16` the load resolves to WASM by itself:
+   * `pickBackendForF16` asks the same question in the worker that the picker
+   * asks in the page, which is why the two cannot disagree here.
+   */
+  test("continues a known prompt, and greedy twice is identical", async ({
+    page,
+  }) => {
+    test.setTimeout(15 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/text-generation");
+    await model.load();
+    await model.waitForReady();
+
+    // Greedy is the default preset, and the prompt has one right continuation.
+    await page.locator("#tg-prompt").fill("The capital of France is");
+    await model.run(/^Generate$/);
+
+    const out = page.getByTestId("generated-text");
+    await expect(out).toBeVisible({ timeout: 300_000 });
+    const first = (await out.innerText()).trim();
+    expect(first.length, "the model produced nothing").toBeGreaterThan(0);
+    expect(first).toMatch(/paris/i);
+
+    // The answer is labelled with the strategy that produced it.
+    await expect(page.getByTestId("ran-settings")).toContainText("greedy");
+
+    // Same prompt, same settings, again. Greedy decoding always takes the
+    // highest-probability token, so this must come back byte-identical — and if
+    // the decoding parameters never reached the model, it would not.
+    await model.run(/^Generate$/);
+    await expect(out).toBeVisible({ timeout: 300_000 });
+    await expect
+      .poll(async () => (await out.innerText()).trim(), { timeout: 300_000 })
+      .toBe(first);
+
+    // And the model stayed loaded across both runs: two inferences, one load.
+    await expect(model.readyStatus).toBeVisible();
+  });
+
+  test("the comparison really runs twice, and labels each half", async ({
+    page,
+  }) => {
+    test.setTimeout(15 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/text-generation");
+    await model.load();
+    await model.waitForReady();
+
+    await page.locator("#tg-prompt").fill("The capital of France is");
+    // Sampling on one side, greedy on the other — the comparison the page is
+    // built around.
+    await page.getByTestId("mode-sample").click();
+    await page.getByTestId("compare-run").click();
+
+    await expect(page.getByTestId("comparison-text")).toBeVisible({
+      timeout: 600_000,
+    });
+    // Two generations of one prompt, each labelled with its own strategy.
+    await expect(page.getByTestId("ran-settings")).toContainText("T=");
+    await expect(page.getByTestId("comparison")).toContainText("greedy");
+    // Deliberately **not** asserting the two texts differ: sampling at a low
+    // temperature can reproduce the greedy path, so that would pin a property
+    // the model does not promise — the mistake the video-text-to-text spec was
+    // written to avoid.
+  });
+});
+
+// --- Text ranking (§3.10) ----------------------------------------------------
+
+test.describe("@slow text ranking", () => {
+  test.slow();
+
+  /**
+   * `just fe-e2e-rank`.
+   *
+   * **The assertion is that the stages disagree, and in a particular
+   * direction.** A spec where all four rank the same document first proves
+   * nothing about three of them — it is satisfied by a page that quietly renders
+   * the BM25 list four times, which is this page's most plausible bug.
+   *
+   * So the corpus is built around a query whose best answer shares almost
+   * nothing with it: "my machine is overheating under load", answered by a line
+   * about sustained CPU load and the cooling system. BM25 ranks two decoys above
+   * it, on "my" and "machine"; the dense retriever puts it first.
+   *
+   * **The sample had to be chosen against this exact call pattern.** The first
+   * version of this spec used the obvious query — "how do I stop my laptop fan
+   * running constantly" — and failed, because at q8 a sentence's embedding
+   * depends on the *batch it was embedded in*: the page embeds the corpus as one
+   * batch and the query alone, and under that pattern the literal "laptop fan"
+   * decoy beats the right answer by 0.01. Batched together, as a quick offline
+   * check would do it, the right answer wins. Same model, same weights, same
+   * text. The catalogue keeps that query as a labelled counter-example.
+   */
+  test("the dense and reranked stages find what BM25 cannot", async ({
+    page,
+  }) => {
+    test.setTimeout(10 * 60 * 1000);
+    const model = new ModelPageObject(page);
+
+    await page.goto("/text-ranking");
+    await model.load();
+    await model.waitForReady();
+
+    await page.getByTestId("embed-corpus").click();
+    // Wait for the embedding pass to *finish* — the button reads
+    // "Embedding n/N…" while it runs and goes back to "(N passes)" after. A
+    // search started mid-embedding would put two requests into one ONNX
+    // session, which this repo does not rely on anywhere.
+    await expect(page.getByTestId("embed-corpus")).toContainText(/Embedding/, {
+      timeout: 60_000,
+    });
+    await expect(page.getByTestId("embed-corpus")).toContainText(/passes/, {
+      timeout: 300_000,
+    });
+
+    await page.getByTestId("search").click();
+    await expect(page.getByTestId("rankings")).toBeVisible({
+      timeout: 300_000,
+    });
+
+    const topOf = async (column: string) =>
+      (
+        await page
+          .getByTestId(column)
+          .getByRole("listitem")
+          .first()
+          .innerText()
+      ).toLowerCase();
+
+    const bm25 = await topOf("col-bm25");
+    const dense = await topOf("col-dense");
+    const reranked = await topOf("col-rerank");
+
+    // The planted answer, identified by a phrase only it contains.
+    const ANSWER = /cooling system|chassis temperature/;
+    // The default sample is the one this corpus was measured against.
+    expect(await page.locator("#tr-query").inputValue()).toBe(
+      "my machine is overheating under load",
+    );
+
+    // BM25 cannot get there: it matches "laptop" and "fan" and lands on a
+    // decoy. If this ever passes, the corpus has stopped being a test.
+    expect(bm25, "BM25 should be misled by the decoys").not.toMatch(ANSWER);
+    // The neural stages should. Asserting both is what makes the columns
+    // distinguishable from four copies of one list.
+    expect(dense, "the dense retriever should find it").toMatch(ANSWER);
+    expect(reranked, "the reranker should keep it on top").toMatch(ANSWER);
+
+    // And the columns really are different lists.
+    expect(dense).not.toBe(bm25);
+  });
+});

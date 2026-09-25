@@ -404,3 +404,113 @@ describe("createTextHandler — fill-mask", () => {
     });
   });
 });
+
+describe("createTextHandler — feature extraction", () => {
+  afterEach(() => clearGpu());
+
+  /** Load a feature-extraction pipeline whose call returns `output`. */
+  async function loaded(output: unknown) {
+    clearGpu();
+    const posted: TextResponse[] = [];
+    const call = vi.fn(async () => output);
+    const pipe = call as unknown as CallableTextPipeline;
+    const handle = createTextHandler(
+      (m) => posted.push(m),
+      async () => pipe,
+      { warmup: false },
+    );
+    await handle({
+      type: "load",
+      task: "feature-extraction",
+      model: "Xenova/all-MiniLM-L6-v2",
+    });
+    posted.length = 0;
+    return { handle, posted, call };
+  }
+
+  // Normalising is pinned in the engine because every consumer compares by
+  // cosine; the **pooling** deliberately is not, because it is a property of
+  // the checkpoint and the hook is the single call site for it.
+  it("pins normalize and passes the caller's pooling through", async () => {
+    const { handle, call } = await loaded({ data: [1, 0], dims: [1, 2] });
+    await handle({
+      type: "run",
+      id: 1,
+      input: "hello",
+      args: [{ pooling: "cls" }],
+    });
+
+    expect(call).toHaveBeenCalledWith("hello", {
+      pooling: "cls",
+      normalize: true,
+    });
+  });
+
+  it("cannot be talked out of normalising", async () => {
+    const { handle, call } = await loaded({ data: [1, 0], dims: [1, 2] });
+    await handle({
+      type: "run",
+      id: 1,
+      input: "hello",
+      args: [{ pooling: "mean", normalize: false }],
+    });
+
+    expect(call).toHaveBeenCalledWith("hello", {
+      pooling: "mean",
+      normalize: true,
+    });
+  });
+
+  // The transport problem this arm introduced. A `Tensor` keeps `data`/`dims`
+  // as prototype getters, so `postMessage` refuses it outright — the engine
+  // flattens every result through `model/serialize.ts`, and a plain object
+  // standing in for a Tensor here is what makes that assertable without the
+  // runtime.
+  it("flattens the tensor it posts back, and copies the buffer", async () => {
+    const data = new Float32Array([0.5, -0.5]);
+    const tensor = {
+      dims: [1, 2],
+      get data() {
+        return data;
+      },
+      type: "float32",
+    };
+    const { handle, posted } = await loaded(tensor);
+    await handle({ type: "run", id: 7, input: "hello", args: [{ pooling: "mean" }] });
+
+    const message = last(posted);
+    expect(message?.type).toBe("result");
+    const result = (message as { result: { data: Float32Array; dims: number[] } })
+      .result;
+    // Own properties, not getters — which is the whole difference.
+    expect(Object.prototype.hasOwnProperty.call(result, "data")).toBe(true);
+    expect([...result.data]).toEqual([0.5, -0.5]);
+    expect(result.dims).toEqual([1, 2]);
+    // A copy: the posted buffer must not alias a view the runtime may reuse.
+    expect(result.data).not.toBe(data);
+  });
+
+  it("warms up with a pooling, so the warm-up call is valid", async () => {
+    clearGpu();
+    const posted: TextResponse[] = [];
+    const call = vi.fn(async (...args: unknown[]) => {
+      void args;
+      return { data: [1], dims: [1, 1] };
+    });
+    const pipe = call as unknown as CallableTextPipeline;
+    const handle = createTextHandler((m) => posted.push(m), async () => pipe);
+    await handle({
+      type: "load",
+      task: "feature-extraction",
+      model: "Xenova/all-MiniLM-L6-v2",
+    });
+
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(call.mock.calls[0][1]).toMatchObject({ normalize: true });
+    expect(
+      posted.some(
+        (m) => m.type === "progress" && m.progress.status === "warmup",
+      ),
+    ).toBe(true);
+  });
+});

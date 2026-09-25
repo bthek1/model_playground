@@ -18,7 +18,7 @@
 // and no amount of looking at a canvas in jsdom would catch.
 
 import { drawPixels, type PixelBuffer, type Pixels } from "./draw";
-import type { PlainImage } from "./serialize";
+import type { PlainImage } from "@/model/serialize";
 
 /** An RGBA buffer: what the `background-removal` pipeline hands back. */
 export type RgbaImage = PlainImage;

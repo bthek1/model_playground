@@ -16,13 +16,19 @@ import { Route as VisualQuestionAnsweringRouteImport } from './routes/visual-que
 import { Route as VideoTextToTextRouteImport } from './routes/video-text-to-text'
 import { Route as VideoClassificationRouteImport } from './routes/video-classification'
 import { Route as VadRouteImport } from './routes/vad'
+import { Route as TranslationRouteImport } from './routes/translation'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TokenClassificationRouteImport } from './routes/token-classification'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
+import { Route as TextRankingRouteImport } from './routes/text-ranking'
+import { Route as TextGenerationRouteImport } from './routes/text-generation'
+import { Route as TextFeaturesRouteImport } from './routes/text-features'
 import { Route as TextClassificationRouteImport } from './routes/text-classification'
 import { Route as TensorRouteImport } from './routes/tensor'
 import { Route as SuperResolutionRouteImport } from './routes/super-resolution'
+import { Route as SummarizationRouteImport } from './routes/summarization'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SentenceSimilarityRouteImport } from './routes/sentence-similarity'
 import { Route as SegmentationRouteImport } from './routes/segmentation'
 import { Route as QuestionAnsweringRouteImport } from './routes/question-answering'
 import { Route as PoseRouteImport } from './routes/pose'
@@ -83,6 +89,11 @@ const VadRoute = VadRouteImport.update({
   path: '/vad',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TranslationRoute = TranslationRouteImport.update({
+  id: '/translation',
+  path: '/translation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TrainingRoute = TrainingRouteImport.update({
   id: '/training',
   path: '/training',
@@ -96,6 +107,21 @@ const TokenClassificationRoute = TokenClassificationRouteImport.update({
 const TextToSpeechRoute = TextToSpeechRouteImport.update({
   id: '/text-to-speech',
   path: '/text-to-speech',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TextRankingRoute = TextRankingRouteImport.update({
+  id: '/text-ranking',
+  path: '/text-ranking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TextGenerationRoute = TextGenerationRouteImport.update({
+  id: '/text-generation',
+  path: '/text-generation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TextFeaturesRoute = TextFeaturesRouteImport.update({
+  id: '/text-features',
+  path: '/text-features',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TextClassificationRoute = TextClassificationRouteImport.update({
@@ -113,9 +139,19 @@ const SuperResolutionRoute = SuperResolutionRouteImport.update({
   path: '/super-resolution',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SummarizationRoute = SummarizationRouteImport.update({
+  id: '/summarization',
+  path: '/summarization',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SentenceSimilarityRoute = SentenceSimilarityRouteImport.update({
+  id: '/sentence-similarity',
+  path: '/sentence-similarity',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SegmentationRoute = SegmentationRouteImport.update({
@@ -257,13 +293,19 @@ export interface FileRoutesByFullPath {
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
   '/segmentation': typeof SegmentationRoute
+  '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
+  '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
+  '/text-features': typeof TextFeaturesRoute
+  '/text-generation': typeof TextGenerationRoute
+  '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
+  '/translation': typeof TranslationRoute
   '/vad': typeof VadRoute
   '/video-classification': typeof VideoClassificationRoute
   '/video-text-to-text': typeof VideoTextToTextRoute
@@ -296,13 +338,19 @@ export interface FileRoutesByTo {
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
   '/segmentation': typeof SegmentationRoute
+  '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
+  '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
+  '/text-features': typeof TextFeaturesRoute
+  '/text-generation': typeof TextGenerationRoute
+  '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
+  '/translation': typeof TranslationRoute
   '/vad': typeof VadRoute
   '/video-classification': typeof VideoClassificationRoute
   '/video-text-to-text': typeof VideoTextToTextRoute
@@ -336,13 +384,19 @@ export interface FileRoutesById {
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
   '/segmentation': typeof SegmentationRoute
+  '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
+  '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
+  '/text-features': typeof TextFeaturesRoute
+  '/text-generation': typeof TextGenerationRoute
+  '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
+  '/translation': typeof TranslationRoute
   '/vad': typeof VadRoute
   '/video-classification': typeof VideoClassificationRoute
   '/video-text-to-text': typeof VideoTextToTextRoute
@@ -377,13 +431,19 @@ export interface FileRouteTypes {
     | '/pose'
     | '/question-answering'
     | '/segmentation'
+    | '/sentence-similarity'
     | '/signup'
+    | '/summarization'
     | '/super-resolution'
     | '/tensor'
     | '/text-classification'
+    | '/text-features'
+    | '/text-generation'
+    | '/text-ranking'
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
+    | '/translation'
     | '/vad'
     | '/video-classification'
     | '/video-text-to-text'
@@ -416,13 +476,19 @@ export interface FileRouteTypes {
     | '/pose'
     | '/question-answering'
     | '/segmentation'
+    | '/sentence-similarity'
     | '/signup'
+    | '/summarization'
     | '/super-resolution'
     | '/tensor'
     | '/text-classification'
+    | '/text-features'
+    | '/text-generation'
+    | '/text-ranking'
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
+    | '/translation'
     | '/vad'
     | '/video-classification'
     | '/video-text-to-text'
@@ -455,13 +521,19 @@ export interface FileRouteTypes {
     | '/pose'
     | '/question-answering'
     | '/segmentation'
+    | '/sentence-similarity'
     | '/signup'
+    | '/summarization'
     | '/super-resolution'
     | '/tensor'
     | '/text-classification'
+    | '/text-features'
+    | '/text-generation'
+    | '/text-ranking'
     | '/text-to-speech'
     | '/token-classification'
     | '/training'
+    | '/translation'
     | '/vad'
     | '/video-classification'
     | '/video-text-to-text'
@@ -495,13 +567,19 @@ export interface RootRouteChildren {
   PoseRoute: typeof PoseRoute
   QuestionAnsweringRoute: typeof QuestionAnsweringRoute
   SegmentationRoute: typeof SegmentationRoute
+  SentenceSimilarityRoute: typeof SentenceSimilarityRoute
   SignupRoute: typeof SignupRoute
+  SummarizationRoute: typeof SummarizationRoute
   SuperResolutionRoute: typeof SuperResolutionRoute
   TensorRoute: typeof TensorRoute
   TextClassificationRoute: typeof TextClassificationRoute
+  TextFeaturesRoute: typeof TextFeaturesRoute
+  TextGenerationRoute: typeof TextGenerationRoute
+  TextRankingRoute: typeof TextRankingRoute
   TextToSpeechRoute: typeof TextToSpeechRoute
   TokenClassificationRoute: typeof TokenClassificationRoute
   TrainingRoute: typeof TrainingRoute
+  TranslationRoute: typeof TranslationRoute
   VadRoute: typeof VadRoute
   VideoClassificationRoute: typeof VideoClassificationRoute
   VideoTextToTextRoute: typeof VideoTextToTextRoute
@@ -563,6 +641,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/translation': {
+      id: '/translation'
+      path: '/translation'
+      fullPath: '/translation'
+      preLoaderRoute: typeof TranslationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/training': {
       id: '/training'
       path: '/training'
@@ -582,6 +667,27 @@ declare module '@tanstack/react-router' {
       path: '/text-to-speech'
       fullPath: '/text-to-speech'
       preLoaderRoute: typeof TextToSpeechRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/text-ranking': {
+      id: '/text-ranking'
+      path: '/text-ranking'
+      fullPath: '/text-ranking'
+      preLoaderRoute: typeof TextRankingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/text-generation': {
+      id: '/text-generation'
+      path: '/text-generation'
+      fullPath: '/text-generation'
+      preLoaderRoute: typeof TextGenerationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/text-features': {
+      id: '/text-features'
+      path: '/text-features'
+      fullPath: '/text-features'
+      preLoaderRoute: typeof TextFeaturesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/text-classification': {
@@ -605,11 +711,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperResolutionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/summarization': {
+      id: '/summarization'
+      path: '/summarization'
+      fullPath: '/summarization'
+      preLoaderRoute: typeof SummarizationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sentence-similarity': {
+      id: '/sentence-similarity'
+      path: '/sentence-similarity'
+      fullPath: '/sentence-similarity'
+      preLoaderRoute: typeof SentenceSimilarityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/segmentation': {
@@ -799,13 +919,19 @@ const rootRouteChildren: RootRouteChildren = {
   PoseRoute: PoseRoute,
   QuestionAnsweringRoute: QuestionAnsweringRoute,
   SegmentationRoute: SegmentationRoute,
+  SentenceSimilarityRoute: SentenceSimilarityRoute,
   SignupRoute: SignupRoute,
+  SummarizationRoute: SummarizationRoute,
   SuperResolutionRoute: SuperResolutionRoute,
   TensorRoute: TensorRoute,
   TextClassificationRoute: TextClassificationRoute,
+  TextFeaturesRoute: TextFeaturesRoute,
+  TextGenerationRoute: TextGenerationRoute,
+  TextRankingRoute: TextRankingRoute,
   TextToSpeechRoute: TextToSpeechRoute,
   TokenClassificationRoute: TokenClassificationRoute,
   TrainingRoute: TrainingRoute,
+  TranslationRoute: TranslationRoute,
   VadRoute: VadRoute,
   VideoClassificationRoute: VideoClassificationRoute,
   VideoTextToTextRoute: VideoTextToTextRoute,

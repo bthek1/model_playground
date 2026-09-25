@@ -363,10 +363,93 @@ fe-e2e-qa:
 fe-e2e-zeroshot-text:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "zero-shot"
 
+# Run only the @slow translation specs: two real Marian loads (~209 MB each on
+# WebGPU, ~271 MB on WASM) in one run, and real translations both ways.
+#
+# Asserted on **content words, not an exact string** — a beam search is not
+# pinned to one output, so a whole-sentence assertion fails on a decoder update
+# that is not a regression. And "some text appeared" would pass on a model
+# translating in the wrong direction.
+#
+# The second half is what earns the minutes: **the reverse pair, on the same
+# page.** A direction is a checkpoint, so a control that changed the label
+# without changing the model keeps translating en->de — and a German output for
+# a German input is the only thing that catches it. The unit suite cannot: it
+# mocks the worker away.
+fe-e2e-translate:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "translation"
+
+# Run only the @slow summarization specs: a real T5-small load (154 MB on
+# WebGPU, 202 MB on WASM) and a real summary of a known article.
+#
+# Two assertions and one **measurement**. The assertions are that the summary
+# keeps the article's subject and is shorter than the input — "some text
+# appeared" passes while a seq2seq echoes its input back, which is what a
+# min_length fighting a max_new_tokens produces.
+#
+# The measurement is #46's Phase 0, re-taken. The gate — does distilbart open a
+# q8 session on WebGPU — was settled on a box with no GPU at all, only
+# SwiftShader, whose 83 s per summary says nothing about real hardware. This
+# recipe is where the latency figure comes from, and where a runtime upgrade
+# that changes it becomes visible rather than silent. It is logged, not
+# asserted: a latency threshold in CI is a flake.
+fe-e2e-summarize:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "summarization"
+
+# Run only the @slow text-generation specs: a real SmolLM2-360M load (273 MB at
+# q4f16 on WebGPU, 365 MB at q8 on WASM) and real streamed generations.
+#
+# Two assertions. The first is a known continuation on an unambiguous prompt —
+# "some text appeared" passes while the chat template is wrong, or the tokenizer
+# is, or the user's own prompt is being handed back, all of which read fluently.
+#
+# The second is the one that earns the minutes: **greedy, run twice, must be
+# byte-identical.** It is the only assertion that proves the decoding parameters
+# reach the model at all — a page that dropped them would still generate, still
+# look right and still pass the first. It is also the property the page depends
+# on, since a repetition loop is only attributable to greedy decoding if greedy
+# decoding is reproducible.
+#
+# No GPU required: the default entry has a measured WASM path, and on an adapter
+# without shader-f16 the worker resolves to WASM by itself (pickBackendForF16).
+fe-e2e-textgen:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "text generation"
+
+# Run only the @slow text-ranking specs: a real pair load (91 MB on WebGPU,
+# 46 MB on WASM — an embedder *and* a cross-encoder, both live at once) and all
+# four retrieval stages over the page's own corpus.
+#
+# **The assertion is that the stages disagree, in a particular direction.** A
+# spec where all four rank the same document first proves nothing about three of
+# them, and would be satisfied by a page quietly rendering the BM25 list four
+# times — which is this page's most plausible bug. So the corpus is built around
+# a query whose best answer shares no vocabulary with it, and the spec asserts
+# that BM25 does **not** find it while the dense and reranked stages do.
+fe-e2e-rank:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "text ranking"
+
+# Run only the @slow embedding specs: a real all-MiniLM-L6-v2 load (43 MB on
+# WebGPU / 22 MB on WASM — the cheapest floor in the app) and real cosines.
+#
+# **The assertion is a spread, not a threshold.** Dropping the pooling and
+# normalise options — or pooling a CLS-trained checkpoint by the mean — does not
+# fail: it produces embeddings whose cosines all sit in a narrow band near 0.9,
+# so every pair looks alike and the page looks like it works. "The paraphrase
+# scores above 0.5" passes comfortably on exactly those collapsed vectors; a
+# *gap* between the paraphrase and the unrelated pair does not.
+#
+# It also pins the truncation control, which has two halves that fail silently:
+# the ranking must survive the cut, and both vectors must still read
+# 1.000 afterwards — a missing renormalisation leaves a working-looking slider
+# that scales every similarity by an arbitrary factor.
+fe-e2e-embed:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "embedding"
+
 # Check every model id (audio + vision + multimodal + text) still resolves on
 # the Hugging Face Hub, that each vision entry publishes the dtypes both backends
 # ask for, that the VLM entries publish their three q4f16 graphs, and that the
-# VLM and text catalogues still match the download sizes they quote (seconds)
+# VLM and text catalogues still match the download sizes they quote, and that
+# each embedding entry's pooling matches its upstream training config (seconds)
 fe-e2e-models:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium model-ids.spec.ts
 

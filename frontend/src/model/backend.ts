@@ -61,24 +61,70 @@ export function loadOpts(backend: Backend): LoadOpts {
 }
 
 /**
+ * The WASM precision an **encoder-decoder** has to load at, whatever it is.
+ *
+ * Not a preference, and no longer a suspicion: the quantized decoder of *any*
+ * seq2seq export fails to open a session on the WASM execution provider bundled
+ * with `@huggingface/transformers` 4.2.0. ONNX Runtime throws
+ *
+ *   Can't create a session. ERROR_CODE: 1, ERROR_MESSAGE: qdq_actions.cc:137
+ *   TransposeDQWeightsForMatMulNBits Missing required scale: …_merged_0_scale
+ *
+ * — the same error, from the same line, on five families now. And the fifth one
+ * corrects what the first four suggested:
+ *
+ *   Whisper / Moonshine   ASR, where it was first characterised
+ *   Donut                 document QA, which proved it was not ASR-specific
+ *   Marian (opus-mt)      `/translation`, measured 2026-09-25
+ *   BART (distilbart)     `/summarization`, measured 2026-09-25
+ *   **GPT-2**             `/text-generation`, measured 2026-09-25 — and it is
+ *                         **decoder-only**, so this was never a property of
+ *                         encoder-decoders. Its message names
+ *                         `transformer.wte.weight_merged_0_scale`, the same
+ *                         embedding matrix under a different name.
+ *
+ * Nor is it "any model with tied embeddings": `SmolLM2-360M-Instruct` has
+ * `tie_word_embeddings: true` and its `model_quantized.onnx` loads and generates
+ * on WASM perfectly well (measured: 34 s to load, ~180 ms a token). **It is a
+ * property of the export, not of the architecture** — the older `Xenova/*` q8
+ * builds fuse the embedding matmul into `MatMulNBits` with a merged scale the
+ * bundled provider cannot find, and newer first-party and `onnx-community/*`
+ * exports do not. So the rule for a new entry is: try the q8 build, and if the
+ * session fails naming a `*_merged_0_scale`, either pin the graph that holds the
+ * embeddings to fp32 or find a newer export.
+ *
+ * The **per-module fallback below only exists for a multi-graph model**, because
+ * it works by leaving one graph unquantized. A decoder-only model has a single
+ * graph, so there is nothing to pin: GPT-2's only unquantized build is 500 MB
+ * and over the size bar, which is why `/text-generation` has no GPT-2 CPU path
+ * at all. So the spec stays named for the seq2seq case, which is the only one it
+ * can serve, and every such catalogue entry references it:
+ *
+ *   dtypes: { wasm: SEQ2SEQ_WASM_DTYPES }
+ *
+ * The **encoder** quantizes fine, so only the decoder pays full precision. The
+ * cost is real and is the reason a page can fail the feasibility bar on its
+ * WASM side alone — a Marian pair is 101 MB at a uniform q8 and 271 MB like
+ * this — but the alternative is a fallback path that cannot load a model at
+ * all. Revisit when the bundled ORT version updates; `just fe-e2e-models`
+ * checks the files, and only a real in-browser load catches the session
+ * failure (the identical call loads cleanly under `onnxruntime-node`).
+ */
+export const SEQ2SEQ_WASM_DTYPES: DtypeSpec = {
+  encoder_model: "q8",
+  decoder_model_merged: "fp32",
+};
+
+/**
  * Load options for the **ASR** models specifically. Identical to `loadOpts`
  * except on WASM, where the decoder must stay **fp32**.
  *
- * **The bug below is not ASR-specific, despite this function's name.** It was
- * characterised here first because ASR hit it first, but Donut — a document-QA
- * model, not an ASR one — reproduced it exactly: same error, same missing
- * `embed_tokens.weight_merged_0_scale`. Read it as: *any encoder-decoder whose
- * decoder is quantized* fails to open a session on the bundled WASM provider.
- * The fix is expressible per catalogue entry (`dtypes: { wasm: {
- * encoder_model: "q8", decoder_model_merged: "fp32" } }`) rather than through a
- * second named helper; if a third family arrives, generalise this function
- * rather than copying it again.
- *
- * That finding cost Donut ~3x its download (411 MB → 597 MB on WASM) and is
- * part of why `/document-question-answering` was cut. The knowledge is kept
- * here because the next encoder-decoder will hit it too, and only a real
- * in-browser load surfaces it — the unit suite mocks the runtime away, and the
- * same call loads cleanly under `onnxruntime-node`.
+ * **The bug it works around is not ASR-specific, despite this function's
+ * name**, and it is now written up once in {@link SEQ2SEQ_WASM_DTYPES} above —
+ * which this function is expressed in terms of, so the literal exists in one
+ * place. ASR keeps a named helper only because it is the one family that needs
+ * the whole `LoadOpts` pair rather than a per-entry `dtypes` override: its
+ * catalogue predates `dtypes` and its worker asks for load options directly.
  *
  * Why: the quantized (q8) Whisper/Moonshine decoders fail to even open a session
  * on the WASM execution provider bundled with `@huggingface/transformers` 4.2.0 —
@@ -96,7 +142,35 @@ export function loadOpts(backend: Backend): LoadOpts {
 export function asrLoadOpts(backend: Backend): LoadOpts {
   return backend === "webgpu"
     ? { device: "webgpu", dtype: "fp16" }
-    : { device: "wasm", dtype: { encoder_model: "q8", decoder_model_merged: "fp32" } };
+    : { device: "wasm", dtype: SEQ2SEQ_WASM_DTYPES };
+}
+
+/**
+ * `pickBackend()`, but honest about `f16` weights.
+ *
+ * An adapter without the `shader-f16` feature loads `fp16`/`q4f16` weights
+ * happily, reports `ready`, and then fails on the **first operator** of every
+ * run — the worst outcome available, because the user pays for the download
+ * first. `useBackendProbe({ requireShaderF16: true })` already answers that for
+ * the *picker*; this is the same question asked inside a **worker**, at load
+ * time, which is where the decision is actually made.
+ *
+ * Until `/text-generation` the two could not disagree, and that was luck rather
+ * than design: every `q4f16` entry in the app declared `backends: ["webgpu"]`,
+ * so the picker disabled the row and the worker was never asked on a machine
+ * that would have got it wrong. The first entry with an f16 GPU path **and** a
+ * working CPU fallback breaks that — the row is legitimately enabled, the user
+ * clicks Load, and a plain `pickBackend()` sends them to a GPU that cannot run
+ * the weights. Use this wherever the resolved precision may be an f16 one.
+ *
+ * Never throws; a machine that cannot be asked is reported as `"wasm"`, because
+ * the cost of a false negative is a slower run and the cost of a false positive
+ * is a dead page.
+ */
+export async function pickBackendForF16(): Promise<Backend> {
+  const backend = await pickBackend();
+  if (backend !== "webgpu") return backend;
+  return (await supportsShaderF16()) ? "webgpu" : "wasm";
 }
 
 /**
