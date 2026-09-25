@@ -20,10 +20,18 @@
 // directly, so `k1`, `b` and RRF's `k` re-score on the main thread.
 //
 // **Two models are live at once**, which is the declared exception `/pose`
-// established. They are two workers, one model each, so the engine rule is
-// intact per worker and a teardown that throws in one cannot strand the other.
-// Disposal is `Promise.allSettled` over both, so a reranker whose dispose
-// throws does not skip the larger embedder.
+// established — but not the way `/pose` does it, and the difference is the
+// reason `combineProgress` exists. `/pose` loads its pair inside **one** worker,
+// so one engine owns both models and a combined teardown is something it can
+// get wrong; the plan's `Promise.allSettled` bullet was written for that shape.
+// Here each half is **its own worker**, so the engine rule ("one model live at a
+// time") holds per worker unmodified, each engine disposes its single model with
+// `disposeQuietly`, and `useModelWorker` terminates each worker independently.
+// There is no shared teardown to `allSettled` over: a dispose that throws in one
+// worker cannot reach the other, which is the property `allSettled` was wanted
+// for, obtained structurally instead. The cost of the split is the progress
+// table — two of them, neither of which can report the pair — which is what
+// `combineProgress` is for.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -34,6 +42,7 @@ import {
 } from "@/hooks/useTextPipeline";
 import { combineProgress } from "@/model/progress";
 import { pickBackend, type Backend } from "@/model/backend";
+import { cosine } from "@/model/similarity";
 import type { ModelStatus } from "@/model/types";
 import {
   DEFAULT_RANKING_PAIR,
@@ -215,7 +224,6 @@ export function useRanking(
       query: string,
       corpus: readonly string[],
     ): Promise<RerankScore[]> => {
-      const { cosine } = await import("@/model/similarity");
       // The query is embedded with the **query** prefix where the checkpoint
       // wants one, and the documents with the document prefix — the same
       // sentence under two prefixes is two different vectors, which is why the
