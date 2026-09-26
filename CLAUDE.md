@@ -133,8 +133,13 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   first — phased, with a Testing section — opened as an issue with `gh issue create --label plan`
   (the plan is the issue body; see the template in the Copilot instructions). **Never add a plan
   markdown file to the repo.** Tick the phase checkboxes as work progresses, and **close the issue
-  once its work has been merged into `main`** (`gh issue close <n> --comment "..."`) — the closed
-  issue is the record. Reference the issue number in the commit message (`Closes #12`).
+  as soon as its work is complete** — every phase done, tests green, the commits on `develop`
+  (`gh issue close <n> --comment "..."`). That runs **unattended**: closing a finished issue is
+  bookkeeping, it is reversible from the GitHub UI, and leaving completed work open is the
+  failure mode this rule exists to prevent. Closing no longer waits for the `main` merge, so
+  **"closed" means done and integrated on `develop`, not shipped** — `main` is what has shipped,
+  and the merge is a separate release step that still prompts. The closed issue is the record.
+  Reference the issue number in the commit message (`Closes #12`).
 - **Never commit `.env` files.** `.env.example` is the source of truth for required vars.
 - **Backend ↔ frontend communicate only via the API contract** — never mix their concerns.
 - **All work lands on `develop`; `main` is what has shipped.** `develop` is the integration
@@ -145,16 +150,20 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   before committing; if it isn't `develop`, switch (`git switch develop`) rather than branching.
   Create a `<type>/<topic>` branch **only when the user asks for one** — a spike to be thrown
   away, or work that has to be reviewed as a PR in its own right — and branch it from `develop`.
-- **Merging into `main` is the completion step of an issue, not a step inside it.** When an
-  issue's phases are all ticked and its tests are green: `git switch main`, merge `develop`
-  (`git merge --no-ff develop`, so the issue's commits stay legible as one landing), push, then
-  `gh issue close <n>`. Merge only whole issues — `develop` holding half an issue is why the
-  merge waits, not a reason to cherry-pick. Never commit directly on `main`.
+- **Merging into `main` is a release, not the thing that finishes an issue.** An issue is
+  finished — and closed — when its work is complete on `develop`. The merge is what makes that
+  work *shipped*: `git switch main`, merge `develop` (`git merge --no-ff develop`, so the
+  issue's commits stay legible as one landing), push. Merge only whole issues — `develop`
+  holding half an issue is why the merge waits, not a reason to cherry-pick. Both the merge and
+  the push prompt, because a release is outward-facing. Never commit directly on `main`.
 - **Commits are cheap; pushes are not.** Committing and switching run unattended — they are
   reversible, and `git reflog` recovers almost anything local. **Ask before anything
   outward-facing or unrecoverable:** `git push`, `git rebase`/`git merge` (the merge into `main`
-  included), `gh pr create`/`gh pr merge`, create/edit/close a GitHub issue (`gh issue …`),
-  `docker compose down -v`, deleting migrations, or modifying shared `.env` files. **Never**
+  included), `gh pr create`/`gh pr merge`, `gh issue create`/`gh issue edit`,
+  `docker compose down -v`, deleting migrations, or modifying shared `.env` files.
+  **`gh issue close` is the exception and runs unattended** — it publishes no content, it is
+  undone with one click, and an issue whose work has landed should not stay open waiting for a
+  prompt. **Never**
   force-push, `git reset --hard`, `git clean`, `git branch -D`, or `git checkout .` — those are
   denied outright in `.claude/settings.json`. See
   [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md) and the full list in the Copilot
@@ -1481,9 +1490,11 @@ lighter entry to fall back on.** Two heavy *entries* went with them: Depth Pro
 `just be-test`, `just fe-e2e`, `uv run …`) is friction-free, then fences the dangerous edges —
 deny beats ask beats allow:
 
-- **allow** — everything, including `git add`/`commit`/`switch`/`checkout -b`/`stash`.
+- **allow** — everything, including `git add`/`commit`/`switch`/`checkout -b`/`stash`, and
+  **`gh issue close`**: it publishes no content, one click undoes it, and a finished issue
+  should not stay open waiting for a prompt.
 - **ask** — `git push`, `git rebase`, `git merge`, `gh pr create|merge`,
-  `gh issue create|edit|close`, `docker compose down`, `rm -rf`, plus the two `just` recipes that
+  `gh issue create|edit`, `docker compose down`, `rm -rf`, plus the two `just` recipes that
   wrap `docker compose down -v` (`just down-v`, `just db-reset`) — a wrapper is a different
   command string, so it needs its own rule. `git merge` prompting is deliberate and is the
   point at which `develop` lands on `main`: it is a release, so it is confirmed each time.

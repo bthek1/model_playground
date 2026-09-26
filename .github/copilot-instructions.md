@@ -1629,15 +1629,22 @@ folder; do not recreate one.
 |---|---|---|
 | Open, `plan` label | Draft or in progress | `gh issue create --label plan --title "Plan: <Feature>" --body-file <file>` |
 | Phase checkboxes ticked | Progress is visible on the issue itself | `gh issue edit <n> --body-file <file>` |
-| Merged | Every phase ticked, tests green — `develop` merges into `main` | `git switch main && git merge --no-ff develop` |
-| Closed | Complete — the closed issue is the permanent record | `gh issue close <n> --comment "<what landed>"` |
+| Closed | Every phase ticked, tests green, commits on `develop` — the closed issue is the permanent record | `gh issue close <n> --comment "<what landed>"` (runs unattended) |
+| Merged | The work becomes what has *shipped* — a release, separate from the issue | `git switch main && git merge --no-ff develop` (prompts) |
 
 - Write the plan body to a scratch file first, then pass it with `--body-file` — it keeps long
   markdown intact. The scratch file is temporary; **never commit it**.
 - Reference the issue from the work: `Closes #<n>` in the commit message or PR body.
-- **An issue is a unit of merging, not of branching.** Its commits accumulate on `develop`; the
-  merge into `main` is what completes it, and the issue is closed after that merge — not when the
-  last commit is written. See the git section under "Absolute Don'ts".
+- **An issue is a unit of merging, not of branching.** Its commits accumulate on `develop`, and
+  it is closed as soon as they are all there and green — **closing does not wait for the `main`
+  merge**, which is a release and prompts. So "closed" means done and integrated on `develop`;
+  "on `main`" means shipped. Keeping the two distinct is what lets the close be autonomous
+  without the word quietly coming to mean less than it did. See the git section under
+  "Absolute Don'ts".
+- **Closing a finished issue runs unattended, and should.** `gh issue close` publishes no
+  content, one click in the GitHub UI undoes it, and the failure this rule guards against is
+  the opposite one: completed work sitting open because nobody was there to approve a prompt.
+  `gh issue create` and `gh issue edit` still prompt — those write content on the user's behalf.
 - Roadmap/research issues (label `roadmap`) are **not plans** — they are the per-category research a
   plan gets written from, and they stay open **while the category is still unbuilt**.
 - **A roadmap graduates to a file once its first route ships.** At that point it stops being
@@ -1679,9 +1686,10 @@ Any known risks, open questions, or decisions deferred.
 - Every plan must include a **Testing** section covering unit tests, integration tests, and manual steps
 - Do not start implementation without a plan issue for any feature that touches more than one file
 - Keep the phase checkboxes current as work progresses — the issue is the status
-- **Close the issue when the work lands.** Closed issues are the record; never delete them
-- Creating, editing, or closing an issue is a **remote action** — ask before running `gh issue …`
-  on the user's behalf unless they asked for it
+- **Close the issue as soon as the work lands on `develop`** — do not wait for the `main` merge,
+  and do not wait to be asked. Closed issues are the record; never delete them
+- `gh issue create` and `gh issue edit` write content on the user's behalf, so they **ask**.
+  `gh issue close` does not, so it runs unattended
 
 ---
 
@@ -1713,10 +1721,11 @@ develop` — switch, don't branch. A `<type>/<topic>` branch (`feat/`, `fix/`, `
 when the **user asks** for one — a throwaway spike, or work that must be reviewed as its own
 PR — and it branches from `develop`.
 
-*Merging `develop` into `main` is how an issue finishes.* When every phase of the issue is
-ticked and its tests are green: `git switch main`, `git merge --no-ff develop` (so the
-issue's commits land as one legible unit), push, then `gh issue close <n>`. Merge whole
-issues only — half an issue sitting on `develop` is why the merge waits, not a reason to
+*Merging `develop` into `main` is a release, not the thing that finishes an issue.* An issue
+finishes — and is closed, unattended — when every phase is ticked, its tests are green and its
+commits are on `develop`. The merge is what makes that work *shipped*: `git switch main`,
+`git merge --no-ff develop` (so the issue's commits land as one legible unit), push. Merge
+whole issues only — half an issue sitting on `develop` is why the merge waits, not a reason to
 cherry-pick — and never commit directly on `main`. Both the merge and the push prompt.
 
 *Never run autonomously — confirm first:*
@@ -1735,9 +1744,13 @@ string `--force`). The real protection is branch protection on `main` plus worki
 — see [`docs/guides/ai-guardrails.md`](../docs/guides/ai-guardrails.md).
 
 **GitHub (remote) — never run autonomously:**
-- `gh issue create` / `gh issue edit` / `gh issue close` — plans live here, but creating or closing
-  one on the user's behalf needs confirmation
+- `gh issue create` / `gh issue edit` — these write content on the user's behalf
 - `gh pr create` / `gh pr merge`
+
+**GitHub — the one remote verb that does run autonomously:**
+- `gh issue close` — it publishes nothing, one click undoes it, and an issue whose work has
+  landed on `develop` should not stay open waiting for a prompt. Close it with a comment
+  saying what landed.
 
 **File system:**
 - `rm -rf` on any non-temporary directory

@@ -30,19 +30,28 @@ and let the assistant do the rest without interruption.
   A `feat/<topic>` / `fix/<topic>` / `chore/<topic>` branch is still the right shape when you
   **ask** for one: a spike you expect to throw away, or work that has to be reviewed as a pull
   request on its own. It branches from `develop`, and merges back into it.
-- **Merging `develop` into `main` is the completion step of an issue.** Every phase ticked,
-  tests green, then:
+- **An issue finishes on `develop`; `main` is a release.** Every phase ticked, tests green and
+  the commits on `develop` — the issue is done and gets closed, unattended:
+
+  ```bash
+  gh issue close <n> --comment "..."   # runs without a prompt
+  ```
+
+  Shipping it is a separate step, and that one prompts:
 
   ```bash
   git switch main
   git merge --no-ff develop          # prompts — this is a release
   git push                           # prompts
-  gh issue close <n> --comment "..."
   ```
 
   `--no-ff` keeps the issue's commits legible as one landing. Merge whole issues only: half an
   issue sitting on `develop` is a reason for the merge to wait, not a reason to cherry-pick.
   Nothing is ever committed directly on `main`.
+
+  Splitting the two changes what "closed" means, and it is worth holding onto: **closed = done
+  and integrated on `develop`**, **on `main` = shipped**. They were one event only because the
+  close used to need a human at the keyboard.
 - **Enable branch protection on `main`** in GitHub so even a stray push can't land
   unreviewed. This is a repo-settings change, not something in this file:
 
@@ -80,8 +89,8 @@ Personal overrides go in `.claude/settings.local.json` (gitignored) or
 
 | List | Contains | Effect |
 |------|----------|--------|
-| `allow` | `Bash(*)`, plus the read-only and local git verbs spelled out | Runs without a prompt |
-| `ask` | `git push` / `rebase` / `merge`, `gh pr create\|merge`, `gh issue create\|edit\|close`, `docker compose down`, `just down-v`, `just db-reset`, `rm -rf` | Prompts every time |
+| `allow` | `Bash(*)`, plus the read-only and local git verbs spelled out, plus `gh issue close` | Runs without a prompt |
+| `ask` | `git push` / `rebase` / `merge`, `gh pr create\|merge`, `gh issue create\|edit`, `docker compose down`, `just down-v`, `just db-reset`, `rm -rf` | Prompts every time |
 | `deny` | `git push --force` / `-f`, `git reset --hard`, `git clean`, `git branch -D`, `git checkout .` | Blocked outright |
 
 Notes on the shape:
@@ -94,6 +103,11 @@ Notes on the shape:
 - **Committing is unattended, pushing is not.** A commit on `develop` is recoverable; a push
   is outward-facing. The assistant still commits because you asked it to — the permission only
   removes the prompt.
+- **`gh issue close` is the one remote verb in `allow`, and the asymmetry is the point.**
+  `gh issue create` and `gh issue edit` write content on the user's behalf and stay in `ask`;
+  closing writes none — it flips a flag that one click in the GitHub UI flips back. Gating it
+  optimised against the wrong failure: the thing that actually goes wrong is finished work
+  sitting open because nobody was there to approve a prompt.
 - **`git merge` prompts, and that prompt is the release gate.** Under this workflow the merge
   the assistant reaches for is `develop` → `main`, which is the moment an issue's work becomes
   what has shipped. It is confirmed every time, deliberately.
@@ -131,6 +145,7 @@ the non-deprecated form).
 - **Don't approve pushes reactively mid-session.** A push prompt is the one place where
   reading the diff first is worth the interruption — that's why it's in `ask` rather than
   `allow`.
-- Plans are GitHub issues (`gh issue create --label plan`); creating, editing and closing
-  them prompts, because they are the project's record.
+- Plans are GitHub issues (`gh issue create --label plan`). Creating and editing them prompts,
+  because that writes content on your behalf; **closing a finished one does not** — an issue
+  whose work is on `develop` is closed straight away, with a comment saying what landed.
 - Add rules when you notice yourself approving the same prompt repeatedly, not in advance.
