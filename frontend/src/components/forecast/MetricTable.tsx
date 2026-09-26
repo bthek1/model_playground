@@ -23,9 +23,12 @@ export function MetricTable({
   rows,
   /** Which row the user has selected, highlighted rather than filtered. */
   selected,
+  /** Steps ahead these numbers were scored over. See the MASE note below. */
+  horizon,
 }: {
   rows: MethodRow[];
   selected?: string;
+  horizon: number;
 }) {
   const best = rows.reduce<MethodRow | null>(
     (acc, r) => (acc == null || r.metrics.mae < acc.metrics.mae ? r : acc),
@@ -76,10 +79,33 @@ export function MetricTable({
       </div>
       <p className="text-xs leading-snug text-muted-foreground">
         <strong>MASE is the column to read.</strong> It is the error divided by
-        the in-sample naive error, so <strong>1.0 means “no better than
-        repeating the last value”</strong> and below 1 is a real improvement over
-        the thing you have to beat. MAE and RMSE are in the series' own units and
-        say nothing on their own.
+        the <em>in-sample one-step</em> naive error, so it is a ratio against the
+        thing you have to beat rather than a quantity in the series' units — which
+        is what MAE and RMSE are, and why neither says much on its own.
+      </p>
+      <p
+        className="text-xs leading-snug text-muted-foreground"
+        data-testid="mase-horizon-note"
+      >
+        {horizon === 1 ? (
+          <>
+            At a horizon of 1 the benchmark is the same estimator, so{" "}
+            <strong>1.0 means “no better than repeating the last value”</strong>{" "}
+            and below 1 is a real improvement.
+          </>
+        ) : (
+          <>
+            <strong>
+              These are {horizon} steps ahead, measured against a one-step
+              benchmark, so 1.0 is not the break-even point here.
+            </strong>{" "}
+            Error grows with the horizon while the denominator does not — on a
+            random walk a naive forecast scores about 1.0 one step out and about
+            3.0 fourteen steps out, with nothing wrong. Compare the methods in
+            this column against <em>each other</em>, and use the backtest below
+            to see how much either number moves.
+          </>
+        )}
       </p>
       {anySkipped && (
         <p className="text-xs leading-snug text-muted-foreground">

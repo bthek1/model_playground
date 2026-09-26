@@ -1412,6 +1412,44 @@ a decision rather than an omission. See [`docs/roadmaps/tabular.md`](docs/roadma
   the page says it has no learned model, in OUTPUT's **empty state** so it is read before a forecast
   exists, and a test pins the copy.
 
+- **A fitting page's test list is the standard one with three substitutions.** "Nothing
+  downloads on mount" becomes **nothing fits on mount** (no `autoLoad` argument *and* neither
+  `load` nor `fit` called); "choosing an input runs nothing" becomes **choosing a dataset, a
+  target, a feature or a hyperparameter fits nothing**; and the cached-weights case has no
+  analogue, so what replaces it is stronger — **spy on `fetch`, `indexedDB.open` and
+  `Storage.setItem` across a real fit**, because the privacy claim is a behaviour and gets an
+  assertion rather than a sentence. Plus one addition: assert the defaults are **swapped with
+  the family**, not inherited.
+- **A page with no worker owes an assertion that it still has none.** Stub `globalThis.Worker`
+  in the unit test and count constructions in an init script in the spec. happy-dom ships no
+  `Worker` at all, so the stub is what makes the assertion reachable *and* proves a hook
+  reaching for one would have found something — `vi.spyOn(globalThis, "Worker")` throws
+  "property is not defined" instead.
+- **Assert a chart's option object, never its pixels.** Mock the lazy `EChart` wrapper, capture
+  what it was handed, and check the parts that encode a decision: series order (ECharts draws a
+  horizontal category axis bottom-up, so "most important at the top" means *ascending* data),
+  colour by sign, whether a forecast is drawn only across the held-out region, whether a big
+  cloud was thinned. **Mock `getCSSVar` to echo its token name** too — happy-dom resolves no CSS
+  custom properties, so every colour comes back `""` and "positive and negative differ" is
+  unassertable.
+- **`<caption>` is a table's accessible *name*, not its description.** `toHaveAccessibleDescription`
+  on a `<table>` whose only annotation is a caption fails; `toHaveAccessibleName` is the query.
+- **`new RegExp(someCatalogueString)` is a trap in a catalogue test.** Licence strings contain
+  brackets, so "CC0 1.0 (public domain…)" becomes a capture group and matches nothing. Match with
+  a predicate against `textContent` instead.
+- **Two renders in one test need an explicit `cleanup()`.** Rendering a second instance to compare
+  two prop sets leaves both in the DOM, and the next `getByTestId` fails with "found multiple" —
+  a failure that has nothing to do with what the test is about. `render(<div />)` does not unmount
+  the first one.
+- **MASE near 1.0 is a *one-step* property, and reading it otherwise is the mistake available on
+  `/time-series-forecasting`.** The denominator is the in-sample **one-step** naive error by
+  definition, so a multi-step forecast is scored against a one-step benchmark: on the bundled
+  random walk a naive forecast measures ~1.0 one step out, 1.8 at four and ~3.0 at fourteen, with
+  nothing wrong. The page's note is therefore **horizon-aware** — at 1 it says 1.0 is break-even,
+  beyond it says 1.0 is not and to compare the methods against each other — and a test measures
+  the ratio at three horizons and asserts it grows. When a number looks wrong, check whether the
+  copy explaining it is what is wrong.
+
 ### Three routes were built and then cut for size — read this before adding one
 
 `/text-to-audio` (MusicGen: **599 MB** WASM / **1127 MB** WebGPU),

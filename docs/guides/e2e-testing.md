@@ -90,6 +90,47 @@ just fe-e2e-zeroshot-text  # a known ranking, and a template proven to reach the
 just fe-e2e-fillmask  # the same question through two tokenizers — the RoBERTa half is the test
 ```
 
+### The tabular and forecasting specs, which are neither slow nor mocked
+
+```bash
+just fe-e2e-tabular   # the whole ladder fitted in a real browser (~1.5 min)
+just fe-e2e-forecast  # the backtest spread against the single split (~10 s)
+```
+
+Neither is `@slow`, because **there is nothing to download**: these pages fit the
+model in the tab on data that ships with the app. `fe-e2e-tabular` runs in the
+`webgpu` project anyway, because half the ladder is real WGSL — the logistic, MLP,
+ridge and quantile rungs dispatch compute shaders, and the project's
+`--enable-unsafe-swiftshader` means a runner with no `/dev/dri` still executes
+them for real. `fe-e2e-forecast` is plain `chromium` and is part of the default
+`just fe-e2e` run.
+
+Three assertion shapes here are worth copying:
+
+- **`fe-e2e-tabular` asserts above the *majority baseline*, and reads both numbers
+  off the page** — the `fe-e2e-graphcls` shape, for the same reason. It also pins
+  the two claims the page makes *in words*: that the neural network loses to the
+  trees, and that the linear floor loses too. A page is not allowed to assert
+  "deep learning does not win on tabular data" in prose and leave it unchecked.
+- **`fe-e2e-forecast` asserts the spread is wide, not that it straddles.** The
+  single split *is* the last rolling origin, so "the single-split number lies
+  inside the window range" is true by construction and would pass on a backtest
+  that reused one split's numbers for every window — which renders as a perfectly
+  flat strip and is this page's most plausible bug. `max > 1.5 × min` is what
+  catches it. Measured on the airline sample: single 47.8 against 12.6–53.1.
+- **Both specs assert an absence.** The tabular one records every request whose
+  URL is not the dev server and asserts the list is empty across choosing a
+  dataset — the privacy claim reduced to a behaviour. The forecasting one replaces
+  `window.Worker` with a counting constructor in an init script and asserts zero
+  constructions, because "no worker" is a decision that a refactor can undo with
+  nothing visible changing.
+
+**A control that the page says re-derives gets an E2E assertion too.** The
+threshold slider is checked by reading the `model-ready` line *before and after*
+the drag: the confusion matrix must change while the fit's duration and row count
+must not. That is what "it re-read the result instead of refitting" looks like
+from outside the process.
+
 `fe-e2e-graph` is the odd one: it is `@slow` without downloading anything, because
 `/graph` has no checkpoint and its dataset is bundled. What makes it slow is 200
 epochs of real training — about 3 minutes on SwiftShader for one run, and the
@@ -118,6 +159,14 @@ written for a metric:
 **Ask which direction the silent failure moves the number.** A floor catches a
 model that got worse; only a ceiling catches one that got suspiciously better; and
 neither means anything unless the null model is known.
+
+The fourth case is **a number that is not wrong at all, only misread.** MASE on
+`/time-series-forecasting` divides by the in-sample *one-step* naive error, so at a
+horizon of 14 a perfectly correct naive forecast scores about 3.0 — and "1.0 means
+no better than naive", which is true one step out, invites reading that as broken.
+The fix was not a different metric but a horizon-aware note on the page, pinned by
+a unit test that measures the ratio at 1, at 4 and at 14 and asserts it *grows*.
+When a number looks wrong, check whether the copy explaining it is what is wrong.
 
 `fe-e2e-vlm` is the odd one in the other direction: **its failure has no number at
 all.** `/image-text-to-text` is driven by `apply_chat_template`, and a prompt built

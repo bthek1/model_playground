@@ -353,8 +353,14 @@ Four decisions worth carrying forward:
   demonstration is the gap between them. A page that only showed the spread would be correct
   and would not make the point.
 - **MASE is the metric that makes the comparison legible**, because it is scaled by the
-  in-sample naive error: 1.0 means "no better than naive". It ships beside MAE and RMSE for
-  exactly that reason.
+  in-sample naive error. It ships beside MAE and RMSE for exactly that reason — with one
+  correction the build had to make: **1.0 means "no better than naive" only at a horizon of
+  1.** The denominator is the in-sample *one-step* error by definition, so a multi-step
+  forecast is scored against a one-step benchmark and grows away from 1 with the horizon. On
+  the bundled random walk a naive forecast measures ~1.0 one step out, 1.8 at four and ~3.0 at
+  fourteen, with nothing wrong. So the note beside the table is horizon-aware, and a test
+  measures the ratio at three horizons and asserts it grows. The metric was right; the sentence
+  explaining it was not.
 - **The season length is a control, never auto-detected.** Guessing the period and being
   wrong produces a confident, plausible, wrong forecast. A control the user sets is both
   honest and the more instructive design.

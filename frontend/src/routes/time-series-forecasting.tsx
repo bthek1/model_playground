@@ -255,7 +255,7 @@ function TimeSeriesForecastingPage() {
                     testStart={derived.testStart}
                     lines={derived.lines}
                   />
-                  <MetricTable rows={derived.rows} selected={method} />
+                  <MetricTable rows={derived.rows} selected={method} horizon={safeHorizon} />
 
                   <div className="space-y-2 border-t pt-3">
                     <div className="flex flex-wrap items-center gap-2">

@@ -50,6 +50,40 @@ category guide's feasibility table saying so and why, and it keeps its
 reason" is a finished piece of work.** It stops the next person spending three
 days rediscovering it.
 
+### One whole category answers all three questions vacuously, and needs a different bar
+
+The **Tabular** rows — `/tabular-classification`, `/tabular-regression`,
+`/time-series-forecasting` — have no checkpoint at all. The model is *fitted in
+the tab* on the user's own CSV, so question 1 has nothing to look for,
+question 2 is satisfied by zero bytes, and question 3 is not the right axis
+either. Answering "yes, yes, yes" and moving on would have skipped the only
+measurement that could have cut a page.
+
+**The bar that actually applies there is whether the *fit* fits**, and it had to
+be measured before the pages were designed around it. Synthetic data of 20
+columns and 2 classes, fitted in Node against the CPU-reference matmul:
+
+| rows | forest 60×d8 | boosting 120×d4 | boosting 120×d6 | logistic 30ep | MLP 40ep |
+|---|---|---|---|---|---|
+| 10 000 | 1.0 s | 1.7 s | **3.0 s** | 0.14 s | 1.8 s |
+| 50 000 | 4.6 s | 7.7 s | **12.2 s** | 0.71 s | 9.2 s |
+| 200 000 | 16.9 s | 31.4 s | **51.0 s** | 3.20 s | 38.0 s |
+
+Nothing was cut — but the table is what set `MAX_ROWS` to 50 000 and capped
+boosting's depth at 6, and it is recorded in
+[`tabular/limits.ts`](../../frontend/src/tabular/limits.ts) beside the constants
+rather than in a commit message. **Before writing a page, work out which
+resource it actually spends, and measure that one.** For every other category so
+far that is the download; it does not have to be.
+
+A second thing generalises from the same place: **question 1's "no" has two
+different causes, and they are not equally final.** A task whose only weights are
+PyTorch is a missing *export* — `/time-series-forecasting`'s two foundation
+forecasters are that case, and no amount of quantization reaches them. A task
+whose cheapest export is 600 MB is a *size* problem, which a smaller checkpoint
+can later solve. Say which one you found, and date it: the check is one API call
+and the answer can change.
+
 ### Question 2 has teeth, and three shipped routes proved it
 
 `/text-to-audio`, `/image-to-text` and `/document-question-answering` were all

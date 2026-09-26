@@ -243,3 +243,47 @@ describe("Natural Language Processing", () => {
     );
   });
 });
+
+describe("the Tabular category", () => {
+  const all = taskCategories.flatMap((c) => c.tasks);
+  const at = (slug: string) => all.find((t) => t.slug === slug)!.to;
+
+  it("maps all three of its rows, because the category shipped whole", () => {
+    // The only category with no checkpoint anywhere in it: the model is fitted
+    // in the tab on the user's own CSV, so the feasibility bar is the *fit*
+    // rather than the download, and every row cleared it.
+    expect(at("tabular-classification")).toBe("/tabular-classification");
+    expect(at("tabular-regression")).toBe("/tabular-regression");
+    expect(at("time-series-forecasting")).toBe("/time-series-forecasting");
+  });
+
+  it("leaves nothing in the category on the placeholder", () => {
+    const tabular = taskCategories.find((c) => c.label === "Tabular")!;
+    expect(tabular.tasks).toHaveLength(3);
+    for (const task of tabular.tasks) {
+      expect(task.to, task.slug).not.toMatch(/^\/tasks\//);
+    }
+  });
+
+  it("gives Time Series Forecasting its own route despite having no model", () => {
+    // The two foundation forecasters publish no ONNX weights at all, so the row
+    // could plausibly have stayed on `/tasks/$slug` — as the three routes cut
+    // for size did. It did not, because the baselines and the backtest are the
+    // page, and a missing export does not stop them.
+    expect(at("time-series-forecasting")).not.toBe("/tasks/time-series-forecasting");
+  });
+
+  it("puts every tabular route in the Tabular category, not in Theory", () => {
+    // These pages train in the tab, which makes them look like the Theory
+    // surfaces (`/training`, `/tensor`). They are not: they answer Hub task
+    // rows and take the user's own data, so they belong to the taxonomy's own
+    // category rather than to this repo's invented one.
+    for (const path of [
+      "/tabular-classification",
+      "/tabular-regression",
+      "/time-series-forecasting",
+    ]) {
+      expect(categoryForPath(path), path).toBe("Tabular");
+    }
+  });
+});

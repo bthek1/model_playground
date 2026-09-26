@@ -670,7 +670,7 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 
 | Test id | Where | Means |
 |---|---|---|
-| `slot-1` … `slot-4` | `ModelPage` | The four bands, in pipeline order. Always exactly four. |
+| `slot-1` … `slot-4` | `ModelPage` | The bands, in pipeline order. Four on every page that has a model — `ModelPage` cannot render fewer. The single exception is `/time-series-forecasting`, which composes its own shell with **three** and says where the fourth would have been; §7 carries the rule, and its route test asserts `slot-4` is absent. |
 | `model-size-note` | `ModelPicker` | The selected model's hint, params and per-backend download. |
 | `model-size-warning` | `ModelPicker` | The large-model guardrail. Absent below `LARGE_MODEL_BYTES`. |
 | `model-ready` | `ModelStatus` | The model loaded; carries the resolved backend and the load time. |
@@ -712,6 +712,22 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `ran-text` · `ran-question` | text routes | The input the result on screen was **actually** produced from, captured inside the run. |
 | `compare-load` · `compare-cost` | `/text-classification` | The head-to-head's second model: a second download and a second model in memory, quoted before the click. |
 | `score-near-tie` · `score-single` | `ScoreList` | A near-tie stated in words, and the refusal to render a lone 1.00 as certainty. |
+| `dataset-panel` · `dataset-summary` | tabular routes | The input surface — samples, the file picker, the privacy claim — and the shape of what was parsed. The summary quotes **both** row counts when the cap bit, and names the line of the first skipped row. |
+| `column-picker` | tabular routes | Target and features. The target is never offered as a feature, and only the right *kind* of column is offered as a target. |
+| `family-compute` · `fit-estimate` | tabular routes | Where the chosen rung's arithmetic runs and why, and roughly what one press will cost on this many rows. Both are derivations over the choice — neither runs anything. |
+| `fit-button` · `fit-stop` · `fit-progress` | tabular routes | The FIT band's three states. `fit-progress` is **determinate** (`phase · done/total`), because a fit's total is a hyperparameter the user just set — see §7. |
+| `metric-block` · `baseline-note` | `/tabular-classification` | The scores, and the majority baseline **in the same object** so the two cannot come from different splits. The note states the margin in points and says plainly when there is none. |
+| `confusion-matrix` · `threshold-control` | `/tabular-classification` | The matrix as a real `<table>`, and the decision threshold. Moving the threshold re-derives the whole block from held-out probabilities on the main thread — it never refits. |
+| `importance-bars` | tabular routes | Permutation importance, grouped by the **source** column. A negative bar is kept rather than clipped, and the causal caveat is beside it. |
+| `regression-metrics` · `regression-baseline` · `log-space-metrics` | `/tabular-regression` | Scores with their **units named**, the train-mean baseline in those units, and — separately — the same fit scored in log space. The separation is the point: side by side and unlabelled *is* the mistake the toggle demonstrates. |
+| `predicted-vs-actual` · `residual-plot` · `band-coverage` | `/tabular-regression` | The two plots that show what a scalar cannot, and the quantile band's **measured** coverage of the held-out rows. |
+| `coefficients` · `rank-deficient` · `log-toggle` | `/tabular-regression` | Ridge's coefficients on the standardised design, the report that the normal equations had no unique solution, and the transform toggle that **spends**. |
+| `prediction` · `predict-button` | tabular routes | The RUN band's transport and its result. PREDICT is the second of the page's two spending buttons; typing in the row form runs nothing. |
+| `dropped-rows` | tabular routes | Rows left out because the **target** was blank. Dropped rather than imputed or refused — and the count is said out loud, because a missing categorical target reads as class 0, which is a real class. |
+| `series-panel` · `series-summary` · `series-gaps` · `series-irregular` | `/time-series-forecasting` | The series and what was found in it. Gaps and irregular spacing are **reported, never interpolated** — a filled gap gives a seasonal forecast off by a phase and the error gets blamed on the method. |
+| `backtest-controls` · `backtest-strip` · `backtest-spread` | `/time-series-forecasting` | The rolling-origin settings, the per-window chart with the single split drawn across it, and the same three numbers as text. |
+| `metric-table` · `mase-horizon-note` | `/time-series-forecasting` | All four baselines on one window, and the note that **1.0 is break-even only at a horizon of 1** — the denominator is the in-sample *one-step* error, so a naive forecast measures ~1.0 one step out and ~3.0 fourteen steps out with nothing wrong. |
+| `no-fit-band` · `no-model-note` | `/time-series-forecasting` | Why there is no FIT band, and the standing note that the page has no learned model — in OUTPUT's **empty state**, so it is read before a forecast exists. |
 
 The testids are unchanged by the horizontal arrangement — `slot-N` is bound to the
 step number, not to a position in the layout.
@@ -753,6 +769,37 @@ That ambiguity is one reason §4's band labels stay generic.
   and any control the page says re-runs **does**.
 - Where a route declares `backends`, an unsupported model is offered but not selectable —
   and an undecided probe gates nothing.
+
+**A page that fits instead of downloading** owes the same list with three substitutions,
+and one addition:
+
+- "Nothing downloads on mount" becomes **"nothing fits on mount"** — the hook is called
+  with no `autoLoad` argument *and* neither `load` nor `fit` has been called.
+- "Choosing an input runs nothing" becomes **"choosing a dataset, a target, a feature or a
+  hyperparameter fits nothing"**. This is the assertion most worth writing on these pages,
+  for the same reason as on the others: "pick a target column and it fits" feels responsive
+  and is the five-samples-five-inferences failure with a dropdown in front of it.
+- There is no cached-weights case to assert, because there are no weights. What replaces it
+  is stronger: **assert that nothing is persisted and nothing is uploaded** — spy on `fetch`,
+  `indexedDB.open` and `Storage.setItem` across a real fit. The privacy claim is a
+  behaviour, so it gets an assertion rather than a sentence.
+- **Assert the hyperparameter defaults are swapped with the family**, not inherited. A depth
+  that suits one criterion is not right for another, and reuse that looks like a decision is
+  usually an inheritance.
+
+**A page with no worker owes an assertion that it still has none.** "No worker" is a design
+decision a later refactor can quietly undo, and nothing visible changes when it does. Stub
+`globalThis.Worker` in the unit test and count constructions in the spec — the same shape as
+the pages that must not fetch asserting zero Hub requests. (happy-dom ships no `Worker` at
+all, so the stub is what makes the assertion reachable *and* proves a hook reaching for one
+would have found something.)
+
+**Where a component's own decision lives in a chart option**, assert the option object
+rather than the pixels: happy-dom has no layout engine, so mock the lazy `EChart` wrapper,
+capture what it was handed, and check the parts that encode a decision — series order,
+colour by sign, whether a forecast is drawn only across the held-out region. Mock
+`getCSSVar` to echo its token name too, or every colour resolves to `""` and "positive and
+negative differ" is unassertable.
 
 ## 9. Checklist — adding a task page
 
