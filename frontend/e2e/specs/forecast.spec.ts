@@ -30,7 +30,6 @@ test.describe("Time series forecasting", () => {
       const w = window as unknown as { __workers: number; Worker: unknown };
       w.__workers = 0;
       const Original = window.Worker;
-      // @ts-expect-error - replacing the constructor for the count
       window.Worker = class extends Original {
         constructor(...args: ConstructorParameters<typeof Worker>) {
           (window as unknown as { __workers: number }).__workers++;
