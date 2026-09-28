@@ -185,6 +185,11 @@ const REAL_ROUTES: Record<string, string> = {
   // measured that the GPU round trip costs more than an RL step's arithmetic —
   // so it has no checkpoint, no download and no LOAD band.
   "reinforcement-learning": "/rl",
+  // The perception half of robot learning: an open-vocabulary detector and a
+  // depth model the app already ships, composed as one pair in two workers.
+  // The control half does not port (no simulator, no hardware), and the page
+  // says so beside its result.
+  "robotics": "/robotics",
   // Three slugs deliberately have no route and fall through to the placeholder,
   // for one reason each — every checkpoint the task has is too heavy to offer:
   //

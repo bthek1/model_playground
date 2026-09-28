@@ -33,6 +33,7 @@ import { Route as SummarizationRouteImport } from './routes/summarization'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SentenceSimilarityRouteImport } from './routes/sentence-similarity'
 import { Route as SegmentationRouteImport } from './routes/segmentation'
+import { Route as RoboticsRouteImport } from './routes/robotics'
 import { Route as RlRouteImport } from './routes/rl'
 import { Route as QuestionAnsweringRouteImport } from './routes/question-answering'
 import { Route as PoseRouteImport } from './routes/pose'
@@ -178,6 +179,11 @@ const SegmentationRoute = SegmentationRouteImport.update({
   path: '/segmentation',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoboticsRoute = RoboticsRouteImport.update({
+  id: '/robotics',
+  path: '/robotics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RlRoute = RlRouteImport.update({
   id: '/rl',
   path: '/rl',
@@ -317,6 +323,7 @@ export interface FileRoutesByFullPath {
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
   '/rl': typeof RlRoute
+  '/robotics': typeof RoboticsRoute
   '/segmentation': typeof SegmentationRoute
   '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
@@ -366,6 +373,7 @@ export interface FileRoutesByTo {
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
   '/rl': typeof RlRoute
+  '/robotics': typeof RoboticsRoute
   '/segmentation': typeof SegmentationRoute
   '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
@@ -416,6 +424,7 @@ export interface FileRoutesById {
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
   '/rl': typeof RlRoute
+  '/robotics': typeof RoboticsRoute
   '/segmentation': typeof SegmentationRoute
   '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
@@ -467,6 +476,7 @@ export interface FileRouteTypes {
     | '/pose'
     | '/question-answering'
     | '/rl'
+    | '/robotics'
     | '/segmentation'
     | '/sentence-similarity'
     | '/signup'
@@ -516,6 +526,7 @@ export interface FileRouteTypes {
     | '/pose'
     | '/question-answering'
     | '/rl'
+    | '/robotics'
     | '/segmentation'
     | '/sentence-similarity'
     | '/signup'
@@ -565,6 +576,7 @@ export interface FileRouteTypes {
     | '/pose'
     | '/question-answering'
     | '/rl'
+    | '/robotics'
     | '/segmentation'
     | '/sentence-similarity'
     | '/signup'
@@ -615,6 +627,7 @@ export interface RootRouteChildren {
   PoseRoute: typeof PoseRoute
   QuestionAnsweringRoute: typeof QuestionAnsweringRoute
   RlRoute: typeof RlRoute
+  RoboticsRoute: typeof RoboticsRoute
   SegmentationRoute: typeof SegmentationRoute
   SentenceSimilarityRoute: typeof SentenceSimilarityRoute
   SignupRoute: typeof SignupRoute
@@ -812,6 +825,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SegmentationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/robotics': {
+      id: '/robotics'
+      path: '/robotics'
+      fullPath: '/robotics'
+      preLoaderRoute: typeof RoboticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/rl': {
       id: '/rl'
       path: '/rl'
@@ -999,6 +1019,7 @@ const rootRouteChildren: RootRouteChildren = {
   PoseRoute: PoseRoute,
   QuestionAnsweringRoute: QuestionAnsweringRoute,
   RlRoute: RlRoute,
+  RoboticsRoute: RoboticsRoute,
   SegmentationRoute: SegmentationRoute,
   SentenceSimilarityRoute: SentenceSimilarityRoute,
   SignupRoute: SignupRoute,

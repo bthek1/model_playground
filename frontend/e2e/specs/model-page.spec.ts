@@ -67,6 +67,8 @@ const TASK_ROUTES = [
   // Both runtimes on one page: the depth model downloads *and* a GPU is
   // probed. It is still a downloading route — the probe is free and additional.
   { path: "/image-to-3d", heading: "Image to 3D", downloads: true },
+  // A pair from two catalogues in two workers — one LOAD for both.
+  { path: "/robotics", heading: "Robotics", downloads: true },
   // Compile-only: no weights, so LOAD auto-runs as a device probe (§7).
   { path: "/tensor", heading: "Tensor Arithmetic", downloads: false },
   // A task with nothing behind it renders the same page with empty slots, so an
