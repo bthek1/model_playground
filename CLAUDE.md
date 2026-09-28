@@ -111,6 +111,7 @@ just fe-e2e-tabular # the model ladder fitted in a real browser, pinned above th
 just fe-e2e-forecast # the backtest spread against the single-split number (no model, no worker)
 just fe-e2e-rl      # /rl: a real training run, pinned by a named arrow and value iteration (seconds)
 just fe-e2e-rl-phase0 # re-measure RL Phase 0: CPU vs GPU steps/s, per-step posting cost (logged)
+just fe-e2e-robotics # @slow: OWLv2 + Depth Anything — the nearer car must be ranked nearer (needs a shader-f16 GPU)
 just fe-e2e-models  # check every model id (audio + vision + multimodal + text) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -1514,6 +1515,18 @@ size is the **environment**, which has to be written in TypeScript. See
   `trainRlInWorker` + `useRlTraining` (worker on the first Train, never on mount; rAF-batched;
   a history of one entry per configuration). Learners plug in through `stepper.ts`, one
   environment step at a time, so the loop never learns which algorithm it holds.
+- **`/robotics` is a pair from two catalogues in two workers**, and the roadmap's teardown
+  advice was wrong for it. §3.6 asked for "`/pose`'s treatment: one combined size, and
+  `Promise.allSettled` on teardown". The size half is right — `vision/grounding.ts` builds
+  the pair *from* the shipped OWLv2 and Depth Anything entries, summing their measured
+  `bytes` and intersecting their `backends`, so nothing can drift. The teardown half is
+  not: `/pose` holds both models in **one** worker; here each half rides its own hook and
+  worker (`/text-ranking`'s shape), so a throwing dispose cannot reach the other, and
+  `useGrounding.test.ts` asserts that rather than adding an `allSettled` that could never
+  fire. Depth is **inverse** and relative — the page reports an ordering, sampled as a
+  median over the box's centre, never metres. **OWLv2's q8 export does not open on WASM**
+  (`Cast(13) … /class_head/Cast`), which also breaks `/zero-shot-object-detection`'s CPU
+  path; `just fe-e2e-robotics` needs a `shader-f16` GPU.
 
 ### Three routes were built and then cut for size — read this before adding one
 

@@ -489,6 +489,15 @@ fe-e2e-rl:
 fe-e2e-rl-phase0:
     cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/rl-phase0.spec.ts
 
+# Run the @slow /robotics spec: a real OWLv2 + Depth Anything load on the city
+# street sample, pinned by **geometry** — the hatchback in the foreground must be
+# ranked nearer than the car up the road. That is the only assertion that
+# catches an inverted depth convention; every count-based check passes it.
+# Needs a GPU with shader-f16: OWLv2's q8 export does not open on WASM.
+# Runs /robotics' real grounding spec (needs a shader-f16 GPU)
+fe-e2e-robotics:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/robotics.spec.ts
+
 # Check every model id (audio + vision + multimodal + text) still resolves on
 # the Hugging Face Hub, that each vision entry publishes the dtypes both backends
 # ask for, that the VLM entries publish their three q4f16 graphs, and that the

@@ -18,7 +18,7 @@
 | Actor-Critic (§3.3) | `/rl` | Planned — [#52](https://github.com/bthek1/model_playground/issues/52) |
 | Decision Transformer (§3.4) | — | Prose — [#52](https://github.com/bthek1/model_playground/issues/52) |
 | RL for Language Models (§3.5) | — | Prose — [#52](https://github.com/bthek1/model_playground/issues/52) |
-| Robotics: grounding (§3.6) | [`/robotics`](../../frontend/src/routes/robotics.tsx) | [#53](https://github.com/bthek1/model_playground/issues/53) |
+| Robotics: grounding (§3.6) | [`/robotics`](../../frontend/src/routes/robotics.tsx) | **Shipped** — OWLv2 + Depth Anything V2, one pair in two workers ([#53](https://github.com/bthek1/model_playground/issues/53)) |
 | Robotics: behaviour cloning (§3.6) | `/robotics` | Planned — [#54](https://github.com/bthek1/model_playground/issues/54) |
 
 Reinforcement learning is the best fit for a browser of anything in the taxonomy, and the
@@ -262,12 +262,67 @@ environment is MuJoCo. Planned as prose in #52.
 The policy is an LLM, the reward model is another, and one PPO step is a cluster job.
 Planned as prose in #52.
 
-### 3.6 Robotics
+### 3.6 Robotics — the perception half shipped
 
-Taxonomy task **Robotics**. The perception half — grounding an instruction with OWLv2 and
-Depth Anything V2 — is [#53](https://github.com/bthek1/model_playground/issues/53); the
-behaviour-cloning multimodality failure on a toy reaching task is
-[#54](https://github.com/bthek1/model_playground/issues/54).
+Taxonomy task **Robotics** · [`/robotics`](../../frontend/src/routes/robotics.tsx) ·
+[#53](https://github.com/bthek1/model_playground/issues/53). Upstream research: behaviour
+cloning, multimodality, action chunking.
+
+The buildable half is **grounding an instruction in what the camera sees**: type "a car",
+point the camera or drop an image, and the page answers with a box from an
+open-vocabulary detector and a *relative* distance for it from a depth model — then calls
+out the nearest match, because "which one do I reach for" is the question.
+
+| Upstream (PyTorch) | Browser model | WebGPU | WASM |
+|---|---|---|---|
+| `google/owlv2-base-patch16-ensemble` | `Xenova/owlv2-base-patch16-ensemble` | 307 904 711 | 155 312 754 |
+| `depth-anything/Depth-Anything-V2-Small-hf` | `onnx-community/depth-anything-v2-small` | 49 642 442 | 27 258 801 |
+| **the pair** | | **357.5 MB** | **182.6 MB** |
+
+**It downloads nothing new.** Both are shipped entries on `/zero-shot-object-detection` and
+`/depth`, and [`vision/grounding.ts`](../../frontend/src/vision/grounding.ts) composes the
+pair **from those entries** — ids, dtypes, `backends` (the intersection of the two) and
+the measured `bytes` (their sum) — so none of it can drift from the pages that own it. A
+test asserts the sum against the source entries, because the combined figure is also the
+progress bar's denominator. Past `LARGE_MODEL_BYTES` on WebGPU, so the warning fires;
+under `HEAVY_MODEL_BYTES`, so there is no second opt-in; both directions are pinned.
+
+**The roadmap's teardown instruction was wrong for the shape this page has.** It asked for
+"the `/pose` treatment: one combined size quoted once, and `Promise.allSettled` on
+teardown". The first half is right. The second is not: `/pose` loads its pair **inside one
+worker**, where one engine owns a combined teardown and can get it wrong. Here each half
+rides its own hook (`useZeroShotDetector`, `useDepth`), so each gets its own worker — the
+`/text-ranking` shape — and a dispose that throws in one is structurally unable to reach
+the other. [`useGrounding`](../../frontend/src/hooks/useGrounding.ts) says so, and its test
+makes one worker's teardown throw and asserts the other still terminates. Two workers also
+means **`combineProgress`**, not repo-keyed progress.
+
+**Depth is relative, and its direction is easy to invert.** Depth Anything emits
+**inverse** depth — a big value is *near* — and getting that backwards turns the scene
+inside out while still looking plausible (`/image-to-3d`'s lesson). The direction is read
+from the catalogue (`DepthModel.metric`), and
+[`groundingDepth.ts`](../../frontend/src/vision/groundingDepth.ts) returns an **ordering**
+(rank, nearest) plus the raw value rather than a distance in units it does not have. It
+samples the **median over the box's central region**, never the centre pixel, which on a
+thin object lands on the background and reports the wall's distance.
+
+**OWLv2 wants labels, not sentences.** It scores each phrase as a class name, so "pick up
+the red block nearest the camera" is one enormous class; the page flags a phrase over four
+words rather than letting it quietly underperform. The score threshold re-derives from the
+boxes in hand, and the camera path runs both models per frame with one frame in flight.
+
+**The control half mostly does not port, and the page says so** in OUTPUT's description,
+before a result exists: behaviour cloning on real data needs demonstrations,
+`lerobot/pusht` needs a simulator, and action chunking is about real hardware latency. The
+one control-half demonstration that does work — the multimodality failure on a toy
+reaching task — is [#54](https://github.com/bthek1/model_playground/issues/54).
+
+**Found while building it: OWLv2's q8 export does not open on WASM.** The session fails with
+`Could not find an implementation for Cast(13) node with name '/class_head/Cast'` — and
+`/zero-shot-object-detection`'s own `@slow` spec fails the same way on the `chromium`
+project, so the bug predates this page. The OWLv2 entry declares no `backends`, so both
+pages offer a CPU path that downloads 155 MB and then cannot run. The `@slow` grounding spec
+(`just fe-e2e-robotics`) therefore needs a GPU with `shader-f16`, and skips without one.
 
 ---
 
@@ -282,7 +337,7 @@ behaviour-cloning multimodality failure on a toy reaching task is
 | **Decision Transformer** | No | no ONNX weights, and MuJoCo | - | export it, and replace the env |
 | **RL for LLMs** | No, and correctly | - | - | prose, plus `/text-generation` |
 | **Behaviour cloning** (Robotics) | Toy env only | 2-D reaching task in TypeScript | CPU | `lerobot` datasets to a server |
-| **Grounding an instruction** (Robotics) | Yes | OWLv2 plus Depth Anything V2 | WebGPU | - |
+| **Grounding an instruction** (Robotics) | **Shipped** | OWLv2 plus Depth Anything V2, two workers | WebGPU (OWLv2 has no working WASM path) | - |
 
 Rule of thumb: **the algorithm always ports, the environment usually does not.**
 
