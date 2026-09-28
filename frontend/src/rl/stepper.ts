@@ -16,8 +16,8 @@ export interface Stepper {
   /** Environment steps taken so far. */
   readonly steps: number;
   readonly done: boolean;
-  /** The exploration rate in force, for the progress line. */
-  readonly epsilon: number;
+  /** The exploration rate in force, for the progress line; null if the learner has none. */
+  readonly epsilon: number | null;
   /** Set by the live control; `null` returns the run to its own schedule. */
   epsilonOverride: number | null;
   /** One environment step. Returns the episode's return if it just ended, else null. */

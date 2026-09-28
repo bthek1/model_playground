@@ -7,7 +7,13 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RlRunRecord } from "@/hooks/useRlTraining";
-import type { QLearningRequest, RlRenderState, RlTrainResult } from "@/rl/types";
+import { PG_DEFAULTS } from "@/rl/policyGradient";
+import type {
+  PolicyGradientRequest,
+  QLearningRequest,
+  RlRenderState,
+  RlTrainResult,
+} from "@/rl/types";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -32,6 +38,7 @@ const hookState = {
   error: null as string | null,
   history: [] as RlRunRecord[],
   start: vi.fn(),
+  startAll: vi.fn(),
   stop: vi.fn(),
   control: vi.fn(),
   clearHistory: vi.fn(),
@@ -195,5 +202,104 @@ describe("RlPage", () => {
     expect(setItem).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
     setItem.mockRestore();
+  });
+
+  describe("CartPole and the policy gradients (#52)", () => {
+    it("disables the invalid pairs, with the reason on the row", () => {
+      renderPage();
+      // On FrozenLake, the policy gradients are the invalid ones.
+      expect(screen.getByRole("button", { name: /^REINFORCE/ })).toBeDisabled();
+      expect(screen.getByTestId("pairing-reason-reinforce")).toHaveTextContent(/zero/i);
+      fireEvent.click(screen.getByRole("button", { name: /^CartPole$/ }));
+      expect(screen.getByRole("button", { name: /tabular q-learning/i })).toBeDisabled();
+      expect(screen.getByTestId("pairing-reason-q-learning")).toHaveTextContent(/discrete states/i);
+      expect(screen.getByRole("button", { name: /^REINFORCE/ })).toBeEnabled();
+    });
+
+    it("trains nothing when the environment or the algorithm changes", () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("button", { name: /^CartPole$/ }));
+      fireEvent.click(screen.getByRole("button", { name: /^Actor-Critic/ }));
+      fireEvent.change(screen.getByLabelText(/GAE λ/), { target: { value: "0.5" } });
+      expect(hookState.start).not.toHaveBeenCalled();
+      expect(hookState.startAll).not.toHaveBeenCalled();
+      expect(screen.getByTestId("output-empty")).toBeInTheDocument();
+    });
+
+    it("gives each algorithm its own measured defaults", () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("button", { name: /^CartPole$/ }));
+      fireEvent.click(screen.getByTestId("train-button"));
+      const [rf] = hookState.start.mock.calls[0] as [PolicyGradientRequest];
+      expect(rf).toMatchObject({ algorithm: "reinforce", env: "cartpole", lr: PG_DEFAULTS.reinforce.lr, normalise: false });
+
+      fireEvent.click(screen.getByRole("button", { name: /^Actor-Critic/ }));
+      fireEvent.click(screen.getByTestId("train-button"));
+      const [ac] = hookState.start.mock.calls[1] as [PolicyGradientRequest];
+      expect(ac.lr).toBe(PG_DEFAULTS["actor-critic"].lr);
+      expect(ac.lr).not.toBe(rf.lr);
+    });
+
+    it("runs both algorithms, exactly two runs, at one seed", () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("button", { name: /^CartPole$/ }));
+      fireEvent.change(screen.getByLabelText(/^seed$/i), { target: { value: "9" } });
+      fireEvent.click(screen.getByTestId("run-both"));
+      expect(hookState.startAll).toHaveBeenCalledTimes(1);
+      const [reqs] = hookState.startAll.mock.calls[0] as [PolicyGradientRequest[]];
+      expect(reqs.map((r) => r.algorithm)).toEqual(["reinforce", "actor-critic"]);
+      expect(reqs.every((r) => r.seed === 9)).toBe(true);
+      // Each at its own rate, not the selected one's.
+      expect(reqs[0].lr).toBe(PG_DEFAULTS.reinforce.lr);
+      expect(reqs[1].lr).toBe(PG_DEFAULTS["actor-critic"].lr);
+      expect(screen.getByTestId("run-both-note")).toHaveTextContent(/same seed \(9\)/);
+    });
+
+    it("says what is not here, and why, before any run — naming DPO, not RLHF", () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("button", { name: /^CartPole$/ }));
+      expect(screen.getByTestId("output-empty")).toBeInTheDocument();
+      const notes = screen.getByTestId("rl-notes");
+      expect(notes).toHaveTextContent(/Decision Transformer/);
+      expect(notes).toHaveTextContent(/no\s+ONNX export/i);
+      expect(notes).toHaveTextContent(/MuJoCo/);
+      expect(notes).toHaveTextContent(/DPO/);
+      expect(within(notes).getByRole("link", { name: "/text-generation" })).toHaveAttribute("href", "/text-generation");
+    });
+
+    it("hides the live ε, which a policy gradient does not have", () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("button", { name: /^CartPole$/ }));
+      expect(screen.queryByLabelText(/live ε/i)).toBeNull();
+    });
+
+    it("reports the spread across seeds per algorithm, once there are runs", () => {
+      const render: RlRenderState = {
+        kind: "cartpole",
+        state: new Float32Array([0, 0, 0.01, 0]),
+        diagnostics: { meanAbsWeight: 1.5, criticLoss: 0.2 },
+      };
+      const run = (algorithm: "reinforce" | "actor-critic", seed: number, level: number) => {
+        const request = { algorithm, env: "cartpole", seed, hidden: 32, lr: 0.01, criticLr: 0.03, gamma: 0.99, lambda: 0.9, normalise: false, episodes: 20 } as PolicyGradientRequest;
+        return {
+          key: JSON.stringify(request),
+          request,
+          returns: new Array(20).fill(level),
+          result: { episodes: 20, steps: 20 * level, elapsedMs: 5, stopped: false, epsilonChanged: false, render },
+        };
+      };
+      Object.assign(hookState, {
+        render,
+        returns: new Array(20).fill(500),
+        result: run("actor-critic", 2, 500).result,
+        history: [run("reinforce", 1, 100), run("reinforce", 2, 300), run("actor-critic", 1, 480), run("actor-critic", 2, 500)],
+      });
+      renderPage();
+      expect(screen.getByTestId("cartpole-canvas")).toBeInTheDocument();
+      expect(screen.getByTestId("spread-reinforce")).toHaveTextContent("200");
+      expect(screen.getByTestId("spread-reinforce")).toHaveTextContent("100 · 100–300");
+      expect(screen.getByTestId("spread-actor-critic")).toHaveTextContent("10 · 480–500");
+      expect(screen.getByTestId("pg-weight")).toHaveTextContent("1.50");
+    });
   });
 });

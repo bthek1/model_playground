@@ -1525,6 +1525,26 @@ size is the **environment**, which has to be written in TypeScript. See
   `trainRlInWorker` + `useRlTraining` (worker on the first Train, never on mount; rAF-batched;
   a history of one entry per configuration). Learners plug in through `stepper.ts`, one
   environment step at a time, so the loop never learns which algorithm it holds.
+- **CartPole is pinned to a trajectory Gymnasium generated, not to our expectations.** A
+  sign error in the pole update trains happily — the agent learns whatever physics it is
+  given — so `scripts/make-cartpole-fixture.py` runs Gymnasium itself and `cartPole.test.ts`
+  matches it to 12 decimals. The constants were verified against `cartpole.py` too
+  (half-length 0.5, the falling step still pays 1, 500 is a truncation).
+- **REINFORCE and Actor-Critic are one gradient with two weights**, `−(1/T)Σ wₜ log π`:
+  the return Gₜ, or a GAE(λ) advantage against a critic. Each learner is checked by finite
+  differences of its own loss, and "an exact critic gives zero advantage" is asserted as a
+  property. They plug in through `stepper.ts` — no new worker, hook or protocol; the hook
+  only gained `startAll` for "Run both" (sequential, one seed, Stop ends the queue).
+- **Each algorithm has its own measured defaults, and "Run both" keeps them.** At
+  Actor-Critic's rate REINFORCE collapses (79 ± 56, one seed at 9); at its own it is
+  258 ± 34 against Actor-Critic's 500 ± 1. Normalising REINFORCE's returns lifts it to
+  428 ± 20 — so that switch is off by default and says what it does. The page and its test
+  assert a **spread across seeds**, never a per-seed winner.
+- **Read the model card before writing the sentence.** §3.5's prose names the alignment
+  method SmolLM2-360M-Instruct's card states — SFT then **DPO**, not PPO-style RLHF.
+- **A caveat in OUTPUT's description must not squeeze the result.** The §3.4/§3.5 notes sit
+  there only while there is no result, then move below it; left in place they pushed the
+  page's own controls under the card edge, which the E2E spec caught.
 - **`/robotics` is a pair from two catalogues in two workers**, and the roadmap's teardown
   advice was wrong for it. §3.6 asked for "`/pose`'s treatment: one combined size, and
   `Promise.allSettled` on teardown". The size half is right — `vision/grounding.ts` builds

@@ -112,7 +112,8 @@ describe("useRlTraining", () => {
     frame();
     expect(hook.current.returns).toEqual([0, 1, 0, 1, 1]);
     expect(hook.current.progress?.episode).toBe(5);
-    expect(hook.current.render?.agent).toBe(3);
+    const shown = hook.current.render;
+    expect(shown?.kind === "grid" && shown.agent).toBe(3);
   });
 
   it("sends Stop and live controls to the run in progress", () => {
@@ -165,6 +166,28 @@ describe("useRlTraining", () => {
     await waitFor(() => expect(hook.current.training).toBe(false));
     expect(hook.current.history).toEqual([]);
     expect(hook.current.result?.stopped).toBe(true);
+  });
+
+  it("runs both requests of a head-to-head in sequence, and Stop ends the queue", async () => {
+    const { result: hook } = renderHook(() => useRlTraining());
+    const a = { ...REQUEST, seed: 5 };
+    const b = { ...REQUEST, seed: 6 };
+    act(() => hook.current.startAll([a, b]));
+    expect(mockTrain).toHaveBeenCalledTimes(1); // not in parallel
+    await act(async () => resolveRun(result()));
+    await waitFor(() => expect(mockTrain).toHaveBeenCalledTimes(2));
+    expect(mockTrain.mock.calls[1][1]).toEqual(b);
+    await act(async () => resolveRun(result()));
+    await waitFor(() => expect(hook.current.training).toBe(false));
+    expect(hook.current.history).toHaveLength(2);
+
+    // Stop during the first run: the second never starts.
+    mockTrain.mockClear();
+    act(() => hook.current.startAll([{ ...a, seed: 7 }, { ...b, seed: 8 }]));
+    act(() => hook.current.stop());
+    await act(async () => resolveRun(result({ stopped: true })));
+    await waitFor(() => expect(hook.current.training).toBe(false));
+    expect(mockTrain).toHaveBeenCalledTimes(1);
   });
 
   it("terminates the worker on unmount", () => {

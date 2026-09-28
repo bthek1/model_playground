@@ -14,10 +14,10 @@
 | Roadmap section | Route | Status |
 |---|---|---|
 | Tabular Q-Learning (§3.1) | [`/rl`](../../frontend/src/routes/rl.tsx) | **Shipped** — FrozenLake, checked against value iteration ([#51](https://github.com/bthek1/model_playground/issues/51)) |
-| REINFORCE (§3.2) | `/rl` | Planned — [#52](https://github.com/bthek1/model_playground/issues/52) |
-| Actor-Critic (§3.3) | `/rl` | Planned — [#52](https://github.com/bthek1/model_playground/issues/52) |
-| Decision Transformer (§3.4) | — | Prose — [#52](https://github.com/bthek1/model_playground/issues/52) |
-| RL for Language Models (§3.5) | — | Prose — [#52](https://github.com/bthek1/model_playground/issues/52) |
+| REINFORCE (§3.2) | `/rl` | **Shipped** — CartPole, pinned to Gymnasium's own trajectory ([#52](https://github.com/bthek1/model_playground/issues/52)) |
+| Actor-Critic (§3.3) | `/rl` | **Shipped** — the head-to-head, one seed, "Run both" ([#52](https://github.com/bthek1/model_playground/issues/52)) |
+| Decision Transformer (§3.4) | — | **Prose, on `/rl`** — no ONNX export *and* MuJoCo ([#52](https://github.com/bthek1/model_playground/issues/52)) |
+| RL for Language Models (§3.5) | — | **Prose, on `/rl`** — linked to `/text-generation`; SmolLM2 was aligned with DPO ([#52](https://github.com/bthek1/model_playground/issues/52)) |
 | Robotics: grounding (§3.6) | [`/robotics`](../../frontend/src/routes/robotics.tsx) | **Shipped** — OWLv2 + Depth Anything V2, one pair in two workers ([#53](https://github.com/bthek1/model_playground/issues/53)) |
 | Robotics: behaviour cloning (§3.6) | `/robotics` | Planned — [#54](https://github.com/bthek1/model_playground/issues/54) |
 
@@ -235,32 +235,96 @@ the schedule — and they sit in RUN, saying which kind they are. The speed dial
 **simulation** dial, not a frame rate: at "max" a thousand episodes take milliseconds, so
 the page defaults to 3000 steps a second, slow enough to watch the agent walk.
 
-### 3.2 REINFORCE, the policy gradient in its rawest form
+### 3.2 REINFORCE, the policy gradient in its rawest form — shipped
 
-Part of the taxonomy task **Reinforcement Learning** · planned in
+Part of the taxonomy task **Reinforcement Learning** · `/rl`, CartPole ·
 [#52](https://github.com/bthek1/model_playground/issues/52).
 
-CartPole plus a two-layer policy network, trained in the tab. The forward pass is two
-matmuls and a softmax; the backward pass is the log-probability times the return. **The
-variance is the thing to render**: the per-episode return without smoothing, next to a
-running mean.
+**CartPole is transcribed, and pinned by a trajectory Gymnasium itself generated.** Every
+constant in [`envs/cartPole.ts`](../../frontend/src/rl/envs/cartPole.ts) was checked
+against `cartpole.py` in Gymnasium 1.3.0 — gravity 9.8, cart 1.0, pole 0.1, **half**-length
+0.5, force 10, τ 0.02, Euler, ±12°, ±2.4 m, reward 1 *including* the falling step, a
+500-step cap — and all matched the plan. That is not the check that matters, though: a
+CartPole with a sign error in the pole update trains perfectly happily, because the agent
+learns whatever physics it is given. So
+[`scripts/make-cartpole-fixture.py`](../../frontend/scripts/make-cartpole-fixture.py) runs
+**Gymnasium itself** from a fixed state and action sequence, and `cartPole.test.ts` matches
+that trajectory to 12 decimals, step for step, until the pole falls. The same discipline as
+DeepFilterNet3's libDF fixture: an outside reference, never our own expectations.
 
-### 3.3 Actor-Critic, the same gradient with far less variance
+**The policy network is `policyNet.ts`** — 4 → hidden → 2, tanh, forward and backward
+written out, the softmax reused from `linearModel.ts`. The loss the page descends is
+`−(1/T) Σ wₜ log π(aₜ|sₜ)`, whose gradient with respect to the logits is the cross-entropy
+gradient scaled by the weight; REINFORCE's weight is the discounted return Gₜ.
 
-Part of the taxonomy task **Reinforcement Learning** · planned in
+**The variance is the render.** The per-episode return is drawn raw with its running mean
+over it, and the scoreboard reports the mean weight on ∇log π — |Gₜ| for REINFORCE, |Aₜ| for
+Actor-Critic — which is where the variance went, as a number.
+
+**Return normalisation is off by default, and measured.** Standardising the returns per
+episode is a crude baseline: it lifts REINFORCE from 258 ± 34 to 428 ± 20 (below), most of
+the way to what the critic buys. The page says so beside the switch.
+
+### 3.3 Actor-Critic, the same gradient with far less variance — shipped
+
+Part of the taxonomy task **Reinforcement Learning** · `/rl` ·
 [#52](https://github.com/bthek1/model_playground/issues/52).
 
-Same environment, same page, one more network, run against REINFORCE on the same seed.
+The same gradient, weighted by a GAE(λ) advantage against a separate value network.
+Bootstrapping through CartPole's 500-step **truncation** and not through a **fall** is the
+detail that fails silently; a test pins both.
 
-### 3.4 Decision Transformer — prose
+**Each algorithm has its own measured defaults** (400 episodes, hidden 32, γ 0.99, mean of
+the last 50 episodes over seeds 1–6, recorded in
+[`policyGradient.ts`](../../frontend/src/rl/policyGradient.ts)):
 
-`edbeeching/decision-transformer-gym-hopper-medium` has no ONNX weights and its
-environment is MuJoCo. Planned as prose in #52.
+| configuration | final return |
+|---|---|
+| REINFORCE, lr 0.01 | 79 ± 56 — one seed ends at 9 |
+| REINFORCE, lr 0.003 (**default**) | 258 ± 34 |
+| REINFORCE, lr 0.003, normalised returns | 428 ± 20 |
+| Actor-Critic, lr 0.01, critic 0.01, λ 0.95 | 479 ± 46 |
+| Actor-Critic, lr 0.01, critic 0.03, λ 0.9 (**default**) | 500 ± 1 |
 
-### 3.5 RL for Language Models — prose
+Giving REINFORCE the Actor-Critic's learning rate would have flattered the comparison and
+been unfair: at 0.01 REINFORCE collapses. **Do not inherit a sibling's hyperparameters** —
+the `/link-prediction` lesson again, measured here in both directions. "Run both" gives each
+algorithm its own rate and shares everything else, including the seed.
 
-The policy is an LLM, the reward model is another, and one PPO step is a cluster job.
-Planned as prose in #52.
+**What the comparison asserts is a spread, not a winner.** Actor-Critic beating REINFORCE on
+a given seed is not a property RL promises; the page accumulates one history entry per
+(algorithm, seed) and tabulates each algorithm's mean, standard deviation and range across
+the seeds trained, and the unit test asserts only that the spread across four seeds is
+narrower. In Chromium at seed 1: REINFORCE 354, Actor-Critic 500, both runs in about a
+second at full speed.
+
+**The finite-difference checks are per learner**, over a short fixed episode at a generic
+point, plus the critic's own gradient — because a wrong policy gradient still produces a
+rising curve (a sign or a 1/T error is absorbed into the learning rate). And one property
+"the loss falls" cannot express: **with an exact critic every advantage is zero**, at any λ.
+
+### 3.4 Decision Transformer — prose, on the page
+
+`edbeeching/decision-transformer-gym-hopper-medium` publishes `config.json`,
+`pytorch_model.bin`, `README.md` and `replay.mp4` and nothing else (re-checked 2026-09-26):
+§0 question 1's **missing-export** flavour, *and* a MuJoCo environment, the more final of the
+two. `/rl` says both, dated, and explains the sequence-modelling framing — a small GPT
+reading (return-to-go, state, action) triples — against the trajectories the page has just
+generated.
+
+### 3.5 RL for Language Models — prose, on the page
+
+The policy is an LLM, the reward model is another, and one optimisation step is a cluster
+job. The page links to `/text-generation`, whose two entries already differ in exactly this
+way — and **names the method the model card states**: SmolLM2-360M-Instruct was tuned with
+supervised fine-tuning and then **DPO** on UltraFeedback, a preference method, not PPO-style
+RLHF. Reading the card before writing the sentence is what caught that (the `/background-removal`
+licence precedent).
+
+**Both notes sit in OUTPUT's description while there is no result**, so they are read first,
+and move below the result once one exists. Left in the description, they squeezed the
+result area until the page's own policy toggle sat under the card edge — which the E2E spec
+found, not a reviewer.
 
 ### 3.6 Robotics — the perception half shipped
 
@@ -331,11 +395,11 @@ pages offer a CPU path that downloads 155 MB and then cannot run. The `@slow` gr
 | Piece | In-browser? | How | Runs on | If not |
 |---|---|---|---|---|
 | **Tabular Q-Learning** | **Shipped** | a `Float32Array` plus a grid world | CPU, in a worker | - |
-| **REINFORCE** | Yes | 2-layer MLP, trained in a worker | CPU (§0) | - |
-| **Actor-Critic** | Yes | as above, two networks | CPU (§0) | - |
-| **Algorithm head-to-head** | Yes | same seed, two curves | CPU (§0) | - |
-| **Decision Transformer** | No | no ONNX weights, and MuJoCo | - | export it, and replace the env |
-| **RL for LLMs** | No, and correctly | - | - | prose, plus `/text-generation` |
+| **REINFORCE** | **Shipped** | 2-layer MLP, trained in a worker | CPU (§0) | - |
+| **Actor-Critic** | **Shipped** | as above, two networks | CPU (§0) | - |
+| **Algorithm head-to-head** | **Shipped** | same seed, two curves, a spread across seeds | CPU (§0) | - |
+| **Decision Transformer** | No — prose on `/rl` | no ONNX weights, and MuJoCo | - | export it, and replace the env |
+| **RL for LLMs** | No, and correctly — prose on `/rl` | - | - | prose, plus `/text-generation` |
 | **Behaviour cloning** (Robotics) | Toy env only | 2-D reaching task in TypeScript | CPU | `lerobot` datasets to a server |
 | **Grounding an instruction** (Robotics) | **Shipped** | OWLv2 plus Depth Anything V2, two workers | WebGPU (OWLv2 has no working WASM path) | - |
 

@@ -53,6 +53,8 @@ export interface RlTrainingState {
   error: string | null;
   history: RlRunRecord[];
   start: (req: RlTrainRequest, speed?: number | null) => void;
+  /** Run several requests in sequence — the head-to-head. Stop ends the queue. */
+  startAll: (reqs: RlTrainRequest[], speed?: number | null) => void;
   stop: () => void;
   control: (control: RlControl) => void;
   clearHistory: () => void;
@@ -93,10 +95,12 @@ export function useRlTraining(): RlTrainingState {
     };
   }, []);
 
-  const start = useCallback(
-    (req: RlTrainRequest, speed: number | null = null) => {
-      if (trainingRef.current) return;
-      trainingRef.current = true;
+  // Set by Stop so a "Run both" queue does not start its next run.
+  const stoppedRef = useRef(false);
+
+  /** One run, start to finish. Resolves either way; errors land in `error`. */
+  const runOne = useCallback(
+    (req: RlTrainRequest, speed: number | null): Promise<void> => {
       workerRef.current ??= createRlWorker();
 
       returnsRef.current = [];
@@ -104,8 +108,6 @@ export function useRlTraining(): RlTrainingState {
       setReturns([]);
       setProgress(null);
       setResult(null);
-      setError(null);
-      setTraining(true);
 
       const handle = trainRlInWorker(
         workerRef.current,
@@ -119,7 +121,7 @@ export function useRlTraining(): RlTrainingState {
       );
       handleRef.current = handle;
 
-      handle.promise
+      return handle.promise
         .then((final) => {
           const all = returnsRef.current.slice();
           setReturns(all);
@@ -134,17 +136,50 @@ export function useRlTraining(): RlTrainingState {
             ),
           );
         })
-        .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+        .catch((e: unknown) => {
+          stoppedRef.current = true; // a failed run ends the queue too
+          setError(e instanceof Error ? e.message : String(e));
+        })
         .finally(() => {
-          trainingRef.current = false;
           handleRef.current = null;
-          setTraining(false);
         });
     },
     [scheduleFlush],
   );
 
-  const stop = useCallback(() => handleRef.current?.cancel(), []);
+  /**
+   * Run several requests one after another — "Run both" for the head-to-head.
+   * Sequential, not parallel: two loops in one worker would share its CPU and
+   * each would run at half speed for no gain. Stop ends the whole queue.
+   */
+  const startAll = useCallback(
+    (reqs: RlTrainRequest[], speed: number | null = null) => {
+      if (trainingRef.current || reqs.length === 0) return;
+      trainingRef.current = true;
+      stoppedRef.current = false;
+      setError(null);
+      setTraining(true);
+      void (async () => {
+        for (const req of reqs) {
+          if (stoppedRef.current) break;
+          await runOne(req, speed);
+        }
+        trainingRef.current = false;
+        setTraining(false);
+      })();
+    },
+    [runOne],
+  );
+
+  const start = useCallback(
+    (req: RlTrainRequest, speed: number | null = null) => startAll([req], speed),
+    [startAll],
+  );
+
+  const stop = useCallback(() => {
+    stoppedRef.current = true;
+    handleRef.current?.cancel();
+  }, []);
   const control = useCallback((c: RlControl) => handleRef.current?.control(c), []);
   const clearHistory = useCallback(() => setHistory([]), []);
 
@@ -157,6 +192,7 @@ export function useRlTraining(): RlTrainingState {
     error,
     history,
     start,
+    startAll,
     stop,
     control,
     clearHistory,

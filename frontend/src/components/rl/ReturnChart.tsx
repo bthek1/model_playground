@@ -20,18 +20,23 @@ const EChart = lazy(() => import("@/components/charts/EChart"));
 export interface ComparisonLine {
   label: string;
   returns: readonly number[];
+  /** Draw its raw trace too, not only its running mean. */
+  raw?: boolean;
 }
 
 export function ReturnChart({
   returns,
   window,
   yLabel,
+  label = "this run",
   comparisons = [],
 }: {
   returns: readonly number[];
   window: number;
   yLabel: string;
-  /** Earlier runs, drawn as running means only. */
+  /** The current run's legend name. */
+  label?: string;
+  /** Earlier runs, drawn as running means (and raw, if asked). */
   comparisons?: readonly ComparisonLine[];
 }) {
   const { theme } = useTheme();
@@ -44,17 +49,34 @@ export function ReturnChart({
     const toPairs = (values: readonly number[]) =>
       strideIndices(values.length).map((i) => [i + 1, values[i]] as [number, number]);
 
-    const series: NonNullable<EChartsOption["series"]> = comparisons.map((c, i) => ({
-      name: c.label,
-      type: "line" as const,
-      showSymbol: false,
-      lineStyle: { color: others[i % others.length], width: 1.2, type: "dashed" as const },
-      itemStyle: { color: others[i % others.length] },
-      data: toPairs(runningMean(c.returns, window)),
-    }));
+    const series: NonNullable<EChartsOption["series"]> = comparisons.flatMap((c, i) => {
+      const color = others[i % others.length];
+      const mean = {
+        name: c.label,
+        type: "line" as const,
+        showSymbol: false,
+        lineStyle: { color, width: 1.6, type: "dashed" as const },
+        itemStyle: { color },
+        data: toPairs(runningMean(c.returns, window)),
+      };
+      // The head-to-head draws the other run's raw trace too: comparing one
+      // run's noise against the other's smoothed mean would flatter the mean.
+      if (!c.raw) return [mean];
+      return [
+        {
+          name: `${c.label} (each episode)`,
+          type: "line" as const,
+          showSymbol: false,
+          lineStyle: { color, width: 0.7, opacity: 0.4 },
+          itemStyle: { color },
+          data: toPairs(c.returns),
+        },
+        mean,
+      ];
+    });
     series.push(
       {
-        name: "each episode",
+        name: `${label} (each episode)`,
         type: "line",
         showSymbol: false,
         lineStyle: { color: raw, width: 0.8, opacity: 0.55 },
@@ -62,7 +84,7 @@ export function ReturnChart({
         data: toPairs(returns),
       },
       {
-        name: `mean of last ${window}`,
+        name: `${label} (mean of last ${window})`,
         type: "line",
         showSymbol: false,
         lineStyle: { color: mean, width: 2 },
@@ -93,7 +115,7 @@ export function ReturnChart({
       series,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [returns, window, yLabel, comparisons, theme]);
+  }, [returns, window, yLabel, label, comparisons, theme]);
 
   return (
     <div className="h-56 w-full" data-testid="return-chart" aria-label={`${yLabel}, per episode`}>

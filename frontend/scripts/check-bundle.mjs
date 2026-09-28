@@ -36,9 +36,16 @@ const assets = join(root, "dist", "assets");
  * and series are behind dynamic imports for exactly this reason — a static
  * `?raw` import of the six sample files put 97 KB of incompressible text into
  * this chunk and is what caught them.
+ * Measured 2026-09-28: 1,861 KB raw / 561 KB gzip, after `/rl` (#51, #52) and
+ * `/robotics` (#53). Raw raised 1860 → 1900 and gzip 560 → 575. Again app code:
+ * `echarts` is still split, the CartPole fixture is test-only, and the RL
+ * module is plain arithmetic with no library behind it. Every route is in this
+ * chunk — there is no route-level code splitting — so each new page moves it;
+ * lazy route components are the structural fix, and the next raise should be
+ * that instead.
  */
-const ENTRY_BUDGET_GZIP_KB = 560;
-const ENTRY_BUDGET_RAW_KB = 1860;
+const ENTRY_BUDGET_GZIP_KB = 575;
+const ENTRY_BUDGET_RAW_KB = 1900;
 
 /**
  * Markers that must not appear in the entry chunk. Each is a string the library

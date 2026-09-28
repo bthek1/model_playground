@@ -74,7 +74,8 @@ describe("createRlSession", () => {
     expect(h.progress()[h.progress().length - 1]?.episode).toBe(250);
     // The result's table must be readable after the last post transferred its
     // own — the bug a real browser found and a plain-object harness did not.
-    expect(h.result().render?.q).toHaveLength(64);
+    const render = h.result().render;
+    expect(render?.kind === "grid" && render.q).toHaveLength(64);
   });
 
   it("posts after every step when the interval is zero — the measurement's control arm", async () => {

@@ -1,5 +1,6 @@
-// Reinforcement Learning — tabular Q-learning over a FrozenLake grid, and the
-// first page in the app whose subject is a loop the user watches.
+// Reinforcement Learning — tabular Q-learning on FrozenLake, and REINFORCE
+// against Actor-Critic on CartPole. The first page in the app whose subject is a
+// loop the user watches.
 //
 // Every other route is a press and a result. Here the agent acts, the
 // environment answers, and the Q-table's arrows turn around on screen while it
@@ -20,14 +21,21 @@
 // five-samples-five-inferences bug with a slider in front of it. What ε *may*
 // do live is change the behaviour of a run already in progress, which is not a
 // re-run; that control sits in RUN, and says which kind it is.
+//
+// **SELECT spans (environment, algorithm)**, and the invalid pairs are disabled
+// with the reason on the row — `ModelPicker`'s behaviour, transplanted. There
+// is one taxonomy row, so there is one route: the grid with Q-learning (#51) and
+// CartPole with the two policy gradients (#52) are two rows of one control.
+// "Run both" is the head-to-head: both policy gradients, one seed, in sequence.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Gamepad2, Loader2, Play, Square } from "lucide-react";
+import { Gamepad2, GitCompare, Loader2, Play, Square } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelSlot } from "@/components/model/ModelPage";
 import { OutputPanel } from "@/components/model/OutputPanel";
+import { CartPoleCanvas } from "@/components/rl/CartPoleCanvas";
 import { GridCanvas } from "@/components/rl/GridCanvas";
 import { ReturnChart } from "@/components/rl/ReturnChart";
 import { Button } from "@/components/ui/button";
@@ -36,7 +44,14 @@ import { cn } from "@/lib/utils";
 import { ACTION_NAMES, GridWorld, MAPS } from "@/rl/envs/gridWorld";
 import { DEFAULT_SPEED, MAX_EPISODES, SPEEDS } from "@/rl/limits";
 import { EPSILON_FLOOR, greedyRollout, QTable } from "@/rl/qLearning";
-import type { GridMapId, QLearningRequest } from "@/rl/types";
+import { PG_DEFAULTS } from "@/rl/policyGradient";
+import type {
+  GridMapId,
+  PolicyGradientRequest,
+  QLearningRequest,
+  RlAlgorithm,
+  RlTrainRequest,
+} from "@/rl/types";
 import { optimalActions, valueIteration } from "@/rl/valueIteration";
 
 export const Route = createFileRoute("/rl")({
@@ -63,9 +78,42 @@ const defaultsFor = (map: GridMapId, slippery: boolean) =>
 
 /** The success rate is averaged over this many episodes. */
 const WINDOW = 100;
+/** CartPole's returns are averaged over fewer: a run is only ~400 episodes. */
+const PG_WINDOW = 20;
+
+export type EnvId = "frozenlake" | "cartpole";
+
+/**
+ * Which algorithms each environment pairs with, and why the others do not.
+ * The reason is rendered on the disabled row, because the constraint is the
+ * lesson: a table needs states it can index.
+ */
+export const PAIRINGS: Record<EnvId, Partial<Record<RlAlgorithm, string>>> = {
+  frozenlake: {
+    reinforce:
+      "Not paired here: a random policy reaches FrozenLake's goal about once in seventy episodes, so almost every REINFORCE gradient is exactly zero.",
+    "actor-critic":
+      "Not paired here, for the same reason: the reward is too sparse for a policy gradient to find from a random start.",
+  },
+  cartpole: {
+    "q-learning":
+      "Tabular methods need discrete states. CartPole's state is four real numbers — there is no row of the table to look up.",
+  },
+};
+
+const ALGORITHMS: { id: RlAlgorithm; label: string; note: string }[] = [
+  { id: "q-learning", label: "Tabular Q-learning", note: "a table of action values, one update rule" },
+  { id: "reinforce", label: "REINFORCE", note: "the policy gradient, weighted by the raw return" },
+  { id: "actor-critic", label: "Actor-Critic", note: "the same gradient, weighted by a learned advantage" },
+];
+
 
 function RlPage() {
   const rl = useRlTraining();
+
+  const [env, setEnv] = useState<EnvId>("frozenlake");
+  const [algorithm, setAlgorithm] = useState<RlAlgorithm>("q-learning");
+  const [pg, setPg] = useState(() => pgDefaults("reinforce"));
 
   const [map, setMap] = useState<GridMapId>("4x4");
   const [slippery, setSlippery] = useState(false);
@@ -87,7 +135,20 @@ function RlPage() {
     setEpisodes(d.episodes);
   }
 
-  const request: QLearningRequest = {
+  /** A new environment picks its first valid algorithm, with that algorithm's defaults. */
+  function chooseEnvironment(next: EnvId) {
+    setEnv(next);
+    const first = ALGORITHMS.find((a) => !PAIRINGS[next][a.id])!.id;
+    chooseAlgorithm(first);
+  }
+
+  /** Each algorithm brings its own measured defaults — never the previous one's. */
+  function chooseAlgorithm(next: RlAlgorithm) {
+    setAlgorithm(next);
+    if (next !== "q-learning") setPg(pgDefaults(next));
+  }
+
+  const qRequest: QLearningRequest = {
     algorithm: "q-learning",
     map,
     slippery,
@@ -98,11 +159,23 @@ function RlPage() {
     episodes,
     seed,
   };
+  const pgRequest = (alg: "reinforce" | "actor-critic"): PolicyGradientRequest => ({
+    algorithm: alg,
+    env: "cartpole",
+    ...pg,
+    // "Run both" gives each algorithm its own rates — REINFORCE collapses at
+    // Actor-Critic's (policyGradient.ts) — and shares everything else.
+    ...(alg === algorithm ? {} : pgRates(alg)),
+    seed,
+  });
+  const request: RlTrainRequest = algorithm === "q-learning" ? qRequest : pgRequest(algorithm);
 
   const train = () => {
     setLiveEpsilon(null);
     rl.start(request, speed);
   };
+
+  const runBoth = () => rl.startAll([pgRequest("reinforce"), pgRequest("actor-critic")], speed);
 
   const changeSpeed = (next: number | null) => {
     setSpeed(next);
@@ -117,6 +190,7 @@ function RlPage() {
   // The render state to draw: the run in progress, or the one that finished.
   const render = rl.render;
   const lastRequest = rl.history[rl.history.length - 1]?.request;
+  const lastQ = lastRequest?.algorithm === "q-learning" ? lastRequest : undefined;
   const shownMap = render?.kind === "grid" ? render.map : map;
 
   return (
@@ -126,11 +200,12 @@ function RlPage() {
           <Gamepad2 className="size-6" /> Reinforcement Learning
         </h1>
         <p className="text-sm text-muted-foreground">
-          Tabular Q-learning on Gymnasium&apos;s FrozenLake, trained in front of
-          you. The whole model is a table of {MAPS[map].length ** 2 * 4} numbers
-          and the whole algorithm is one update rule — watch the arrows turn
-          around as the agent discovers the goal. Nothing is downloaded and
-          nothing leaves this tab.
+          Agents trained in front of you, on environments transcribed from
+          Gymnasium: tabular Q-learning on FrozenLake, where the whole model is
+          a table and you watch its arrows turn toward the goal — and REINFORCE
+          against Actor-Critic on CartPole, where the difference between them is
+          the noise in the curve. Nothing is downloaded and nothing leaves this
+          tab.
         </p>
       </header>
 
@@ -149,6 +224,24 @@ function RlPage() {
         <div className="flex min-w-0 flex-col gap-5 rounded-lg border bg-muted/30 p-4 md:[grid-area:setup] md:flex-row md:gap-8 xl:max-h-full xl:flex-col xl:gap-5 xl:self-start xl:overflow-y-auto">
           <ModelSlot step={1} label="Agent & environment" dense className="min-w-0 md:flex-1 xl:flex-none">
             <div className="space-y-4">
+              <AlgorithmPicker
+                env={env}
+                algorithm={algorithm}
+                onEnv={chooseEnvironment}
+                onAlgorithm={chooseAlgorithm}
+                disabled={rl.training}
+              />
+              {env === "cartpole" ? (
+                <PgHyperparameters
+                  algorithm={algorithm as "reinforce" | "actor-critic"}
+                  value={pg}
+                  onChange={setPg}
+                  seed={seed}
+                  onSeed={setSeed}
+                  disabled={rl.training}
+                />
+              ) : (
+                <>
               <EnvPicker map={map} slippery={slippery} onChoose={chooseEnv} disabled={rl.training} />
               <Hyperparameters
                 alpha={alpha}
@@ -165,6 +258,8 @@ function RlPage() {
                 onSeed={setSeed}
                 disabled={rl.training}
               />
+                </>
+              )}
             </div>
           </ModelSlot>
 
@@ -197,11 +292,22 @@ function RlPage() {
           >
             <div className="flex min-h-0 flex-1 flex-col gap-4">
               <SpeedDial speed={speed} onSpeed={changeSpeed} />
-              <LiveEpsilon
-                training={rl.training}
-                value={liveEpsilon ?? rl.progress?.epsilon ?? epsilon}
-                onChange={changeLiveEpsilon}
-              />
+              {algorithm === "q-learning" && (
+                <LiveEpsilon
+                  training={rl.training}
+                  value={liveEpsilon ?? rl.progress?.epsilon ?? epsilon}
+                  onChange={changeLiveEpsilon}
+                />
+              )}
+              {env === "cartpole" && (
+                <p className="text-xs leading-snug text-muted-foreground" data-testid="run-both-note">
+                  <strong>Run both</strong> trains REINFORCE and then
+                  Actor-Critic at the same seed ({seed}) and draws them on one
+                  chart. Two seeds of one algorithm differ more than two
+                  algorithms at one seed, so the seed is fixed and on screen —
+                  change it and run both again until you believe the result.
+                </p>
+              )}
               <p className="text-xs leading-snug text-muted-foreground">
                 Everything in band 1 is a <strong>choice</strong>: changing it
                 trains nothing until you press Train. The two controls above are
@@ -223,6 +329,11 @@ function RlPage() {
                     </>
                   )}
                 </Button>
+                {env === "cartpole" && (
+                  <Button variant="secondary" onClick={runBoth} disabled={rl.training} data-testid="run-both">
+                    <GitCompare className="size-4" /> Run both
+                  </Button>
+                )}
                 <Button variant="outline" onClick={rl.stop} disabled={!rl.training}>
                   <Square className="size-4" /> Stop
                 </Button>
@@ -232,8 +343,8 @@ function RlPage() {
                     data-testid="rl-progress"
                   >
                     episode {rl.progress.episode.toLocaleString()}/
-                    {rl.progress.totalEpisodes.toLocaleString()} · ε{" "}
-                    {rl.progress.epsilon.toFixed(2)}
+                    {rl.progress.totalEpisodes.toLocaleString()}
+                    {rl.progress.epsilon != null && ` · ε ${rl.progress.epsilon.toFixed(2)}`}
                   </span>
                 )}
               </div>
@@ -244,34 +355,46 @@ function RlPage() {
         <div className="flex min-h-0 min-w-0 flex-col md:overflow-y-auto md:[grid-area:work-b]">
           <ModelSlot
             step={3}
-            label="The table"
+            label={env === "cartpole" ? "The policy" : "The table"}
             className="flex min-h-0 flex-1 flex-col [&>*:last-child]:min-h-0 [&>*:last-child]:flex-1"
           >
             <OutputPanel
-              title="Q-table over the grid"
+              title={env === "cartpole" ? "CartPole" : "Q-table over the grid"}
               meta={
                 rl.result
                   ? `${rl.result.episodes.toLocaleString()} episodes · ${rl.result.steps.toLocaleString()} steps · ${Math.round(rl.result.elapsedMs)} ms${rl.result.stopped ? " · stopped" : ""}`
                   : undefined
               }
-              description="Each arrow is the action the agent would take from that cell if it stopped exploring; the shading is how much that cell is worth. Faint arrows are ties — every action still worth the same, so the arrow is only the tie-break rule, not something learned."
+              description={
+                <>
+                  {env === "cartpole"
+                    ? "A policy network, 4 → hidden → 2, samples left or right from the cart's state. Each episode's return is the number of steps the pole stayed up (500 is the cap, and a truncation, not a win). The raw trace is drawn unsmoothed on purpose: REINFORCE's noise is the argument for Actor-Critic."
+                    : "Each arrow is the action the agent would take from that cell if it stopped exploring; the shading is how much that cell is worth. Faint arrows are ties — every action still worth the same, so the arrow is only the tie-break rule, not something learned."}
+                  {/* Read before a result exists — a caveat that arrives once you
+                      already believe the answer comes too late — and then moved
+                      below the result, where it no longer squeezes it. */}
+                  {render == null && <RlNotes />}
+                </>
+              }
               running={rl.training && !render}
               runningLabel="Starting…"
               empty={
                 <span data-testid="rl-empty">
-                  Press Train. The agent starts knowing nothing — every cell worth
-                  zero — and the arrows turn toward the goal as the reward it finds
-                  propagates backward through the table.
+                  {env === "cartpole"
+                    ? "Press Train, or Run both for the head-to-head. The policy starts near a coin flip, and the pole falls within a few dozen steps until it learns."
+                    : "Press Train. The agent starts knowing nothing — every cell worth zero — and the arrows turn toward the goal as the reward it finds propagates backward through the table."}
                 </span>
               }
             >
-              {render?.kind === "grid" && (
+              {/* One child, not two conditionals: OutputPanel reads an array as a
+                  result and would never show its empty state. */}
+              {render == null ? null : render.kind === "grid" ? (
                 <div className="space-y-4">
                   <GridCanvas map={render.map} q={render.q} agent={render.agent} />
                   <Scoreboard
                     returns={rl.returns}
                     q={render.q}
-                    request={rl.training ? request : (lastRequest ?? request)}
+                    request={rl.training && algorithm === "q-learning" ? qRequest : (lastQ ?? qRequest)}
                     map={shownMap}
                     final={!rl.training}
                   />
@@ -279,7 +402,7 @@ function RlPage() {
                     returns={rl.returns}
                     window={WINDOW}
                     yLabel="reached the goal"
-                    comparisons={comparisonsFor(rl.history, rl.training ? request : (lastRequest ?? request))}
+                    comparisons={comparisonsFor(rl.history, rl.training && algorithm === "q-learning" ? qRequest : (lastQ ?? qRequest))}
                   />
                   <p className="text-xs leading-snug text-muted-foreground">
                     Each episode&apos;s return is 1 if the agent reached the goal
@@ -288,7 +411,33 @@ function RlPage() {
                     out below 100%. Dashed lines are earlier runs from this visit.
                   </p>
                   <PolicyTable q={render.q} map={render.map} />
-                  <History history={rl.history} onClear={rl.clearHistory} />
+                  <History history={rl.history.filter((r) => r.request.algorithm === "q-learning")} onClear={rl.clearHistory} />
+                  <RlNotes />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <CartPoleCanvas state={render.state} />
+                  <PgScoreboard
+                    returns={rl.returns}
+                    diagnostics={render.diagnostics}
+                    algorithm={(rl.training ? request : lastRequest ?? request).algorithm}
+                  />
+                  <ReturnChart
+                    returns={rl.returns}
+                    window={PG_WINDOW}
+                    yLabel="steps balanced"
+                    label={ALGORITHMS.find((a) => a.id === (rl.training ? request : lastRequest ?? request).algorithm)?.label}
+                    comparisons={pgComparisons(rl.history, rl.training ? request : (lastRequest ?? request))}
+                  />
+                  <p className="text-xs leading-snug text-muted-foreground">
+                    Faint lines are every episode, raw; solid and dashed lines are
+                    the mean of the last {PG_WINDOW}. The other algorithm&apos;s
+                    run at the same seed, if there is one, is drawn beside this
+                    one — raw and smoothed alike, so neither is flattered.
+                  </p>
+                  <SeedSpread history={rl.history} />
+                  <PgHistory history={rl.history} onClear={rl.clearHistory} />
+                  <RlNotes />
                 </div>
               )}
             </OutputPanel>
@@ -299,15 +448,65 @@ function RlPage() {
   );
 }
 
+interface PgSettings {
+  hidden: number;
+  gamma: number;
+  episodes: number;
+  normalise: boolean;
+  lr: number;
+  criticLr: number;
+  lambda: number;
+}
+
+/** An algorithm's measured defaults (policyGradient.ts), never the last one's. */
+function pgDefaults(alg: "reinforce" | "actor-critic"): PgSettings {
+  return {
+    hidden: PG_DEFAULTS.hidden,
+    gamma: PG_DEFAULTS.gamma,
+    episodes: PG_DEFAULTS.episodes,
+    normalise: false,
+    ...pgRates(alg),
+  };
+}
+
+function pgRates(alg: "reinforce" | "actor-critic"): Pick<PgSettings, "lr" | "criticLr" | "lambda"> {
+  const d = PG_DEFAULTS[alg];
+  return { lr: d.lr, criticLr: d.criticLr, lambda: d.lambda };
+}
+
+
+function pgLabel(r: RlTrainRequest): string {
+  return ALGORITHMS.find((a) => a.id === r.algorithm)?.label ?? r.algorithm;
+}
+
+function pgComparisons(history: RlRunRecord[], shown: RlTrainRequest) {
+  // The head-to-head: the *other* algorithm at the *same* seed, raw trace and
+  // all. Other seeds are summarised by the spread below, not drawn — a chart of
+  // eight noisy curves shows nothing.
+  if (shown.algorithm === "q-learning") return [];
+  return history
+    .filter(
+      (r) =>
+        r.request.algorithm !== "q-learning" &&
+        r.request.algorithm !== shown.algorithm &&
+        r.request.seed === shown.seed,
+    )
+    .slice(-1)
+    .map((r) => ({ label: `${pgLabel(r.request)}, seed ${r.request.seed}`, returns: r.returns, raw: true }));
+}
+
 function runLabel(r: QLearningRequest): string {
   return `seed ${r.seed} · ε ${r.epsilon}${r.decay ? "↘" : ""} · α ${r.alpha} · ${r.map}${r.slippery ? " slippery" : ""}`;
 }
 
 function comparisonsFor(history: RlRunRecord[], shown: QLearningRequest) {
+  const q = history.filter(
+    (r): r is RlRunRecord & { request: QLearningRequest } => r.request.algorithm === "q-learning",
+  );
   // Only runs on the same grid: a 4×4 curve over 1 000 episodes drawn against
   // an 8×8 one over 20 000 compares two different problems. And never the run
   // on screen itself, which is the newest entry once it finishes.
-  return history
+  return q
     .filter(
       (r) =>
         r.key !== runKey(shown) &&
@@ -434,7 +633,7 @@ function SpeedDial({ speed, onSpeed }: { speed: number | null; onSpeed: (s: numb
         ))}
       </div>
       <p className="text-xs leading-snug text-muted-foreground">
-        A <strong>simulation</strong> dial, not a frame rate: the grid is
+        A <strong>simulation</strong> dial, not a frame rate: the canvas is
         repainted at most 60 times a second however fast the loop runs. At
         &ldquo;max&rdquo; a thousand episodes take milliseconds — slow it down to
         watch the agent walk. It takes effect on a run in progress.
@@ -696,6 +895,307 @@ function NumberField({
         }}
         className="w-28 rounded-md border bg-background px-2 py-1 text-right font-mono text-xs tabular-nums"
       />
+    </div>
+  );
+}
+
+function AlgorithmPicker({
+  env,
+  algorithm,
+  onEnv,
+  onAlgorithm,
+  disabled,
+}: {
+  env: EnvId;
+  algorithm: RlAlgorithm;
+  onEnv: (env: EnvId) => void;
+  onAlgorithm: (alg: RlAlgorithm) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-2" data-testid="algorithm-picker">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Environment">
+        {(
+          [
+            ["frozenlake", "FrozenLake"],
+            ["cartpole", "CartPole"],
+          ] as [EnvId, string][]
+        ).map(([id, label]) => (
+          <Button
+            key={id}
+            size="sm"
+            variant={id === env ? "default" : "outline"}
+            aria-pressed={id === env}
+            disabled={disabled}
+            onClick={() => onEnv(id)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {ALGORITHMS.map((a) => {
+          const reason = PAIRINGS[env][a.id];
+          const selected = a.id === algorithm;
+          return (
+            <Button
+              key={a.id}
+              variant={selected ? "default" : "outline"}
+              aria-pressed={selected}
+              disabled={disabled || reason != null}
+              onClick={() => onAlgorithm(a.id)}
+              className="h-auto w-full flex-col items-start gap-0.5 px-3 py-2 text-left whitespace-normal"
+            >
+              <span className="text-sm font-medium">{a.label}</span>
+              <span
+                className={cn(
+                  "text-xs leading-snug font-normal",
+                  selected ? "text-primary-foreground/75" : "text-muted-foreground",
+                )}
+                data-testid={reason ? `pairing-reason-${a.id}` : undefined}
+              >
+                {reason ?? a.note}
+              </span>
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PgHyperparameters({
+  algorithm,
+  value,
+  onChange,
+  seed,
+  onSeed,
+  disabled,
+}: {
+  algorithm: "reinforce" | "actor-critic";
+  value: PgSettings;
+  onChange: (v: PgSettings) => void;
+  seed: number;
+  onSeed: (v: number) => void;
+  disabled: boolean;
+}) {
+  const set = <K extends keyof PgSettings>(k: K) => (v: PgSettings[K]) => onChange({ ...value, [k]: v });
+  return (
+    <div className="space-y-3 border-t pt-3">
+      <div className="space-y-1">
+        <p className="text-xs font-medium">Hidden width</p>
+        <div className="flex gap-1.5">
+          {[16, 32, 64, 128].map((h) => (
+            <Button
+              key={h}
+              size="sm"
+              variant={h === value.hidden ? "secondary" : "outline"}
+              aria-pressed={h === value.hidden}
+              className="h-7 px-2 text-xs"
+              disabled={disabled}
+              onClick={() => set("hidden")(h)}
+            >
+              {h}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <Slider id="pg-lr" label="Policy learning rate" value={value.lr} min={0.0005} max={0.03} step={0.0005} onChange={set("lr")} disabled={disabled} />
+      {algorithm === "actor-critic" && (
+        <>
+          <Slider id="pg-critic-lr" label="Critic learning rate" value={value.criticLr} min={0.001} max={0.1} step={0.001} onChange={set("criticLr")} disabled={disabled} />
+          <Slider id="pg-lambda" label="GAE λ" value={value.lambda} min={0} max={1} step={0.05} onChange={set("lambda")} disabled={disabled} />
+        </>
+      )}
+      <Slider id="pg-gamma" label="Discount γ" value={value.gamma} min={0.9} max={0.999} step={0.001} onChange={set("gamma")} disabled={disabled} />
+      {algorithm === "reinforce" && (
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={value.normalise}
+              disabled={disabled}
+              onChange={(e) => set("normalise")(e.target.checked)}
+            />
+            Normalise returns per episode
+          </label>
+          <p className="text-xs leading-snug text-muted-foreground" data-testid="normalise-note">
+            Off by default, and that is a choice: standardising the returns is a
+            crude baseline, and it removes most of the variance this comparison
+            is about — measured, it lifts REINFORCE from about 260 to about 430
+            steps. Turn it on to see how much of Actor-Critic&apos;s advantage a
+            one-line trick recovers.
+          </p>
+        </div>
+      )}
+      <NumberField id="pg-episodes" label="Episodes" value={value.episodes} min={10} max={5000} onChange={set("episodes")} disabled={disabled} />
+      <NumberField id="rl-seed" label="Seed" value={seed} min={0} max={2 ** 31 - 1} onChange={onSeed} disabled={disabled} />
+      <p className="text-xs leading-snug text-muted-foreground">
+        Each algorithm opens with its own measured learning rate. Given
+        Actor-Critic&apos;s, REINFORCE collapses on some seeds — a comparison at
+        a rate that suits only one of them would say nothing about either.
+      </p>
+    </div>
+  );
+}
+
+/** §3.4 and §3.5 of the roadmap: the two things this page does not do, and why. */
+function RlNotes() {
+  return (
+    <span className="mt-2 block space-y-1.5 text-xs text-muted-foreground" data-testid="rl-notes">
+      <span className="block">
+        <strong>Not here: Decision Transformer.</strong> It treats RL as sequence
+        modelling — a small GPT reads (return-to-go, state, action) triples and
+        predicts the next action, the way the trajectories above could be read.
+        It is unavailable for two separate reasons: the checkpoint publishes no
+        ONNX export (<code>edbeeching/decision-transformer-gym-hopper-medium</code>{" "}
+        ships only <code>pytorch_model.bin</code>, checked 2026-09-26), and its
+        environment is MuJoCo, which has no browser equivalent.
+      </span>
+      <span className="block">
+        <strong>Not here: RL for language models.</strong> There the policy is an
+        LLM, the reward model is another, and one optimisation step is a cluster
+        job. Its product is visible on{" "}
+        <a className="underline" href="/text-generation">
+          /text-generation
+        </a>
+        : GPT-2 has no instruction tuning at all, and SmolLM2-360M-Instruct was
+        tuned with supervised fine-tuning and then <strong>DPO</strong> on
+        UltraFeedback — a preference method, not PPO-style RLHF, which is what
+        its model card says.
+      </span>
+    </span>
+  );
+}
+
+function tailMean(returns: readonly number[], n: number): number | null {
+  const tail = returns.slice(-n);
+  return tail.length ? tail.reduce((a, b) => a + b, 0) / tail.length : null;
+}
+
+function PgScoreboard({
+  returns,
+  diagnostics,
+  algorithm,
+}: {
+  returns: readonly number[];
+  diagnostics: { meanAbsWeight: number; criticLoss: number | null } | null;
+  algorithm: RlAlgorithm;
+}) {
+  const mean = tailMean(returns, PG_WINDOW);
+  return (
+    <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-2" data-testid="pg-scoreboard">
+      <div className="flex justify-between gap-2">
+        <dt className="text-muted-foreground">Mean return, last {PG_WINDOW}</dt>
+        <dd className="font-mono tabular-nums" data-testid="pg-mean-return">
+          {mean == null ? "—" : mean.toFixed(0)}
+        </dd>
+      </div>
+      <div className="flex justify-between gap-2">
+        <dt className="text-muted-foreground">Episodes</dt>
+        <dd className="font-mono tabular-nums">{returns.length}</dd>
+      </div>
+      {diagnostics && (
+        <>
+          <div className="flex justify-between gap-2">
+            <dt className="text-muted-foreground">
+              Weight on ∇log π, mean {algorithm === "actor-critic" ? "|Aₜ|" : "|Gₜ|"}
+            </dt>
+            <dd className="font-mono tabular-nums" data-testid="pg-weight">
+              {diagnostics.meanAbsWeight.toFixed(2)}
+            </dd>
+          </div>
+          {diagnostics.criticLoss != null && (
+            <div className="flex justify-between gap-2">
+              <dt className="text-muted-foreground">Critic loss</dt>
+              <dd className="font-mono tabular-nums">{diagnostics.criticLoss.toFixed(3)}</dd>
+            </div>
+          )}
+          <p className="text-xs leading-snug text-muted-foreground sm:col-span-2">
+            Where the variance went: REINFORCE scales each step&apos;s gradient
+            by the whole return that followed it, which is large and different
+            every episode. Actor-Critic scales it by how much better the step
+            went than the critic expected — near zero once the critic is good.
+          </p>
+        </>
+      )}
+    </dl>
+  );
+}
+
+/** Final returns per algorithm across the seeds trained this visit — the claim is a spread. */
+function SeedSpread({ history }: { history: RlRunRecord[] }) {
+  const rows = (["reinforce", "actor-critic"] as const)
+    .map((alg) => {
+      const finals = history
+        .filter((r) => r.request.algorithm === alg && !r.result.stopped)
+        .map((r) => ({ seed: r.request.seed, value: tailMean(r.returns, PG_WINDOW) ?? 0 }));
+      if (finals.length === 0) return null;
+      const values = finals.map((f) => f.value);
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const sd = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length);
+      return { alg, finals, mean, sd, min: Math.min(...values), max: Math.max(...values) };
+    })
+    .filter((r) => r != null);
+  if (rows.length === 0) return null;
+  return (
+    <div className="space-y-1.5 border-t pt-3" data-testid="seed-spread">
+      <p className="text-xs font-medium">Across seeds</p>
+      <table className="w-full text-xs">
+        <caption className="sr-only">Final mean return per algorithm, across the seeds trained</caption>
+        <thead>
+          <tr className="text-left text-muted-foreground">
+            <th className="font-normal">Algorithm</th>
+            <th className="font-normal">Seeds</th>
+            <th className="font-normal">Mean</th>
+            <th className="font-normal">Spread (sd · range)</th>
+          </tr>
+        </thead>
+        <tbody className="font-mono tabular-nums">
+          {rows.map((r) => (
+            <tr key={r.alg} data-testid={`spread-${r.alg}`}>
+              <td className="font-sans">{pgLabel({ algorithm: r.alg } as RlTrainRequest)}</td>
+              <td>{r.finals.map((f) => f.seed).join(", ")}</td>
+              <td>{r.mean.toFixed(0)}</td>
+              <td>
+                {r.finals.length > 1 ? `${r.sd.toFixed(0)} · ${r.min.toFixed(0)}–${r.max.toFixed(0)}` : "one seed"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-xs leading-snug text-muted-foreground">
+        The claim this page makes is about the <strong>spread</strong>, not the
+        winner of any one seed. Actor-Critic beating REINFORCE on a given seed is
+        not something RL promises; a narrower spread over several seeds is what
+        the baseline buys. Run both at a few seeds to fill this in.
+      </p>
+    </div>
+  );
+}
+
+function PgHistory({ history, onClear }: { history: RlRunRecord[]; onClear: () => void }) {
+  const runs = history.filter((r) => r.request.algorithm !== "q-learning");
+  if (runs.length === 0) return null;
+  return (
+    <div className="space-y-1.5 border-t pt-3" data-testid="pg-history">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium">Runs this visit</p>
+        <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={onClear}>
+          Clear
+        </Button>
+      </div>
+      <ul className="space-y-0.5 text-xs">
+        {runs.map((r) => (
+          <li key={r.key} className="flex justify-between gap-2 font-mono tabular-nums">
+            <span className="truncate">
+              {pgLabel(r.request)} · seed {r.request.seed}
+              {r.result.stopped ? " · stopped" : ""}
+            </span>
+            <span>{(tailMean(r.returns, PG_WINDOW) ?? 0).toFixed(0)}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

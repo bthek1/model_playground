@@ -84,7 +84,29 @@ export interface QLearningRequest {
   seed: number;
 }
 
-export type RlTrainRequest = QLearningRequest;
+/**
+ * REINFORCE or Actor-Critic on CartPole (#52). The two share every field the
+ * head-to-head holds fixed; `criticLr` and `lambda` are read only by
+ * Actor-Critic, `normalise` only by REINFORCE.
+ */
+export interface PolicyGradientRequest {
+  algorithm: "reinforce" | "actor-critic";
+  env: "cartpole";
+  hidden: number;
+  /** Actor (policy) learning rate, Adam. */
+  lr: number;
+  /** Critic learning rate, Adam. */
+  criticLr: number;
+  gamma: number;
+  /** GAE's λ: 0 is one-step TD, 1 is the Monte Carlo return minus a baseline. */
+  lambda: number;
+  /** Standardise REINFORCE's returns per episode. Off by default — see policyGradient.ts. */
+  normalise: boolean;
+  episodes: number;
+  seed: number;
+}
+
+export type RlTrainRequest = QLearningRequest | PolicyGradientRequest;
 export type RlAlgorithm = RlTrainRequest["algorithm"];
 
 /** What the canvas draws. Posted on a wall-clock interval, never per step. */
@@ -97,7 +119,22 @@ export interface GridRenderState {
   agent: number;
 }
 
-export type RlRenderState = GridRenderState;
+/** Where the variance went: the weight each learner put on ∇log π, and the critic's loss. */
+export interface PolicyGradientDiagnostics {
+  /** Mean |Gₜ| for REINFORCE, mean |Aₜ| for Actor-Critic, over the last episode. */
+  meanAbsWeight: number;
+  /** The critic's ½·MSE on the last episode; null for REINFORCE. */
+  criticLoss: number | null;
+}
+
+export interface CartPoleRenderState {
+  kind: "cartpole";
+  /** `[x, x_dot, theta, theta_dot]`. */
+  state: Float32Array;
+  diagnostics: PolicyGradientDiagnostics | null;
+}
+
+export type RlRenderState = GridRenderState | CartPoleRenderState;
 
 /** Everything since the last post — so the chart gets every episode, unsmoothed. */
 export interface RlProgress {
@@ -108,8 +145,8 @@ export interface RlProgress {
   totalEpisodes: number;
   /** Environment steps taken so far. */
   steps: number;
-  /** The exploration rate in force, which the live control may have changed. */
-  epsilon: number;
+  /** The exploration rate in force; null for a learner that explores by sampling. */
+  epsilon: number | null;
   render: RlRenderState;
 }
 

@@ -98,4 +98,55 @@ test.describe("Reinforcement learning", () => {
     // The second run is whole: every episode counted once, from zero.
     await expect(page.getByTestId("rl-progress")).toContainText("episode 1,000/1,000");
   });
+
+  test("CartPole: nothing trains on arrival, and the notes are read before a result", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const outbound: string[] = [];
+    await page.route("**/*", (route) => {
+      const url = route.request().url();
+      if (!url.includes("localhost") && !url.includes("127.0.0.1")) outbound.push(url);
+      return route.continue();
+    });
+    await page.goto("/rl");
+    await page.getByRole("button", { name: /^CartPole$/ }).click();
+    await expect(page.getByRole("button", { name: /tabular q-learning/i })).toBeDisabled();
+    await expect(page.getByTestId("pairing-reason-q-learning")).toContainText(/discrete states/i);
+    await expect(page.getByTestId("output-empty")).toBeVisible();
+    await expect(page.getByTestId("rl-notes")).toContainText(/DPO/);
+    await expect(page.getByTestId("rl-progress")).toHaveCount(0);
+    expect(outbound).toEqual([]);
+  });
+
+  test("CartPole: REINFORCE lands in its band, and Run both draws both at one seed", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    await page.goto("/rl");
+    await page.getByRole("button", { name: /^CartPole$/ }).click();
+    await page.getByRole("button", { name: /^max$/ }).click();
+    await page.getByTestId("run-both").click();
+    await expect(page.getByTestId("train-button")).toBeDisabled();
+    await expect(page.getByTestId("train-button")).toBeEnabled({ timeout: 60_000 });
+    await expect(page.getByTestId("cartpole-canvas")).toBeVisible();
+    await expect(page.getByTestId("return-chart")).toBeVisible();
+
+    // Seed 1, 400 episodes: REINFORCE measured 354 (last 20) in Chromium. A
+    // band, not a floor that a broken gradient could also clear — a random
+    // policy balances ~22 steps, and 500 is the cap a lenient termination
+    // would pin every run to.
+    const history = page.getByTestId("pg-history");
+    await expect(history).toContainText("REINFORCE · seed 1");
+    await expect(history).toContainText("Actor-Critic · seed 1");
+    const rows = await history.locator("li").allInnerTexts();
+    const final = (name: string) => Number(rows.find((r) => r.startsWith(name))?.split("\n").pop());
+    expect(final("REINFORCE")).toBeGreaterThan(150);
+    expect(final("REINFORCE")).toBeLessThan(490);
+    // Both are reported, with their seed — not which one won.
+    await expect(page.getByTestId("spread-reinforce")).toContainText("1");
+    await expect(page.getByTestId("spread-actor-critic")).toContainText("1");
+  });
 });
