@@ -33,6 +33,7 @@ import { Route as SummarizationRouteImport } from './routes/summarization'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SentenceSimilarityRouteImport } from './routes/sentence-similarity'
 import { Route as SegmentationRouteImport } from './routes/segmentation'
+import { Route as RlRouteImport } from './routes/rl'
 import { Route as QuestionAnsweringRouteImport } from './routes/question-answering'
 import { Route as PoseRouteImport } from './routes/pose'
 import { Route as PlaygroundRouteImport } from './routes/playground'
@@ -177,6 +178,11 @@ const SegmentationRoute = SegmentationRouteImport.update({
   path: '/segmentation',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RlRoute = RlRouteImport.update({
+  id: '/rl',
+  path: '/rl',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const QuestionAnsweringRoute = QuestionAnsweringRouteImport.update({
   id: '/question-answering',
   path: '/question-answering',
@@ -310,6 +316,7 @@ export interface FileRoutesByFullPath {
   '/playground': typeof PlaygroundRoute
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
+  '/rl': typeof RlRoute
   '/segmentation': typeof SegmentationRoute
   '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
@@ -358,6 +365,7 @@ export interface FileRoutesByTo {
   '/playground': typeof PlaygroundRoute
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
+  '/rl': typeof RlRoute
   '/segmentation': typeof SegmentationRoute
   '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
@@ -407,6 +415,7 @@ export interface FileRoutesById {
   '/playground': typeof PlaygroundRoute
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
+  '/rl': typeof RlRoute
   '/segmentation': typeof SegmentationRoute
   '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
@@ -457,6 +466,7 @@ export interface FileRouteTypes {
     | '/playground'
     | '/pose'
     | '/question-answering'
+    | '/rl'
     | '/segmentation'
     | '/sentence-similarity'
     | '/signup'
@@ -505,6 +515,7 @@ export interface FileRouteTypes {
     | '/playground'
     | '/pose'
     | '/question-answering'
+    | '/rl'
     | '/segmentation'
     | '/sentence-similarity'
     | '/signup'
@@ -553,6 +564,7 @@ export interface FileRouteTypes {
     | '/playground'
     | '/pose'
     | '/question-answering'
+    | '/rl'
     | '/segmentation'
     | '/sentence-similarity'
     | '/signup'
@@ -602,6 +614,7 @@ export interface RootRouteChildren {
   PlaygroundRoute: typeof PlaygroundRoute
   PoseRoute: typeof PoseRoute
   QuestionAnsweringRoute: typeof QuestionAnsweringRoute
+  RlRoute: typeof RlRoute
   SegmentationRoute: typeof SegmentationRoute
   SentenceSimilarityRoute: typeof SentenceSimilarityRoute
   SignupRoute: typeof SignupRoute
@@ -799,6 +812,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SegmentationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/rl': {
+      id: '/rl'
+      path: '/rl'
+      fullPath: '/rl'
+      preLoaderRoute: typeof RlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/question-answering': {
       id: '/question-answering'
       path: '/question-answering'
@@ -978,6 +998,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlaygroundRoute: PlaygroundRoute,
   PoseRoute: PoseRoute,
   QuestionAnsweringRoute: QuestionAnsweringRoute,
+  RlRoute: RlRoute,
   SegmentationRoute: SegmentationRoute,
   SentenceSimilarityRoute: SentenceSimilarityRoute,
   SignupRoute: SignupRoute,

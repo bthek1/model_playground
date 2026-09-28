@@ -470,6 +470,25 @@ fe-e2e-tabular:
 fe-e2e-forecast:
     cd frontend && npx playwright test --project=chromium --workers=1 forecast.spec.ts
 
+# Run the /rl spec: a real worker trains the default FrozenLake grid and the
+# page's arrows are checked against value iteration's exact optimal policy.
+# Not @slow — nothing is downloaded and Phase 0 put every step on the CPU, so
+# a full run is seconds. It is part of `just fe-e2e`; this runs it alone.
+#
+# **The assertion is a named arrow and 11-of-11 agreement, never "a curve went
+# up"** — a wrong Bellman update still finds the goal on a 4×4 grid.
+# Runs /rl's spec alone: a real training run, pinned by a named arrow (seconds)
+fe-e2e-rl:
+    cd frontend && npx playwright test --project=chromium --workers=1 rl.spec.ts
+
+# Re-measure RL's Phase 0: steps per second on the CPU against the GPU matmul,
+# and the cost of posting render state per step against 60 Hz. Logged, not
+# asserted — it is the table `src/rl/limits.ts` records. @slow because it is a
+# benchmark, not a test.
+# Re-measures RL Phase 0: CPU vs GPU steps/s, and per-step posting's cost
+fe-e2e-rl-phase0:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/rl-phase0.spec.ts
+
 # Check every model id (audio + vision + multimodal + text) still resolves on
 # the Hugging Face Hub, that each vision entry publishes the dtypes both backends
 # ask for, that the VLM entries publish their three q4f16 graphs, and that the

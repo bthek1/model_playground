@@ -476,6 +476,7 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Tabular Classification | the **model family** and its hyperparameters | **FIT** — there are no weights, so the band holds the fit and its determinate iteration counter | the CSV, the target column, the feature set, and a row to predict | accuracy **against the majority baseline**, the confusion matrix, permutation importance, and a threshold slider that only re-reads |
 | Tabular Regression | the **regression** ladder — ridge, trees, quantile — with its own defaults, not §3.1's | **FIT**, as above | the CSV, a numeric target, and a **log-transform toggle that spends** | RMSE/MAE/R² against the train-mean baseline **in named units**, predicted-vs-actual, the residual plot, and a quantile band with its measured coverage |
 | Time Series Forecasting | the baseline and the **season length** | **absent** — nothing to download and nothing to fit, and the page says so where the band would have been | the series, the horizon, and the backtest settings | the forecast over a marked held-out region, MASE beside MAE and RMSE, and the window spread with the single split drawn across it |
+| Reinforcement Learning (`/rl`) | the grid, its slipperiness, and α, γ, ε, episodes, seed — **all choices** | **absent** — no download, and Phase 0 of #51 measured that the page raises no GPU question either, so `DeviceStatus` would be wrong too | Train / Stop, plus the two controls that steer a run **in progress** without restarting it: the simulation speed and a live ε | the Q-table as arrows over the grid, repainted at ≤ 60 Hz, the raw return curve with its running mean, and agreement with value iteration's exact policy |
 | `/tasks/$slug` placeholder | — | — | — | "not available yet" |
 
 Where LOAD is fast and free (a shader compile), it may auto-run — pass `autoLoad`. The
@@ -579,6 +580,21 @@ bands: `slot-4` is genuinely not rendered and a test asserts that; `output-empty
 nothing ever becomes ready. **No route may drop a band without adding a row to the
 table above and a paragraph here** — four bands is the default precisely so that
 three is a decision someone had to write down.
+
+**The second three-band page is a *training* page, and its absent band is a measurement.**
+`/rl` has no download, like `/time-series-forecasting` — but it does have a worker and a
+long-running loop, and the roadmap handed its LOAD band a `DeviceStatus`, "as `/tensor`
+does". Phase 0 of #51 measured that instead of assuming it: at batch 1 an RL step is
+thousands of *tiny* matmuls a second, and the GPU round trip costs more than the
+arithmetic (`rl/limits.ts`, [`rl.md`](../roadmaps/rl.md) §0). So the page raises no GPU
+question and the band is absent, explained where it would have been (`no-load-band`), and
+its route test asserts `slot-4` is absent exactly as the forecasting page's does. Two things
+generalise. **A band a roadmap assigns is a hypothesis** — `/tensor` compiles WGSL and this
+page would not. And **"only Train spends" admits controls that steer a run in progress**:
+`/rl`'s speed dial and live ε change the behaviour of the loop already running, which is not
+a re-run, so they live in RUN and say which kind they are. What they must never do is start
+one — dragging ε and watching it retrain is the five-samples-five-inferences failure with a
+slider in front of it.
 
 **A page with no worker owes an assertion that it still has none.** "No worker" is a
 design decision that a later refactor can quietly undo, and nothing visible changes
@@ -728,6 +744,8 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `backtest-controls` · `backtest-strip` · `backtest-spread` | `/time-series-forecasting` | The rolling-origin settings, the per-window chart with the single split drawn across it, and the same three numbers as text. |
 | `metric-table` · `mase-horizon-note` | `/time-series-forecasting` | All four baselines on one window, and the note that **1.0 is break-even only at a horizon of 1** — the denominator is the in-sample *one-step* error, so a naive forecast measures ~1.0 one step out and ~3.0 fourteen steps out with nothing wrong. |
 | `no-fit-band` · `no-model-note` | `/time-series-forecasting` | Why there is no FIT band, and the standing note that the page has no learned model — in OUTPUT's **empty state**, so it is read before a forecast exists. |
+| `no-load-band` · `train-button` · `rl-progress` · `rl-empty` | `/rl` | Why there is no LOAD band (the Phase 0 measurement, in words), the one spending button, and the episode / ε line of the run in progress. |
+| `grid-canvas` · `policy-grid` · `rl-scoreboard` · `success-rate` · `greedy-rate` · `policy-agreement` · `rl-history` · `return-chart` · `epsilon-lesson` | `/rl` | The Q-table drawn and **as text** (`policy-grid` carries `data-state` / `data-action` per cell, so a spec can name an arrow — the canvas cannot be read), the scores including agreement with value iteration's exact policy, and the ε = 0 claim the E2E spec checks. |
 
 The testids are unchanged by the horizontal arrangement — `slot-N` is bound to the
 step number, not to a position in the layout.

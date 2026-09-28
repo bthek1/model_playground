@@ -180,6 +180,11 @@ const REAL_ROUTES: Record<string, string> = {
   // model at all. It is also the second route to hold two models live at once,
   // after /pose, and for the same reason: neither half is useful alone.
   "text-ranking": "/text-ranking",
+  // The Reinforcement Learning category, and the only pages whose subject is a
+  // loop the user watches. `/rl` trains in the tab on the CPU — Phase 0 of #51
+  // measured that the GPU round trip costs more than an RL step's arithmetic —
+  // so it has no checkpoint, no download and no LOAD band.
+  "reinforcement-learning": "/rl",
   // Three slugs deliberately have no route and fall through to the placeholder,
   // for one reason each — every checkpoint the task has is too heavy to offer:
   //

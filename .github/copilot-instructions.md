@@ -1464,6 +1464,68 @@ Each of those is a decision rather than an omission. See
   the ratio at three horizons and asserts it grows. When a number looks wrong, check whether the
   copy explaining it is what is wrong.
 
+**In-browser reinforcement learning (`src/rl/` — `/rl`) — the first page whose subject is a loop the user watches:**
+
+The sixth modality, and the first page whose subject is **a loop the user watches**: the
+agent acts, the environment answers, and the Q-table's arrows turn around on screen while it
+learns. No checkpoint, no download, nothing to dispose — the constraint that replaces model
+size is the **environment**, which has to be written in TypeScript. See
+[`docs/roadmaps/rl.md`](../docs/roadmaps/rl.md).
+
+- **The CPU is the answer, and it was measured, not assumed.** The roadmap handed the page
+  a `DeviceStatus` "as `/tensor` does". Phase 0 of #51 (`rl/limits.ts`,
+  `just fe-e2e-rl-phase0`) measured a Q-learning step at ~15 M/s and a 4→128→2 policy
+  forward at ~400 k/s on the CPU, against ~66/s through `runMatmul` — flat across a 16×
+  width change, because at batch 1 the GPU cost *is* the round trip. So `src/rl/` touches no
+  GPU, and **`/rl` is three bands** like `/time-series-forecasting`, explaining the absent
+  one in `no-load-band`. A band a roadmap assigns is a hypothesis.
+- **The loop must yield a *macrotask*, or Stop cannot arrive.** A CPU loop that only awaits
+  resolved promises never lets the event loop deliver a message, so `cancel` would queue
+  behind the run it was meant to interrupt. `webgpu/worker.ts` gets away without it because
+  its awaits are real GPU work; `session.ts` yields through a `MessageChannel`
+  (`setTimeout(0)` clamps to 4 ms). Cancel and live controls are handled synchronously on
+  arrival, and a Stop that beats its own run is remembered.
+- **Post render state on a wall-clock interval, never per step** — measured at **50×**
+  (32 ms vs 1614 ms for the same 230 956-step run). `session.test.ts` counts posts against
+  steps. The speed dial is a **simulation** dial, not a frame rate.
+- **A transferred buffer is gone.** The first `session.ts` put the last progress post's
+  Q-table in the result as well; that post had *transferred* it, so the result could not be
+  cloned and every run failed on its last line — in a real browser only. The unit harness
+  passed because it handed objects by reference. It now does what `postMessage` does
+  (`structuredClone(m, { transfer })`), and fails four tests on the old code. **A worker
+  test harness that does not clone cannot see a transfer bug.**
+- **Transcribe the environment, never invent it.** `envs/gridWorld.ts` is Gymnasium's
+  FrozenLake letter for letter — maps, LEFT/DOWN/RIGHT/UP order, walls, the 100/200 time
+  limits, and the slip rule (intended direction or either **perpendicular**, a third each,
+  **never backwards**). A plausible variant makes every published comparison wrong with
+  nothing on screen to say so. `terminated` and `truncated` stay separate: a learner
+  bootstraps through a time limit and not through a hole.
+- **Value iteration is the reference; a rising curve is not evidence.** A wrong Bellman
+  update still finds the goal on a 4×4 grid. `valueIteration.ts` solves the MDP exactly and
+  the tests compare entry for entry — deterministic to 10⁻³, slippery to 0.02 under
+  Robbins–Monro step sizes (a constant α leaves noise of order α, and a tolerance loose
+  enough for that passes a wrong update). The page runs the same check on the table in hand.
+- **The agent and the environment must not share a random stream.** Found by that check:
+  seeded alike, each action draw and the next slip were the *same number*, the dynamics
+  stopped matching the model, and Q-learning converged — confidently, with a rising curve —
+  to values **4× too high**. `QLearningRun` seeds the agent with `seed ^ 0x51ed27`, and a
+  test pins the failure.
+- **Ties go to the first action (`np.argmax`), and the ε = 0 lesson depends on it.** A cold
+  table's greedy action is LEFT, into the wall, forever. Random tie-breaking (Gymnasium's
+  tutorial) explores by accident and hides the lesson. The same rule makes a small
+  *constant* ε useless — 0 goals in 2000 episodes at ε = 0.2 — so ε **decays** by default.
+- **Defaults are per (map, slipperiness), swapped with the environment.** α = 0.5 suits a
+  deterministic grid and hurts a slippery one; the 8×8 needs ~20 000 episodes and one seed in
+  three never finds its goal, which the page leaves visible.
+- **Only Train spends; two controls steer a run in progress.** The speed dial and a live ε
+  change the behaviour of the loop already running — not a re-run — and live in RUN, saying
+  so. Everything in SELECT is a choice. The Q-table is also rendered **as text**
+  (`policy-grid`, `data-state`/`data-action`) so a spec can name an arrow the canvas hides.
+- **`/graph`'s trio is the precedent, not `useModelWorker`**: `session.ts` +
+  `trainRlInWorker` + `useRlTraining` (worker on the first Train, never on mount; rAF-batched;
+  a history of one entry per configuration). Learners plug in through `stepper.ts`, one
+  environment step at a time, so the loop never learns which algorithm it holds.
+
 **Commands:**
 - Dev server: `just fe-dev`
 - Build: `just fe-build`
@@ -1512,6 +1574,8 @@ Key commands:
 | `just fe-e2e-superres` | Run the @slow super-resolution spec: Swin2SR vs a bicubic baseline, by PSNR |
 | `just fe-e2e-vision-one <route>` | One @slow vision route at a time |
 | `just fe-e2e-link` | @slow link prediction, pinned by an AUC **band** — leakage pushes it up, so a floor would pass with the bug |
+| `just fe-e2e-rl` | /rl: a real training run, pinned by a named arrow and 11-of-11 agreement with value iteration (seconds, not @slow) |
+| `just fe-e2e-rl-phase0` | Re-measure RL Phase 0: CPU vs GPU steps/s and the per-step posting cost (logged, not asserted) |
 | `just fe-e2e-graphcls` | @slow graph classification, pinned **above its majority baseline**, not above chance |
 | `just fe-e2e-models` | Check every model id (audio + vision) resolves on the HF Hub (seconds) |
 | `just be-seed-e2e` | Create/reset the E2E test user (dev only) |
