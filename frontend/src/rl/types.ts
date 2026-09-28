@@ -106,7 +106,24 @@ export interface PolicyGradientRequest {
   seed: number;
 }
 
-export type RlTrainRequest = QLearningRequest | PolicyGradientRequest;
+/**
+ * Behaviour cloning on the toy reacher (#54): supervised regression over a
+ * scripted demonstration set. `mix` is the experiment — both sides of the
+ * obstacle, or one — and everything else is held fixed between the two.
+ */
+export interface CloningRequest {
+  algorithm: "behaviour-cloning";
+  mix: "both" | "one";
+  demos: number;
+  /** The obstacle's offset from the start→target line, in metres. */
+  obstacle: number;
+  hidden: number;
+  epochs: number;
+  lr: number;
+  seed: number;
+}
+
+export type RlTrainRequest = QLearningRequest | PolicyGradientRequest | CloningRequest;
 export type RlAlgorithm = RlTrainRequest["algorithm"];
 
 /** What the canvas draws. Posted on a wall-clock interval, never per step. */
@@ -134,7 +151,14 @@ export interface CartPoleRenderState {
   diagnostics: PolicyGradientDiagnostics | null;
 }
 
-export type RlRenderState = GridRenderState | CartPoleRenderState;
+/** The cloned policy so far, packed flat (`behaviourCloning.packPolicy`) — a few hundred floats. */
+export interface CloningRenderState {
+  kind: "cloning";
+  policy: Float32Array;
+  hidden: number;
+}
+
+export type RlRenderState = GridRenderState | CartPoleRenderState | CloningRenderState;
 
 /** Everything since the last post — so the chart gets every episode, unsmoothed. */
 export interface RlProgress {

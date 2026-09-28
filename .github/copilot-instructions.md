@@ -1557,6 +1557,15 @@ size is the **environment**, which has to be written in TypeScript. See
   median over the box's centre, never metres. **OWLv2's q8 export does not open on WASM**
   (`Cast(13) … /class_head/Cast`), which also breaks `/zero-shot-object-detection`'s CPU
   path; `just fe-e2e-robotics` needs a `shader-f16` GPU.
+- **A failure you ship needs a control that succeeds.** `/robotics`' behaviour-cloning entry
+  trains the same network, budget and seed on demonstrations that go round an obstacle both
+  ways (the policy averages them and collides, 5 seeds in 6) *and* one way (it reaches,
+  6 of 6), and shows the verdicts side by side — the failure alone is indistinguishable
+  from a bug in the page. The test pins it at the **action field** (heading 0–10° off the
+  obstacle against 16–39°), not only the rollout. And **check the demonstrator before the
+  learner**: the first scripted expert cut a corner and 3 of its 20 demonstrations
+  collided. It is a zero-byte entry beside the grounding pair; the route branches on
+  `kind` and each view owns its hooks, so choosing it mounts no grounding worker.
 
 **Commands:**
 - Dev server: `just fe-dev`
@@ -1609,6 +1618,7 @@ Key commands:
 | `just fe-e2e-rl` | /rl: a real training run, pinned by a named arrow and 11-of-11 agreement with value iteration (seconds, not @slow) |
 | `just fe-e2e-rl-phase0` | Re-measure RL Phase 0: CPU vs GPU steps/s and the per-step posting cost (logged, not asserted) |
 | `just fe-e2e-robotics` | @slow /robotics: a real OWLv2 + Depth Anything load, pinned by geometry — the nearer car ranked nearer (needs a `shader-f16` GPU) |
+| `just fe-e2e-cloning` | /robotics behaviour cloning: the both-ways policy collides and the one-way policy reaches, same seed, one page (seconds, not @slow) |
 | `just fe-e2e-graphcls` | @slow graph classification, pinned **above its majority baseline**, not above chance |
 | `just fe-e2e-models` | Check every model id (audio + vision) resolves on the HF Hub (seconds) |
 | `just be-seed-e2e` | Create/reset the E2E test user (dev only) |

@@ -19,6 +19,7 @@
 // interrupt. `webgpu/worker.ts` gets away without this because its awaits are
 // real GPU work, which resolves as a task; this loop has no GPU to lean on.
 
+import { CloningRun } from "./behaviourCloning";
 import { PolicyGradientRun } from "./policyGradient";
 import { QLearningRun } from "./qLearning";
 import type { Stepper } from "./stepper";
@@ -55,6 +56,8 @@ export function createStepper(req: RlTrainRequest): Stepper {
     case "reinforce":
     case "actor-critic":
       return new PolicyGradientRun(req);
+    case "behaviour-cloning":
+      return new CloningRun(req);
   }
 }
 
@@ -203,7 +206,9 @@ export function createRlSession(
 }
 
 function transferOf(render: RlRenderState): Transferable[] {
-  return [render.kind === "grid" ? render.q.buffer : render.state.buffer];
+  if (render.kind === "grid") return [render.q.buffer];
+  if (render.kind === "cartpole") return [render.state.buffer];
+  return [render.policy.buffer];
 }
 
 /**

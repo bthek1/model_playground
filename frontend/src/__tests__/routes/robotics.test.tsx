@@ -451,4 +451,18 @@ describe("RoboticsPage", () => {
       expect(mockRun).not.toHaveBeenCalled();
     });
   });
+
+  describe("the behaviour-cloning entry (#54)", () => {
+    it("mounts none of the grounding pair's workers once it is selected", () => {
+      useModelPrefs.setState({ selected: { robotics: "behaviour-cloning" } });
+      useGrounding.mockClear();
+      renderPage();
+      expect(useGrounding).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: /behaviour cloning/i })).toHaveAttribute("aria-pressed", "true");
+      // Zero bytes: no large-download warning, and LOAD is already answered.
+      expect(screen.queryByText(/large model/i)).toBeNull();
+      expect(screen.getByTestId("model-ready")).toHaveTextContent(/nothing to download/i);
+      expect(screen.getByTestId("slot-4")).toBeInTheDocument();
+    });
+  });
 });

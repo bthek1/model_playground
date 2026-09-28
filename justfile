@@ -498,6 +498,14 @@ fe-e2e-rl-phase0:
 fe-e2e-robotics:
     cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/robotics.spec.ts
 
+# Run /robotics' behaviour-cloning specs: train both demonstration mixes at one
+# seed and assert **both** halves — the both-ways policy collides and the
+# one-way policy reaches. The failure alone is not evidence. Not @slow: nothing
+# downloads, and a run is under a second; it is part of `just fe-e2e`.
+# Runs /robotics' cloning specs: the failure beside its control (seconds)
+fe-e2e-cloning:
+    cd frontend && npx playwright test --project=chromium --workers=1 robotics.spec.ts -g "behaviour cloning"
+
 # Check every model id (audio + vision + multimodal + text) still resolves on
 # the Hugging Face Hub, that each vision entry publishes the dtypes both backends
 # ask for, that the VLM entries publish their three q4f16 graphs, and that the

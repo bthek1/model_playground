@@ -83,12 +83,15 @@ const PG_WINDOW = 20;
 
 export type EnvId = "frozenlake" | "cartpole";
 
+/** The algorithms this page offers; behaviour cloning lives on /robotics. */
+type PageAlgorithm = Exclude<RlAlgorithm, "behaviour-cloning">;
+
 /**
  * Which algorithms each environment pairs with, and why the others do not.
  * The reason is rendered on the disabled row, because the constraint is the
  * lesson: a table needs states it can index.
  */
-export const PAIRINGS: Record<EnvId, Partial<Record<RlAlgorithm, string>>> = {
+export const PAIRINGS: Record<EnvId, Partial<Record<PageAlgorithm, string>>> = {
   frozenlake: {
     reinforce:
       "Not paired here: a random policy reaches FrozenLake's goal about once in seventy episodes, so almost every REINFORCE gradient is exactly zero.",
@@ -101,7 +104,7 @@ export const PAIRINGS: Record<EnvId, Partial<Record<RlAlgorithm, string>>> = {
   },
 };
 
-const ALGORITHMS: { id: RlAlgorithm; label: string; note: string }[] = [
+const ALGORITHMS: { id: PageAlgorithm; label: string; note: string }[] = [
   { id: "q-learning", label: "Tabular Q-learning", note: "a table of action values, one update rule" },
   { id: "reinforce", label: "REINFORCE", note: "the policy gradient, weighted by the raw return" },
   { id: "actor-critic", label: "Actor-Critic", note: "the same gradient, weighted by a learned advantage" },
@@ -112,7 +115,7 @@ function RlPage() {
   const rl = useRlTraining();
 
   const [env, setEnv] = useState<EnvId>("frozenlake");
-  const [algorithm, setAlgorithm] = useState<RlAlgorithm>("q-learning");
+  const [algorithm, setAlgorithm] = useState<PageAlgorithm>("q-learning");
   const [pg, setPg] = useState(() => pgDefaults("reinforce"));
 
   const [map, setMap] = useState<GridMapId>("4x4");
@@ -143,7 +146,7 @@ function RlPage() {
   }
 
   /** Each algorithm brings its own measured defaults — never the previous one's. */
-  function chooseAlgorithm(next: RlAlgorithm) {
+  function chooseAlgorithm(next: PageAlgorithm) {
     setAlgorithm(next);
     if (next !== "q-learning") setPg(pgDefaults(next));
   }
@@ -414,7 +417,7 @@ function RlPage() {
                   <History history={rl.history.filter((r) => r.request.algorithm === "q-learning")} onClear={rl.clearHistory} />
                   <RlNotes />
                 </div>
-              ) : (
+              ) : render.kind === "cartpole" ? (
                 <div className="space-y-4">
                   <CartPoleCanvas state={render.state} />
                   <PgScoreboard
@@ -439,7 +442,7 @@ function RlPage() {
                   <PgHistory history={rl.history} onClear={rl.clearHistory} />
                   <RlNotes />
                 </div>
-              )}
+              ) : null}
             </OutputPanel>
           </ModelSlot>
         </div>
@@ -907,9 +910,9 @@ function AlgorithmPicker({
   disabled,
 }: {
   env: EnvId;
-  algorithm: RlAlgorithm;
+  algorithm: PageAlgorithm;
   onEnv: (env: EnvId) => void;
-  onAlgorithm: (alg: RlAlgorithm) => void;
+  onAlgorithm: (alg: PageAlgorithm) => void;
   disabled: boolean;
 }) {
   return (

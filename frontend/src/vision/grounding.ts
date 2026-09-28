@@ -65,10 +65,33 @@ export interface GroundingEntry {
 }
 
 /**
- * Everything the `/robotics` picker can offer. A union on `kind`, with one
- * member today; a later entry that downloads nothing joins it here.
+ * Behaviour cloning on a toy reaching task (#54): a policy **trained in the
+ * tab**, with no checkpoint at all. `/vad`'s energy baseline is the precedent —
+ * `bytes: { webgpu: 0, wasm: 0 }`, no repo — in the opposite direction: a
+ * zero-byte entry beside a 357 MB pair, in the same picker, through the same
+ * four bands.
  */
-export type RoboticsEntry = GroundingEntry;
+export interface CloningEntry {
+  kind: "cloning";
+  id: string;
+  label: string;
+  hint: string;
+  /** The policy network's size in millions — hidden 64 is ~0.0005. */
+  params: number;
+  bytes: MeasuredBytes;
+}
+
+export const CLONING_ENTRY: CloningEntry = {
+  kind: "cloning",
+  id: "behaviour-cloning",
+  label: "Behaviour cloning (toy reacher)",
+  hint: "No model, no download — a small policy trained in this tab on scripted demonstrations, to show why cloning a two-way choice fails.",
+  params: 0,
+  bytes: { webgpu: 0, wasm: 0 },
+};
+
+/** Everything the `/robotics` picker can offer, discriminated on `kind`. */
+export type RoboticsEntry = GroundingEntry | CloningEntry;
 
 function sumBytes(a?: MeasuredBytes, b?: MeasuredBytes): MeasuredBytes {
   return {
@@ -127,7 +150,7 @@ export const GROUNDING_PAIR: GroundingEntry = groundingPair(
   },
 );
 
-export const ROBOTICS_ENTRIES: RoboticsEntry[] = [GROUNDING_PAIR];
+export const ROBOTICS_ENTRIES: RoboticsEntry[] = [GROUNDING_PAIR, CLONING_ENTRY];
 
 export const DEFAULT_ROBOTICS_ENTRY = ROBOTICS_ENTRIES[0].id;
 

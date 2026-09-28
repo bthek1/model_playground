@@ -93,3 +93,48 @@ test.describe("/robotics", () => {
     expect(weightRequests, "/robotics fetched weights before LOAD").toEqual([]);
   });
 });
+
+// #54 — the behaviour-cloning entry. Not @slow: it downloads nothing and trains
+// in about half a second a run, so the real training is part of the default
+// suite. The assertion is the failure **and** its control, from one page, at
+// one seed: the failure alone is not evidence (`just fe-e2e-cloning`).
+test.describe("/robotics — behaviour cloning", () => {
+  test("selecting it downloads nothing, and the demonstrations draw without training", async ({
+    page,
+    mockApi,
+  }) => {
+    await mockApi();
+    const hub = await stubHub(page);
+    await page.goto("/robotics");
+    await page.getByRole("button", { name: /behaviour cloning/i }).click();
+    for (const step of [1, 2, 3, 4]) await expect(page.getByTestId(`slot-${step}`)).toBeVisible();
+    await expect(page.getByTestId("model-ready")).toContainText(/nothing to download/i);
+    await expect(page.getByTestId("demo-preview")).toBeVisible();
+    await expect(page.getByTestId("demo-summary")).toContainText("10 above");
+    await page.getByRole("button", { name: /one way round/i }).click();
+    await expect(page.getByTestId("demo-summary")).toContainText("20 above");
+    await expect(page.getByTestId("output-empty")).toBeVisible();
+    await expect(page.getByTestId("rl-progress")).toHaveCount(0);
+    expect(hub).toEqual([]);
+  });
+
+  test("both ways round collides; one way round, same seed, reaches", async ({ page, mockApi }) => {
+    await mockApi();
+    await page.goto("/robotics");
+    await page.getByRole("button", { name: /behaviour cloning/i }).click();
+
+    const train = async () => {
+      await page.getByTestId("train-button").click();
+      await expect(page.getByTestId("train-button")).toBeDisabled();
+      await expect(page.getByTestId("train-button")).toBeEnabled({ timeout: 60_000 });
+    };
+    await train(); // both ways round, the default
+    await expect(page.getByTestId("cloning-verdict")).toHaveAttribute("data-outcome", "collided");
+    await page.getByRole("button", { name: /one way round/i }).click();
+    await train();
+    await expect(page.getByTestId("cloning-verdict")).toHaveAttribute("data-outcome", "reached");
+    // Side by side, from one page.
+    await expect(page.getByTestId("verdict-both")).toHaveAttribute("data-outcome", "collided");
+    await expect(page.getByTestId("verdict-one")).toHaveAttribute("data-outcome", "reached");
+  });
+});

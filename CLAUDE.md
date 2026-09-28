@@ -62,7 +62,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Multimodal roadmap** (**complete as scoped, 3 of 3**; VLMs, `q4f16`, streaming, video frames) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
 | **NLP roadmap** (complete as scoped: **11 of the category's 12 taxonomy rows** shipped, across 10 of the file's 11 sections — §3.7 covers two rows with one engine — and Table QA does not port; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
 | **Tabular roadmap** (**complete as scoped, 3 of 3**; the fit is the feasibility bar, not the download) | [`docs/roadmaps/tabular.md`](docs/roadmaps/tabular.md) |
-| **Reinforcement Learning roadmap** (§0 is the measurement that put every step on the CPU; the environment is the work) | [`docs/roadmaps/rl.md`](docs/roadmaps/rl.md) |
+| **Reinforcement Learning roadmap** (**complete as scoped, 2 of 2**; §0 is the measurement that put every step on the CPU; the environment is the work) | [`docs/roadmaps/rl.md`](docs/roadmaps/rl.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -112,6 +112,7 @@ just fe-e2e-forecast # the backtest spread against the single-split number (no m
 just fe-e2e-rl      # /rl: a real training run, pinned by a named arrow and value iteration (seconds)
 just fe-e2e-rl-phase0 # re-measure RL Phase 0: CPU vs GPU steps/s, per-step posting cost (logged)
 just fe-e2e-robotics # @slow: OWLv2 + Depth Anything — the nearer car must be ranked nearer (needs a shader-f16 GPU)
+just fe-e2e-cloning  # /robotics behaviour cloning: both-ways collides, one-way reaches, same seed (seconds)
 just fe-e2e-models  # check every model id (audio + vision + multimodal + text) resolves on the HF Hub (seconds)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
@@ -1547,6 +1548,15 @@ size is the **environment**, which has to be written in TypeScript. See
   median over the box's centre, never metres. **OWLv2's q8 export does not open on WASM**
   (`Cast(13) … /class_head/Cast`), which also breaks `/zero-shot-object-detection`'s CPU
   path; `just fe-e2e-robotics` needs a `shader-f16` GPU.
+- **A failure you ship needs a control that succeeds.** `/robotics`' behaviour-cloning entry
+  trains the same network, budget and seed on demonstrations that go round an obstacle both
+  ways (the policy averages them and collides, 5 seeds in 6) *and* one way (it reaches,
+  6 of 6), and shows the verdicts side by side — the failure alone is indistinguishable
+  from a bug in the page. The test pins it at the **action field** (heading 0–10° off the
+  obstacle against 16–39°), not only the rollout. And **check the demonstrator before the
+  learner**: the first scripted expert cut a corner and 3 of its 20 demonstrations
+  collided. It is a zero-byte entry beside the grounding pair; the route branches on
+  `kind` and each view owns its hooks, so choosing it mounts no grounding worker.
 
 ### Three routes were built and then cut for size — read this before adding one
 

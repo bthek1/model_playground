@@ -19,7 +19,15 @@
 | Decision Transformer (§3.4) | — | **Prose, on `/rl`** — no ONNX export *and* MuJoCo ([#52](https://github.com/bthek1/model_playground/issues/52)) |
 | RL for Language Models (§3.5) | — | **Prose, on `/rl`** — linked to `/text-generation`; SmolLM2 was aligned with DPO ([#52](https://github.com/bthek1/model_playground/issues/52)) |
 | Robotics: grounding (§3.6) | [`/robotics`](../../frontend/src/routes/robotics.tsx) | **Shipped** — OWLv2 + Depth Anything V2, one pair in two workers ([#53](https://github.com/bthek1/model_playground/issues/53)) |
-| Robotics: behaviour cloning (§3.6) | `/robotics` | Planned — [#54](https://github.com/bthek1/model_playground/issues/54) |
+| Robotics: behaviour cloning (§3.6) | `/robotics` | **Shipped** — the multimodality failure beside its control ([#54](https://github.com/bthek1/model_playground/issues/54)) |
+
+**The category is complete as scoped: 2 of 2 taxonomy rows.** Every buildable section
+shipped, and the two that do not port — Decision Transformer and RL for language models —
+are prose on `/rl` with their measured reasons. The build-out is recorded in the closed plan
+issues [#51](https://github.com/bthek1/model_playground/issues/51),
+[#52](https://github.com/bthek1/model_playground/issues/52),
+[#53](https://github.com/bthek1/model_playground/issues/53) and
+[#54](https://github.com/bthek1/model_playground/issues/54).
 
 Reinforcement learning is the best fit for a browser of anything in the taxonomy, and the
 reason has nothing to do with model size.
@@ -378,8 +386,7 @@ boxes in hand, and the camera path runs both models per frame with one frame in 
 **The control half mostly does not port, and the page says so** in OUTPUT's description,
 before a result exists: behaviour cloning on real data needs demonstrations,
 `lerobot/pusht` needs a simulator, and action chunking is about real hardware latency. The
-one control-half demonstration that does work — the multimodality failure on a toy
-reaching task — is [#54](https://github.com/bthek1/model_playground/issues/54).
+one control-half demonstration that does work is below.
 
 **Found while building it: OWLv2's q8 export does not open on WASM.** The session fails with
 `Could not find an implementation for Cast(13) node with name '/class_head/Cast'` — and
@@ -387,6 +394,48 @@ reaching task — is [#54](https://github.com/bthek1/model_playground/issues/54)
 project, so the bug predates this page. The OWLv2 entry declares no `backends`, so both
 pages offer a CPU path that downloads 155 MB and then cannot run. The `@slow` grounding spec
 (`just fe-e2e-robotics`) therefore needs a GPU with `shader-f16`, and skips without one.
+
+#### The control half: behaviour cloning's multimodality failure — shipped
+
+A second entry in `/robotics`' picker ([#54](https://github.com/bthek1/model_playground/issues/54)):
+a toy two-link arm ([`envs/reacher2d.ts`](../../frontend/src/rl/envs/reacher2d.ts)), a
+scripted demonstrator ([`demos.ts`](../../frontend/src/rl/demos.ts)) that goes round an
+obstacle over or under it, and a policy cloned from it in the tab
+([`behaviourCloning.ts`](../../frontend/src/rl/behaviourCloning.ts)). Train on both ways
+round and a mean-squared-error policy learns their **average** — straight through the
+obstacle. That is the motivation for action chunking and diffusion policies, which the
+page names and does not demonstrate.
+
+**It is `/vad`'s zero-byte entry in the opposite direction**: `bytes: { webgpu: 0,
+wasm: 0 }`, no repo, beside a 357 MB pair in the same picker, through the same four bands.
+LOAD is answered at once and still renders. The route branches on the entry's `kind`
+and each view owns its own hooks, so selecting the cloning entry never mounts the
+grounding pair's two workers — asserted.
+
+**A failure is only evidence beside a control that succeeds.** A policy that drives into
+the obstacle could equally be undertrained, badly scaled or fed a broken environment, so
+the page trains the same network, budget and seed on a **unimodal** set too and shows the
+two verdicts side by side. Measured over seeds 1–6 (hidden 64, 100 epochs, lr 0.01, 20
+demonstrations, ~0.4 s a run): at a point on the straight line between the modes, the
+bimodal policy heads **0–10°** off the obstacle's centre and its rollout **collides 5
+times in 6**; the unimodal one heads **16–39°** off and **reaches 6 of 6**. The test pins
+the claim at the level of the **action field** across four seeds — so a rollout failing
+for some other reason cannot satisfy it — and the rollouts at seed 1. One bimodal seed in
+six got through, which is why the page's verdict distinguishes reached / collided /
+stalled rather than promising a crash.
+
+**The demonstrator is the hidden assumption, and its first version was wrong.** It turned
+for the target 0.15 m before reaching its waypoint and cut the corner over the top of the
+obstacle — 0.29 m from its centre against a 0.30 radius — so 3 demonstrations in 20
+collided. An expert that fails muddies the experiment it exists for; it now turns at the
+waypoint, and a test requires every demonstration to reach, at four obstacle offsets, and
+every "above" path to stay above the centre line (and "below", below) *before* any
+learning is checked.
+
+**Scaling is fitted on the demonstrations only and travels with the policy** — packed with
+the weights for the page and asserted as stored statistics, not only as an outcome. And
+**only the hand collides**; the links pass through, a simplification of the toy the page
+states beside the drawing.
 
 ---
 
@@ -400,7 +449,8 @@ pages offer a CPU path that downloads 155 MB and then cannot run. The `@slow` gr
 | **Algorithm head-to-head** | **Shipped** | same seed, two curves, a spread across seeds | CPU (§0) | - |
 | **Decision Transformer** | No — prose on `/rl` | no ONNX weights, and MuJoCo | - | export it, and replace the env |
 | **RL for LLMs** | No, and correctly — prose on `/rl` | - | - | prose, plus `/text-generation` |
-| **Behaviour cloning** (Robotics) | Toy env only | 2-D reaching task in TypeScript | CPU | `lerobot` datasets to a server |
+| **Behaviour cloning** (Robotics) | **Shipped**, toy env only | 2-D reaching task in TypeScript | CPU, in a worker | `lerobot` datasets to a server |
+| **The multimodality failure** (Robotics) | **Shipped**, with its control | the toy env above, both mixes at one seed | CPU, in a worker | - |
 | **Grounding an instruction** (Robotics) | **Shipped** | OWLv2 plus Depth Anything V2, two workers | WebGPU (OWLv2 has no working WASM path) | - |
 
 Rule of thumb: **the algorithm always ports, the environment usually does not.**

@@ -34,6 +34,7 @@ import { Bot, Crosshair, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { InputPanel } from "@/components/model/InputPanel";
+import { CloningPage } from "@/components/robotics/CloningPage";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
@@ -62,7 +63,9 @@ import {
 import {
   DEFAULT_GROUNDING_QUERIES,
   DEFAULT_ROBOTICS_ENTRY,
+  type GroundingEntry,
   ROBOTICS_ENTRIES,
+  type RoboticsEntry,
   sentenceLike,
 } from "@/vision/grounding";
 import {
@@ -101,7 +104,32 @@ function RoboticsPage() {
       ROBOTICS_ENTRIES.find((e) => e.id === DEFAULT_ROBOTICS_ENTRY) ??
       ROBOTICS_ENTRIES[0],
   });
-  const entry = session.model;
+  // Two kinds of entry, one picker (#54). Each view owns its own hooks, so the
+  // cloning entry never mounts the grounding pair's two workers — and never
+  // downloads a byte of them.
+  if (session.model.kind === "cloning") {
+    return (
+      <CloningPage
+        select={
+          <ModelPicker
+            models={ROBOTICS_ENTRIES}
+            value={session.model.id}
+            onChange={session.setModel}
+          />
+        }
+      />
+    );
+  }
+  return <GroundingPage session={session} entry={session.model} />;
+}
+
+function GroundingPage({
+  session,
+  entry,
+}: {
+  session: ReturnType<typeof useModelSelection<RoboticsEntry>>;
+  entry: GroundingEntry;
+}) {
 
   const {
     pair,
