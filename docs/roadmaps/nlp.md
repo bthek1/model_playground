@@ -155,7 +155,7 @@ a time** (null the reference *first*, then `disposeQuietly`), **warm-up before `
 
 ### 2.1 The two shared components
 
-- **[`ScoreList`](../../frontend/src/components/text/ScoreList.tsx)** — a sorted bar per
+- **[`ScoreList`](../../frontend/src/components/model/ScoreList.tsx)** — a sorted bar per
   label with the score printed. **It refuses to render a single row**, and that is the
   whole design: a classifier's argmax is the least informative thing it produces, because
   "POSITIVE" alone looks identical at 0.99 and at 0.51. Callers pass the full label set,

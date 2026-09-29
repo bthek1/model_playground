@@ -74,8 +74,10 @@ five; render the ones that apply, in this order of prominence.
 These are the reusable primitives. New model views should **compose these**, not invent
 parallel ones. The canonical implementations live in
 [`components/viz/`](../../frontend/src/components/viz/) — `schematic.tsx` (Stage / Arrow /
-ParamChip) and `heatmap.tsx` (HeatmapTile / DivergingLegend). Both the Training route
-(`components/training/`) and the Tensor route (`routes/tensor.tsx`) compose them.
+ParamChip), `heatmap.tsx` (HeatmapTile / DivergingLegend) and `readout.tsx` (Fact / Score,
+the `<dt>`/`<dd>` cells of a metrics readout — the three graph pages use them). Both the
+Training route (`components/training/`) and the Tensor route (`routes/tensor.tsx`) compose
+them.
 
 ### Stage
 A labelled box for one phase of the pipeline (INPUT LAYER, WEIGHTS + BIAS, OUTPUT). Title

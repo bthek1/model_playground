@@ -716,18 +716,26 @@ task, beside the worker, shaped like
 [`audio/classification.ts`](../../frontend/src/audio/classification.ts):
 
 ```ts
-export interface DepthModel {
-  id: string;      // the Hub id, verified — this is what `just fe-e2e-models` checks
-  label: string;   // what the picker shows
-  hint: string;    // one line: what makes this model different from its neighbour
-  params: number;  // millions. Drives the size estimate in `model/size.ts`
-  bytes?: MeasuredBytes;  // per-backend override, when the estimate would mislead
+// CatalogueEntry (model/catalogue.ts) already carries the fields every entry has:
+//   id       the Hub id, verified — this is what `just fe-e2e-models` checks
+//   label    what the picker shows
+//   hint     one line: what makes this model different from its neighbour
+//   params   millions. Drives the size estimate in `model/size.ts`
+//   bytes?   per-backend override, when the estimate would mislead
+//   backends? only when a backend genuinely cannot run it
+export interface DepthModel extends CatalogueEntry {
   graphs?: readonly string[];   // ONNX base names, when the repo has no `model.onnx`
-  backends?: readonly Backend[]; // only when a backend genuinely cannot run it
+  // …and whatever else is specific to the task
 }
 export const DEPTH_MODELS: DepthModel[] = [ /* … */ ];
 export const DEFAULT_DEPTH_MODEL = DEPTH_MODELS[0].id;
 ```
+
+Extend `CatalogueEntry` (or the modality's `VisionModel`/`TextModel`, which do) rather
+than restating its fields. An entry type may *narrow* one — text entries require `bytes`
+— but never redefine it. In the task hook, look the entry up with
+`useCatalogueEntry(DEPTH_MODELS, model)`, which falls back to the first entry for an id
+the catalogue no longer has.
 
 `graphs` and `backends` are both about *not lying*, and both were added because the
 absence bit. `graphs` names the files the model actually downloads — CLIP as a feature
