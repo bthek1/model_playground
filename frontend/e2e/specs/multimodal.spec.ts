@@ -98,8 +98,7 @@ test.describe("/image-text-to-text", () => {
   }) => {
     await mockApi();
     await page.goto("/image-text-to-text");
-    // The taxonomy entry is wired, so the task no longer falls through to
-    // `/tasks/$slug`.
+    // The taxonomy entry is wired to the real route.
     await expect(page).toHaveURL(/\/image-text-to-text$/);
     await expect(
       page.getByRole("heading", { name: "Image Text to Text" }),

@@ -7,9 +7,11 @@
 > are the per-category model lookup tables it sends you to.
 
 Every task in [`taskTaxonomy.ts`](../../frontend/src/components/layout/taskTaxonomy.ts)
-answers "I have this input and want that output, what should I use". Most of
-them currently render the `/tasks/$slug` placeholder. Turning one into a real
-page is mechanical enough to write down, which is what this file does.
+answers "I have this input and want that output, what should I use", and
+every one of them has a page — the sidebar lists nothing else (#59). A Hugging
+Face task that is not in it yet is either unbuilt or ruled out in its category
+roadmap. Turning one into a real page is mechanical enough to write down, which
+is what this file does.
 
 The model research behind these guides comes from a companion collection of
 Python notebooks, which is a separate project — the checkpoints, the input
@@ -45,9 +47,9 @@ does not become a page. Three questions, in order:
    care makes them.
 
 If the answer to any of these is no, the task still gets a row in its
-category guide's feasibility table saying so and why, and it keeps its
-`/tasks/$slug` placeholder. **A documented "server-side, and here is the
-reason" is a finished piece of work.** It stops the next person spending three
+category guide's feasibility table saying so and why, and it stays out of the
+sidebar — there is no placeholder page to park it on (#59). **A documented
+"server-side, and here is the reason" is a finished piece of work.** It stops the next person spending three
 days rediscovering it.
 
 ### One whole category answers all three questions vacuously, and needs a different bar
@@ -158,7 +160,7 @@ choice**, and two shipped things prove it:
   would make them slower.
 
 What is *not* acceptable is a task that needs a server. That is the line —
-`/tasks/$slug` and a documented reason, per the rule above.
+no sidebar row and a documented reason, per the rule above.
 
 The one exception is the raw WebGPU path
 ([`frontend/src/webgpu/`](../../frontend/src/webgpu/)). A task with no ONNX
@@ -725,10 +727,11 @@ none.
 
 **The frontend taxonomy.** The sidebar is data. Categories and tasks live in
 [`components/layout/taskTaxonomy.ts`](../../frontend/src/components/layout/taskTaxonomy.ts)
-and are mapped to real routes through `REAL_ROUTES`. An unmapped task falls
-through to the generic `/tasks/$slug` placeholder, which is how the full Hugging
-Face taxonomy is displayed without every task existing. Adding a page means
-adding one `REAL_ROUTES` entry keyed by the slugified task label.
+and are mapped to real routes through `REAL_ROUTES`. The sidebar lists only
+tasks with a page: `task()` throws on a label with no `REAL_ROUTES` entry, so a
+row cannot be added ahead of its route. Adding a page means adding the task
+label to its category **and** one `REAL_ROUTES` entry keyed by the slugified
+label.
 
 **The backend registry**, optionally. One `ModelCard` per checkpoint the page
 offers — but note that `task` is a **fixed choice set**
@@ -904,7 +907,7 @@ structurally: the run controls simply do not work until the load machine says
 [ ] Hook wraps useModelWorker, returns the §3 contract verbatim, adds no alias
 [ ] Selection persisted through useModelSelection with the route's own routeKey
 [ ] Route renders all four slots; autoLoad from the session; DOM order 1-4
-[ ] REAL_ROUTES entry added; placeholder retired; taxonomy test flipped
+[ ] Task row + REAL_ROUTES entry added; taxonomy test asserts the route
 [ ] Added to model-page.spec.ts's route table, and to model-ids.spec.ts's imports
 [ ] ModelCard rows created if used; task is a ModelTask choice, not a pipeline
 [ ] Vitest contract asserted, including which controls re-derive and which re-run

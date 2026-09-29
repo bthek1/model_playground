@@ -14,16 +14,18 @@ import {
  * The app's navigation taxonomy — a two-level tree of task categories and the
  * tasks within them, modelled on the Hugging Face pipeline taxonomy.
  *
- * The sidebar is data-driven: to add a task, add an entry here. A task links to
- * a real route when one exists (`to`), otherwise it falls back to the generic
- * `/tasks/$slug` landing page (see `routes/tasks.$slug.tsx`).
+ * The sidebar is data-driven: to add a task, add an entry here **and** its
+ * route in `REAL_ROUTES`. The sidebar lists only tasks that have a page — a
+ * Hub task with no route is not listed at all (#59), and `task()` throws on a
+ * label with no route so an unbuilt row cannot creep back in. Why each missing
+ * Hub task has no page is recorded in its category roadmap under `docs/roadmaps/`.
  */
 
 export interface TaskItem {
   label: string;
-  /** Kebab-case identifier derived from `label`; used in `/tasks/$slug`. */
+  /** Kebab-case identifier derived from `label`; the key into `REAL_ROUTES`. */
   slug: string;
-  /** Route this task links to. Real route if implemented, else `/tasks/$slug`. */
+  /** The implemented route this task links to. */
   to: string;
 }
 
@@ -40,10 +42,7 @@ function slugify(label: string): string {
     .replace(/^-|-$/g, "");
 }
 
-/**
- * Tasks that map to a real, implemented route. Everything else routes to the
- * generic `/tasks/$slug` placeholder.
- */
+/** Every sidebar task's implemented route, keyed by slug. */
 const REAL_ROUTES: Record<string, string> = {
   "gpu-playground": "/playground",
   "linear-model-training": "/training",
@@ -194,28 +193,16 @@ const REAL_ROUTES: Record<string, string> = {
   // The control half does not port (no simulator, no hardware), and the page
   // says so beside its result.
   "robotics": "/robotics",
-  // Three slugs deliberately have no route and fall through to the placeholder,
-  // for one reason each — every checkpoint the task has is too heavy to offer:
-  //
-  //   text-to-audio                 MusicGen-small, the only browser music
-  //                                 model, is 599 MB on WASM / 1127 MB on
-  //                                 WebGPU — past the ~1 GB ceiling.
-  //   image-to-text                 Florence-2 (544 MB) and vit-gpt2 (482 MB)
-  //                                 are the whole catalogue; neither is a
-  //                                 download to put behind a sidebar click.
-  //   document-question-answering   Donut is 411 MB on WebGPU and 597 MB on
-  //                                 WASM (its decoder cannot be quantized —
-  //                                 see `model/backend.ts`), and the pipeline
-  //                                 hardcodes Donut's prompt, so there is no
-  //                                 lighter second entry to fall back to.
-  //
-  // All three are written up in their category roadmaps with the measured
-  // numbers, which `adding-a-task-page.md` §0 counts as finished work.
 };
 
 function task(label: string): TaskItem {
   const slug = slugify(label);
-  return { label, slug, to: REAL_ROUTES[slug] ?? `/tasks/${slug}` };
+  const to = REAL_ROUTES[slug];
+  // A row without a page is a promise the sidebar cannot keep: it used to fall
+  // through to a "/tasks/$slug — on the roadmap" placeholder, for tasks the
+  // roadmaps had measured and ruled out. Fail at import rather than list one.
+  if (!to) throw new Error(`Task "${label}" has no route in REAL_ROUTES`);
+  return { label, slug, to };
 }
 
 function tasks(labels: string[]): TaskItem[] {
@@ -228,7 +215,6 @@ export const taskCategories: TaskCategory[] = [
     icon: AudioLines,
     tasks: tasks([
       "Text to Speech",
-      "Text to Audio",
       "Automatic Speech Recognition",
       "Audio to Audio",
       "Audio Classification",
@@ -243,21 +229,14 @@ export const taskCategories: TaskCategory[] = [
       "Image Classification",
       "Object Detection",
       "Image Segmentation",
-      "Text to Image",
-      "Image to Text",
       "Image to Image",
-      "Image to Video",
-      "Unconditional Image Generation",
       "Video Classification",
-      "Text to Video",
       "Zero Shot Image Classification",
       "Mask Generation",
       "Zero Shot Object Detection",
-      "Text to 3D",
       "Image to 3D",
       "Image Feature Extraction",
       "Keypoint Detection",
-      "Video to Video",
       // **A deliberate departure from the Hub's task list.** Every other row in
       // this category mirrors a Hugging Face pipeline tag; the Hub has no
       // `background-removal` task — Transformers.js added the pipeline itself,
@@ -271,15 +250,9 @@ export const taskCategories: TaskCategory[] = [
     label: "Multimodal",
     icon: Layers,
     tasks: tasks([
-      "Audio Text to Text",
       "Image Text to Text",
-      "Image Text to Image",
-      "Image Text to Video",
       "Visual Question Answering",
-      "Document Question Answering",
       "Video Text to Text",
-      "Visual Document Retrieval",
-      "Any to Any",
     ]),
   },
   {
@@ -288,7 +261,6 @@ export const taskCategories: TaskCategory[] = [
     tasks: tasks([
       "Text Classification",
       "Token Classification",
-      "Table Question Answering",
       "Question Answering",
       "Zero Shot Classification",
       "Translation",
@@ -343,11 +315,6 @@ export const taskCategories: TaskCategory[] = [
     ]),
   },
 ];
-
-/** Flat lookup of every task by slug — used by the `/tasks/$slug` route. */
-export const tasksBySlug: Record<string, TaskItem> = Object.fromEntries(
-  taskCategories.flatMap((c) => c.tasks.map((t) => [t.slug, t])),
-);
 
 /** The category label that owns the given pathname, if any. */
 export function categoryForPath(pathname: string): string | undefined {

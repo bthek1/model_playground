@@ -31,29 +31,18 @@ describe("titleForPath", () => {
     );
   });
 
-  it("names the generic /tasks/$slug placeholder", () => {
-    const placeholder = taskCategories
-      .flatMap((c) => c.tasks)
-      .find((t) => t.to.startsWith("/tasks/"));
-    expect(placeholder, "expected at least one unimplemented task").toBeDefined();
-    expect(titleForPath(placeholder!.to)).toBe(
-      `${placeholder!.label} · Model Playground`,
-    );
-  });
-
   it("tolerates a trailing slash", () => {
     expect(titleForPath("/home/")).toBe("Home · Model Playground");
   });
 
   it("falls back to the product name rather than inventing a label", () => {
     expect(titleForPath("/nope")).toBe("Model Playground");
-    expect(titleForPath("/tasks/not-a-task")).toBe("Model Playground");
+    // The retired /tasks/$slug placeholder (#59) is just an unknown path now.
+    expect(titleForPath("/tasks/text-to-image")).toBe("Model Playground");
   });
 
-  it("gives every implemented task route a distinct title", () => {
-    const real = taskCategories
-      .flatMap((c) => c.tasks)
-      .filter((t) => !t.to.startsWith("/tasks/"));
+  it("gives every task route a distinct title", () => {
+    const real = taskCategories.flatMap((c) => c.tasks);
     const titles = real.map((t) => titleForPath(t.to));
     expect(new Set(titles).size).toBe(real.length);
     expect(titles.every((t) => t !== "Model Playground")).toBe(true);

@@ -71,9 +71,6 @@ const TASK_ROUTES = [
   { path: "/robotics", heading: "Robotics", downloads: true },
   // Compile-only: no weights, so LOAD auto-runs as a device probe (§7).
   { path: "/tensor", heading: "Tensor Arithmetic", downloads: false },
-  // A task with nothing behind it renders the same page with empty slots, so an
-  // unimplemented task reads as this page without a model — not another app.
-  { path: "/tasks/text-to-image", heading: "Text to Image", downloads: false },
 ] as const;
 
 test.describe("the four-slot model page contract", () => {

@@ -379,7 +379,7 @@ show the output*. The modality changes; the pipeline does not. Full contract in
   precision pin" is a catalogue answer and a pin arriving later should be a deliberate edit
   with a measurement behind it.
 - **Reference implementations:** `routes/text-to-speech.tsx` (downloads weights),
-  `routes/tensor.tsx` (compile-only), `routes/tasks.$slug.tsx` (the empty case).
+  `routes/tensor.tsx` (compile-only), `routes/time-series-forecasting.tsx` (three bands).
   `routes/training.tsx` is the one **documented exception** — a full-bleed canvas HUD that keeps its
   own layout; see model-page-pattern.md §7 before copying it.
 - **Two buttons spend anything: LOAD and GENERATE.** SELECT and INPUT are choices — free,
@@ -854,9 +854,11 @@ on.** Two heavy *entries* went with them: Depth Pro (1009 MB) off `/depth` and S
   downloaded nothing until an explicit click, and had an E2E spec asserting zero Hub
   requests before it. They were cut anyway. Gate a heavy entry that sits *beside* light
   ones; do not gate a page into existence.
-- **The taxonomy row stays; the route goes.** All three fall through to `/tasks/$slug`,
-  asserted in `taskTaxonomy.test.ts` so none can be re-mapped without a smaller model.
-  The sidebar mirrors the Hub, not our build state.
+- **The route goes, and so does the row.** #59 removed every sidebar row with no page
+  (these three and twelve more the roadmaps ruled out) along with the `/tasks/$slug`
+  placeholder. `taskTaxonomy.ts` throws on a row with no route, and
+  `taskTaxonomy.test.ts` asserts none of the 15 is listed. The reasons stay in the
+  roadmaps.
 - **Rewrite a mechanism rather than deleting it with its subject.** `isHeavy` was a Depth
   Pro id check and is now a size threshold (`HEAVY_MODEL_BYTES`), so `/depth`'s gate
   outlived the entry; `DepthModel.metric` stays unset for the same reason.

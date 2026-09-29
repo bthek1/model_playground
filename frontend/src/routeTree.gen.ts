@@ -57,7 +57,6 @@ import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
 import { Route as AudioClassificationRouteImport } from './routes/audio-classification'
 import { Route as AsrRouteImport } from './routes/asr'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as TasksSlugRouteImport } from './routes/tasks.$slug'
 
 const ZeroShotObjectDetectionRoute = ZeroShotObjectDetectionRouteImport.update({
   id: '/zero-shot-object-detection',
@@ -300,11 +299,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TasksSlugRoute = TasksSlugRouteImport.update({
-  id: '/tasks/$slug',
-  path: '/tasks/$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -355,7 +349,6 @@ export interface FileRoutesByFullPath {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
-  '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -406,7 +399,6 @@ export interface FileRoutesByTo {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
-  '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -458,7 +450,6 @@ export interface FileRoutesById {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
-  '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -511,7 +502,6 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
-    | '/tasks/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -562,7 +552,6 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
-    | '/tasks/$slug'
   id:
     | '__root__'
     | '/'
@@ -613,7 +602,6 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
-    | '/tasks/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -665,7 +653,6 @@ export interface RootRouteChildren {
   ZeroShotClassificationRoute: typeof ZeroShotClassificationRoute
   ZeroShotImageClassificationRoute: typeof ZeroShotImageClassificationRoute
   ZeroShotObjectDetectionRoute: typeof ZeroShotObjectDetectionRoute
-  TasksSlugRoute: typeof TasksSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1006,13 +993,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/tasks/$slug': {
-      id: '/tasks/$slug'
-      path: '/tasks/$slug'
-      fullPath: '/tasks/$slug'
-      preLoaderRoute: typeof TasksSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -1065,7 +1045,6 @@ const rootRouteChildren: RootRouteChildren = {
   ZeroShotClassificationRoute: ZeroShotClassificationRoute,
   ZeroShotImageClassificationRoute: ZeroShotImageClassificationRoute,
   ZeroShotObjectDetectionRoute: ZeroShotObjectDetectionRoute,
-  TasksSlugRoute: TasksSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

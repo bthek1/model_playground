@@ -934,9 +934,9 @@ dropped it would be claiming more than it measured. `just fe-e2e-rank` is what c
 
 ### 3.11 Table Question Answering — **does not port**
 
-Taxonomy task **Table Question Answering** · no route, and it should stay that way. The
-row falls through to `/tasks/$slug`, pinned by an assertion in `taskTaxonomy.test.ts` so it
-cannot be re-mapped without a model to point at.
+Taxonomy task **Table Question Answering** · no route, and it should stay that way. It is
+not in the sidebar (#59), pinned by an assertion in `taskTaxonomy.test.ts` so it cannot be
+re-added without a model to point at.
 
 - **TAPAS** has no ONNX export, and its table-aware position embeddings mean a generic
   encoder is not a substitute.

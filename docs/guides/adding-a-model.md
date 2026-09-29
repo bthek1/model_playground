@@ -385,9 +385,9 @@ run args (see `useAudioClassifier.ts`). The route composes `ModelPicker` +
 `ModelStatus` with the task's own controls, and must degrade gracefully when the
 backend is WASM-only.
 
-**d. Taxonomy.** Map the task slug to the real route in `REAL_ROUTES`
-(`components/layout/taskTaxonomy.ts`), or it falls through to the
-`/tasks/$slug` placeholder.
+**d. Taxonomy.** Add the task row and map its slug to the real route in
+`REAL_ROUTES` (`components/layout/taskTaxonomy.ts`). A row with no route throws
+at import — the sidebar lists only tasks that have a page.
 
 ### Three traps these cost us
 

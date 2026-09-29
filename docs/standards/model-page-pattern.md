@@ -480,14 +480,13 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Robotics (`/robotics`) | **a pair from two catalogues** — `/zero-shot-object-detection`'s detector and `/depth`'s model, composed as one entry | both downloads, **two workers**, one aggregate bar from `combineProgress` against the pair's measured sum | phrases, an image or camera frame, a threshold that only re-derives | boxes over the frame, the depth map, the **nearest** match — and "grounding, not control" in the description |
 | Robotics — behaviour cloning | a **zero-byte entry beside a 357 MB pair** in the same picker (`/vad`'s energy baseline, the other way round), plus the demonstration mix, count, obstacle, width and seed | answered at once — nothing to download, and the band still renders so both entries keep one rhythm | the demonstrations, **drawn live** as the set changes (generation is pure and cheap), and Train / Stop | the rollout over the demonstrations, the action field, a reached / collided / stalled verdict — and **the two mixes side by side** at one seed |
 | Discrete Maths (`/discrete-maths`) | a small **graph** — six, chosen in contrasting pairs (C₈ against C₇, the path against Petersen, plus Zachary's karate club) | **absent** — exact integer arithmetic on ≤ 34 nodes, no download, no worker, no GPU, said where the band would have been | the source node, and **Step** / Run to end / Reset — the one control that advances anything | the BFS ball drawn with each node's distance, and row *s* of (A + I)ᵏ or Aᵏ beside it, with a computed ✓/✗ against the ball; the A / A + I switch **re-reads** the same k |
-| `/tasks/$slug` placeholder | — | — | — | "not available yet" |
 
 Where LOAD is fast and free (a shader compile), it may auto-run — pass `autoLoad`. The
 slot still renders, so the page keeps the same four-band rhythm as its neighbours; use
 [`DeviceStatus`](../../frontend/src/components/model/DeviceStatus.tsx) there, which answers
-the question those pages actually raise — is there a GPU, or nothing to compute on. The
-placeholder route uses the same shell with empty slots, so an unimplemented task reads
-as *the same kind of page*, not a different app.
+the question those pages actually raise — is there a GPU, or nothing to compute on.
+There is no placeholder page for an unbuilt task: the sidebar lists only tasks with a
+route (#59).
 
 **A result the user can re-read without re-running belongs on the main thread.** `/vad` returns
 per-frame speech probabilities and lets the user drag a threshold; the segments that threshold
@@ -887,5 +886,4 @@ negative differ" is unassertable.
 | A page that holds two models | [`routes/pose.tsx`](../../frontend/src/routes/pose.tsx) — one combined size, one aggregate bar, controls that re-run on purpose |
 | A page whose framing is a requirement | [`routes/video-classification.tsx`](../../frontend/src/routes/video-classification.tsx) — a frame-level baseline, said so in copy an E2E spec asserts |
 | A page whose answer streams | [`routes/image-text-to-text.tsx`](../../frontend/src/routes/image-text-to-text.tsx) — the encode is named, the tokens arrive over seconds, and `partial` carries both |
-| The empty case | [`routes/tasks.$slug.tsx`](../../frontend/src/routes/tasks.$slug.tsx) |
 | The contract, asserted | [`frontend/e2e/specs/model-page.spec.ts`](../../frontend/e2e/specs/model-page.spec.ts) |

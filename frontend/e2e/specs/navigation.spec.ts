@@ -1,21 +1,13 @@
-import {
-  taskCategories,
-  tasksBySlug,
-} from "../../src/components/layout/taskTaxonomy";
+import { taskCategories } from "../../src/components/layout/taskTaxonomy";
 import { AppShell } from "../pages/AppShell";
 import { expect, test } from "../fixtures/base";
 
 // The sidebar is taxonomy-driven, so these tests are driven from the same data.
 // Adding a task to taskTaxonomy.ts automatically extends this coverage.
 
-// Real routes: everything whose `to` is not the /tasks/$slug placeholder.
-const realTasks = Object.values(tasksBySlug).filter(
-  (t) => !t.to.startsWith("/tasks/"),
-);
-// One placeholder task is enough to prove the fallback path.
-const placeholderTask = Object.values(tasksBySlug).find((t) =>
-  t.to.startsWith("/tasks/"),
-)!;
+// Every sidebar row has a real route — the taxonomy refuses one that does not
+// (#59), so there is no placeholder page left to tell apart from them.
+const realTasks = taskCategories.flatMap((c) => c.tasks);
 
 test.describe("sidebar navigation", () => {
   test("renders every taxonomy category", async ({ page, mockApi }) => {
@@ -50,41 +42,23 @@ test.describe("sidebar navigation", () => {
       await mockApi();
       await page.goto(item.to);
       await expect(page).toHaveURL(new RegExp(`${item.to}$`));
-      // The route rendered something of its own, not the placeholder card.
-      await expect(
-        page.getByText("This task isn't available in the playground yet."),
-      ).toHaveCount(0);
+      await expect(page.getByText("Not Found")).toHaveCount(0);
       await expect(page.getByRole("heading").first()).toBeVisible();
     });
   }
 
-  test(`unimplemented task "${placeholderTask.label}" shows the placeholder`, async ({
+  test("the retired /tasks/$slug placeholder is an unknown URL now", async ({
     page,
     mockApi,
   }) => {
+    // #59: the rows it served were removed from the sidebar, and a page saying
+    // "on the roadmap" for tasks the roadmaps ruled out went with them.
     await mockApi();
-    await page.goto(placeholderTask.to);
-    // The placeholder is the four-slot model page with empty slots, so the task
-    // name is the page's own h1 — same as an implemented task.
+    await page.goto("/tasks/text-to-image");
+    await expect(page.getByText("Not Found")).toBeVisible();
     await expect(
-      page.getByRole("heading", { level: 1, name: placeholderTask.label }),
-    ).toBeVisible();
-    await expect(page.locator("main").getByTestId("slot-4")).toBeVisible();
-    await expect(page.getByTestId("output-empty")).toContainText(
-      "on the roadmap",
-    );
-  });
-
-  test("an unknown slug renders the unknown-task card, not a crash", async ({
-    page,
-    mockApi,
-  }) => {
-    await mockApi();
-    await page.goto("/tasks/definitely-not-a-task");
-    await expect(
-      page.locator('[data-slot="card-title"]', { hasText: "Unknown task" }),
-    ).toBeVisible();
-    await expect(page.getByText("definitely-not-a-task")).toBeVisible();
+      page.getByRole("heading", { level: 1, name: "Text to Image" }),
+    ).toHaveCount(0);
   });
 
   test("clicking through the sidebar navigates and marks the link current", async ({

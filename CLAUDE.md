@@ -225,7 +225,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - React 19 + TypeScript ~6.0 + Vite 8 (dev server on `:5180`). Functional components only.
 - All API calls go through `src/api/client.ts` (Axios + JWT with silent 401 refresh). Its base URL is **empty by default** — requests hit `/api` on the page's own origin and the Vite dev server proxies them to `VITE_API_PROXY_TARGET`. This keeps LAN/HTTPS access working: a page served from `https://192.168.x.x:5180` calling `http://localhost:8006` directly is blocked by mixed content, CORS, and Local Network Access.
 - Server state lives in TanStack Query; global UI flags in Zustand + Immer (`src/store/`, one file per concern) — never put server data in Zustand.
-- The sidebar is **taxonomy-driven**: categories/tasks live in `components/layout/taskTaxonomy.ts` (data), rendered by `components/layout/Sidebar.tsx`. To add a task, add a data entry — map it to a real route via `REAL_ROUTES` (e.g. the Theory tools Linear Model Training → `/training` and Tensor Arithmetic → `/tensor`), else it falls through to the generic `routes/tasks.$slug.tsx` placeholder. Per-category expand state is in `store/ui.ts`.
+- The sidebar is **taxonomy-driven**: categories/tasks live in `components/layout/taskTaxonomy.ts` (data), rendered by `components/layout/Sidebar.tsx`. To add a task, add a data entry — map it to a real route via `REAL_ROUTES` (e.g. the Theory tools Linear Model Training → `/training` and Tensor Arithmetic → `/tensor`). **The sidebar lists only tasks that have a page** (#59): `task()` throws on a label with no route, and there is no `/tasks/$slug` placeholder any more. A Hub task with no page is absent from the sidebar, and why it has none lives in its category roadmap. Per-category expand state is in `store/ui.ts`.
 - Forms use React Hook Form + Zod schemas (`src/schemas/`, one file per domain).
 - Styling is Tailwind v4 (CSS-first, no config file) + shadcn/ui in the **`base-nova`** style, built on **`@base-ui/react`** primitives (NOT Radix). Add components with `npx shadcn@latest add <component>`.
 - Charts: ECharts, always via the lazy `src/components/charts/EChart.tsx` wrapper (`echarts` is heavy — keep it code-split). Render Markdown/LLM output with `src/components/Markdown.tsx` (`react-markdown` + `remark-gfm`).
@@ -1635,11 +1635,13 @@ lighter entry to fall back on.** Two heavy *entries* went with them: Depth Pro
   *beside light ones*; it cannot rescue a page that is nothing but a heavy entry.
 - **§0 is cheap and skipping it is not.** The measurement that condemned each page
   was available before a line was written. Ask the three questions first.
-- **The taxonomy row stays; the route goes.** All three fall through to
-  `/tasks/$slug`, asserted by a test in `taskTaxonomy.test.ts` so none can be
-  re-mapped without a smaller model to point at. The sidebar mirrors the Hub, not
-  our build state, and a documented "too heavy, here are the numbers" is a
-  finished piece of work.
+- **The route goes, and so does the row.** The sidebar used to keep every Hub
+  row and send the unbuilt ones to a `/tasks/$slug` "on the roadmap" placeholder;
+  #59 removed those 15 rows and the placeholder, because the roadmaps had already
+  ruled each of them out and the page said otherwise. `taskTaxonomy.test.ts`
+  asserts none is listed, so re-adding one needs a route and a smaller model to
+  point at. A documented "too heavy, here are the numbers" in the roadmap is
+  still a finished piece of work.
 - **Rewrite a mechanism rather than deleting it with its subject.** `isHeavy` was
   a Depth Pro id check and is now a size threshold (`HEAVY_MODEL_BYTES`), so the
   `/depth` gate outlived the entry it was written for; `DepthModel.metric` stays
