@@ -18,6 +18,7 @@
 import type { Backend, DtypeSpec, LoadOpts } from "@/model/backend";
 import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
 import type { MeasuredBytes } from "@/model/size";
+import type { CatalogueEntry } from "@/model/catalogue";
 
 /**
  * Transformers.js pipeline task strings this generic worker supports.
@@ -57,16 +58,10 @@ export type TextCategoryTask = TextTask | "question-answering";
 export type TextProgress = ModelProgress;
 
 /**
- * The shape every text model catalogue entry shares. Structurally a
- * `PickableModel` (so `ModelPicker` takes it as-is) plus the task it runs and
- * the backends it is known to work on.
+ * The shape every text model catalogue entry shares: a `CatalogueEntry` whose
+ * `bytes` is required, plus the task it runs and how its weights load.
  */
-export interface TextModel {
-  id: string;
-  label: string;
-  hint: string;
-  /** Parameter count in millions — drives the size-before-load estimate. */
-  params: number;
+export interface TextModel extends CatalogueEntry {
   /**
    * Measured download bytes. **Every entry in this category carries one**, which
    * is a stricter rule than vision's "where the estimate would mislead", and it
@@ -77,12 +72,6 @@ export interface TextModel {
    */
   bytes: MeasuredBytes;
   task: TextCategoryTask;
-  /**
-   * Backends this model is known to run on. Omitted means both. List one when
-   * the other is a known failure rather than merely slower, so `ModelPicker`
-   * can gate the row instead of the load failing after the download.
-   */
-  backends?: readonly Backend[];
   /**
    * The ONNX graph base names this entry downloads, relative to `onnx/`.
    * Defaults to `["model"]`. A seq2seq entry publishes `encoder_model` and

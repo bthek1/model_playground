@@ -9,18 +9,14 @@
 import type { ModelRequest, ModelResponse } from "@/model/types";
 
 import type { LoadOpts } from "@/model/backend";
+import type { CatalogueEntry } from "@/model/catalogue";
 
 export interface TtsVoice {
   id: string;
   label: string;
 }
 
-export interface TtsModel {
-  id: string;
-  label: string;
-  hint: string;
-  /** Parameter count in millions — drives the size-before-load estimate. */
-  params: number;
+export interface TtsModel extends CatalogueEntry {
   engine: "kokoro" | "pipeline";
   /** Named voices — Kokoro only. */
   voices?: TtsVoice[];

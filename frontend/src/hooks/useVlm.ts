@@ -23,6 +23,7 @@ import {
   type VlmResult,
 } from "@/multimodal/types";
 import { toPayload, transferablesOf } from "@/vision/image";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface UseVlmResult {
   status: ModelStatus;
@@ -64,10 +65,7 @@ export function useVlm(
   model: string = DEFAULT_VLM_MODEL,
   autoLoad = false,
 ): UseVlmResult {
-  const meta = useMemo(
-    () => VLM_MODELS.find((m) => m.id === model) ?? VLM_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(VLM_MODELS, model);
 
   const loadMessage = useMemo(
     () => ({

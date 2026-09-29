@@ -27,6 +27,7 @@ import {
   POSE_MODELS,
   type PoseResult,
 } from "@/vision/pose/types";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface UsePoseResult {
   status: ModelStatus;
@@ -54,10 +55,7 @@ export function usePose(
   model: string = DEFAULT_POSE_MODEL,
   autoLoad = false,
 ): UsePoseResult {
-  const meta = useMemo(
-    () => POSE_MODELS.find((m) => m.id === model) ?? POSE_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(POSE_MODELS, model);
 
   const loadMessage = useMemo(() => ({ model: meta.id }), [meta]);
 

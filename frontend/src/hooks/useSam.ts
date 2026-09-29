@@ -32,6 +32,7 @@ import {
   type SamPoint,
   type SamResult,
 } from "@/vision/sam/types";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface MaskResult {
   /** SAM's candidates, best-scoring first. */
@@ -76,10 +77,7 @@ export function useSam(
   model: string = DEFAULT_SAM_MODEL,
   autoLoad = false,
 ): UseSamResult {
-  const meta = useMemo(
-    () => SAM_MODELS.find((m) => m.id === model) ?? SAM_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(SAM_MODELS, model);
 
   const loadMessage = useMemo(
     () => ({ model: meta.id, ...(meta.dtypes ? { dtypes: meta.dtypes } : {}) }),

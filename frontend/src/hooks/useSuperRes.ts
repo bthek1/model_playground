@@ -19,7 +19,7 @@
 //              A run that is thirty inferences long needs a way out that does
 //              not throw away the weights.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { RawImage } from "@huggingface/transformers";
 
 import {
@@ -40,6 +40,7 @@ import {
   finishCanvas,
   planTiles,
 } from "@/vision/tile";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 /** Progress through one run's tiles. Null when nothing is running. */
 export interface TileProgress {
@@ -70,10 +71,7 @@ export function useSuperRes(
   model: string = DEFAULT_SUPER_RES_MODEL,
   autoLoad = false,
 ): UseSuperResResult {
-  const meta = useMemo(
-    () => SUPER_RES_MODELS.find((m) => m.id === model) ?? SUPER_RES_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(SUPER_RES_MODELS, model);
   const pipe = useVisionPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

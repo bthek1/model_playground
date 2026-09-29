@@ -8,7 +8,7 @@
 // one call site is easier to keep right than every future one. See
 // `text/engine.ts` → `pinnedArgs`.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   useTextPipeline,
@@ -20,6 +20,7 @@ import {
   type EntitySpan,
   type LocatableEntity,
 } from "@/text/highlight";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 /** What the pipeline returns per entity with `aggregation_strategy: "simple"`. */
 interface RawEntity {
@@ -47,10 +48,7 @@ export function useNer(
   model: string = DEFAULT_NER_MODEL,
   autoLoad = false,
 ): UseNerResult {
-  const meta = useMemo(
-    () => NER_MODELS.find((m) => m.id === model) ?? NER_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(NER_MODELS, model);
   const pipe = useTextPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

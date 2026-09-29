@@ -7,7 +7,7 @@
 // The returned shape is the shared `ModelTask` contract, verbatim: `run`, not a
 // `classify()` alias (docs/standards/model-page-pattern.md §3).
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import type { RawImage } from "@huggingface/transformers";
 
 import type { ClassLabel } from "@/model/types";
@@ -20,6 +20,7 @@ import {
   IMAGE_CLASSIFIER_MODELS,
   TOP_K,
 } from "@/vision/classification";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface UseImageClassifierResult
   extends Omit<UseVisionPipelineResult, "run"> {
@@ -33,12 +34,7 @@ export function useImageClassifier(
   model: string = DEFAULT_IMAGE_CLASSIFIER,
   autoLoad = false,
 ): UseImageClassifierResult {
-  const meta = useMemo(
-    () =>
-      IMAGE_CLASSIFIER_MODELS.find((m) => m.id === model) ??
-      IMAGE_CLASSIFIER_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(IMAGE_CLASSIFIER_MODELS, model);
   const pipe = useVisionPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

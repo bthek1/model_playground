@@ -11,9 +11,9 @@
 
 import type { Backend, DtypeSpec, LoadOpts } from "@/model/backend";
 import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
-import type { MeasuredBytes } from "@/model/size";
 
 import type { ImagePayload } from "./image";
+import type { CatalogueEntry } from "@/model/catalogue";
 
 /** Transformers.js pipeline task strings this generic worker supports. */
 export type VisionTask =
@@ -44,25 +44,11 @@ export type VisionTask =
 export type VisionProgress = ModelProgress;
 
 /**
- * The shape every vision model catalogue entry shares. Structurally a
- * `PickableModel` (so `ModelPicker` takes it as-is) plus the task it runs and
- * the backends it is known to work on.
+ * The shape every vision model catalogue entry shares: a `CatalogueEntry` plus
+ * the task it runs and how its weights load.
  */
-export interface VisionModel {
-  id: string;
-  label: string;
-  hint: string;
-  /** Parameter count in millions — drives the size-before-load estimate. */
-  params: number;
-  /** Measured download bytes, where the params estimate would mislead. */
-  bytes?: MeasuredBytes;
+export interface VisionModel extends CatalogueEntry {
   task: VisionTask;
-  /**
-   * Backends this model is known to run on. Most vision models manage both;
-   * list one when the other is a known failure rather than merely slower, so
-   * the picker can gate instead of the load failing.
-   */
-  backends?: readonly Backend[];
   /**
    * The ONNX graph base names this entry actually downloads, relative to
    * `onnx/`. Defaults to `["model"]`.

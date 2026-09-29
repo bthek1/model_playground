@@ -7,17 +7,13 @@ import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
 import type { Backend } from "@/model/backend";
 import type { MeasuredBytes } from "@/model/size";
 import { SAMPLE_RATE } from "./deepFilterNet";
+import type { CatalogueEntry } from "@/model/catalogue";
 
 export { SAMPLE_RATE };
 
-export interface EnhanceModel {
-  id: string;
-  label: string;
-  hint: string;
+export interface EnhanceModel extends CatalogueEntry {
   /** Hugging Face repo the graph and its auxiliary constants come from. */
   repo: string;
-  /** Parameter count in millions — the shared `ModelPicker` wants it. */
-  params: number;
   /**
    * Measured download. Quoted for both backends because it is the same number:
    * the published graph is fp32 and there is no quantized variant, so unlike the

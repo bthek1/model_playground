@@ -21,7 +21,7 @@
 //     no error attached, which is why it is asserted directly rather than
 //     assumed.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   useTextPipeline,
@@ -34,6 +34,7 @@ import {
   type EmbedModel,
 } from "@/text/catalogue";
 import { EmbeddingCache, toVector } from "@/text/embed";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 /** Which task instruction to glue to the front, for a model that wants one. */
 export type PrefixKind = "symmetric" | "query" | "document";
@@ -62,10 +63,7 @@ export function useTextEmbed(
   model: string = DEFAULT_EMBED_MODEL,
   autoLoad = false,
 ): UseTextEmbedResult {
-  const meta = useMemo(
-    () => EMBED_MODELS.find((m) => m.id === model) ?? EMBED_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(EMBED_MODELS, model);
   const pipe = useTextPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

@@ -8,7 +8,7 @@
 // the direction it was built for — which is exactly why the direction lives in
 // SELECT as a model choice and this hook takes no language at all.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   useTextPipeline,
@@ -19,6 +19,7 @@ import {
   TRANSLATION_MODELS,
   type TranslationModel,
 } from "@/text/catalogue";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 /** What one Marian call returns, per input. */
 interface RawTranslation {
@@ -54,11 +55,7 @@ export function useTranslate(
   model: string = DEFAULT_TRANSLATION_MODEL,
   autoLoad = false,
 ): UseTranslateResult {
-  const meta = useMemo(
-    () =>
-      TRANSLATION_MODELS.find((m) => m.id === model) ?? TRANSLATION_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(TRANSLATION_MODELS, model);
   const pipe = useTextPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

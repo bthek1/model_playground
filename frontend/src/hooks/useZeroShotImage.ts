@@ -42,6 +42,7 @@ import {
 } from "@/vision/zeroShot";
 import { createZeroShotWorker } from "@/vision/zeroshot/client";
 import type { ZeroShotResult } from "@/vision/zeroshot/types";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 /** One template's scores, in the user's own words. */
 export interface TemplateScores {
@@ -83,10 +84,7 @@ export function useZeroShotImage(
   model: string = DEFAULT_ZERO_SHOT_MODEL,
   autoLoad = false,
 ): UseZeroShotImageResult {
-  const meta = useMemo(
-    () => ZERO_SHOT_MODELS.find((m) => m.id === model) ?? ZERO_SHOT_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(ZERO_SHOT_MODELS, model);
 
   const loadMessage = useMemo(
     () => ({

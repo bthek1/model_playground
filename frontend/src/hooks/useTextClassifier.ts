@@ -7,7 +7,7 @@
 // The returned shape is the shared `ModelTask` contract, verbatim: `run`, not a
 // `classify()` alias (docs/standards/model-page-pattern.md §3).
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { ClassLabel } from "@/model/types";
 import {
@@ -19,6 +19,7 @@ import {
   TEXT_CLASSIFIER_MODELS,
   TOP_K,
 } from "@/text/catalogue";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface UseTextClassifierResult
   extends Omit<UseTextPipelineResult, "run"> {
@@ -32,12 +33,7 @@ export function useTextClassifier(
   model: string = DEFAULT_TEXT_CLASSIFIER,
   autoLoad = false,
 ): UseTextClassifierResult {
-  const meta = useMemo(
-    () =>
-      TEXT_CLASSIFIER_MODELS.find((m) => m.id === model) ??
-      TEXT_CLASSIFIER_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(TEXT_CLASSIFIER_MODELS, model);
   const pipe = useTextPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

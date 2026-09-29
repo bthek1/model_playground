@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   CLASSIFIER_MODELS,
@@ -6,6 +6,7 @@ import {
 } from "@/audio/classification";
 import type { ClassLabel } from "@/audio/pipelineTypes";
 import { usePipeline, type UsePipelineResult } from "@/hooks/usePipeline";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 /** How many labels to return for fixed-label (non zero-shot) models. */
 const TOP_K = 6;
@@ -32,10 +33,7 @@ export function useAudioClassifier(
   model: string = DEFAULT_CLASSIFIER_MODEL,
   autoLoad = false,
 ): UseAudioClassifierResult {
-  const meta = useMemo(
-    () => CLASSIFIER_MODELS.find((m) => m.id === model) ?? CLASSIFIER_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(CLASSIFIER_MODELS, model);
   const isZeroShot = meta.task === "zero-shot-audio-classification";
   const pipe = usePipeline(meta.task, meta.id, autoLoad);
   const { run } = pipe;

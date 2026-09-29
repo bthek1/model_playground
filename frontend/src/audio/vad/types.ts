@@ -8,22 +8,18 @@ import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
 import type { Backend } from "@/model/backend";
 import type { MeasuredBytes } from "@/model/size";
 import { FRAME_SAMPLES } from "./vad";
+import type { CatalogueEntry } from "@/model/catalogue";
 
 /** 16 kHz mono, the default for `decodeToMono` — this is not the 48 kHz route. */
 export const SAMPLE_RATE = 16000;
 
 export { FRAME_SAMPLES };
 
-export interface VadModel {
-  id: string;
-  label: string;
-  hint: string;
+export interface VadModel extends CatalogueEntry {
   /** Hugging Face repo, or `null` for the baseline that downloads nothing. */
   repo: string | null;
   /** File within the repo. */
   file?: string;
-  /** Parameter count in millions — the shared `ModelPicker` wants it. */
-  params: number;
   /** Measured download; both backends quote the same number (see below). */
   bytes: MeasuredBytes;
 }
