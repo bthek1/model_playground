@@ -357,6 +357,44 @@ timeline, and the page shows a comparison that was never computed.
 
 ---
 
+### 4c. The wiring is written once
+
+The shell above is shared, and since #58 so is the code that *connects* a task hook to
+it. A task route writes the task-specific parts and spreads the rest:
+
+```tsx
+const task = useImageClassifier(session.model.id);      // idle by default
+const slots = useTaskSlots(session, task, { models: IMAGE_CLASSIFIER_MODELS, busy });
+
+select={<ModelPicker {...slots.picker} />}
+load={<ModelStatus {...slots.status} />}
+run={<InputPanel … controls={
+  <RunButton icon={ImageIcon} running={task.running} runningLabel="Classifying…"
+             onRun={classify} disabled={!task.ready || busy || !picked}>
+    Classify
+  </RunButton>} />}
+output={<OutputPanel … error={slots.runError} />}
+```
+
+- **[`useTaskSlots`](../../frontend/src/model/useTaskSlots.ts)** returns `picker` and
+  `status` props for the two setup slots. It also returns the §2 error split as two
+  **named** fields, `loadError` (already inside `status`) and `runError`, and re-probes
+  the cache when the model reaches `ready`. The split stays visible because "errors render
+  where they came from" is a rule the route has to be seen to follow. A third error source
+  (a failed decode belongs to RUN) the route still passes itself. `busy` shuts LOAD and the
+  picker while anything else is in flight. `backend` (from `useBackendProbe`) turns on the
+  picker's row gating.
+- **[`RunButton`](../../frontend/src/components/model/RunButton.tsx)** is the GENERATE
+  trigger: a spinner and the present-participle label while running, the icon and verb
+  otherwise. If `onRun` returns a promise, the button swallows the rejection, because the
+  hook has already reported it in OUTPUT. `disabled` stays the route's call. A page with
+  two triggers (`/text-ranking`'s embed + search, `/fill-mask`'s probes) uses two.
+- **Override after the spread, don't abandon the helper.** A route that needs one field
+  different writes `<ModelPicker {...slots.picker} onChange={…} />`. The bespoke pages
+  (`/rl`, `/graph`, the tabular routes) wire by hand where a helper does not fit, and no
+  page is bent to fit one. `useModelSelection` no longer has `onLoad`/`onCancel`: they were
+  pass-throughs, kept only "so the call sites stay uniform", and `useTaskSlots` does that now.
+
 ## 5. Size before load
 
 The guardrail that motivates `idle`. Before any bytes move, the user sees the estimate:
@@ -780,6 +818,24 @@ no natural accessible name (a band, an empty panel). Note that a band is a label
 `getByLabelText(/text/i)` will match both a band named "Text" and a field inside it.
 That ambiguity is one reason §4's band labels stay generic.
 
+**The shared set-up lives in [`src/test/taskPage.tsx`](../../frontend/src/test/taskPage.tsx)**
+(#58). `idleTask` / `readyTask` / `loadingTask` / `loadErrorTask` build a mocked hook
+result from a route's own base, so a test no longer hand-writes all fifteen `ModelTask`
+fields. `routeComponent(await import("@/routes/x"))` reads the page off the real
+`createFileRoute`, so there is no router mock. `describeTaskPageContract({ render, hook,
+base, setState, trigger })`, called inside the route's own `describe`, registers the six
+checks that read identically on every page: no load on arrival, LOAD fires `load()` from
+slot 2, four slots with `output-empty`, GENERATE shut until `ready`, a load error in LOAD
+and a run error in OUTPUT with the model still loaded. The suite is tested against a
+deliberately broken page (`taskPage.test.tsx`), so it is known to fail when it should.
+[`token-classification.test.tsx`](../../frontend/src/__tests__/routes/token-classification.test.tsx)
+is the reference.
+
+The contract suite is **additive**. Everything that depends on how *this* page takes its
+input stays in the route's own file — above all "choosing an input runs nothing" and "the
+input survives its run". Delete a local assertion only where the suite checks the same
+thing against the same page.
+
 **What every task page's tests should cover**, beyond the task's own behaviour:
 
 - Nothing downloads on mount — assert the hook was called with **no `autoLoad` argument
@@ -856,8 +912,11 @@ negative differ" is unassertable.
 - [ ] A parameter beside the input re-runs on the next GENERATE, never on the keystroke
 - [ ] OUTPUT has an empty state, a running state, and an error state
 - [ ] Errors land in the slot that produced them
-- [ ] Unit tests for the hook's state machine; a route test covering §8's list
-- [ ] Sidebar taxonomy entry mapped in `REAL_ROUTES`, and the taxonomy test flipped
+- [ ] SELECT/LOAD wired through `useTaskSlots`; GENERATE is a `RunButton` (§4c)
+- [ ] Unit tests for the hook's state machine; a route test that calls
+      `describeTaskPageContract` and adds the input-specific half of §8's list
+- [ ] Task row added to its category and mapped in `REAL_ROUTES` — the sidebar lists
+      only tasks with a page, and a row without a route throws
 - [ ] Added to `e2e/specs/model-page.spec.ts`'s route table and to `model-ids.spec.ts`
 - [ ] A `@slow` spec that asserts a **property**, never a count
 
@@ -877,6 +936,8 @@ negative differ" is unassertable.
 | State machines | [`frontend/src/model/useModelWorker.ts`](../../frontend/src/model/useModelWorker.ts) |
 | Contract types | [`frontend/src/model/types.ts`](../../frontend/src/model/types.ts) |
 | Shell + slots | [`frontend/src/components/model/`](../../frontend/src/components/model/) |
+| The slot wiring | [`model/useTaskSlots.ts`](../../frontend/src/model/useTaskSlots.ts) + [`components/model/RunButton.tsx`](../../frontend/src/components/model/RunButton.tsx) (§4c) |
+| The route-test harness | [`src/test/taskPage.tsx`](../../frontend/src/test/taskPage.tsx) — state builders and the §8 contract suite |
 | A weight-downloading page | [`routes/text-to-speech.tsx`](../../frontend/src/routes/text-to-speech.tsx) |
 | The smallest complete page | [`routes/image-classification.tsx`](../../frontend/src/routes/image-classification.tsx) — an image in, a ranked list out; read this one first |
 | A compile-only page | [`routes/tensor.tsx`](../../frontend/src/routes/tensor.tsx) |

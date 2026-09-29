@@ -626,30 +626,49 @@ function DepthPage() {
     fallback: DEPTH_MODELS[0],
   });
   const task = useDepth(session.model.id);   // no autoLoad: the default is `idle`
-  useCacheRefresh(session, task.ready);
+  const input = useImagePick();
 
-  // A load error belongs in LOAD, a run error in OUTPUT. `status` splits them.
-  const loadError = task.status === "error" ? task.error : null;
-  const runError  = task.status === "error" ? null : task.error;
+  // The SELECT and LOAD wiring, once (#58): picker + status props to spread,
+  // the cache re-probe on `ready`, and the error split as two named fields —
+  // a load error belongs in LOAD (already inside `slots.status`), a run error
+  // in OUTPUT.
+  const slots = useTaskSlots(session, task, {
+    models: DEPTH_MODELS,
+    busy: task.running || input.preparing !== null,
+  });
+
+  const estimate = () => {
+    if (!input.picked) return;
+    return task.run(input.picked.image);   // RunButton swallows the rejection
+  };
 
   return (
     <ModelPage
       icon={Mountain}
       title="Depth Estimation"
       description="Relative depth from a single image, entirely in your browser."
-      select={
-        <ModelPicker
-          models={DEPTH_MODELS}
-          value={session.model.id}
-          onChange={session.setModel}
-          disabled={task.loading || task.running}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+      select={<ModelPicker {...slots.picker} />}
+      load={<ModelStatus {...slots.status} />}
+      run={
+        <InputPanel
+          ready={task.ready}
+          error={input.error}
+          controls={
+            <RunButton
+              icon={Mountain}
+              running={task.running}
+              runningLabel="Estimating…"
+              onRun={estimate}
+              disabled={!task.ready || task.running || !input.picked}
+            >
+              Estimate depth
+            </RunButton>
+          }
+        >
+          …
+        </InputPanel>
       }
-      load={<ModelStatus {...task} error={loadError} />}
-      run={<InputPanel … />}
-      output={<OutputPanel … error={runError} />}
+      output={<OutputPanel … error={slots.runError} />}
     />
   );
 }
@@ -772,12 +791,34 @@ card.
 
 ## 9. Tests: the same contract on every page
 
-Every task page asserts the identical list. Copy it from the nearest existing
-spec rather than writing it fresh.
+Every task page asserts the identical list, and half of it is now shared code.
+[`src/test/taskPage.tsx`](../../frontend/src/test/taskPage.tsx) (#58) provides the
+mocked-hook state builders (`idleTask`, `readyTask`, `loadingTask`,
+`loadErrorTask`), `routeComponent()` to get the page without a router mock, and
+`describeTaskPageContract()`. That registers the checks that read the same on every
+page: nothing loads on arrival, LOAD fires from slot 2, four slots with
+`output-empty`, GENERATE shut until `ready`, and each error in its own slot. Call
+it inside your route's `describe`, then write the input-specific half yourself.
+[`token-classification.test.tsx`](../../frontend/src/__tests__/routes/token-classification.test.tsx)
+is the model:
 
-**Vitest, mocked network and mocked ONNX Runtime** (`src/__tests__/routes/`,
-with [`asr.test.tsx`](../../frontend/src/__tests__/routes/asr.test.tsx) as the
-model):
+```tsx
+const base = idleTask<UseNerResult>({ run: vi.fn(), result: null, … });
+const Page = routeComponent(await import("@/routes/token-classification"));
+
+describe("/token-classification", () => {
+  describeTaskPageContract({
+    render: renderPage, hook: useNer, base,
+    setState: (st) => { mockState = st; },
+    trigger: /find entities/i,
+  });
+  it("choosing a sample runs nothing", () => { … });   // stays local, always
+});
+```
+
+**Vitest, mocked network and mocked ONNX Runtime** (`src/__tests__/routes/`). The
+full list — the contract suite covers the on-mount, LOAD, four-slot, gating and
+error-slot items; the refresh, input and re-derive items are yours:
 
 - nothing downloads on mount: the hook was called with **no `autoLoad` argument**
   **and** `load` was not called

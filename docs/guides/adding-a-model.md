@@ -196,10 +196,16 @@ const session = useModelSelection({
   models: MY_MODELS,
   fallback: MY_MODELS[0],
 });
-const { status, ready, loadProgress, loadedInMs, load, retry, cancel, … } =
-  useMyTask(session.model.id);      // no second argument — the default is `idle`
-useCacheRefresh(session, ready);    // re-probe the cache once the download lands
+const task = useMyTask(session.model.id);   // no second argument — the default is `idle`
+const slots = useTaskSlots(session, task, { models: MY_MODELS, busy: task.running });
 ```
+
+[`useTaskSlots`](../../frontend/src/model/useTaskSlots.ts) is the wiring between the task
+hook and the two setup slots, written once (#58). It returns `picker` and `status` props
+to spread onto `ModelPicker` and `ModelStatus`, and the error split as two **named**
+fields, `loadError` and `runError`. It also re-probes the cache when the model reaches
+`ready`, so a route cannot forget to. Pass `backend` from `useBackendProbe` when the
+picker should gate rows the machine cannot run.
 
 The hook has **no `autoLoad` to hand you**, deliberately: it cannot start a load, so
 there is no path by which arriving at a page, switching models, or refreshing begins a
@@ -215,27 +221,34 @@ grow a fifth stage:
   icon={Waves}
   title="My Task"
   description="What it does and where it runs."
-  select={<ModelPicker models={MY_MODELS} value={session.model.id}
-                       onChange={session.setModel} disabled={loading || running}
-                       cached={session.cached}
-                       onEvict={(m) => void session.evict(m.id)} />}
-  load={<ModelStatus status={status} backend={backend}
-                     loadProgress={loadProgress} loadedInMs={loadedInMs}
-                     cached={session.isCached}
-                     error={status === "error" ? error : null}
-                     onLoad={session.onLoad(load)}
-                     onCancel={session.onCancel(cancel)}
-                     onRetry={retry} />}
-  run={<InputPanel ready={ready} error={ioError} controls={…}>{fields}</InputPanel>}
-  output={<OutputPanel title="Result" running={running}
-                       error={status === "error" ? null : error}
-                       empty="What the user will get.">{result && …}</OutputPanel>}
+  select={<ModelPicker {...slots.picker} />}
+  load={<ModelStatus {...slots.status} />}
+  run={<InputPanel ready={task.ready} error={ioError}
+                   controls={<RunButton icon={Waves} running={task.running}
+                                        runningLabel="Working…" onRun={generate}
+                                        disabled={!task.ready || task.running}>
+                               Generate
+                             </RunButton>}>
+         {fields}
+       </InputPanel>}
+  output={<OutputPanel title="Result" running={task.running}
+                       error={slots.runError}
+                       empty="What the user will get.">{task.result && …}</OutputPanel>}
 />
 ```
 
 `ModelStatus` takes `loadProgress` — the aggregate from `model/progress.ts` — never the
-raw `progress` event. `session.onLoad` / `session.onCancel` wrap the actions so every
-route's LOAD slot is wired identically.
+raw `progress` event; `slots.status` carries it. A route that needs one field different
+overrides it **after** the spread (`<ModelPicker {...slots.picker} onChange={…} />`)
+rather than abandoning the helper, and a bespoke page that does not fit it wires the
+slots by hand.
+
+[`RunButton`](../../frontend/src/components/model/RunButton.tsx) is the GENERATE trigger:
+the spinner and present-participle label while a run is in flight, the icon and verb
+otherwise. If `onRun` returns a promise, `RunButton` swallows the rejection, because the
+hook already reports the failure in OUTPUT. `disabled` stays the route's call, since
+"ready, with an input held" is something only the page knows. A page with two triggers
+uses two `RunButton`s.
 
 **The RUN slot holds its input.** Whatever the modality, the decoded thing is state:
 [`useImagePick`](../../frontend/src/hooks/useImagePick.ts) for images,
@@ -258,8 +271,10 @@ const generate = () => {
 Capture whatever OUTPUT needs to render the result *inside* the run, not from the input
 currently held — otherwise choosing a new input restyles the previous result.
 
-The `status === "error" ? … : …` split on both slots is the §2 discriminator in practice:
-a load failure belongs in LOAD, anything else came from a run and belongs in OUTPUT.
+`loadError` / `runError` are the §2 discriminator in practice: a load failure belongs in
+LOAD (it is already inside `slots.status`), anything else came from a run and belongs in
+OUTPUT. A third error source — a failed decode belongs to RUN — the route still passes
+itself.
 
 **If your task has no weights** — a WGSL kernel compiles in milliseconds — use
 [`DeviceStatus`](../../frontend/src/components/model/DeviceStatus.tsx) in the LOAD band
