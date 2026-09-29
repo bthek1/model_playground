@@ -287,3 +287,21 @@ describe("the Tabular category", () => {
     }
   });
 });
+
+describe("the Reinforcement Learning category", () => {
+  const at = (slug: string) =>
+    taskCategories.flatMap((c) => c.tasks).find((t) => t.slug === slug)!.to;
+
+  it("maps both rows — the category is complete as scoped", () => {
+    // `/rl` holds three algorithms on two environments; `/robotics` holds the
+    // grounding pair and the behaviour-cloning entry (docs/roadmaps/rl.md).
+    expect(at("reinforcement-learning")).toBe("/rl");
+    expect(at("robotics")).toBe("/robotics");
+  });
+
+  it("files both routes under the category in the sidebar", () => {
+    expect(categoryForPath("/rl")).toBe("Reinforcement Learning");
+    expect(categoryForPath("/robotics")).toBe("Reinforcement Learning");
+  });
+});
+

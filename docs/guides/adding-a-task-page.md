@@ -76,6 +76,16 @@ rather than in a commit message. **Before writing a page, work out which
 resource it actually spends, and measure that one.** For every other category so
 far that is the download; it does not have to be.
 
+**Reinforcement Learning was the second vacuous category, and measuring its real
+resource reversed its own roadmap.** `/rl` and half of `/robotics` download nothing, so
+the resource is *step rate*. The roadmap assumed policy networks would run as WGSL
+matmuls and handed the LOAD band a `DeviceStatus`; Phase 0 of #51 measured ~15 M
+Q-learning steps/s and ~400 k policy forwards/s on the CPU against ~66/s through the GPU
+matmul, flat across widths because at batch 1 the GPU's cost is its round trip. So
+`src/rl/` has no GPU code and `/rl` has three bands
+([`rl/limits.ts`](../../frontend/src/rl/limits.ts), [`rl.md`](../roadmaps/rl.md) §0).
+**A band a roadmap assigns is a hypothesis; measure before you build it.**
+
 A second thing generalises from the same place: **question 1's "no" has two
 different causes, and they are not equally final.** A task whose only weights are
 PyTorch is a missing *export* — `/time-series-forecasting`'s two foundation

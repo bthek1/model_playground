@@ -125,6 +125,40 @@ Three assertion shapes here are worth copying:
   constructions, because "no worker" is a decision that a refactor can undo with
   nothing visible changing.
 
+### The RL and behaviour-cloning specs, which train for real in the default run
+
+```bash
+just fe-e2e-rl        # /rl: FrozenLake against value iteration, CartPole head to head (seconds)
+just fe-e2e-cloning   # /robotics behaviour cloning: the failure beside its control (seconds)
+just fe-e2e-rl-phase0 # @slow benchmark: CPU vs GPU steps/s, per-step posting cost (logged)
+just fe-e2e-robotics  # @slow: a real OWLv2 + Depth Anything load (needs a shader-f16 GPU)
+```
+
+The first two are **not** `@slow` and run in `just fe-e2e`: nothing downloads, every
+step runs on the CPU in a real worker (`docs/roadmaps/rl.md` §0), and a whole run is
+about a second. The only honest test of "it learns" is to let it learn, so they do.
+Three assertion shapes:
+
+- **A named answer, never a rising curve.** A wrong Bellman update still finds the
+  goal on a 4×4 grid, so `fe-e2e-rl` asserts the arrow in cell 14 points right —
+  read from `policy-grid`, the text rendering of the table, because a canvas cannot
+  be read — and that the page reports 11 of 11 cells agreeing with value iteration.
+- **A band, not a floor, where a bug pushes the number up.** REINFORCE at seed 1 is
+  pinned between 150 and 490: a random policy balances ~22 steps, and a too-lenient
+  termination pins every run at the 500 cap. Actor-Critic is *not* asserted to win —
+  the spec asserts both runs are reported at the same seed.
+- **The failure and its control, from one page.** `fe-e2e-cloning` trains both
+  demonstration mixes at one seed and asserts the both-ways policy collides **and** the
+  one-way policy reaches. The failure alone would pass on a broken environment.
+
+All four assert an absence too: nothing leaves for the Hub or the API on arrival, and
+choosing an environment, an algorithm, a hyperparameter or a demonstration set trains
+nothing. `rl-phase0.spec.ts` imports the app's own modules through the dev server
+(`import("/src/rl/qLearning.ts")` inside `page.evaluate`), so it times the code that
+ships; hold the path in a variable, or the spec's own type-check tries to resolve it.
+Headless Chromium on a box with no `/dev/dri` only gets SwiftShader, so its GPU column
+is a software rasteriser — the spec prints the adapter it measured.
+
 **A control that the page says re-derives gets an E2E assertion too.** The
 threshold slider is checked by reading the `model-ready` line *before and after*
 the drag: the confusion matrix must change while the fit's duration and row count

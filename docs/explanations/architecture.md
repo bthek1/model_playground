@@ -131,6 +131,15 @@ frontend/
 │   │   ├── offsets.ts       The character offsets Transformers.js does not return
 │   │   ├── highlight.ts, mask.ts, zeroShot.ts  Pure derivations over a result in hand
 │   │   └── qa/              Its own engine: the span survives only if the tokens do
+│   ├── tabular/           Models fitted in the tab on the user's CSV (no checkpoint)
+│   ├── forecast/          Forecasting baselines + rolling backtest (no model, no worker)
+│   ├── rl/                Reinforcement learning, trained in the tab on the CPU
+│   │   ├── envs/            FrozenLake, CartPole (transcribed from Gymnasium), a toy reacher
+│   │   ├── session.ts       Pure worker handler: pacing, ≤ 60 Hz posts, Stop between steps
+│   │   ├── stepper.ts       The seam every learner plugs into, one env step at a time
+│   │   ├── qLearning.ts, valueIteration.ts   Tabular learner + its exact reference
+│   │   ├── policyGradient.ts, policyNet.ts   REINFORCE / Actor-Critic, backward by hand
+│   │   └── behaviourCloning.ts, demos.ts     /robotics' cloning entry and its demonstrator
 │   ├── model/             Shared across modalities: backend probe, size guardrail,
 │   │                        worker lifecycle, aggregate progress, weight cache
 │   ├── telemetry/         The system panel's samplers, ring buffer and 1 Hz loop

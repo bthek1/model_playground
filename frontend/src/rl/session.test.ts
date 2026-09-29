@@ -155,4 +155,34 @@ describe("createRlSession", () => {
     await handle({ type: "train", id: 3, req: request() });
     expect(messages).toEqual([{ id: 3, ok: false, error: "bad grid" }]);
   });
+
+  it("drives every learner through the same loop, and each render survives a real transfer", async () => {
+    // The Stepper seam's promise: the session never learns which algorithm it
+    // holds. The harness structured-clones with transfer, so a learner whose
+    // render state reused a buffer the loop still writes — or referenced one
+    // already given away — would fail here, as it did in a real browser.
+    const cases = [
+      {
+        req: { algorithm: "reinforce", env: "cartpole", hidden: 8, lr: 0.003, criticLr: 0.03, gamma: 0.99, lambda: 0.9, normalise: false, episodes: 5, seed: 1 },
+        kind: "cartpole",
+      },
+      {
+        req: { algorithm: "actor-critic", env: "cartpole", hidden: 8, lr: 0.01, criticLr: 0.03, gamma: 0.99, lambda: 0.9, normalise: false, episodes: 5, seed: 1 },
+        kind: "cartpole",
+      },
+      {
+        req: { algorithm: "behaviour-cloning", mix: "both", demos: 4, obstacle: 0, hidden: 8, epochs: 3, lr: 0.01, seed: 1 },
+        kind: "cloning",
+      },
+    ] as const;
+    for (const c of cases) {
+      const h = harness();
+      await h.handle({ type: "train", id: 1, req: c.req });
+      const result = h.result();
+      expect(result.render?.kind, c.req.algorithm).toBe(c.kind);
+      expect(h.progress().flatMap((p) => p.returns)).toHaveLength(result.episodes);
+      // A policy gradient and a regression explore by sampling, not by ε.
+      expect(h.progress()[0].epsilon).toBeNull();
+    }
+  });
 });

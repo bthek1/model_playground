@@ -1557,6 +1557,18 @@ size is the **environment**, which has to be written in TypeScript. See
   learner**: the first scripted expert cut a corner and 3 of its 20 demonstrations
   collided. It is a zero-byte entry beside the grounding pair; the route branches on
   `kind` and each view owns its hooks, so choosing it mounts no grounding worker.
+- **Testing this category has four fixed shapes.** (1) **Every learner goes through the
+  session**, not only its own class: `session.test.ts` drives Q-learning, REINFORCE,
+  Actor-Critic and cloning through one harness that `structuredClone`s with `transfer`, so a
+  render state that reuses or re-references a transferred buffer fails in Vitest instead of
+  in a browser. (2) **Compare against an exact or outside reference** — value iteration for
+  the Q-table, a Gymnasium-generated trajectory for CartPole, finite differences for every
+  gradient — never "the curve went up". (3) **A canvas test asserts its accessible name**
+  (the angle, the outcome, the map); the painting is unreachable in happy-dom, so the
+  geometry lives in pure `*Geometry.ts` modules with their own tests. (4) **The E2E specs
+  train for real and are not `@slow`** (`fe-e2e-rl`, `fe-e2e-cloning` run in `just fe-e2e`):
+  nothing downloads and a run is a second, so asserting a named arrow, a return *band* and
+  a failure-beside-its-control costs nothing. See `docs/guides/e2e-testing.md`.
 
 ### Three routes were built and then cut for size — read this before adding one
 
