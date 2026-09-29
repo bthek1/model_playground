@@ -25,21 +25,6 @@ vi.mock("@/vision/resample", () => ({
   resample: (src: unknown) => src,
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const SOURCE = {
   data: new Uint8ClampedArray(300 * 220 * 3),
   width: 300,

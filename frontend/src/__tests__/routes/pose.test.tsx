@@ -32,21 +32,6 @@ vi.mock("@/model/backend", async (importOriginal) => {
   return { ...actual, pickBackend: () => pickBackend() };
 });
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const person = (score: number, nose: [number, number], ankle: number) => ({
   box: { xmin: 0, ymin: 0, xmax: 4, ymax: 8 },
   score,

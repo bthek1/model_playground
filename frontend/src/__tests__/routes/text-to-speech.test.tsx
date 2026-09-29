@@ -13,18 +13,6 @@ vi.mock("@/audio/io", () => ({
   toWavBlob: vi.fn(() => new Blob()),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({ path, options: opts }),
-      ),
-  };
-});
-
 const mockSynthesize = vi.fn<(text: string, opts?: unknown) => Promise<TtsAudio>>();
 const baseState: UseTtsResult = {
   status: "idle",

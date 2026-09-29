@@ -6,19 +6,6 @@ import type { UseDatasetResult } from "@/hooks/useDataset";
 import type { UseTabularFitResult } from "@/hooks/useTabularFit";
 import type { ClassificationMetrics, Dataset, FitResult } from "@/tabular/types";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation((path: string) => (opts: Record<string, unknown>) => ({
-        path,
-        options: opts,
-      })),
-  };
-});
-
 // ECharts needs a real layout engine; jsdom/happy-dom has none, and the bars
 // are asserted in the E2E suite instead.
 vi.mock("@/components/charts/EChart", () => ({

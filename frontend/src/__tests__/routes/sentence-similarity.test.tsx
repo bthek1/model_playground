@@ -4,21 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UseTextEmbedResult } from "@/hooks/useTextEmbed";
 import { EMBED_MODELS, PAIR_SAMPLES } from "@/text/catalogue";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const MINILM = EMBED_MODELS[0];
 const DIM = 384;
 

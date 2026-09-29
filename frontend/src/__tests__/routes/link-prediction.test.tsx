@@ -4,21 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LinkMetrics } from "@/webgpu/linkPredictor";
 import type { LinkSummary, LinkTrainResult } from "@/webgpu/linkSession";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 vi.mock("@/components/charts/EChart", () => ({
   default: () => <div data-testid="echart" />,
 }));

@@ -18,21 +18,6 @@ vi.mock("@/vision/image", () => ({
   openCamera: vi.fn().mockResolvedValue(() => {}),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 /** 2x1 RGBA: one fully covered pixel, one half-covered. A soft matte. */
 const CUTOUT = {
   data: new Uint8ClampedArray([200, 100, 50, 255, 200, 100, 50, 128]),

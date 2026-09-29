@@ -27,21 +27,6 @@ vi.mock("@/vision/image", () => ({
   openCamera: (...a: unknown[]) => openCamera(...a),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 /** `[1, 3, 2]` — CLS then two patches, so both poolings exist and differ. */
 const embedding = (cls: [number, number], p1: [number, number]) =>
   poolEmbedding({

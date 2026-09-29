@@ -1,18 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({ path, options: opts }),
-      ),
-  };
-});
-
 // The catalog card fetches from the registry API; this route's own content is
 // what's under test.
 vi.mock("@/components/home/ModelCatalogCard", () => ({

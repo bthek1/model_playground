@@ -4,21 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UseTextGenResult } from "@/hooks/useTextGen";
 import { DECODING_PRESETS, TEXTGEN_MODELS } from "@/text/catalogue";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 let probe: string | null = "webgpu";
 vi.mock("@/model/useBackendProbe", () => ({
   useBackendProbe: () => probe,

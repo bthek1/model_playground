@@ -34,21 +34,6 @@ vi.mock("@/model/backend", async (importOriginal) => {
   };
 });
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const mockRun = vi.fn();
 const mockLoad = vi.fn();
 

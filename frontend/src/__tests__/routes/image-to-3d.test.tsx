@@ -47,21 +47,6 @@ vi.mock("@/hooks/useWebGPU", () => ({
   }),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 /** A 4x4 depth map with a real spread, so the cloud is non-degenerate. */
 const DEPTH = {
   predicted_depth: {

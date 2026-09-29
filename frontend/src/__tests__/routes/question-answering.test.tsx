@@ -4,21 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UseQaResult } from "@/hooks/useQa";
 import type { QaAnswer } from "@/text/qa/types";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const DISTILBERT = "Xenova/distilbert-base-cased-distilled-squad";
 
 const EIFFEL =

@@ -3,21 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseTextClassifierResult } from "@/hooks/useTextClassifier";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const POSITIVE = [
   { label: "POSITIVE", score: 0.97 },
   { label: "NEGATIVE", score: 0.03 },

@@ -1,19 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation((path: string) => (opts: Record<string, unknown>) => ({
-        path,
-        options: opts,
-      })),
-  };
-});
-
 // ECharts needs a layout engine happy-dom does not have; the charts themselves
 // are asserted in the E2E suite.
 vi.mock("@/components/charts/EChart", () => ({

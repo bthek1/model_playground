@@ -26,21 +26,6 @@ vi.mock("@/audio/io", () => ({
   toWavBlob: vi.fn(() => new Blob()),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const mockStart = vi.fn();
 const mockStop = vi.fn();
 const mockTranscribeClip = vi.fn();

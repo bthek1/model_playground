@@ -4,21 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UseTranslateResult } from "@/hooks/useTranslate";
 import { TRANSLATION_MODELS } from "@/text/catalogue";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const EN_DE = TRANSLATION_MODELS[0];
 const DE_EN = TRANSLATION_MODELS[1];
 

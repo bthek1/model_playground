@@ -1,19 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation((path: string) => (opts: Record<string, unknown>) => ({
-        path,
-        options: opts,
-      })),
-  };
-});
-
 const { Route } = await import("@/routes/discrete-maths");
 const Page = Route?.options?.component as React.ComponentType | undefined;
 

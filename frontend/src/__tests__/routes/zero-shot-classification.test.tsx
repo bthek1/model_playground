@@ -3,21 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseZeroShotTextResult } from "@/hooks/useZeroShotText";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const SCORES = [
   { label: "billing", score: 0.91 },
   { label: "outage", score: 0.06 },

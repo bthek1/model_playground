@@ -5,21 +5,6 @@ import type { UseEntailmentResult } from "@/hooks/useEntailment";
 import type { UseSummarizeResult } from "@/hooks/useSummarize";
 import { ARTICLE_SAMPLES, SUMMARIZER_MODELS } from "@/text/catalogue";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 vi.mock("@/model/useBackendProbe", () => ({
   useBackendProbe: () => "webgpu",
 }));

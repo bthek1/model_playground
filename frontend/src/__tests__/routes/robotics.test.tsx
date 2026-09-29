@@ -33,21 +33,6 @@ vi.mock("@/vision/image", () => ({
   openCamera: (...a: unknown[]) => openCamera(...a),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 // The browser cache probe. Empty unless a test seeds it.
 let cached = new Set<string>();
 vi.mock("@/model/cache", () => ({

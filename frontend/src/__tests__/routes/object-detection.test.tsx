@@ -18,21 +18,6 @@ vi.mock("@/vision/image", () => ({
   openCamera: (...a: unknown[]) => openCamera(...a),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const DETECTIONS = [
   { label: "person", score: 0.91, box: { xmin: 0, ymin: 0, xmax: 4, ymax: 8 } },
   { label: "car", score: 0.42, box: { xmin: 4, ymin: 2, xmax: 8, ymax: 6 } },

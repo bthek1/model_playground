@@ -2,6 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseImageClassifierResult } from "@/hooks/useImageClassifier";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 // The image helpers reach for RawImage / canvas, neither of which exists under
 // happy-dom. The route only ever passes what they return straight to `run`.
@@ -13,39 +19,11 @@ vi.mock("@/vision/image", () => ({
   fromUrl: (...args: unknown[]) => fromUrl(...args),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const mockRun = vi.fn().mockResolvedValue([]);
-const baseState: UseImageClassifierResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseImageClassifierResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseImageClassifierResult = { ...baseState };
 const useImageClassifier = vi.fn(() => mockState);
 
@@ -53,21 +31,14 @@ vi.mock("@/hooks/useImageClassifier", () => ({
   useImageClassifier: (...args: unknown[]) => useImageClassifier(...(args as [])),
 }));
 
-const { Route } = await import("@/routes/image-classification");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/image-classification"));
 
 function renderPage() {
-  if (!Page) throw new Error("Image classification route component not found");
   render(<Page />);
 }
 
-const ready = (extra: Partial<UseImageClassifierResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseImageClassifierResult> = {}) =>
+  readyTask(baseState, extra);
 
 describe("ImageClassificationPage", () => {
   beforeEach(() => {
@@ -75,6 +46,16 @@ describe("ImageClassificationPage", () => {
     mockState = { ...baseState };
     URL.createObjectURL = vi.fn(() => "blob:preview");
     URL.revokeObjectURL = vi.fn();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useImageClassifier,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: /^classify$/i,
   });
 
   it("renders the heading and every model option", () => {
@@ -107,12 +88,6 @@ describe("ImageClassificationPage", () => {
     expect(screen.getByTestId("slot-1")).toBeInTheDocument();
     expect(screen.getByTestId("slot-4")).toBeInTheDocument();
     expect(screen.getByTestId("output-empty")).toBeInTheDocument();
-  });
-
-  it("keeps the run control disabled until a model is ready", () => {
-    renderPage();
-    expect(screen.getByRole("button", { name: /^classify$/i })).toBeDisabled();
-    expect(screen.getByText(/load a model to classify an image/i)).toBeInTheDocument();
   });
 
   it("keeps the run control disabled while ready but with no image picked", () => {
@@ -254,28 +229,5 @@ describe("ImageClassificationPage", () => {
     });
     renderPage();
     expect(screen.getByText(/not confident/i)).toBeInTheDocument();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = {
-      ...baseState,
-      status: "error",
-      idle: false,
-      error: "404 model not found",
-    };
-    renderPage();
-
-    const note = screen.getByText(/404 model not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Unsupported image format" });
-    renderPage();
-
-    const note = screen.getByText(/unsupported image format/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

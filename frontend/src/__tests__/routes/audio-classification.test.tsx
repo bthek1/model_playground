@@ -2,6 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseAudioClassifierResult } from "@/hooks/useAudioClassifier";
+import {
+  describeTaskPageContract,
+  idleTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 // Mock the mic/decode helpers so the record button resolves without real
 // AudioContext/getUserMedia (absent in the test env).
@@ -19,50 +24,24 @@ vi.mock("@/components/audio/Waveform", () => ({
   LiveWaveform: () => <div data-testid="live-waveform" />,
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({ path, options: opts }),
-      ),
-  };
-});
-
 const mockClassify = vi.fn();
-const baseState: UseAudioClassifierResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseAudioClassifierResult>({
   run: vi.fn(),
   isZeroShot: false,
   result: null,
   classify: mockClassify,
-  // Machine A actions — additive in the useModelWorker refactor.
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseAudioClassifierResult = { ...baseState };
 
+const useAudioClassifier = vi.fn(() => mockState);
 vi.mock("@/hooks/useAudioClassifier", () => ({
-  useAudioClassifier: () => mockState,
+  useAudioClassifier: (...args: unknown[]) =>
+    useAudioClassifier(...(args as [])),
 }));
 
-const { Route } = await import("@/routes/audio-classification");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/audio-classification"));
 
 function renderPage() {
-  if (!Page) throw new Error("Audio classification route component not found");
   render(<Page />);
 }
 
@@ -70,6 +49,16 @@ describe("AudioClassificationPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState = { ...baseState };
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useAudioClassifier,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: /^classify$/i,
   });
 
   it("renders the heading and every model option", () => {

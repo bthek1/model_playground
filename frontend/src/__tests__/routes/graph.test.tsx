@@ -4,18 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GnnMetrics } from "@/webgpu/gnn";
 import type { GraphSummary } from "@/webgpu/graphSession";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({ path, options: opts }),
-      ),
-  };
-});
-
 vi.mock("@/components/charts/EChart", () => ({
   default: () => <div data-testid="echart" />,
 }));

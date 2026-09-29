@@ -3,18 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TensorOpJob, TensorOpResult } from "@/webgpu/types";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({ path, options: opts }),
-      ),
-  };
-});
-
 const mockRun = vi.fn<(job: TensorOpJob) => Promise<void>>();
 const mockReset = vi.fn();
 const mockHookState = {

@@ -19,21 +19,6 @@ vi.mock("@/vision/image", () => ({
   downscale: (...a: unknown[]) => downscale(...(a as [never])),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const MASKS = [
   { data: new Uint8Array([1, 1, 0, 0]), width: 2, height: 2, score: 0.93 },
   { data: new Uint8Array([1, 1, 1, 1]), width: 2, height: 2, score: 0.51 },

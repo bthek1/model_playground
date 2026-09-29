@@ -12,21 +12,6 @@ import type {
   UseVideoClassifierResult,
 } from "@/hooks/useVideoClassifier";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 // The chart is lazy and pulls in echarts; the route's own behaviour is what is
 // under test, not the plotting library.
 vi.mock("@/components/charts/EChart", () => ({

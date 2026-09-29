@@ -18,21 +18,6 @@ vi.mock("@/vision/image", () => ({
   openCamera: vi.fn().mockResolvedValue(() => {}),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const DEPTH = {
   predicted_depth: { data: new Float32Array([0, 1, 2, 3]), dims: [1, 2, 2] },
 };
