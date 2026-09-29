@@ -2,6 +2,12 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseFillMaskResult } from "@/hooks/useFillMask";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 const PARIS = {
   mask: "[MASK]",
@@ -14,24 +20,11 @@ const PARIS = {
 };
 
 const mockRun = vi.fn().mockResolvedValue(PARIS);
-const base: UseFillMaskResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const base = idleTask<UseFillMaskResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
   maskToken: "[MASK]",
-};
+});
 
 // Keyed by model id, so a test can assert *which* entry the page asked for —
 // the mask token is per model, and picking the wrong one is this page's bug.
@@ -42,13 +35,11 @@ vi.mock("@/hooks/useFillMask", () => ({
   useFillMask: (...args: unknown[]) => useFillMask(...(args as [string])),
 }));
 
-const { Route } = await import("@/routes/fill-mask");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/fill-mask"));
 
 const BERT = "Xenova/bert-base-uncased";
 
 function renderPage() {
-  if (!Page) throw new Error("Fill mask route component not found");
   render(<Page />);
 }
 
@@ -56,7 +47,7 @@ const box = () => screen.getByLabelText(/sentence with a mask/i);
 const trigger = () => screen.getByRole("button", { name: /fill the mask/i });
 
 function ready(extra: Partial<UseFillMaskResult> = {}) {
-  state = { ...base, status: "ready", idle: false, ready: true, ...extra };
+  state = readyTask(base, extra);
 }
 
 describe("FillMaskPage", () => {
@@ -65,6 +56,16 @@ describe("FillMaskPage", () => {
     states = new Map();
     state = { ...base };
     localStorage.clear();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useFillMask,
+    base,
+    setState: (st) => {
+      state = st;
+    },
+    trigger: /^fill the mask$/i,
   });
 
   it("renders the heading and every model option", () => {
@@ -320,25 +321,5 @@ describe("FillMaskPage", () => {
     expect(
       screen.getByText(/evidence about the training data/i),
     ).toBeInTheDocument();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    state = { ...base, status: "error", idle: false, error: "404 model not found" };
-    renderPage();
-
-    const note = screen.getByText(/404 model not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    ready({ error: "Mask token ([MASK]) not found in text." });
-    renderPage();
-
-    // The whole sentence: "mask token" alone also matches the SELECT slot's
-    // line naming this checkpoint's token.
-    const note = screen.getByText("Mask token ([MASK]) not found in text.");
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

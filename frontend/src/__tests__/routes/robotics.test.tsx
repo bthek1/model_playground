@@ -16,6 +16,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GroundingResult, UseGroundingResult } from "@/hooks/useGrounding";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import { GROUNDING_PAIR } from "@/vision/grounding";
 
 const fakeImage = { width: 8, height: 8, channels: 3, data: [] } as never;
@@ -64,23 +70,11 @@ const RESULT: GroundingResult = {
 };
 
 const mockRun = vi.fn();
-const base: UseGroundingResult = {
+const base = idleTask<UseGroundingResult>({
   pair: GROUNDING_PAIR,
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  error: null,
-  running: false,
   result: null,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
   run: mockRun,
-};
+});
 let state: UseGroundingResult = { ...base };
 const useGrounding = vi.fn<(...args: unknown[]) => UseGroundingResult>(
   () => state,
@@ -89,24 +83,16 @@ vi.mock("@/hooks/useGrounding", () => ({
   useGrounding: (...args: unknown[]) => useGrounding(...args),
 }));
 
-const { Route } = await import("@/routes/robotics");
+const Page = routeComponent(await import("@/routes/robotics"));
 const { useModelPrefs } = await import("@/store/models");
-const Page = Route?.options?.component as React.ComponentType | undefined;
 
 function renderPage() {
-  if (!Page) throw new Error("Robotics route component not found");
   return render(<Page />);
 }
 
 const LOCATE = /^locate$/i;
-const ready = (extra: Partial<UseGroundingResult> = {}): UseGroundingResult => ({
-  ...base,
-  status: "ready",
-  idle: false,
-  ready: true,
-  backend: "webgpu",
-  ...extra,
-});
+const ready = (extra: Partial<UseGroundingResult> = {}) =>
+  readyTask(base, { backend: "webgpu", ...extra });
 
 async function pickAndLocate(sample = /^city street$/i) {
   fireEvent.click(screen.getByRole("button", { name: sample }));
@@ -136,6 +122,17 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("RoboticsPage", () => {
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useGrounding,
+    base,
+    setState: (st) => {
+      state = st;
+    },
+    trigger: LOCATE,
+    loadButton: /^load model$/i,
+  });
+
   describe("the shell", () => {
     it("renders the heading and the pair", () => {
       renderPage();
@@ -411,21 +408,6 @@ describe("RoboticsPage", () => {
   });
 
   describe("errors land in the slot that produced them", () => {
-    it("a load failure in LOAD", () => {
-      state = { ...base, status: "error", idle: false, error: "404 not found" };
-      renderPage();
-      const note = screen.getByText(/404 not found/i);
-      expect(screen.getByTestId("slot-2")).toContainElement(note);
-      expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-    });
-
-    it("an inference failure in OUTPUT", () => {
-      state = ready({ error: "Non-zero status code" });
-      renderPage();
-      const note = screen.getByText(/non-zero status code/i);
-      expect(screen.getByTestId("slot-4")).toContainElement(note);
-    });
-
     it("a failed decode in RUN, having run nothing", async () => {
       state = ready();
       fromUrl.mockRejectedValueOnce(new Error("Unsupported image type"));

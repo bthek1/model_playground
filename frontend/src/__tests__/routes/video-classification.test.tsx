@@ -11,6 +11,12 @@ import type {
   ClipScores,
   UseVideoClassifierResult,
 } from "@/hooks/useVideoClassifier";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 // The chart is lazy and pulls in echarts; the route's own behaviour is what is
 // under test, not the plotting library.
@@ -32,25 +38,12 @@ const RESULT: ClipScores = {
 
 const mockRun = vi.fn().mockResolvedValue(RESULT);
 const mockStop = vi.fn();
-const baseState: UseVideoClassifierResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseVideoClassifierResult>({
   result: null,
   clipProgress: null,
   run: mockRun,
   stop: mockStop,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseVideoClassifierResult = { ...baseState };
 const useVideoClassifier = vi.fn(() => mockState);
 
@@ -62,21 +55,14 @@ vi.mock("@/hooks/useVideoClassifier", async (importOriginal) => {
   };
 });
 
-const { Route } = await import("@/routes/video-classification");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/video-classification"));
 
 function renderPage() {
-  if (!Page) throw new Error("Video classification route component not found");
   return render(<Page />);
 }
 
-const ready = (extra: Partial<UseVideoClassifierResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseVideoClassifierResult> = {}) =>
+  readyTask(baseState, extra);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -88,6 +74,16 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("VideoClassificationPage", () => {
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useVideoClassifier,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: /score the clip/i,
+  });
+
   it("renders the heading and the CLIP catalogue it reuses", () => {
     renderPage();
     expect(
@@ -121,13 +117,6 @@ describe("VideoClassificationPage", () => {
     expect(screen.getByTestId("slot-1").parentElement).toBeTruthy();
     expect(document.body).toHaveTextContent(/frame-level baseline/i);
     expect(document.body).toHaveTextContent(/never sees motion/i);
-  });
-
-  it("keeps the run control disabled until a model is ready", () => {
-    renderPage();
-    expect(
-      screen.getByRole("button", { name: /score the clip/i }),
-    ).toBeDisabled();
   });
 
   it("starts from the sample's own label set, and swaps it with the clip", () => {
@@ -240,19 +229,6 @@ describe("VideoClassificationPage", () => {
     );
   });
 
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = {
-      ...baseState,
-      status: "error",
-      idle: false,
-      error: "404 not found",
-    };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
   it("puts a clip that will not decode in the RUN slot, where the file is", async () => {
     mockState = ready();
     mockRun.mockRejectedValueOnce(new Error("Could not decode that video"));
@@ -261,12 +237,5 @@ describe("VideoClassificationPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /score the clip/i }));
     const note = await screen.findByText(/could not decode that video/i);
     expect(screen.getByTestId("slot-3")).toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Non-zero status code" });
-    renderPage();
-    const note = screen.getByText(/non-zero status code/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
   });
 });

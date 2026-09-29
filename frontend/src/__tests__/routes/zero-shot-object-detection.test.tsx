@@ -9,6 +9,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseZeroShotDetectorResult } from "@/hooks/useZeroShotDetector";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 const fakeImage = { width: 8, height: 8, channels: 3, data: [] } as never;
 const fromFile = vi.fn().mockResolvedValue(fakeImage);
@@ -40,23 +46,10 @@ const DETECTIONS = [
 ];
 
 const mockRun = vi.fn().mockResolvedValue(DETECTIONS);
-const baseState: UseZeroShotDetectorResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseZeroShotDetectorResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseZeroShotDetectorResult = { ...baseState };
 const useZeroShotDetector = vi.fn(() => mockState);
 
@@ -68,11 +61,9 @@ vi.mock("@/hooks/useZeroShotDetector", async (importOriginal) => {
   };
 });
 
-const { Route } = await import("@/routes/zero-shot-object-detection");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/zero-shot-object-detection"));
 
 function renderPage() {
-  if (!Page) throw new Error("Zero-shot detection route component not found");
   return render(<Page />);
 }
 
@@ -88,13 +79,8 @@ async function pickAndRun(sample: RegExp) {
   fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
 }
 
-const ready = (extra: Partial<UseZeroShotDetectorResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseZeroShotDetectorResult> = {}) =>
+  readyTask(baseState, extra);
 
 let ticks: FrameRequestCallback[] = [];
 
@@ -117,6 +103,16 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ZeroShotObjectDetectionPage", () => {
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useZeroShotDetector,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
+  });
+
   it("renders the heading and every model option", () => {
     renderPage();
     expect(
@@ -144,11 +140,6 @@ describe("ZeroShotObjectDetectionPage", () => {
     expect(screen.getAllByRole("region")).toHaveLength(4);
     expect(screen.getByTestId("slot-3")).toBeInTheDocument();
     expect(screen.getByTestId("output-empty")).toBeInTheDocument();
-  });
-
-  it("keeps the run control disabled until a model is ready", () => {
-    renderPage();
-    expect(screen.getByRole("button", { name: /^detect$/i })).toBeDisabled();
   });
 
   it("lets the queries be written before anything is loaded", () => {
@@ -262,25 +253,5 @@ describe("ZeroShotObjectDetectionPage", () => {
     const note = await screen.findByText(/unsupported image type/i);
     expect(screen.getByTestId("slot-3")).toContainElement(note);
     expect(mockRun).not.toHaveBeenCalled();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = {
-      ...baseState,
-      status: "error",
-      idle: false,
-      error: "404 not found",
-    };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Non-zero status code" });
-    renderPage();
-    const note = screen.getByText(/non-zero status code/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
   });
 });

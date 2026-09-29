@@ -2,6 +2,12 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseSegmenterResult } from "@/hooks/useSegmenter";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 const fakeImage = { width: 2, height: 2, channels: 3, data: [] } as never;
 const fromFile = vi.fn().mockResolvedValue(fakeImage);
@@ -29,23 +35,10 @@ const MASKS = [
 ];
 
 const mockRun = vi.fn().mockResolvedValue(MASKS);
-const baseState: UseSegmenterResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseSegmenterResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseSegmenterResult = { ...baseState };
 const useSegmenter = vi.fn(() => mockState);
 
@@ -57,11 +50,9 @@ vi.mock("@/hooks/useSegmenter", async (importOriginal) => {
   };
 });
 
-const { Route } = await import("@/routes/segmentation");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/segmentation"));
 
 function renderPage() {
-  if (!Page) throw new Error("Segmentation route component not found");
   render(<Page />);
 }
 
@@ -77,13 +68,8 @@ async function pickAndRun(sample: RegExp) {
   fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
 }
 
-const ready = (extra: Partial<UseSegmenterResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseSegmenterResult> = {}) =>
+  readyTask(baseState, extra);
 
 describe("SegmentationPage", () => {
   beforeEach(() => {
@@ -92,6 +78,16 @@ describe("SegmentationPage", () => {
     mockRun.mockResolvedValue(MASKS);
     URL.createObjectURL = vi.fn(() => "blob:preview");
     URL.revokeObjectURL = vi.fn();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useSegmenter,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
   });
 
   it("renders the heading and every model option", () => {
@@ -116,11 +112,6 @@ describe("SegmentationPage", () => {
     renderPage();
     expect(screen.getAllByRole("region")).toHaveLength(4);
     expect(screen.getByTestId("output-empty")).toBeInTheDocument();
-  });
-
-  it("keeps the run control disabled until a model is ready", () => {
-    renderPage();
-    expect(screen.getByRole("button", { name: /^segment$/i })).toBeDisabled();
   });
 
   it("states the class space before the run, and which kind of segmentation", () => {
@@ -195,20 +186,5 @@ describe("SegmentationPage", () => {
     const note = await screen.findByText(/unsupported image type/i);
     expect(screen.getByTestId("slot-3")).toContainElement(note);
     expect(mockRun).not.toHaveBeenCalled();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = { ...baseState, status: "error", idle: false, error: "404 not found" };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Non-zero status code" });
-    renderPage();
-    const note = screen.getByText(/non-zero status code/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
   });
 });

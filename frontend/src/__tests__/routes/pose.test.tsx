@@ -9,6 +9,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UsePoseResult } from "@/hooks/usePose";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import { COCO_KEYPOINTS } from "@/vision/pose/skeleton";
 
 const fakeImage = { width: 8, height: 8, channels: 3, data: [] } as never;
@@ -52,23 +58,10 @@ const RESULT = {
 };
 
 const mockRun = vi.fn().mockResolvedValue(RESULT);
-const baseState: UsePoseResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UsePoseResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UsePoseResult = { ...baseState };
 const usePose = vi.fn(() => mockState);
 
@@ -77,11 +70,9 @@ vi.mock("@/hooks/usePose", async (importOriginal) => {
   return { ...actual, usePose: (...a: unknown[]) => usePose(...(a as [])) };
 });
 
-const { Route } = await import("@/routes/pose");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/pose"));
 
 function renderPage() {
-  if (!Page) throw new Error("Pose route component not found");
   return render(<Page />);
 }
 
@@ -97,13 +88,8 @@ async function pickAndRun(sample: RegExp) {
   fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
 }
 
-const ready = (extra: Partial<UsePoseResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UsePoseResult> = {}) =>
+  readyTask(baseState, extra);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -119,6 +105,16 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("PosePage", () => {
+  describeTaskPageContract({
+    render: renderPage,
+    hook: usePose,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
+  });
+
   it("renders the heading and both model pairs", () => {
     renderPage();
     expect(
@@ -170,11 +166,6 @@ describe("PosePage", () => {
     renderPage();
     expect(screen.getAllByRole("region")).toHaveLength(4);
     expect(screen.getByTestId("output-empty")).toBeInTheDocument();
-  });
-
-  it("keeps the run control disabled until both models are ready", () => {
-    renderPage();
-    expect(screen.getByRole("button", { name: /find poses/i })).toBeDisabled();
   });
 
   it("picks a sample without running, then estimates when asked, on a capped frame", async () => {
@@ -305,25 +296,5 @@ describe("PosePage", () => {
     const note = await screen.findByText(/unsupported image type/i);
     expect(screen.getByTestId("slot-3")).toContainElement(note);
     expect(mockRun).not.toHaveBeenCalled();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = {
-      ...baseState,
-      status: "error",
-      idle: false,
-      error: "404 not found",
-    };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where both models stay loaded", () => {
-    mockState = ready({ error: "Non-zero status code" });
-    renderPage();
-    const note = screen.getByText(/non-zero status code/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
   });
 });

@@ -8,6 +8,11 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseLiveAsrResult } from "@/hooks/useLiveAsr";
+import {
+  describeTaskPageContract,
+  idleTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 // No Web Audio in happy-dom — stub decode/playback/encode. decodeToMono returns
 // a fixed clip so the sample-clip flow can be exercised without a real WAV;
@@ -32,34 +37,23 @@ const mockTranscribeClip = vi.fn();
 const mockLoad = vi.fn();
 const mockRetry = vi.fn();
 const mockSetSkipSilence = vi.fn();
-const baseState: UseLiveAsrResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
+const baseState = idleTask<UseLiveAsrResult>({
   recording: false,
-  running: false,
   stream: null,
   clip: null,
   sampleRate: 16000,
   text: "",
   chunks: [],
-  error: null,
   start: mockStart,
   stop: mockStop,
   transcribeClip: mockTranscribeClip,
   load: mockLoad,
   retry: mockRetry,
-  cancel: vi.fn(),
   skipSilence: true,
   setSkipSilence: mockSetSkipSilence,
   silent: false,
   skippedTicks: 0,
-};
+});
 let mockState: UseLiveAsrResult = { ...baseState };
 
 // Forwarded verbatim, arity included: the route passes the model and *nothing
@@ -80,15 +74,13 @@ vi.mock("@/model/cache", () => ({
   evictModel: vi.fn(() => Promise.resolve()),
 }));
 
-const { Route } = await import("@/routes/asr");
+const AsrPage = routeComponent(await import("@/routes/asr"));
 const { useModelPrefs } = await import("@/store/models");
 const { ASR_MODELS } = await import("@/audio/types");
 const WHISPER = ASR_MODELS[0].id;
 const MOONSHINE = ASR_MODELS[1].id;
-const AsrPage = Route?.options?.component as React.ComponentType | undefined;
 
 function renderPage() {
-  if (!AsrPage) throw new Error("ASR route component not found");
   render(<AsrPage />);
 }
 
@@ -101,6 +93,16 @@ describe("AsrPage", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useLiveAsrArgs,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: /^transcribe$/i,
   });
 
   it("renders the heading and both model options", () => {

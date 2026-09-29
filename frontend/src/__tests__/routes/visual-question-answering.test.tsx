@@ -8,6 +8,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseVlmResult } from "@/hooks/useVlm";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 const fakeImage = { width: 8, height: 8, channels: 3, data: [] } as never;
 const fromFile = vi.fn().mockResolvedValue(fakeImage);
@@ -37,25 +43,13 @@ vi.mock("@/model/backend", async (importOriginal) => {
 const mockRun = vi.fn();
 const mockLoad = vi.fn();
 
-const baseState = (): UseVlmResult => ({
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseVlmResult>({
   result: null,
   partial: null,
   run: mockRun,
   load: mockLoad,
-  retry: vi.fn(),
-  cancel: vi.fn(),
 });
-let mockState: UseVlmResult = baseState();
+let mockState: UseVlmResult = { ...baseState };
 const useVlm = vi.fn(() => mockState);
 
 vi.mock("@/hooks/useVlm", async (importOriginal) => {
@@ -70,28 +64,21 @@ vi.mock("@/model/cache", () => ({
   evictModel: vi.fn(() => Promise.resolve()),
 }));
 
-const { Route } = await import("@/routes/visual-question-answering");
+const Page = routeComponent(await import("@/routes/visual-question-answering"));
 const { useModelPrefs } = await import("@/store/models");
 const { VLM_MODELS } = await import("@/multimodal/types");
 const SMALL = VLM_MODELS[0].id;
 const LARGE = VLM_MODELS[1].id;
-const Page = Route?.options?.component as React.ComponentType | undefined;
 
 function renderPage() {
-  if (!Page) throw new Error("Visual-question-answering route not found");
   return render(<Page />);
 }
 
 const RUN_BUTTON = /^generate$/i;
 const SAMPLE = /^tiger$/i;
 
-const ready = (extra: Partial<UseVlmResult> = {}): UseVlmResult => ({
-  ...baseState(),
-  status: "ready",
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseVlmResult> = {}): UseVlmResult =>
+  readyTask(baseState, extra);
 
 async function pick() {
   fireEvent.click(screen.getByRole("button", { name: SAMPLE }));
@@ -102,7 +89,7 @@ async function pick() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockState = baseState();
+  mockState = { ...baseState };
   cached = new Set();
   useModelPrefs.setState({ selected: {} });
   mockRun.mockResolvedValue({
@@ -119,6 +106,16 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("VisualQuestionAnsweringPage — the four-slot contract", () => {
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useVlm,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
+  });
+
   it("renders the heading and the shared catalogue", () => {
     renderPage();
     expect(
@@ -402,27 +399,6 @@ describe("VisualQuestionAnsweringPage — gating and errors", () => {
     renderPage();
     await waitFor(() =>
       expect(screen.getByTestId("f16-note")).toHaveTextContent(/shader-f16/),
-    );
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = {
-      ...baseState(),
-      status: "error",
-      idle: false,
-      error: "404 not found",
-    };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "out of memory" });
-    renderPage();
-    expect(screen.getByTestId("slot-4")).toContainElement(
-      screen.getByText(/out of memory/i),
     );
   });
 

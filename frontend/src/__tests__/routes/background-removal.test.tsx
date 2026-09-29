@@ -2,6 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseBackgroundRemovalResult } from "@/hooks/useBackgroundRemoval";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import { MATTE_MODELS } from "@/vision/backgroundRemoval";
 
 // The image helpers reach for RawImage / canvas / getUserMedia, none of which
@@ -27,24 +33,11 @@ const CUTOUT = {
 };
 
 const mockRun = vi.fn().mockResolvedValue(CUTOUT);
-const baseState: UseBackgroundRemovalResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseBackgroundRemovalResult>({
   result: null,
   meta: MATTE_MODELS[0],
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseBackgroundRemovalResult = { ...baseState };
 const useBackgroundRemoval = vi.fn(() => mockState);
 
@@ -57,23 +50,16 @@ vi.mock("@/hooks/useBackgroundRemoval", async (importOriginal) => {
   };
 });
 
-const { Route } = await import("@/routes/background-removal");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/background-removal"));
 
 function renderPage() {
-  if (!Page) throw new Error("Background removal route component not found");
   render(<Page />);
 }
 
 const RUN_BUTTON = /remove background/i;
 
-const ready = (extra: Partial<UseBackgroundRemovalResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseBackgroundRemovalResult> = {}) =>
+  readyTask(baseState, extra);
 
 describe("BackgroundRemovalPage", () => {
   beforeEach(() => {
@@ -82,6 +68,16 @@ describe("BackgroundRemovalPage", () => {
     mockRun.mockResolvedValue(CUTOUT);
     URL.createObjectURL = vi.fn(() => "blob:preview");
     URL.revokeObjectURL = vi.fn();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useBackgroundRemoval,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
   });
 
   it("renders the heading and every model option", () => {
@@ -108,13 +104,6 @@ describe("BackgroundRemovalPage", () => {
     expect(screen.getByTestId("slot-1")).toBeInTheDocument();
     expect(screen.getByTestId("slot-4")).toBeInTheDocument();
     expect(screen.getByTestId("output-empty")).toBeInTheDocument();
-  });
-
-  it("keeps the run control disabled until a model is ready", () => {
-    renderPage();
-    expect(
-      screen.getByRole("button", { name: /remove background/i }),
-    ).toBeDisabled();
   });
 
   it("states the licence beside the model choice, in the SELECT slot", () => {
@@ -211,26 +200,5 @@ describe("BackgroundRemovalPage", () => {
     const note = await screen.findByText(/unsupported image type/i);
     expect(screen.getByTestId("slot-3")).toContainElement(note);
     expect(mockRun).not.toHaveBeenCalled();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = {
-      ...baseState,
-      status: "error",
-      idle: false,
-      error: "404 not found",
-    };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Non-zero status code" });
-    renderPage();
-    const note = screen.getByText(/non-zero status code/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

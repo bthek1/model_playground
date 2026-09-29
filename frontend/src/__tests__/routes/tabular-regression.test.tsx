@@ -5,6 +5,7 @@ import type { UseDatasetResult } from "@/hooks/useDataset";
 import type { UseTabularFitResult } from "@/hooks/useTabularFit";
 import { parseCsv } from "@/tabular/csv";
 import type { Dataset, FitResult, RegressionMetrics } from "@/tabular/types";
+import { idleTask, routeComponent } from "@/test/taskPage";
 
 vi.mock("@/components/charts/EChart", () => ({
   default: () => <div data-testid="echart" />,
@@ -85,36 +86,22 @@ vi.mock("@/hooks/useTabularFit", () => ({
 }));
 vi.mock("@/hooks/useDataset", () => ({ useDataset: () => useDataset() }));
 
-const { Route } = await import("@/routes/tabular-regression");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/tabular-regression"));
 
 function renderPage() {
-  if (!Page) throw new Error("Tabular regression route component not found");
   render(<Page />);
 }
 
 function baseFit(extra: Partial<UseTabularFitResult> = {}): UseTabularFitResult {
-  return {
-    status: "idle",
-    idle: true,
-    loading: false,
-    ready: false,
-    progress: null,
-    loadProgress: null,
-    loadedInMs: null,
-    backend: null,
-    running: false,
+  return idleTask<UseTabularFitResult>({
     partial: null,
     result: null,
-    error: null,
     load: loadMock,
-    retry: vi.fn(),
-    cancel: vi.fn(),
     fit: fitMock,
     predict: predictMock,
     stop: stopMock,
     ...extra,
-  };
+  });
 }
 
 function baseData(extra: Partial<UseDatasetResult> = {}): UseDatasetResult {

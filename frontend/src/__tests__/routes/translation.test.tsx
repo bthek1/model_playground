@@ -2,30 +2,23 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseTranslateResult } from "@/hooks/useTranslate";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import { TRANSLATION_MODELS } from "@/text/catalogue";
 
 const EN_DE = TRANSLATION_MODELS[0];
 const DE_EN = TRANSLATION_MODELS[1];
 
 const mockRun = vi.fn(async () => "Die Besprechung wurde verlegt.");
-const base: UseTranslateResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const base = idleTask<UseTranslateResult>({
   meta: EN_DE,
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 
 // Keyed by model id, so a test can assert *which* entry the page asked
 // for — picking the wrong one is the bug these pages can silently have.
@@ -36,11 +29,9 @@ vi.mock("@/hooks/useTranslate", () => ({
   useTranslate: (...args: unknown[]) => useTranslate(...(args as [string])),
 }));
 
-const { Route } = await import("@/routes/translation");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/translation"));
 
 function renderPage() {
-  if (!Page) throw new Error("Translation route component not found");
   render(<Page />);
 }
 
@@ -51,7 +42,7 @@ const box = () => screen.getByRole("textbox");
 const trigger = () => screen.getByRole("button", { name: /^translate$/i });
 
 function ready(extra: Partial<UseTranslateResult> = {}) {
-  state = { ...base, status: "ready", idle: false, ready: true, ...extra };
+  state = readyTask(base, extra);
 }
 
 describe("TranslationPage", () => {
@@ -60,6 +51,16 @@ describe("TranslationPage", () => {
     states = new Map();
     state = { ...base };
     localStorage.clear();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useTranslate,
+    base,
+    setState: (st) => {
+      state = st;
+    },
+    trigger: /^translate$/i,
   });
 
   it("renders the heading and every direction", () => {
@@ -201,28 +202,5 @@ describe("TranslationPage", () => {
     expect(screen.getByTestId("ran-source")).toHaveTextContent(
       "The original source.",
     );
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    state = {
-      ...base,
-      status: "error",
-      idle: false,
-      error: "Can't create a session. qdq_actions.cc:137",
-    };
-    renderPage();
-
-    const note = screen.getByText(/qdq_actions/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT", () => {
-    ready({ error: "Input is too long" });
-    renderPage();
-
-    const note = screen.getByText(/input is too long/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

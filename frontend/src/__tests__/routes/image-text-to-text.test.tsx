@@ -8,6 +8,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseVlmResult } from "@/hooks/useVlm";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 const fakeImage = { width: 8, height: 8, channels: 3, data: [] } as never;
 const fromFile = vi.fn().mockResolvedValue(fakeImage);
@@ -37,25 +43,13 @@ vi.mock("@/model/backend", async (importOriginal) => {
 const mockRun = vi.fn();
 const mockLoad = vi.fn();
 
-const baseState = (): UseVlmResult => ({
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseVlmResult>({
   result: null,
   partial: null,
   run: mockRun,
   load: mockLoad,
-  retry: vi.fn(),
-  cancel: vi.fn(),
 });
-let mockState: UseVlmResult = baseState();
+let mockState: UseVlmResult = { ...baseState };
 const useVlm = vi.fn(() => mockState);
 
 vi.mock("@/hooks/useVlm", async (importOriginal) => {
@@ -63,24 +57,17 @@ vi.mock("@/hooks/useVlm", async (importOriginal) => {
   return { ...actual, useVlm: (...a: unknown[]) => useVlm(...(a as [])) };
 });
 
-const { Route } = await import("@/routes/image-text-to-text");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/image-text-to-text"));
 
 function renderPage() {
-  if (!Page) throw new Error("Image-text-to-text route component not found");
   return render(<Page />);
 }
 
 const RUN_BUTTON = /^generate$/i;
 const SAMPLE = /^tiger$/i;
 
-const ready = (extra: Partial<UseVlmResult> = {}): UseVlmResult => ({
-  ...baseState(),
-  status: "ready",
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseVlmResult> = {}): UseVlmResult =>
+  readyTask(baseState, extra);
 
 async function pick() {
   fireEvent.click(screen.getByRole("button", { name: SAMPLE }));
@@ -91,7 +78,7 @@ async function pick() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockState = baseState();
+  mockState = { ...baseState };
   mockRun.mockResolvedValue({
     text: "A tiger lying in grass.",
     ms: 4200,
@@ -106,6 +93,16 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("ImageTextToTextPage — the four-slot contract", () => {
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useVlm,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
+  });
+
   it("renders the heading and both model options", () => {
     renderPage();
     expect(
@@ -363,22 +360,6 @@ describe("ImageTextToTextPage — backend gating and errors", () => {
     expect(
       screen.queryByTestId("model-unsupported-HuggingFaceTB/SmolVLM-256M-Instruct"),
     ).not.toBeInTheDocument();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = { ...baseState(), status: "error", idle: false, error: "404 not found" };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "out of memory" });
-    renderPage();
-    expect(screen.getByTestId("slot-4")).toContainElement(
-      screen.getByText(/out of memory/i),
-    );
   });
 
   it("surfaces a failed decode in the RUN slot, not the output", async () => {

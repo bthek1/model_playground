@@ -8,6 +8,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseSamResult } from "@/hooks/useSam";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 const fakeImage = { width: 8, height: 8, channels: 3, data: [] } as never;
 const fromFile = vi.fn().mockResolvedValue(fakeImage);
@@ -29,17 +35,7 @@ const mockRun = vi.fn().mockResolvedValue({ masks: MASKS, ms: 12 });
 const mockEncode = vi.fn().mockResolvedValue(undefined);
 const mockReset = vi.fn();
 
-const baseState: UseSamResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseSamResult>({
   result: null,
   encoding: false,
   encoded: false,
@@ -47,10 +43,7 @@ const baseState: UseSamResult = {
   encode: mockEncode,
   run: mockRun,
   reset: mockReset,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseSamResult = { ...baseState };
 const useSam = vi.fn(() => mockState);
 
@@ -59,26 +52,14 @@ vi.mock("@/hooks/useSam", async (importOriginal) => {
   return { ...actual, useSam: (...a: unknown[]) => useSam(...(a as [])) };
 });
 
-const { Route } = await import("@/routes/mask-generation");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/mask-generation"));
 
 function renderPage() {
-  return render(<MaskPage />);
+  return render(<Page />);
 }
 
-/** The route component, or a loud failure — so tests can render it as JSX. */
-function MaskPage() {
-  if (!Page) throw new Error("Mask generation route component not found");
-  return <Page />;
-}
-
-const ready = (extra: Partial<UseSamResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseSamResult> = {}) =>
+  readyTask(baseState, extra);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -130,6 +111,16 @@ async function generate() {
 }
 
 describe("MaskGenerationPage", () => {
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useSam,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: /generate mask/i,
+  });
+
   it("renders the heading and both model options", () => {
     renderPage();
     expect(
@@ -214,7 +205,7 @@ describe("MaskGenerationPage", () => {
     );
 
     mockState = ready({ encoding: true });
-    rerender(<MaskPage />);
+    rerender(<Page />);
 
     expect(screen.getByTestId("encoding")).toBeInTheDocument();
     // The LOAD slot is not what is busy — the model is loaded.
@@ -375,25 +366,5 @@ describe("MaskGenerationPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /^tiger$/i }));
     const note = await screen.findByText(/unsupported image type/i);
     expect(screen.getByTestId("slot-3")).toContainElement(note);
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = {
-      ...baseState,
-      status: "error",
-      idle: false,
-      error: "404 not found",
-    };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Non-zero status code" });
-    renderPage();
-    const note = screen.getByText(/non-zero status code/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
   });
 });

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { routeComponent } from "@/test/taskPage";
 import type { GnnMetrics } from "@/webgpu/gnn";
 import type { GraphSummary } from "@/webgpu/graphSession";
 
@@ -73,11 +74,9 @@ vi.mock("@/hooks/useGraphTraining", () => ({
   useGraphTraining: () => hookState,
 }));
 
-const { Route } = await import("@/routes/graph");
-const GraphPage = Route?.options?.component as React.ComponentType | undefined;
+const GraphPage = routeComponent(await import("@/routes/graph"));
 
 function renderPage() {
-  if (!GraphPage) throw new Error("Graph route component not found");
   render(<GraphPage />);
 }
 

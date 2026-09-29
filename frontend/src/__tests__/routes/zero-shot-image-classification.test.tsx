@@ -2,6 +2,12 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseZeroShotImageResult } from "@/hooks/useZeroShotImage";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 const fakeImage = { width: 4, height: 4, channels: 3, data: [] } as never;
 const fromFile = vi.fn().mockResolvedValue(fakeImage);
@@ -41,23 +47,10 @@ const RESULT = [
 ];
 
 const mockRun = vi.fn().mockResolvedValue(RESULT);
-const baseState: UseZeroShotImageResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseZeroShotImageResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseZeroShotImageResult = { ...baseState };
 const useZeroShotImage = vi.fn(() => mockState);
 
@@ -69,11 +62,9 @@ vi.mock("@/hooks/useZeroShotImage", async (importOriginal) => {
   };
 });
 
-const { Route } = await import("@/routes/zero-shot-image-classification");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/zero-shot-image-classification"));
 
 function renderPage() {
-  if (!Page) throw new Error("Zero-shot route component not found");
   render(<Page />);
 }
 
@@ -89,13 +80,8 @@ async function pickAndRun(sample: RegExp) {
   fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
 }
 
-const ready = (extra: Partial<UseZeroShotImageResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseZeroShotImageResult> = {}) =>
+  readyTask(baseState, extra);
 
 describe("ZeroShotImageClassificationPage", () => {
   beforeEach(() => {
@@ -104,6 +90,16 @@ describe("ZeroShotImageClassificationPage", () => {
     mockRun.mockResolvedValue(RESULT);
     URL.createObjectURL = vi.fn(() => "blob:preview");
     URL.revokeObjectURL = vi.fn();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useZeroShotImage,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
   });
 
   it("renders the heading and every model option", () => {
@@ -130,11 +126,6 @@ describe("ZeroShotImageClassificationPage", () => {
     renderPage();
     expect(screen.getAllByRole("region")).toHaveLength(4);
     expect(screen.getByTestId("output-empty")).toBeInTheDocument();
-  });
-
-  it("keeps the run control disabled until a model is ready", () => {
-    renderPage();
-    expect(screen.getByRole("button", { name: /score labels/i })).toBeDisabled();
   });
 
   it("starts from a label set the user can edit", () => {
@@ -259,20 +250,5 @@ describe("ZeroShotImageClassificationPage", () => {
     const note = await screen.findByText(/unsupported image type/i);
     expect(screen.getByTestId("slot-3")).toContainElement(note);
     expect(mockRun).not.toHaveBeenCalled();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = { ...baseState, status: "error", idle: false, error: "404 not found" };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Non-zero status code" });
-    renderPage();
-    const note = screen.getByText(/non-zero status code/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
   });
 });

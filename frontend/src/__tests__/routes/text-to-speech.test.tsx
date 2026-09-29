@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TtsAudio } from "@/audio/tts";
 import type { UseTtsResult } from "@/hooks/useTts";
+import {
+  describeTaskPageContract,
+  idleTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 // Mock playback/encoding — no Web Audio in the test env.
 const play = vi.fn<(...args: unknown[]) => { close: () => void }>(() => ({
@@ -14,24 +19,10 @@ vi.mock("@/audio/io", () => ({
 }));
 
 const mockSynthesize = vi.fn<(text: string, opts?: unknown) => Promise<TtsAudio>>();
-const baseState: UseTtsResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
+const baseState = idleTask<UseTtsResult>({
   result: null,
-  running: false,
-  error: null,
   synthesize: mockSynthesize,
-  // Machine A actions — additive in the useModelWorker refactor.
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseTtsResult = { ...baseState };
 
 // What the page asks the worker layer for — the second argument is the resolved
@@ -53,15 +44,13 @@ vi.mock("@/model/cache", () => ({
   evictModel: vi.fn(() => Promise.resolve()),
 }));
 
-const { Route } = await import("@/routes/text-to-speech");
+const Page = routeComponent(await import("@/routes/text-to-speech"));
 const { useModelPrefs } = await import("@/store/models");
 const { TTS_MODELS } = await import("@/audio/tts");
 const KOKORO = TTS_MODELS[0].id;
 const MMS = TTS_MODELS[1].id;
-const Page = Route?.options?.component as React.ComponentType | undefined;
 
 function renderPage() {
-  if (!Page) throw new Error("Text-to-speech route component not found");
   render(<Page />);
 }
 
@@ -70,6 +59,16 @@ describe("TextToSpeechPage", () => {
     vi.clearAllMocks();
     mockState = { ...baseState };
     cached = new Set();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useTtsArgs,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: /^speak$/i,
   });
 
   it("renders the heading and every model option", () => {

@@ -2,6 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseTextGenResult } from "@/hooks/useTextGen";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import { DECODING_PRESETS, TEXTGEN_MODELS } from "@/text/catalogue";
 
 let probe: string | null = "webgpu";
@@ -21,25 +27,12 @@ const mockRun = vi.fn(async (prompt: string, decoding: unknown) => {
   return { text: "Paris, the capital city.", tokens: 5, ms: 500 };
 });
 
-const base: UseTextGenResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const base = idleTask<UseTextGenResult>({
   meta: SMOL,
   result: null,
   partial: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 
 let state: UseTextGenResult = { ...base };
 const useTextGen = vi.fn((id: string) => ({
@@ -50,11 +43,9 @@ vi.mock("@/hooks/useTextGen", () => ({
   useTextGen: (...args: unknown[]) => useTextGen(...(args as [string])),
 }));
 
-const { Route } = await import("@/routes/text-generation");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/text-generation"));
 
 function renderPage() {
-  if (!Page) throw new Error("Text generation route component not found");
   render(<Page />);
 }
 
@@ -64,7 +55,7 @@ const box = () => screen.getByRole("textbox");
 const trigger = () => screen.getByRole("button", { name: /^generate$/i });
 
 function ready(extra: Partial<UseTextGenResult> = {}) {
-  state = { ...base, status: "ready", idle: false, ready: true, ...extra };
+  state = readyTask(base, extra);
 }
 
 describe("TextGenerationPage", () => {
@@ -73,6 +64,16 @@ describe("TextGenerationPage", () => {
     state = { ...base };
     probe = "webgpu";
     localStorage.clear();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useTextGen,
+    base,
+    setState: (st) => {
+      state = st;
+    },
+    trigger: /^generate$/i,
   });
 
   it("renders the heading and every model option", () => {
@@ -281,28 +282,5 @@ describe("TextGenerationPage", () => {
     ready();
     renderPage();
     expect(screen.queryByTestId("shader-f16-note")).not.toBeInTheDocument();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    state = {
-      ...base,
-      status: "error",
-      idle: false,
-      error: "404 model not found",
-    };
-    renderPage();
-
-    const note = screen.getByText(/404 model not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT", () => {
-    ready({ error: "Program Gather requires f16" });
-    renderPage();
-
-    const note = screen.getByText(/program gather requires f16/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

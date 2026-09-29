@@ -5,6 +5,7 @@ import { parseCsv } from "@/tabular/csv";
 import type { UseDatasetResult } from "@/hooks/useDataset";
 import type { UseTabularFitResult } from "@/hooks/useTabularFit";
 import type { ClassificationMetrics, Dataset, FitResult } from "@/tabular/types";
+import { idleTask, routeComponent } from "@/test/taskPage";
 
 // ECharts needs a real layout engine; jsdom/happy-dom has none, and the bars
 // are asserted in the E2E suite instead.
@@ -98,36 +99,22 @@ vi.mock("@/hooks/useDataset", () => ({
   useDataset: () => useDataset(),
 }));
 
-const { Route } = await import("@/routes/tabular-classification");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/tabular-classification"));
 
 function renderPage() {
-  if (!Page) throw new Error("Tabular classification route component not found");
   render(<Page />);
 }
 
 function baseFit(extra: Partial<UseTabularFitResult> = {}): UseTabularFitResult {
-  return {
-    status: "idle",
-    idle: true,
-    loading: false,
-    ready: false,
-    progress: null,
-    loadProgress: null,
-    loadedInMs: null,
-    backend: null,
-    running: false,
+  return idleTask<UseTabularFitResult>({
     partial: null,
     result: null,
-    error: null,
     load: loadMock,
-    retry: vi.fn(),
-    cancel: vi.fn(),
     fit: fitMock,
     predict: predictMock,
     stop: stopMock,
     ...extra,
-  };
+  });
 }
 
 function baseData(extra: Partial<UseDatasetResult> = {}): UseDatasetResult {

@@ -20,7 +20,8 @@ import type { ModelTask } from "@/model/types";
 
 /**
  * The fields every task hook shares — the two state machines. `backend` is
- * widened to a string because the task hooks report it that way.
+ * widened to a string because the task hooks report it that way, and
+ * `progress` is optional because not every hook exposes the raw event.
  */
 export type TaskMachine = Pick<
   ModelTask<unknown, unknown>,
@@ -28,7 +29,6 @@ export type TaskMachine = Pick<
   | "idle"
   | "loading"
   | "ready"
-  | "progress"
   | "loadProgress"
   | "loadedInMs"
   | "load"
@@ -36,7 +36,11 @@ export type TaskMachine = Pick<
   | "cancel"
   | "running"
   | "error"
-> & { backend: string | null };
+> & {
+  backend: string | null;
+  /** Some hooks (`useRanking`, `useGrounding`) report only `loadProgress`. */
+  progress?: ModelTask<unknown, unknown>["progress"];
+};
 
 /**
  * A hook result at `idle`, with fresh `load`/`retry`/`cancel` mocks. Pass the
