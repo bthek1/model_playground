@@ -46,6 +46,7 @@ const mockStop = vi.fn();
 const mockTranscribeClip = vi.fn();
 const mockLoad = vi.fn();
 const mockRetry = vi.fn();
+const mockSetSkipSilence = vi.fn();
 const baseState: UseLiveAsrResult = {
   status: "idle",
   idle: true,
@@ -69,6 +70,10 @@ const baseState: UseLiveAsrResult = {
   load: mockLoad,
   retry: mockRetry,
   cancel: vi.fn(),
+  skipSilence: true,
+  setSkipSilence: mockSetSkipSilence,
+  silent: false,
+  skippedTicks: 0,
 };
 let mockState: UseLiveAsrResult = { ...baseState };
 
@@ -258,6 +263,54 @@ describe("AsrPage", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText(/listening…/i)).toBeInTheDocument();
     expect(screen.getByText("hello")).toBeInTheDocument();
+  });
+
+  // #55: the gate is a choice about the live loop. On by default, available
+  // before a model is loaded, and flipping it runs nothing.
+  it("offers the silence gate as an input that runs nothing when flipped", () => {
+    renderPage();
+    const toggle = screen.getByTestId("skip-silence-toggle");
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeEnabled();
+
+    fireEvent.click(toggle);
+    expect(mockSetSkipSilence).toHaveBeenCalledWith(false);
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(mockTranscribeClip).not.toHaveBeenCalled();
+    expect(mockLoad).not.toHaveBeenCalled();
+  });
+
+  // A transcript standing still during a pause looks like a hang unless the
+  // page says why.
+  it("says when live updates are being skipped for silence", () => {
+    mockState = {
+      ...baseState,
+      status: "ready",
+      idle: false,
+      ready: true,
+      recording: true,
+      silent: true,
+      skippedTicks: 3,
+    };
+    renderPage();
+    expect(screen.getByTestId("asr-silent")).toHaveTextContent(
+      "no speech — skipped 3 updates",
+    );
+  });
+
+  it("does not claim silence once the take has stopped", () => {
+    mockState = {
+      ...baseState,
+      status: "ready",
+      idle: false,
+      ready: true,
+      recording: false,
+      silent: true,
+      skippedTicks: 3,
+      text: "done",
+    };
+    renderPage();
+    expect(screen.queryByTestId("asr-silent")).not.toBeInTheDocument();
   });
 
   it("renders the final transcript text when present and idle", () => {

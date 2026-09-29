@@ -501,6 +501,18 @@ show the output*. The modality changes; the pipeline does not. Full contract in
     provider. The `@slow` spec asserts the backend so a later change can't loosen it silently.
   - Threshold → segments (`segments.ts`) is pure and runs on the main thread: dragging the threshold
     re-derives segments from the same scores, never re-running the model.
+  - **Its second life is the live-ASR gate (#55), and the gate is *not* Silero.** `useLiveAsr`
+    re-transcribed the last 30 s every 1.5 s tick, silence included, and Whisper answers room tone
+    with "you". `audio/vad/liveGate.ts` skips a tick whose new audio holds no speech, using the
+    energy baseline's arithmetic against the **window's** floor (10th-percentile frame + 12 dB),
+    judging **only the audio since the last scored tick**. Judging the whole window stops skipping a
+    second into a take, and judging the slice alone reads one sustained vowel as silence. Measured
+    (`frontend/scripts/measure-live-asr-gate.mjs`, real Silero + real Whisper per tick): it skipped
+    25 of the 28 silent ticks Silero skipped, and never a speech tick, so Silero's second model, LOAD
+    and worker would buy three passes. It **fails open**: no floor under 3 s of take, a scoring error
+    transcribes, and the final pass on Stop and `transcribeClip` are never gated. The page says
+    when it is skipping, because a still transcript is otherwise a hang. `just fe-e2e-asr-live` is
+    the only end-to-end guard: Chromium's fake mic plays silence → JFK → silence into a real Whisper.
 - **Unit tests mock the network and ORT, so they cannot catch a broken model.** The `@slow` E2E
   specs (`e2e/specs/audio-models.spec.ts`, `e2e/specs/vision-models.spec.ts`) are the guard, and
   they must assert a **known answer to a known input** — "a result appeared" passes while a
@@ -1587,7 +1599,7 @@ size is the **environment**, which has to be written in TypeScript. See
 - Test UI: `just fe-test-ui`
 - End-to-end: `just fe-e2e` (browsers: `just fe-e2e-install`; UI: `just fe-e2e-ui`)
 - Real model loads: `just fe-e2e-slow` (minutes, needs network); ids only: `just fe-e2e-models`;
-  speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`;
+  speech enhancement only: `just fe-e2e-enhance`; voice activity detection only: `just fe-e2e-vad`; live-ASR silence gate: `just fe-e2e-asr-live`;
   vision only: `just fe-e2e-vision` (tens of minutes cold — one route at a time with
   `just fe-e2e-vision-one /pose`); zero-shot scoring parity: `just fe-e2e-zeroshot`;
   fill-mask across two tokenizers: `just fe-e2e-fillmask`;
@@ -1621,6 +1633,7 @@ Key commands:
 | `just fe-e2e` | Run Playwright end-to-end tests (mocked API) |
 | `just fe-e2e-full` | Run E2E tests against the real Django API |
 | `just fe-e2e-vad` | Run the @slow voice-activity-detection specs (seconds) |
+| `just fe-e2e-asr-live` | Run the @slow live-ASR silence-gate spec (fake mic, real Whisper, ~1 min) |
 | `just fe-e2e-install` | Download the Playwright browsers (once) |
 | `just fe-e2e-slow` | `@slow` specs: real model downloads + real ONNX sessions |
 | `just fe-e2e-vision` | Run the @slow vision specs: real loads across all 14 routes (tens of minutes cold) |

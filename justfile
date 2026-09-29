@@ -230,6 +230,12 @@ fe-data-cora:
 fe-e2e-vad:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "voice activity detection"
 
+# Run the @slow live-ASR silence-gate spec: real Whisper-base, and Chromium's fake
+# mic playing silence → JFK → silence. Asserts the page skips the silent updates
+# and still transcribes the speech (~1 min warm)
+fe-e2e-asr-live:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium asr-live.spec.ts
+
 # Run the @slow vision specs: real loads of MobileNetV4, Depth Anything V2,
 # D-FINE nano, SegFormer-B0, CLIP, OWLv2, DINOv2, SlimSAM, the D-FINE+ViTPose
 # pair, and the Wave 3 carve-outs (MODNet, Swin2SR, depth-to-point-cloud), each

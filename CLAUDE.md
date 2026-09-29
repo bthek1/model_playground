@@ -91,6 +91,7 @@ just fe-e2e         # playwright end-to-end (mocked API, no backend needed)
 just fe-e2e-slow    # @slow specs: real model downloads + real ONNX sessions (minutes)
 just fe-e2e-enhance # @slow speech-enhancement specs (DeepFilterNet3, WASM + WebGPU)
 just fe-e2e-vad     # @slow voice-activity-detection specs (Silero VAD, seconds)
+just fe-e2e-asr-live # @slow: /asr's silence gate — a fake mic plays silence → JFK → silence into real Whisper
 just fe-e2e-vision  # @slow vision specs: real loads across all 14 routes (tens of minutes cold)
 just fe-e2e-superres # @slow: Swin2SR vs a bicubic baseline, by PSNR
 just fe-e2e-vision-one /pose   # one @slow vision route at a time
@@ -255,7 +256,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - **The system panel reports load and capacity, never utilisation — and samples nothing while it is shut.** `src/telemetry/` (samplers + the 1 Hz loop), `components/telemetry/` (the cards) and `components/layout/RightPanel.tsx` (docked `aside` at `lg`, a Sheet below it, `Alt+Shift+M`). A browser exposes **no** host CPU percent, **no** GPU utilisation and **no** VRAM, so every metric is a `Metric<T>` — `{ status: "ok", value }` or `{ status: "unavailable", reason }`, never a zero standing in for "unknown" (`telemetry/types.ts`), and each card carries one line saying what its number *is*. The observer-effect rules are the acceptance criteria: one interval, only while open **and** the tab visible; samples in fixed-capacity ring buffers behind refs (never Zustand, never TanStack Query); the cache walk every 10th tick; a slow tick **skipped, not queued**; closing clears the history rather than drawing a chart across the gap. Sparklines are inline SVG per the viz standard §5 — no `echarts` in this panel. GPU bytes are a **ledger, not a probe** (`webgpu/allocations.ts`): free buffers with `releaseBuffer()` instead of `.destroy()`, and because every kernel runs in a worker realm the worker publishes its ledger to the page over a `MessagePort` handed out by `createWebGPUWorker()` — a `BroadcastChannel` is origin-wide and would fold a second tab's allocations into this page's total. `useModelWorker` reports its inflight count and download bytes to `telemetry/activity.ts` (nothing outside the hook can observe either); the `ModelRequest`/`ModelResponse` envelope does **not** grow a telemetry variant. See [`docs/explanations/telemetry-panel.md`](docs/explanations/telemetry-panel.md).
 - Tests: Vitest + Testing Library + MSW (`src/test/server.ts`, `handlers.ts`). `src/test/setup.ts` also polyfills `localStorage` because Node ≥25 ships a stub that shadows the DOM env's.
 - **End-to-end tests are Playwright** (`e2e/`), covering what happy-dom can't: routing/app shell, real-browser auth, and WebGPU. Default run is fully mocked (no backend); `@backend`-tagged specs need `just be-seed-e2e`, and
-  `@slow`-tagged specs (real Hugging Face downloads + real ONNX sessions) need `just fe-e2e-slow` (or the per-route `fe-e2e-enhance` / `fe-e2e-vad` / `fe-e2e-vision` / `fe-e2e-link` / `fe-e2e-graphcls`; `fe-e2e-models` is the seconds-long id + dtype check in `model-ids.spec.ts`, across every modality). Import `test`/`expect` from `e2e/fixtures/base`, not `@playwright/test`. Shared page-object verbs (`load`, `waitForReady`, `backend`, `sizeNote`, `blockModelDownloads`) live on `ModelPageObject`, not on a modality subclass. Two traps: never `page.route("**/api/**")` (it also matches `/src/api/*` module URLs and stops the app booting), and keep the `test.include`/`test.exclude` block in `vite.config.ts` pinned to `src/` or Vitest swallows the E2E specs. **A `@slow` spec asserts a known label on a known input** — "a result appeared" would have passed while a quantized model called a tiger a snake. See [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md).
+  `@slow`-tagged specs (real Hugging Face downloads + real ONNX sessions) need `just fe-e2e-slow` (or the per-route `fe-e2e-enhance` / `fe-e2e-vad` / `fe-e2e-asr-live` / `fe-e2e-vision` / `fe-e2e-link` / `fe-e2e-graphcls`; `fe-e2e-models` is the seconds-long id + dtype check in `model-ids.spec.ts`, across every modality). Import `test`/`expect` from `e2e/fixtures/base`, not `@playwright/test`. Shared page-object verbs (`load`, `waitForReady`, `backend`, `sizeNote`, `blockModelDownloads`) live on `ModelPageObject`, not on a modality subclass. Two traps: never `page.route("**/api/**")` (it also matches `/src/api/*` module URLs and stops the app booting), and keep the `test.include`/`test.exclude` block in `vite.config.ts` pinned to `src/` or Vitest swallows the E2E specs. **A `@slow` spec asserts a known label on a known input** — "a result appeared" would have passed while a quantized model called a tiger a snake. See [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md).
 
 ### WebGPU essentials (`src/webgpu/`)
 
@@ -467,6 +468,18 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
     leaves nothing for a GPU to win, and its LSTM/`If` ops aren't covered by ORT's WebGPU provider.
     The threshold→segment step (`segments.ts`) is pure and runs on the main thread, so dragging the
     threshold re-derives segments without re-running the model.
+  - **Its second life is the live-ASR gate (#55), and the gate is *not* Silero.** `useLiveAsr`
+    re-transcribed the last 30 s every 1.5 s tick, silence included, and Whisper answers room tone
+    with "you". `audio/vad/liveGate.ts` skips a tick whose new audio holds no speech, using the
+    energy baseline's arithmetic against the **window's** floor (10th-percentile frame + 12 dB),
+    judging **only the audio since the last scored tick**. Judging the whole window stops skipping a
+    second into a take, and judging the slice alone reads one sustained vowel as silence. Measured
+    (`frontend/scripts/measure-live-asr-gate.mjs`, real Silero + real Whisper per tick): it skipped
+    25 of the 28 silent ticks Silero skipped, and never a speech tick, so Silero's second model, LOAD
+    and worker would buy three passes. It **fails open**: no floor under 3 s of take, a scoring error
+    transcribes, and the final pass on Stop and `transcribeClip` are never gated. The page says
+    when it is skipping, because a still transcript is otherwise a hang. `just fe-e2e-asr-live` is
+    the only end-to-end guard: Chromium's fake mic plays silence → JFK → silence into a real Whisper.
 - **Unit tests mock the network and ORT, so they cannot catch a broken model.** Both DeepFilterNet
   bugs above shipped past a green suite, and a 512-sample VAD window would too. The `@slow` E2E specs
   (`e2e/specs/audio-models.spec.ts`) are the guard; `just fe-e2e-enhance` additionally measures a real

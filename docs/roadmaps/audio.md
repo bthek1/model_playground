@@ -211,7 +211,7 @@ The WASM download is roughly 3x the params estimate because of the fp32 decoder
 **Live transcription re-transcribes only the tail 30 s**, so the model's own
 timestamps restart at 0 on a longer take. `useLiveAsr`'s `shiftChunks()` offsets them
 by the window start before the route renders `m:ss` — never render `chunks` straight
-from the worker.
+from the worker. Ticks with no new speech skip the model entirely (§3.6, #55).
 
 Qwen3-ASR and Parakeet have no ONNX export; use Whisper or Moonshine.
 
@@ -368,8 +368,47 @@ provider anyway. The `@slow` spec asserts the backend so this can't be loosened
 by accident. `just fe-e2e-vad` runs that spec in seconds against real weights —
 it is cheap enough to run on any change to `audio/vad/`.
 
-Its second life as a gate in front of ASR — `useLiveAsr` still transcribes
-silence as eagerly as speech — was deliberately left out of #9 and is unclaimed.
+**Its second life is a gate in front of ASR** (#55). It was left out of #9 and
+shipped separately, and the measurement picked **energy, not Silero**:
+
+- **The problem is real.** `useLiveAsr` re-transcribes the last 30 s on every
+  1.5 s tick. On silence, Whisper-base returns `you` in a quiet room and
+  `I'm going to go to the bathroom.` over fan noise. Every such tick costs
+  ~750 ms of CPU inference.
+- **The gate is `audio/vad/liveGate.ts`**, the energy baseline's arithmetic
+  judged against the window's noise floor (its 10th-percentile frame + 12 dB).
+  Measured by `scripts/measure-live-asr-gate.mjs` on synthetic takes of JFK plus
+  silence, with real Silero and real Whisper at every tick:
+
+  | Take | Silent ticks (Silero) | Energy skipped | Energy skipped speech |
+  |---|---|---|---|
+  | quiet room, −60 dBFS | 14 | 13 | 0 |
+  | fan, −40 dBFS | 14 | 12 | 0 |
+  | a 44 s talker who never pauses, over the fan | 0 | 0 | 0 |
+
+  Every disagreement went the safe way: energy transcribed a tick Silero called
+  silent (a word's decaying tail, or the first tick over a fan before a floor
+  exists). Silero would save those three passes at the cost of a second model
+  live beside the ASR one, its own LOAD and its own worker. The gate costs no
+  bytes and under 1 ms a tick.
+- **It fails open.** A take shorter than 3 s has no floor, so only
+  near-digital silence is skipped. A scoring error transcribes. The final pass on
+  Stop and `transcribeClip` are never gated.
+- **It judges only the audio since the last *scored* tick**, with one frame of
+  overlap, against the whole window's floor. Scoring the whole window would find
+  earlier speech every time and stop skipping one second into a take. Scoring the
+  slice alone would read one sustained vowel as silence: the energy scale is
+  relative, and a slice with no dynamic range has none. A tick dropped because
+  another is in flight does not advance the mark, so the next free tick judges
+  what it missed.
+- **Its known limit:** a sound with no quiet part for the whole window (a held
+  note, a whistle) is its own floor and is skipped. That is not speech. Real
+  continuous speech has syllable gaps, and was heard on 29 ticks of 29.
+- **The page says when it is skipping** (`no speech — skipped N updates`),
+  because a transcript that holds still is otherwise indistinguishable from a
+  hang. The toggle is INPUT: flipping it runs nothing, and a take in progress
+  picks it up on the next tick. `just fe-e2e-asr-live` plays silence → JFK →
+  silence into Chromium's fake mic and asserts all of it with real Whisper.
 
 ### 3.7 Audio-Text-to-Text — see the Multimodal guide
 

@@ -55,6 +55,10 @@ function AsrPage() {
     text,
     chunks,
     error,
+    skipSilence,
+    setSkipSilence,
+    silent,
+    skippedTicks,
     start,
     stop,
     transcribeClip,
@@ -240,6 +244,29 @@ function AsrPage() {
             onSelect={selectSample}
           />
 
+          {/* A choice about the live loop, not a run: flipping it spends
+              nothing, and a take already in progress picks it up on its next
+              tick. It never touches Transcribe — a clip you asked for is
+              always transcribed. */}
+          <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                data-testid="skip-silence-toggle"
+                checked={skipSilence}
+                onChange={(e) => setSkipSilence(e.target.checked)}
+              />
+              Skip silence while listening
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Each live update re-transcribes the last 30 s. With this on, an
+              update whose new audio holds no speech is skipped — a level check,
+              no extra model. Whisper tends to hear “you” in an empty room, and a
+              skipped update is about a second of inference saved. The final
+              pass when you stop is never skipped.
+            </p>
+          </div>
+
           <AudioTake
             recording={recording}
             stream={stream}
@@ -260,6 +287,17 @@ function AsrPage() {
                     <span className="relative inline-flex size-2 rounded-full bg-destructive" />
                   </span>
                   Listening…
+                </span>
+              )}
+              {/* Without this, a transcript that stops moving during a pause
+                  is indistinguishable from a model that hung. */}
+              {recording && silent && (
+                <span
+                  data-testid="asr-silent"
+                  className="text-xs font-normal text-muted-foreground"
+                >
+                  no speech — skipped {skippedTicks}{" "}
+                  {skippedTicks === 1 ? "update" : "updates"}
                 </span>
               )}
             </>

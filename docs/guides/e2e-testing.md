@@ -75,6 +75,7 @@ just fe-e2e-slow      # audio: sets E2E_SLOW=1 — ~2.5 min, needs network
 just fe-e2e-models    # the cheap half: every id, dtype file and sample URL (~45 s)
 just fe-e2e-enhance   # speech enhancement on both backends (~20 s + download)
 just fe-e2e-vad       # voice activity detection (~10 s, 2 MB download)
+just fe-e2e-asr-live  # /asr's silence gate: a fake mic plays silence → JFK → silence (~1 min)
 just fe-e2e-vision    # all thirteen vision routes — tens of minutes on a cold cache
 just fe-e2e-vision-one /pose      # one vision route at a time
 just fe-e2e-zeroshot  # split-tower scoring parity against the full CLIP graph
@@ -89,6 +90,29 @@ just fe-e2e-qa        # extractive QA, pinned by a character range rather than a
 just fe-e2e-zeroshot-text  # a known ranking, and a template proven to reach the model
 just fe-e2e-fillmask  # the same question through two tokenizers — the RoBERTa half is the test
 ```
+
+### A live microphone, with a known take
+
+`e2e/specs/asr-live.spec.ts` is the one spec that drives `/asr`'s **live** loop.
+Every other layer mocks some part of it: the hook test fakes `MediaRecorder` and
+the decode, and the mocked run never loads a model, so "Start listening" is never
+enabled. Chromium can play a WAV as the microphone
+(`--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<file>%noloop`,
+plus `--use-fake-ui-for-media-stream` to skip the permission prompt). Two things
+about it:
+
+- **The file is read at launch**, so the spec builds it first
+  (`e2e/utils/wav.ts`, from `jfk.wav`, cached in the OS temp directory) and then
+  launches its own browser through the `playwright` fixture. `test.use({ launchOptions })`
+  cannot work here: the path would have to exist before any test code runs.
+- **`%noloop`** plays the take once and then delivers silence. Without it the
+  clip repeats, and a spec about silence after speech never gets any.
+
+It asserts what the page shows (the "no speech — skipped N updates" line, then
+the words, then the line again, then the final transcript), not a count of
+worker requests. On a slow machine, updates that arrive while a transcription is
+still running get dropped anyway, so an exact count would pin the hardware
+rather than the gate.
 
 ### The tabular and forecasting specs, which are neither slow nor mocked
 
