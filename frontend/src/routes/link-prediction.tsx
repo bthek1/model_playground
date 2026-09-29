@@ -21,6 +21,8 @@ import { lazy, Suspense, useMemo, useState } from "react";
 
 import { GraphCanvas } from "@/components/graph/GraphCanvas";
 import { RunButton } from "@/components/model/RunButton";
+import { ArchPicker } from "@/components/graph/ArchPicker";
+import { Fact, Score } from "@/components/viz/readout";
 import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -33,7 +35,7 @@ import { useWebGPU } from "@/hooks/useWebGPU";
 import { CORA_CLASSES } from "@/lib/cora";
 import { getCSSVar } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { GNN_ARCHITECTURES, type GnnArch } from "@/webgpu/gnn";
+import type { GnnArch } from "@/webgpu/gnn";
 import { sigmoid } from "@/webgpu/linkPredictor";
 import { scorePair } from "@/webgpu/linkSession";
 
@@ -43,7 +45,6 @@ export const Route = createFileRoute("/link-prediction")({
   component: LinkPredictionPage,
 });
 
-const ARCHES: GnnArch[] = ["gcn", "sage", "gin", "gat"];
 
 /** Side of the square the graph is painted into before PanZoom scales it. */
 const GRAPH_RENDER_PX = 720;
@@ -284,58 +285,6 @@ function LinkPredictionPage() {
 
 /** No node is "labelled" here — the supervision is on edges. */
 const EMPTY_MASK = new Uint8Array(0);
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-2">
-      <dt>{label}</dt>
-      <dd className="font-mono text-foreground tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-function ArchPicker({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: GnnArch;
-  onChange: (arch: GnnArch) => void;
-  disabled: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      {ARCHES.map((arch) => {
-        const meta = GNN_ARCHITECTURES[arch];
-        const selected = arch === value;
-        return (
-          <Button
-            key={arch}
-            variant={selected ? "default" : "outline"}
-            disabled={disabled}
-            aria-pressed={selected}
-            onClick={() => onChange(arch)}
-            className="h-auto w-full flex-col items-start gap-0.5 px-3 py-2 text-left whitespace-normal"
-          >
-            <span className="flex w-full items-baseline gap-2 text-sm font-medium">
-              {meta.label}
-              <span
-                className={cn(
-                  "font-mono text-[0.65rem] font-normal",
-                  selected
-                    ? "text-primary-foreground/70"
-                    : "text-muted-foreground",
-                )}
-              >
-                {meta.aggregation}
-              </span>
-            </span>
-          </Button>
-        );
-      })}
-    </div>
-  );
-}
 
 function HeldOutControl({
   value,
@@ -613,15 +562,6 @@ function Scoreboard({
         value={elapsedMs == null ? "—" : `${(elapsedMs / 1000).toFixed(1)}s (${backend})`}
       />
     </dl>
-  );
-}
-
-function Score({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="font-mono text-lg tabular-nums">{value}</dd>
-    </div>
   );
 }
 

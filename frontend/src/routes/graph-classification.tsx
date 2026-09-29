@@ -20,6 +20,8 @@ import { lazy, Suspense, useMemo, useState } from "react";
 
 import { ProteinGallery } from "@/components/graph/ProteinGallery";
 import { RunButton } from "@/components/model/RunButton";
+import { ArchPicker } from "@/components/graph/ArchPicker";
+import { Fact, Score } from "@/components/viz/readout";
 import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -31,7 +33,7 @@ import { useWebGPU } from "@/hooks/useWebGPU";
 import { PROTEINS_BYTES, PROTEINS_CLASSES } from "@/lib/proteins";
 import { getCSSVar } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { GNN_ARCHITECTURES, type GnnArch } from "@/webgpu/gnn";
+import type { GnnArch } from "@/webgpu/gnn";
 import { READOUTS, type ReadoutMode } from "@/webgpu/graphPool";
 
 const EChart = lazy(() => import("@/components/charts/EChart"));
@@ -40,7 +42,6 @@ export const Route = createFileRoute("/graph-classification")({
   component: GraphClassificationPage,
 });
 
-const ARCHES: GnnArch[] = ["gcn", "sage", "gin", "gat"];
 const READOUT_MODES: ReadoutMode[] = ["mean", "sum"];
 
 /** How many test proteins the gallery draws. */
@@ -224,58 +225,6 @@ function majorityOf(labels: Uint8Array): number {
     }
   }
   return best;
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-2">
-      <dt>{label}</dt>
-      <dd className="font-mono text-foreground tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-function ArchPicker({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: GnnArch;
-  onChange: (arch: GnnArch) => void;
-  disabled: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      {ARCHES.map((arch) => {
-        const meta = GNN_ARCHITECTURES[arch];
-        const selected = arch === value;
-        return (
-          <Button
-            key={arch}
-            variant={selected ? "default" : "outline"}
-            disabled={disabled}
-            aria-pressed={selected}
-            onClick={() => onChange(arch)}
-            className="h-auto w-full flex-col items-start gap-0.5 px-3 py-2 text-left whitespace-normal"
-          >
-            <span className="flex w-full items-baseline gap-2 text-sm font-medium">
-              {meta.label}
-              <span
-                className={cn(
-                  "font-mono text-[0.65rem] font-normal",
-                  selected
-                    ? "text-primary-foreground/70"
-                    : "text-muted-foreground",
-                )}
-              >
-                {meta.aggregation}
-              </span>
-            </span>
-          </Button>
-        );
-      })}
-    </div>
-  );
 }
 
 function ReadoutPicker({
@@ -462,15 +411,6 @@ function Scoreboard({
         }
       />
     </dl>
-  );
-}
-
-function Score({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="font-mono text-lg tabular-nums">{value}</dd>
-    </div>
   );
 }
 

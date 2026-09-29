@@ -19,10 +19,10 @@ import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
+import { ScoreList } from "@/components/model/ScoreList";
 import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
 import { useImageClassifier } from "@/hooks/useImageClassifier";
 import { useImagePick } from "@/hooks/useImagePick";
-import type { ClassLabel } from "@/model/types";
 import { useModelSelection } from "@/model/useModelSelection";
 import { useTaskSlots } from "@/model/useTaskSlots";
 import {
@@ -140,42 +140,10 @@ useImagePick();
           empty="Pick an image and its five most likely labels appear here, with their scores."
         >
           {result && result.length > 0 && (
-            <div className="space-y-4">
-              {margin != null && margin < 0.1 && (
-                <p className="text-xs text-amber-600 dark:text-amber-500">
-                  The top two are within {margin.toFixed(2)} of each other — this
-                  model is not confident, whatever the first row says.
-                </p>
-              )}
-              <ul className="space-y-2">
-                {result.map((p) => (
-                  <ScoreRow key={p.label} label={p.label} score={p.score} />
-                ))}
-              </ul>
-            </div>
+            <ScoreList scores={result} format="percent" />
           )}
         </OutputPanel>
       }
     />
-  );
-}
-
-function ScoreRow({ label, score }: ClassLabel) {
-  const pct = Math.round(score * 100);
-  return (
-    <li className="space-y-1">
-      <div className="flex items-baseline justify-between gap-3 text-sm">
-        <span className="truncate">{label}</span>
-        <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-          {pct}%
-        </span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${Math.max(2, pct)}%` }}
-        />
-      </div>
-    </li>
   );
 }

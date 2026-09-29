@@ -15,7 +15,6 @@ import {
   DEFAULT_CLASSIFIER_MODEL,
   DEFAULT_ZERO_SHOT_LABELS,
 } from "@/audio/classification";
-import type { ClassLabel } from "@/audio/pipelineTypes";
 import { AUDIO_SAMPLES } from "@/audio/samples";
 import { AudioSourcePanel } from "@/components/audio/AudioSourcePanel";
 import { RunButton } from "@/components/model/RunButton";
@@ -24,6 +23,7 @@ import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
+import { ScoreList } from "@/components/model/ScoreList";
 import { Label } from "@/components/ui/label";
 import { useAudioClassifier } from "@/hooks/useAudioClassifier";
 import { useAudioPick } from "@/hooks/useAudioPick";
@@ -162,34 +162,11 @@ function AudioClassificationPage() {
           empty="Pick a clip, then press Classify — the ranked tags appear here."
         >
           {result && result.length > 0 && (
-            <ul className="space-y-2">
-              {result.map((p) => (
-                <ScoreRow key={p.label} label={p.label} score={p.score} />
-              ))}
-            </ul>
+            // `quiet`: this page reports the ranking without the near-tie note.
+            <ScoreList scores={result} format="percent" quiet />
           )}
         </OutputPanel>
       }
     />
-  );
-}
-
-function ScoreRow({ label, score }: ClassLabel) {
-  const pct = Math.round(score * 100);
-  return (
-    <li className="space-y-1">
-      <div className="flex items-baseline justify-between gap-3 text-sm">
-        <span className="truncate">{label}</span>
-        <span className="shrink-0 font-mono text-xs text-muted-foreground">
-          {pct}%
-        </span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${Math.max(2, pct)}%` }}
-        />
-      </div>
-    </li>
   );
 }

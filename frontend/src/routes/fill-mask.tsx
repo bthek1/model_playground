@@ -31,7 +31,7 @@ import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
-import { ScoreList } from "@/components/text/ScoreList";
+import { ScoreList } from "@/components/model/ScoreList";
 import { SpanOverlay } from "@/components/text/SpanOverlay";
 import { Button } from "@/components/ui/button";
 import { useFillMask } from "@/hooks/useFillMask";
