@@ -828,6 +828,16 @@ checks that read identically on every page: no load on arrival, LOAD fires `load
 slot 2, four slots with `output-empty`, GENERATE shut until `ready`, a load error in LOAD
 and a run error in OUTPUT with the model still loaded. The suite is tested against a
 deliberately broken page (`taskPage.test.tsx`), so it is known to fail when it should.
+
+**[`src/__tests__/conventions.test.ts`](../../frontend/src/__tests__/conventions.test.ts)
+keeps the shared wiring from drifting back.** It reads the source and fails, naming the
+file, when a route that calls `useModelSelection` skips `useTaskSlots` or its test skips
+`describeTaskPageContract`. It also fails when a route hand-writes the error split, calls
+`useCacheRefresh`, or builds a spinner trigger instead of a `RunButton`, and when a hook
+hand-writes the catalogue lookup. A copy of an old pattern renders fine and passes its own
+tests, so a render cannot catch it. Only a check on how the file is written can. Each
+assertion was verified against the pre-#58 source, and the widened spinner check found
+three triggers the migration had missed.
 [`token-classification.test.tsx`](../../frontend/src/__tests__/routes/token-classification.test.tsx)
 is the reference.
 
@@ -912,7 +922,8 @@ negative differ" is unassertable.
 - [ ] A parameter beside the input re-runs on the next GENERATE, never on the keystroke
 - [ ] OUTPUT has an empty state, a running state, and an error state
 - [ ] Errors land in the slot that produced them
-- [ ] SELECT/LOAD wired through `useTaskSlots`; GENERATE is a `RunButton` (§4c)
+- [ ] SELECT/LOAD wired through `useTaskSlots`; GENERATE is a `RunButton` (§4c) —
+      `conventions.test.ts` fails the build otherwise
 - [ ] Unit tests for the hook's state machine; a route test that calls
       `describeTaskPageContract` and adds the input-specific half of §8's list
 - [ ] Task row added to its category and mapped in `REAL_ROUTES` — the sidebar lists

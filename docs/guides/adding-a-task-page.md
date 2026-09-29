@@ -807,6 +807,10 @@ mocked-hook state builders (`idleTask`, `readyTask`, `loadingTask`,
 page: nothing loads on arrival, LOAD fires from slot 2, four slots with
 `output-empty`, GENERATE shut until `ready`, and each error in its own slot. Call
 it inside your route's `describe`, then write the input-specific half yourself.
+Skipping it is not an option you can take quietly: `src/__tests__/conventions.test.ts`
+fails for any route that calls `useModelSelection` and whose test does not register the
+contract, and likewise for a route that wires LOAD by hand or builds its own spinner
+trigger instead of a `RunButton`.
 [`token-classification.test.tsx`](../../frontend/src/__tests__/routes/token-classification.test.tsx)
 is the model:
 

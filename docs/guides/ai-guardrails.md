@@ -149,3 +149,11 @@ the non-deprecated form).
   because that writes content on your behalf; **closing a finished one does not** — an issue
   whose work is on `develop` is closed straight away, with a comment saying what landed.
 - Add rules when you notice yourself approving the same prompt repeatedly, not in advance.
+- **The working tree is shared, so commit by path.** Several assistant sessions and you
+  may be working in the same `develop` checkout at once. One of them may have staged a
+  deletion, and another may commit files mid-task. A bare `git commit` takes the whole index,
+  including someone else's staged work, so an assistant commits with an explicit pathspec
+  (`git commit -- <paths>`, which leaves other staged changes alone). It also checks
+  `git status` and `git log -3` first, because HEAD may have moved underneath it. If a commit
+  sweeps in foreign changes, `git reset --soft HEAD~1` and recommitting by path undoes it
+  without disturbing their staging. It happened during #58.

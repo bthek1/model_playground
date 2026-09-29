@@ -103,6 +103,9 @@ frontend/
 │   │   ├── models.ts      Registry API (list/get models, record runs)
 │   │   └── queryKeys.ts   Centralised TanStack Query key constants
 │   ├── components/        Shared / reusable UI components
+│   │   ├── model/         The task-page shell: ModelPage, ModelPicker, ModelStatus,
+│   │   │                    InputPanel, OutputPanel, RunButton, ScoreList
+│   │   ├── viz/           Model-visualization primitives (schematic, heatmap, PanZoom, readout)
 │   │   └── ui/            shadcn/ui copy-paste components (Button, Input, Form, Card…)
 │   ├── webgpu/            Raw-WebGPU runtime (no ML framework — see below)
 │   │   ├── capabilities.ts  detectWebGPU() — adapter/features/limits probe
@@ -142,6 +145,9 @@ frontend/
 │   │   └── behaviourCloning.ts, demos.ts     /robotics' cloning entry and its demonstrator
 │   ├── model/             Shared across modalities: backend probe, size guardrail,
 │   │                        worker lifecycle, aggregate progress, weight cache
+│   │   ├── useModelWorker.ts   The two state machines every task hook wraps
+│   │   ├── useTaskSlots.ts     Task hook → ModelPicker/ModelStatus props + the error split
+│   │   └── catalogue.ts        CatalogueEntry (every entry type extends it) + useCatalogueEntry
 │   ├── telemetry/         The system panel's samplers, ring buffer and 1 Hz loop
 │   │                        (load and capacity only — see telemetry-panel.md)
 │   ├── hooks/             Custom hooks encapsulating business logic
@@ -163,7 +169,11 @@ frontend/
 │   │   ├── ui.ts          UI flags (sidebar, system panel, theme)
 │   │   └── auth.ts        Client-side auth flags
 │   ├── test/
-│   │   └── setup.ts       Vitest setup (imports @testing-library/jest-dom)
+│   │   ├── setup.ts       Vitest setup (imports @testing-library/jest-dom)
+│   │   └── taskPage.tsx   Route-test harness: hook-state builders + the §8 contract suite
+│   ├── __tests__/
+│   │   ├── routes/        One test per route, each registering the §8 contract
+│   │   └── conventions.test.ts  Fails if a route or hook drifts back to hand-wiring
 │   ├── types/
 │   │   └── auth.ts        TypeScript types matching API contracts
 │   └── main.tsx           App entry point (QueryClient, RouterProvider)
