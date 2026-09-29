@@ -50,6 +50,7 @@ import { Route as HomeRouteImport } from './routes/home'
 import { Route as GraphClassificationRouteImport } from './routes/graph-classification'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as FillMaskRouteImport } from './routes/fill-mask'
+import { Route as DiscreteMathsRouteImport } from './routes/discrete-maths'
 import { Route as DepthRouteImport } from './routes/depth'
 import { Route as BackgroundRemovalRouteImport } from './routes/background-removal'
 import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
@@ -264,6 +265,11 @@ const FillMaskRoute = FillMaskRouteImport.update({
   path: '/fill-mask',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DiscreteMathsRoute = DiscreteMathsRouteImport.update({
+  id: '/discrete-maths',
+  path: '/discrete-maths',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DepthRoute = DepthRouteImport.update({
   id: '/depth',
   path: '/depth',
@@ -307,6 +313,7 @@ export interface FileRoutesByFullPath {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/discrete-maths': typeof DiscreteMathsRoute
   '/fill-mask': typeof FillMaskRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
@@ -357,6 +364,7 @@ export interface FileRoutesByTo {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/discrete-maths': typeof DiscreteMathsRoute
   '/fill-mask': typeof FillMaskRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
@@ -408,6 +416,7 @@ export interface FileRoutesById {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/discrete-maths': typeof DiscreteMathsRoute
   '/fill-mask': typeof FillMaskRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
@@ -460,6 +469,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/discrete-maths'
     | '/fill-mask'
     | '/graph'
     | '/graph-classification'
@@ -510,6 +520,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/discrete-maths'
     | '/fill-mask'
     | '/graph'
     | '/graph-classification'
@@ -560,6 +571,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/discrete-maths'
     | '/fill-mask'
     | '/graph'
     | '/graph-classification'
@@ -611,6 +623,7 @@ export interface RootRouteChildren {
   AudioToAudioRoute: typeof AudioToAudioRoute
   BackgroundRemovalRoute: typeof BackgroundRemovalRoute
   DepthRoute: typeof DepthRoute
+  DiscreteMathsRoute: typeof DiscreteMathsRoute
   FillMaskRoute: typeof FillMaskRoute
   GraphRoute: typeof GraphRoute
   GraphClassificationRoute: typeof GraphClassificationRoute
@@ -944,6 +957,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FillMaskRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/discrete-maths': {
+      id: '/discrete-maths'
+      path: '/discrete-maths'
+      fullPath: '/discrete-maths'
+      preLoaderRoute: typeof DiscreteMathsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/depth': {
       id: '/depth'
       path: '/depth'
@@ -1003,6 +1023,7 @@ const rootRouteChildren: RootRouteChildren = {
   AudioToAudioRoute: AudioToAudioRoute,
   BackgroundRemovalRoute: BackgroundRemovalRoute,
   DepthRoute: DepthRoute,
+  DiscreteMathsRoute: DiscreteMathsRoute,
   FillMaskRoute: FillMaskRoute,
   GraphRoute: GraphRoute,
   GraphClassificationRoute: GraphClassificationRoute,

@@ -55,8 +55,8 @@ describe("taskCategories", () => {
     expect(vad.to).toBe("/vad");
 
     // Unmapped tasks still fall through to the generic placeholder route.
-    const discreteMaths = all.find((t) => t.slug === "discrete-maths")!;
-    expect(discreteMaths.to).toBe("/tasks/discrete-maths");
+    const tableQa = all.find((t) => t.slug === "table-question-answering")!;
+    expect(tableQa.to).toBe("/tasks/table-question-answering");
   });
 
   it("leaves the three heavy-only tasks on the placeholder", () => {
@@ -86,6 +86,14 @@ describe("taskCategories", () => {
     expect(training.to).toBe("/training");
     expect(tensor.label).toBe("Tensor Arithmetic");
     expect(tensor.to).toBe("/tensor");
+  });
+
+  // #56: Theory's last row. Every Theory row now has a page, so none of them
+  // is left on the placeholder.
+  it("maps Discrete Maths to its route, leaving no Theory row on the placeholder", () => {
+    const theory = taskCategories.find((c) => c.label === "Theory")!;
+    expect(theory.tasks.find((t) => t.slug === "discrete-maths")!.to).toBe("/discrete-maths");
+    for (const t of theory.tasks) expect(t.to.startsWith("/tasks/")).toBe(false);
   });
 
   it("maps the implemented Computer Vision tasks to their real routes", () => {
@@ -159,6 +167,7 @@ describe("categoryForPath", () => {
     );
     expect(categoryForPath("/tensor")).toBe("Theory");
     expect(categoryForPath("/training")).toBe("Theory");
+    expect(categoryForPath("/discrete-maths")).toBe("Theory");
     expect(categoryForPath("/audio-classification")).toBe("Audio");
     expect(categoryForPath("/asr")).toBe("Audio");
     expect(categoryForPath("/image-classification")).toBe("Computer Vision");

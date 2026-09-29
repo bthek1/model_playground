@@ -1476,6 +1476,38 @@ Each of those is a decision rather than an omission. See
   the ratio at three horizons and asserts it grows. When a number looks wrong, check whether the
   copy explaining it is what is wrong.
 
+**In-browser discrete maths (`src/theory/` — `/discrete-maths`) — Theory's last row (#56), and one topic rather than a syllabus:** `(Aᵏ)[s][v]` counts the
+walks of length k from s to v, the fact the three Graph ML pages stand on. A k-layer GCN
+multiplies by `Âᵏ`, so node s hears only from the nodes where row s of that power is nonzero.
+The page steps a BFS one layer per press and shows that row beside it. See
+[`docs/standards/model-page-pattern.md`](../docs/standards/model-page-pattern.md) §7.
+
+- **The claim is a theorem, and it is tested as one.** Row s of `(A + I)ᵏ` is nonzero
+  *exactly* on the BFS ball of radius k. Without the self-loop, on a bipartite graph, it is
+  nonzero exactly at the distances with k's parity, so at odd k the source cannot hear
+  itself. That is why GCN adds `I` (`/graph`'s kernel adds it rather than storing it).
+  `theory/walks.test.ts` proves both over every catalogue graph, every source and every k
+  the page can show. The page's ✓/✗ is **computed** from the two halves, never narrated, so
+  a bug in either one surfaces on screen.
+- **Every reference is independent of the thing it checks.** BFS is checked against
+  Floyd–Warshall, and walk counts against brute-force enumeration of walks. The
+  `bipartite` flag is checked against "no closed walk of odd length", not against a BFS
+  2-colouring. Petersen is pinned to its spectrum (`trace(Aᵏ) = 3ᵏ + 5 + 4(−2)ᵏ`), and the
+  karate club to networkx: 78 edges, the full degree sequence, 45 triangles, diameter 5.
+  **Zachary's data came from networkx's own matrix, not from memory.** The matrix's
+  *weights* are asymmetric (22–33 is nonzero in one direction only); networkx adds an edge
+  wherever either direction is nonzero, and so does `theory/graphs.ts`.
+- **Three bands, no worker, and still a trigger.** Nothing to load (explained in
+  `no-load-band`), microseconds of arithmetic, and a stubbed `Worker` in the route test.
+  But **Step** is a real trigger: the frontier growing layer by layer is the lesson. So
+  choosing a graph or a source runs nothing and *clears* the result, and the A / A + I
+  switch sits in OUTPUT because it re-reads the k on screen.
+- **Small graphs are SVG**, not the canvas `/graph` needs for 2708 animated dots. Each node
+  is an element carrying `data-dist`/`data-walks`, so a spec names a node's distance
+  instead of guessing at pixels. `just fe-e2e-discrete` asserts published answers: Petersen
+  reaches all 10 nodes in 2 steps, and on C₈ one step of `A` leaves node 0 with 0 walks
+  back to itself.
+
 **In-browser reinforcement learning (`src/rl/` — `/rl`) — the first page whose subject is a loop the user watches:**
 
 The sixth modality, and the first page whose subject is **a loop the user watches**: the
@@ -1640,6 +1672,7 @@ Key commands:
 | `just fe-e2e-superres` | Run the @slow super-resolution spec: Swin2SR vs a bicubic baseline, by PSNR |
 | `just fe-e2e-vision-one <route>` | One @slow vision route at a time |
 | `just fe-e2e-link` | @slow link prediction, pinned by an AUC **band** — leakage pushes it up, so a floor would pass with the bug |
+| `just fe-e2e-discrete` | /discrete-maths: BFS and walk counts against published answers (seconds, not @slow) |
 | `just fe-e2e-rl` | /rl: a real training run, pinned by a named arrow and 11-of-11 agreement with value iteration (seconds, not @slow) |
 | `just fe-e2e-rl-phase0` | Re-measure RL Phase 0: CPU vs GPU steps/s and the per-step posting cost (logged, not asserted) |
 | `just fe-e2e-robotics` | @slow /robotics: a real OWLv2 + Depth Anything load, pinned by geometry — the nearer car ranked nearer (needs a `shader-f16` GPU) |

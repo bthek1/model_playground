@@ -479,6 +479,7 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Reinforcement Learning (`/rl`) | **(environment, algorithm)** — FrozenLake with Q-learning, CartPole with REINFORCE or Actor-Critic; invalid pairs disabled **with the reason on the row** — then that pair's hyperparameters and the seed, **all choices** | **absent** — no download, and Phase 0 of #51 measured that the page raises no GPU question either, so `DeviceStatus` would be wrong too | Train / Stop, **Run both** (two runs, one seed, in sequence) for CartPole, plus the two controls that steer a run **in progress** without restarting it: the simulation speed and (Q-learning only) a live ε | the Q-table as arrows over the grid with agreement against value iteration — or the cart and pole, the raw return curve beside the other algorithm's at the same seed, and the **spread** across seeds |
 | Robotics (`/robotics`) | **a pair from two catalogues** — `/zero-shot-object-detection`'s detector and `/depth`'s model, composed as one entry | both downloads, **two workers**, one aggregate bar from `combineProgress` against the pair's measured sum | phrases, an image or camera frame, a threshold that only re-derives | boxes over the frame, the depth map, the **nearest** match — and "grounding, not control" in the description |
 | Robotics — behaviour cloning | a **zero-byte entry beside a 357 MB pair** in the same picker (`/vad`'s energy baseline, the other way round), plus the demonstration mix, count, obstacle, width and seed | answered at once — nothing to download, and the band still renders so both entries keep one rhythm | the demonstrations, **drawn live** as the set changes (generation is pure and cheap), and Train / Stop | the rollout over the demonstrations, the action field, a reached / collided / stalled verdict — and **the two mixes side by side** at one seed |
+| Discrete Maths (`/discrete-maths`) | a small **graph** — six, chosen in contrasting pairs (C₈ against C₇, the path against Petersen, plus Zachary's karate club) | **absent** — exact integer arithmetic on ≤ 34 nodes, no download, no worker, no GPU, said where the band would have been | the source node, and **Step** / Run to end / Reset — the one control that advances anything | the BFS ball drawn with each node's distance, and row *s* of (A + I)ᵏ or Aᵏ beside it, with a computed ✓/✗ against the ball; the A / A + I switch **re-reads** the same k |
 | `/tasks/$slug` placeholder | — | — | — | "not available yet" |
 
 Where LOAD is fast and free (a shader compile), it may auto-run — pass `autoLoad`. The
@@ -598,6 +599,17 @@ a re-run, so they live in RUN and say which kind they are. What they must never 
 one — dragging ε and watching it retrain is the five-samples-five-inferences failure with a
 slider in front of it.
 
+**The third three-band page has nothing to measure, and still has a trigger.**
+`/discrete-maths` (#56) is a breadth-first search and a matrix power on at most 34 nodes —
+microseconds, on the main thread. The LOAD band is absent for the forecasting page's reason
+and explained in `no-load-band`. Unlike the forecasting page, though, it does not re-derive
+everything live. **Step** advances the search one layer per press, because watching the
+frontier grow is the lesson, and a slider for k would hide the layers it jumps over. So the
+usual rules hold even with nothing to spend: choosing a graph or a source runs nothing and
+*clears* the result (a stale ball drawn over a new source is the page's most plausible bug),
+and the one control that re-derives without a press — the A / A + I switch — lives in OUTPUT,
+because it re-reads the k already on screen rather than choosing a new one.
+
 **A page with no worker owes an assertion that it still has none.** "No worker" is a
 design decision that a later refactor can quietly undo, and nothing visible changes
 when it does. `/time-series-forecasting` counts `Worker` constructions in its E2E spec
@@ -688,7 +700,7 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 
 | Test id | Where | Means |
 |---|---|---|
-| `slot-1` … `slot-4` | `ModelPage` | The bands, in pipeline order. Four on every page that has a model — `ModelPage` cannot render fewer. The single exception is `/time-series-forecasting`, which composes its own shell with **three** and says where the fourth would have been; §7 carries the rule, and its route test asserts `slot-4` is absent. |
+| `slot-1` … `slot-4` | `ModelPage` | The bands, in pipeline order. Four on every page that has a model — `ModelPage` cannot render fewer. The exceptions are `/time-series-forecasting`, `/rl` and `/discrete-maths`, which compose their own shell with **three** and say where the fourth would have been; §7 carries the rule, and each route test asserts `slot-4` is absent. |
 | `model-size-note` | `ModelPicker` | The selected model's hint, params and per-backend download. |
 | `model-size-warning` | `ModelPicker` | The large-model guardrail. Absent below `LARGE_MODEL_BYTES`. |
 | `model-ready` | `ModelStatus` | The model loaded; carries the resolved backend and the load time. |
@@ -750,6 +762,7 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `grid-canvas` · `policy-grid` · `rl-scoreboard` · `success-rate` · `greedy-rate` · `policy-agreement` · `rl-history` · `return-chart` · `epsilon-lesson` | `/rl` | The Q-table drawn and **as text** (`policy-grid` carries `data-state` / `data-action` per cell, so a spec can name an arrow — the canvas cannot be read), the scores including agreement with value iteration's exact policy, and the ε = 0 claim the E2E spec checks. |
 | `algorithm-picker` · `pairing-reason-<algorithm>` · `run-both` · `run-both-note` · `rl-notes` | `/rl` | (Environment, algorithm) with each invalid pair's **reason on its row**; the head-to-head trigger and its fixed seed; the Decision Transformer / RL-for-LLMs notes, in OUTPUT's description until a result exists and below it after. |
 | `cartpole-canvas` · `pg-scoreboard` · `pg-mean-return` · `pg-weight` · `seed-spread` · `spread-reinforce` · `spread-actor-critic` · `pg-history` · `normalise-note` | `/rl` (CartPole) | The cart and pole; the mean return and the **weight on ∇log π** (\|G\| or \|A\|, where the variance went); the per-algorithm spread across seeds — the claim is a spread, never a per-seed winner. |
+| `no-load-band` · `graph-facts` · `step-count` · `graph-diagram` · `node-<v>` · `bfs-stats` · `stat-ball` · `stat-frontier` · `stat-walks` · `stat-ecc` · `bfs-done` · `walk-matrix` · `walk-support` · `verdict` | `/discrete-maths` | The drawing **as data**: each `node-<v>` carries `data-reached`, `data-dist` and `data-walks`, so a spec can name a node's distance and walk count, which the picture shows only as shading. `walk-support` lists the row's nonzero nodes (`data-count`), and `verdict` carries `data-match`: the support compared with the BFS ball, **computed**, never narrated. |
 | `demo-preview` · `demo-summary` · `cloning-result` · `cloning-verdict` · `cloning-pair` · `verdict-both` · `verdict-one` · `cloning-fix` | `/robotics` (behaviour cloning) | The demonstrations drawn live; the rollout, action field and a `data-outcome` of `reached` / `collided` / `stalled`; **both mixes side by side** at one seed; and the named fix (action chunking, diffusion policies) that the page does not demonstrate. |
 
 The testids are unchanged by the horizontal arrangement — `slot-N` is bound to the

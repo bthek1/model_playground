@@ -487,6 +487,11 @@ fe-e2e-forecast:
 fe-e2e-rl:
     cd frontend && npx playwright test --project=chromium --workers=1 rl.spec.ts
 
+# Runs /discrete-maths' spec alone: BFS and walk counts against published answers
+# (the Petersen graph's diameter, an even cycle's parity), no worker, no request (seconds)
+fe-e2e-discrete:
+    cd frontend && npx playwright test --project=chromium --workers=1 discrete-maths.spec.ts
+
 # Re-measure RL's Phase 0: steps per second on the CPU against the GPU matmul,
 # and the cost of posting render state per step against 60 Hz. Logged, not
 # asserted — it is the table `src/rl/limits.ts` records. @slow because it is a

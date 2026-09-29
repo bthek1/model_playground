@@ -153,6 +153,7 @@ Three assertion shapes here are worth copying:
 
 ```bash
 just fe-e2e-rl        # /rl: FrozenLake against value iteration, CartPole head to head (seconds)
+just fe-e2e-discrete  # /discrete-maths: Petersen's diameter, C₈'s parity, no worker (seconds)
 just fe-e2e-cloning   # /robotics behaviour cloning: the failure beside its control (seconds)
 just fe-e2e-rl-phase0 # @slow benchmark: CPU vs GPU steps/s, per-step posting cost (logged)
 just fe-e2e-robotics  # @slow: a real OWLv2 + Depth Anything load (needs a shader-f16 GPU)

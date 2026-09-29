@@ -48,6 +48,10 @@ const REAL_ROUTES: Record<string, string> = {
   "gpu-playground": "/playground",
   "linear-model-training": "/training",
   "tensor-arithmetic": "/tensor",
+  // Theory's last row, and one topic rather than a syllabus: walks in a graph,
+  // and why a k-layer GNN reads exactly the nodes within k hops. No checkpoint
+  // and no dataset — the same shape as /tensor.
+  "discrete-maths": "/discrete-maths",
   "automatic-speech-recognition": "/asr",
   "audio-classification": "/audio-classification",
   "text-to-speech": "/text-to-speech",

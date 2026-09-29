@@ -60,13 +60,14 @@ describe("TaskPlaceholderPage", () => {
     expect(screen.getByText("not-a-real-task")).toBeInTheDocument();
   });
 
-  it("renders a placeholder for a Theory task without a real route", () => {
-    // Discrete Maths has no implemented route, so it falls through to here even
-    // though its Theory siblings (Linear Model Training, Tensor Arithmetic) do.
-    mockParams = { slug: "discrete-maths" };
+  it("renders a placeholder for a task without a real route", () => {
+    // Table Question Answering does not port (nlp.md), so it falls through to
+    // here even though every other row in its category has a page. (This used
+    // to be Discrete Maths, until #56 gave Theory's last row a route.)
+    mockParams = { slug: "table-question-answering" };
     renderPage();
-    expect(screen.getAllByText("Discrete Maths").length).toBeGreaterThan(0);
-    expect(screen.getByText(/^Theory ·/)).toBeInTheDocument();
+    expect(screen.getAllByText("Table Question Answering").length).toBeGreaterThan(0);
+    expect(screen.getByText(/^Natural Language Processing ·/)).toBeInTheDocument();
     expect(
       screen.getByText(/not available yet/i),
     ).toBeInTheDocument();
