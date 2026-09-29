@@ -27,10 +27,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAudioClassifier } from "@/hooks/useAudioClassifier";
 import { useAudioPick } from "@/hooks/useAudioPick";
-import {
-  useCacheRefresh,
-  useModelSelection,
-} from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 
 export const Route = createFileRoute("/audio-classification")({
   component: AudioClassificationPage,
@@ -47,23 +45,14 @@ function AudioClassificationPage() {
       CLASSIFIER_MODELS[0],
   });
   const model = session.model.id;
+  const task = useAudioClassifier(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
     isZeroShot,
     result,
     classify,
-    load,
-    retry,
-    cancel,
-  } = useAudioClassifier(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [labelsText, setLabelsText] = useState(
     DEFAULT_ZERO_SHOT_LABELS.join("\n"),
@@ -90,8 +79,11 @@ function AudioClassificationPage() {
 
   // Capture failures (mic denied, undecodable file) belong in RUN; the model's
   // own errors split between LOAD and OUTPUT by status (§4).
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: CLASSIFIER_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   return (
     <ModelPage
@@ -99,28 +91,10 @@ function AudioClassificationPage() {
       title="Audio Classification"
       description="Tag a sound entirely in your browser. Fixed-label models return the most likely tags; CLAP scores the clip against your own text prompts. The model runs on your GPU (WebGPU) or CPU (WASM) in a Web Worker — nothing is uploaded."
       select={
-        <ModelPicker
-          models={CLASSIFIER_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

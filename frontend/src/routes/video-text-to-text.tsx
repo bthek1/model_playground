@@ -50,7 +50,8 @@ import { useVideoPick } from "@/hooks/useVideoPick";
 import { useVlm } from "@/hooks/useVlm";
 import { supportsShaderF16 } from "@/model/backend";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_FRAMES,
   MAX_FRAMES,
@@ -101,23 +102,15 @@ function VideoTextToTextPage() {
       VIDEO_VLM_MODELS[0],
   });
   const model = session.model.id;
+  const task = useVlm(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
     backend,
     running,
     result,
     partial,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useVlm(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   // All three are held state. Typing, dragging the slider and flipping the
   // order change what the next GENERATE sends and cost nothing until then.
@@ -150,8 +143,12 @@ function VideoTextToTextPage() {
   const f16Missing = backendProbe === "wasm" && hasF16 === false;
 
   const busy = running || sampling !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: VIDEO_VLM_MODELS,
+    busy,
+    backend: backendProbe,
+  });
+  const { runError } = slots;
   const canRun = ready && !busy && picked != null && question.trim().length > 0;
 
   const ask = useCallback(async () => {
@@ -205,15 +202,7 @@ function VideoTextToTextPage() {
       }
       select={
         <div className="space-y-3">
-          <ModelPicker
-            models={VIDEO_VLM_MODELS}
-            value={model}
-            onChange={session.setModel}
-            disabled={loading || busy}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-            backend={backendProbe}
-          />
+          <ModelPicker {...slots.picker} />
           {f16Missing && (
             <p
               data-testid="f16-note"
@@ -229,18 +218,7 @@ function VideoTextToTextPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

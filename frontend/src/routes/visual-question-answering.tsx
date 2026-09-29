@@ -51,7 +51,8 @@ import { useImagePick } from "@/hooks/useImagePick";
 import { useVlm } from "@/hooks/useVlm";
 import { supportsShaderF16 } from "@/model/backend";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import { composePrompt } from "@/multimodal/prompt";
 import {
   DEFAULT_VLM_MODEL,
@@ -93,23 +94,15 @@ function VisualQuestionAnsweringPage() {
       VLM_MODELS.find((m) => m.id === DEFAULT_VLM_MODEL) ?? VLM_MODELS[0],
   });
   const model = session.model.id;
+  const task = useVlm(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
     backend,
     running,
     result,
     partial,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useVlm(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   // Both held state. Editing the question and flipping the toggle are INPUT:
   // neither costs anything until GENERATE.
@@ -141,8 +134,12 @@ function VisualQuestionAnsweringPage() {
   const f16Missing = backendProbe === "wasm" && hasF16 === false;
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: VLM_MODELS,
+    busy,
+    backend: backendProbe,
+  });
+  const { runError } = slots;
   const canRun = ready && !busy && picked != null && composed.prompt.length > 0;
 
   const ask = useCallback(
@@ -188,15 +185,7 @@ function VisualQuestionAnsweringPage() {
       }
       select={
         <div className="space-y-3">
-          <ModelPicker
-            models={VLM_MODELS}
-            value={model}
-            onChange={session.setModel}
-            disabled={loading || busy}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-            backend={backendProbe}
-          />
+          <ModelPicker {...slots.picker} />
           {f16Missing && (
             <p
               data-testid="f16-note"
@@ -218,18 +207,7 @@ function VisualQuestionAnsweringPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

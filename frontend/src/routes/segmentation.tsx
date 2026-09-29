@@ -42,7 +42,8 @@ import {
   visibleMasks,
   type SegmentMask,
 } from "@/hooks/useSegmenter";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import { colorForLabel, drawMasks, drawPixels } from "@/vision/draw";
 import { downscale } from "@/vision/image";
 import { IMAGE_SAMPLES } from "@/vision/samples";
@@ -66,22 +67,13 @@ function SegmentationPage() {
       SEGMENTER_MODELS[0],
   });
   const model = session.model.id;
+  const task = useSegmenter(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useSegmenter(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [source, setSource] = useState<RawImage | null>(null);
   const [live, setLive] = useState(false);
@@ -117,8 +109,11 @@ useImagePick();
   });
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: SEGMENTER_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   const toggle = (label: string) =>
     setHidden((prev) => {
@@ -149,14 +144,7 @@ useImagePick();
       labels={{ output: "Masks" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={SEGMENTER_MODELS}
-            value={model}
-            onChange={session.setModel}
-            disabled={loading || busy}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           {/* A segmenter can only ever say what its training set contained, so
               the label space is stated before the run rather than discovered
               from a confusing result. */}
@@ -170,18 +158,7 @@ useImagePick();
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

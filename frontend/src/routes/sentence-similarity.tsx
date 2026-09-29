@@ -40,7 +40,8 @@ import { VectorStrip } from "@/components/text/VectorStrip";
 import { Button } from "@/components/ui/button";
 import { useTextEmbed } from "@/hooks/useTextEmbed";
 import { cosine } from "@/model/similarity";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_EMBED_MODEL,
   EMBED_MODELS,
@@ -79,30 +80,24 @@ function SentenceSimilarityPage() {
   });
   const model = session.model;
 
+  const task = useTextEmbed(model.id);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     run,
     cached,
-  } = useTextEmbed(model.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [a, setA] = useState(PAIR_SAMPLES[0].a);
   const [b, setB] = useState(PAIR_SAMPLES[0].b);
   const [ran, setRan] = useState<RunRecord | null>(null);
   const [keep, setKeep] = useState<number | null>(null);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: EMBED_MODELS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   const steps = useMemo(
     () => truncationSteps(ran?.dim ?? model.dim),
@@ -181,14 +176,7 @@ function SentenceSimilarityPage() {
       labels={{ run: "Two sentences", output: "Similarity" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={EMBED_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={loading || running}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           <p className="text-xs leading-snug text-muted-foreground">
             <span data-testid="embed-dim">{model.dim}</span> dimensions, pooled
             by{" "}
@@ -202,18 +190,7 @@ function SentenceSimilarityPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={running}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

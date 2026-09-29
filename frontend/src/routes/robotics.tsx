@@ -50,7 +50,8 @@ import { useGrounding, type GroundingResult } from "@/hooks/useGrounding";
 import { useImagePick } from "@/hooks/useImagePick";
 import { aboveThreshold } from "@/hooks/useObjectDetector";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   colorForLabel,
   drawBoxes,
@@ -131,22 +132,14 @@ function GroundingPage({
   entry: GroundingEntry;
 }) {
 
+  const task = useGrounding(entry.id);
   const {
     pair,
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
     backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useGrounding(entry.id);
-  useCacheRefresh(session, ready);
+  } = task;
   // Gates the pair in SELECT, before anything downloads, when either half
   // declares a backend this machine cannot give it (`GroundingEntry.backends`).
   const probe = useBackendProbe();
@@ -205,8 +198,12 @@ function GroundingPage({
   });
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: ROBOTICS_ENTRIES,
+    busy,
+    backend: probe,
+  });
+  const { runError } = slots;
   const metric = pair.depth.metric ?? false;
   const wordy = sentenceLike(queries);
 
@@ -258,12 +255,10 @@ function GroundingPage({
       select={
         <div className="space-y-2">
           <ModelPicker
-            models={ROBOTICS_ENTRIES}
-            value={entry.id}
-            onChange={session.setModel}
-            disabled={loading || busy}
+            {...slots.picker}
             cached={cachedIds}
-            backend={probe}
+            // A pair is not one Hub repo, so there is no one cache entry to drop.
+            onEvict={undefined}
           />
           <p className="text-xs leading-snug text-muted-foreground">
             Two models: <strong>{pair.detector.label}</strong> finds what you
@@ -276,18 +271,7 @@ function GroundingPage({
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={pairCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} cached={pairCached} />
       }
       run={
         <InputPanel

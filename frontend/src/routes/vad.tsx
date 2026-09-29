@@ -42,7 +42,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAudioPick } from "@/hooks/useAudioPick";
 import { useVad } from "@/hooks/useVad";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 
 export const Route = createFileRoute("/vad")({
   component: VadPage,
@@ -62,22 +63,13 @@ function VadPage() {
       VAD_MODELS.find((m) => m.id === DEFAULT_VAD_MODEL) ?? VAD_MODELS[0],
   });
   const model = session.model.id;
+  const task = useVad(model);
   const {
-    status,
-    loading,
     ready,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useVad(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const input = useAudioPick();
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
@@ -89,8 +81,11 @@ function VadPage() {
   const busy = running || input.preparing !== null;
   // Each error in the slot that produced it (§4): capture failures in RUN, a
   // load failure in LOAD, a detection failure in OUTPUT.
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: VAD_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   // The threshold drag lands here, not in the worker. `toSegments` over a few
   // hundred floats is microseconds; re-running the model would be ~100 ms and
@@ -133,28 +128,10 @@ function VadPage() {
       }
       labels={{ output: "Speech timeline" }}
       select={
-        <ModelPicker
-          models={VAD_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={busy || loading}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

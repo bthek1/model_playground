@@ -35,7 +35,8 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { useTranslate } from "@/hooks/useTranslate";
 import { formatBytes, sizeEstimate } from "@/model/size";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_TRANSLATION_MODEL,
   NLLB_BYTES,
@@ -66,28 +67,22 @@ function TranslationPage() {
   });
   const model = session.model;
 
+  const task = useTranslate(model.id);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useTranslate(model.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const samples = TRANSLATION_SAMPLES[model.source] ?? [];
   const [text, setText] = useState(() => samples[0]?.text ?? "");
   const [ran, setRan] = useState<RunRecord | null>(null);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: TRANSLATION_MODELS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   const size = useMemo(
     () => sizeEstimate(model.params, model.bytes),
@@ -130,14 +125,7 @@ function TranslationPage() {
       labels={{ select: "Direction", run: "Source text", output: "Translation" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={TRANSLATION_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={loading || running}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           {/* The most likely misreading of this page, stated where the control
               that invites it lives. */}
           <p
@@ -171,18 +159,7 @@ function TranslationPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={running}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

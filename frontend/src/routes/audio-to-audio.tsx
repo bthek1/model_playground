@@ -33,10 +33,8 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { useAudioPick } from "@/hooks/useAudioPick";
 import { useEnhance } from "@/hooks/useEnhance";
-import {
-  useCacheRefresh,
-  useModelSelection,
-} from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 
 export const Route = createFileRoute("/audio-to-audio")({
   component: AudioToAudioPage,
@@ -58,22 +56,13 @@ function AudioToAudioPage() {
       ENHANCE_MODELS[0],
   });
   const model = session.model.id;
+  const task = useEnhance(model);
   const {
-    status,
-    loading,
     ready,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useEnhance(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   // 48 kHz, not the 16 kHz default — DeepFilterNet3 is natively 48 kHz and
   // resampling down would discard the band it exists to repair.
@@ -89,8 +78,11 @@ function AudioToAudioPage() {
   const busy = running || input.preparing !== null;
   // Each error in the slot that produced it (§4): capture failures in RUN, a
   // load failure in LOAD, an enhancement failure in OUTPUT.
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: ENHANCE_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   function playClip(samples: Float32Array) {
     void playbackRef.current?.close();
@@ -132,28 +124,10 @@ function AudioToAudioPage() {
         </>
       }
       select={
-        <ModelPicker
-          models={ENHANCE_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={busy || loading}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

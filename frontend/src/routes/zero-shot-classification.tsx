@@ -50,7 +50,8 @@ import {
 import { useZeroShotText } from "@/hooks/useZeroShotText";
 import type { ClassLabel } from "@/model/types";
 import { formatBytes, isHeavyDownload, sizeEstimate } from "@/model/size";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_ZERO_SHOT_TEXT,
   ZERO_SHOT_SAMPLES,
@@ -99,21 +100,12 @@ function ZeroShotClassificationPage() {
   });
   const model = session.model;
 
+  const task = useZeroShotText(model.id);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useZeroShotText(model.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [text, setText] = useState(ZERO_SHOT_SAMPLES[0].text);
   const [labelText, setLabelText] = useState(
@@ -140,8 +132,11 @@ function ZeroShotClassificationPage() {
   const size = sizeEstimate(model.params, model.bytes);
   const heavy = isHeavyDownload(model.bytes);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: ZERO_SHOT_TEXT_MODELS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   const canRun =
     ready && !running && text.trim().length > 0 && labels.length > 0 && !problem;
@@ -188,14 +183,7 @@ function ZeroShotClassificationPage() {
       labels={{ run: "Text & labels", output: "Scores" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={ZERO_SHOT_TEXT_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={loading || running}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           <p className="text-xs leading-snug text-muted-foreground">
             Fine-tuned on <span className="font-medium">{model.domain}</span> —
             these are entailment models, so “what are the classes?” is a
@@ -212,18 +200,7 @@ function ZeroShotClassificationPage() {
               webgpu={formatBytes(model.bytes.webgpu ?? 0)}
             />
           )}
-          <ModelStatus
-            status={status}
-            backend={backend}
-            loadProgress={loadProgress}
-            loadedInMs={loadedInMs}
-            cached={session.isCached}
-            error={loadError}
-            onLoad={session.onLoad(load)}
-            onCancel={session.onCancel(cancel)}
-            onRetry={retry}
-            disabled={running}
-          />
+          <ModelStatus {...slots.status} />
         </div>
       }
       run={

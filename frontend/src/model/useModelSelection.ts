@@ -34,10 +34,6 @@ export interface UseModelSelectionResult<T> {
   cached: Set<string>;
   /** Shorthand for `cached.has(model.id)`. */
   isCached: boolean;
-  /** Wrap the LOAD slot's action. Kept so the call sites stay uniform. */
-  onLoad: (load: () => void) => () => void;
-  /** Wrap the LOAD slot's cancel. */
-  onCancel: (cancel: () => void) => () => void;
   /** Call when the model reaches `ready`, to refresh the cached set. */
   refreshCache: () => void;
   /** Delete this model's cached weights. */
@@ -88,9 +84,6 @@ export function useModelSelection<T extends { id: string }>({
     [model.id, routeKey, selectModel],
   );
 
-  const onLoad = useCallback((load: () => void) => load, []);
-  const onCancel = useCallback((cancel: () => void) => cancel, []);
-
   const refreshCache = useCallback(() => setProbe((n) => n + 1), []);
 
   const evict = useCallback(async (modelId: string) => {
@@ -104,12 +97,10 @@ export function useModelSelection<T extends { id: string }>({
       setModel,
       cached,
       isCached: cached.has(model.id),
-      onLoad,
-      onCancel,
       refreshCache,
       evict,
     }),
-    [model, setModel, cached, onLoad, onCancel, refreshCache, evict],
+    [model, setModel, cached, refreshCache, evict],
   );
 }
 

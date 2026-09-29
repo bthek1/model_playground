@@ -41,7 +41,8 @@ import { useDepth, depthDims, type DepthResult } from "@/hooks/useDepth";
 import { useImagePick } from "@/hooks/useImagePick";
 import { usePointCloudView } from "@/hooks/usePointCloudView";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import { useWebGPU } from "@/hooks/useWebGPU";
 import {
   DEFAULT_DEPTH_MODEL,
@@ -76,22 +77,13 @@ function ImageTo3DPage() {
   // because the 3-D half needs a device that the inference half does not.
   const gpu = useWebGPU();
 
+  const task = useDepth(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useDepth(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [source, setSource] = useState<RawImage | null>(null);
   const [live, setLive] = useState(false);
@@ -151,8 +143,12 @@ useImagePick();
   const view = usePointCloudView(cloud, result);
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: DEPTH_MODELS,
+    busy,
+    backend: probe,
+  });
+  const { runError } = slots;
 
   const estimateCurrent = () => {
     if (!picked) return;
@@ -176,30 +172,11 @@ useImagePick();
       }
       labels={{ output: "Point cloud" }}
       select={
-        <ModelPicker
-          models={DEPTH_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          backend={probe}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
         <div className="space-y-3">
-          <ModelStatus
-            status={status}
-            backend={backend}
-            loadProgress={loadProgress}
-            loadedInMs={loadedInMs}
-            cached={session.isCached}
-            error={loadError}
-            onLoad={session.onLoad(load)}
-            onCancel={session.onCancel(cancel)}
-            onRetry={retry}
-            disabled={busy}
-          />
+          <ModelStatus {...slots.status} />
           {/* The GPU half of LOAD. Stated here even when it is fine, so the
               answer to "will the 3-D view work on this machine" is visible
               before a 50 MB download rather than after it. */}

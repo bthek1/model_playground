@@ -23,7 +23,8 @@ import { Button } from "@/components/ui/button";
 import { useImageClassifier } from "@/hooks/useImageClassifier";
 import { useImagePick } from "@/hooks/useImagePick";
 import type { ClassLabel } from "@/model/types";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_IMAGE_CLASSIFIER,
   IMAGE_CLASSIFIER_MODELS,
@@ -43,22 +44,13 @@ function ImageClassificationPage() {
       IMAGE_CLASSIFIER_MODELS[0],
   });
   const model = session.model.id;
+  const task = useImageClassifier(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useImageClassifier(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   // Picking, the object-URL lifecycle and decode errors are the same on every
   // vision route, so they live in `useImagePick` rather than here.
@@ -68,8 +60,11 @@ useImagePick();
   const busy = running || preparing !== null;
   // Each error in the slot that produced it (§4): a failed decode belongs to
   // RUN, a failed download to LOAD, a failed inference to OUTPUT.
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: IMAGE_CLASSIFIER_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   const classifyCurrent = () => {
     if (!picked) return;
@@ -95,28 +90,10 @@ useImagePick();
       }
       labels={{ output: "Predictions" }}
       select={
-        <ModelPicker
-          models={IMAGE_CLASSIFIER_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

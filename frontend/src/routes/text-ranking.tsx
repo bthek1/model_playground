@@ -37,7 +37,8 @@ import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { useRanking } from "@/hooks/useRanking";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_RANKING_PAIR,
   RANKING_CORPUS,
@@ -86,27 +87,18 @@ function TextRankingPage() {
   });
   const pairEntry = session.model;
 
+  const task = useRanking(pairEntry.id);
   const {
     pair,
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     embedding,
     embedded,
     embedCorpus,
     denseSearch,
     rerank,
     clear,
-  } = useRanking(pairEntry.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [corpusText, setCorpusText] = useState(RANKING_CORPUS.join("\n"));
   const [query, setQuery] = useState(RANKING_SAMPLES[0].query);
@@ -114,8 +106,11 @@ function TextRankingPage() {
   const [rrfK, setRrfK] = useState(DEFAULT_RRF_K);
   const [ran, setRan] = useState<RunRecord | null>(null);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: RANKING_PAIRS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   const corpus = useMemo(() => parseCorpus(corpusText), [corpusText]);
 
@@ -198,15 +193,14 @@ function TextRankingPage() {
       select={
         <div className="space-y-2">
           <ModelPicker
-            models={RANKING_PAIRS}
-            value={pairEntry.id}
+            {...slots.picker}
             onChange={(next) => {
               session.setModel(next);
               // Vectors from another checkpoint are not comparable with these.
               clear();
             }}
-            disabled={loading || running}
-            cached={session.cached}
+            // A pair is not one Hub repo, so there is no one cache entry to drop.
+            onEvict={undefined}
           />
           <p className="text-xs leading-snug text-muted-foreground">
             Two models: <strong>{pair.embedder.label}</strong> embeds the corpus
@@ -218,18 +212,7 @@ function TextRankingPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={running}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

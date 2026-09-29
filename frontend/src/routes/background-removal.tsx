@@ -34,7 +34,8 @@ import { useBackgroundRemoval } from "@/hooks/useBackgroundRemoval";
 import { useCameraFrames } from "@/hooks/useCameraFrames";
 import { useImagePick } from "@/hooks/useImagePick";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_MATTE_MODEL,
   MATTE_MODELS,
@@ -76,23 +77,14 @@ function BackgroundRemovalPage() {
   });
   const model = session.model.id;
   const probe = useBackendProbe();
+  const task = useBackgroundRemoval(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
     meta,
-  } = useBackgroundRemoval(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [live, setLive] = useState(false);
   const [background, setBackground] = useState(BACKGROUNDS[0]);
@@ -121,8 +113,12 @@ useImagePick();
   });
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: MATTE_MODELS,
+    busy,
+    backend: probe,
+  });
+  const { runError } = slots;
 
   const cutCurrent = () => {
     if (!picked) return;
@@ -145,33 +141,14 @@ useImagePick();
       labels={{ output: "Cut-out" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={MATTE_MODELS}
-            value={model}
-            onChange={session.setModel}
-            disabled={loading || busy}
-            backend={probe}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           {/* Beside the choice, not in a footnote: the licence is a property of
               the model, and this is the moment the user is picking one. */}
           <LicenceNote licence={meta.licence} />
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

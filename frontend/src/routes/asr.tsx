@@ -24,10 +24,8 @@ import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { useLiveAsr } from "@/hooks/useLiveAsr";
-import {
-  useCacheRefresh,
-  useModelSelection,
-} from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 
 export const Route = createFileRoute("/asr")({
   component: AsrPage,
@@ -42,11 +40,9 @@ function AsrPage() {
     fallback: ASR_MODELS.find((m) => m.id === DEFAULT_ASR_MODEL) ?? ASR_MODELS[0],
   });
   const model = session.model.id;
+  const task = useLiveAsr(model);
   const {
-    status,
     ready,
-    loading,
-    backend,
     recording,
     running,
     stream,
@@ -54,7 +50,6 @@ function AsrPage() {
     sampleRate,
     text,
     chunks,
-    error,
     skipSilence,
     setSkipSilence,
     silent,
@@ -62,13 +57,7 @@ function AsrPage() {
     start,
     stop,
     transcribeClip,
-    loadProgress,
-    loadedInMs,
-    load,
-    retry,
-    cancel,
-  } = useLiveAsr(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [decoding, setDecoding] = useState(false);
   const [loadingSample, setLoadingSample] = useState<string | null>(null);
@@ -88,8 +77,11 @@ function AsrPage() {
   }, [clip]);
 
   const busy = recording || decoding || loadingSample != null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: ASR_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -154,28 +146,10 @@ function AsrPage() {
         </>
       }
       select={
-        <ModelPicker
-          models={ASR_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={busy || loading}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

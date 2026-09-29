@@ -26,7 +26,8 @@ import { Button } from "@/components/ui/button";
 import { useTextClassifier } from "@/hooks/useTextClassifier";
 import type { ClassLabel } from "@/model/types";
 import { formatBytes } from "@/model/size";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   CLASSIFIER_SAMPLES,
   DEFAULT_TEXT_CLASSIFIER,
@@ -62,7 +63,6 @@ function TextClassificationPage() {
   const model = session.model;
 
   const primary = useTextClassifier(model.id);
-  useCacheRefresh(session, primary.ready);
 
   // The head-to-head's second model. `null` until the user opts in, because it
   // is a second download — see `compareCost` below, which is on screen before
@@ -80,8 +80,11 @@ function TextClassificationPage() {
 
   // Each error in the slot that produced it (§4): a failed download belongs to
   // LOAD, a failed inference to OUTPUT.
-  const loadError = primary.status === "error" ? primary.error : null;
-  const runError = primary.status === "error" ? null : primary.error;
+  const slots = useTaskSlots(session, primary, {
+    models: TEXT_CLASSIFIER_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   const compareLive = compareModel != null && compare.ready;
 
@@ -114,14 +117,7 @@ function TextClassificationPage() {
       labels={{ run: "Text", output: "Scores" }}
       select={
         <div className="space-y-4">
-          <ModelPicker
-            models={TEXT_CLASSIFIER_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={primary.loading || busy}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
 
           <div className="space-y-1.5 border-t pt-3">
             <p className="text-xs font-medium">Compare against</p>
@@ -167,18 +163,7 @@ function TextClassificationPage() {
       }
       load={
         <div className="space-y-4">
-          <ModelStatus
-            status={primary.status}
-            backend={primary.backend}
-            loadProgress={primary.loadProgress}
-            loadedInMs={primary.loadedInMs}
-            cached={session.isCached}
-            error={loadError}
-            onLoad={session.onLoad(primary.load)}
-            onCancel={session.onCancel(primary.cancel)}
-            onRetry={primary.retry}
-            disabled={busy}
-          />
+          <ModelStatus {...slots.status} />
 
           {compareModel && (
             <div

@@ -42,7 +42,8 @@ import { useCameraFrames } from "@/hooks/useCameraFrames";
 import { useDepth, depthDims, type DepthResult } from "@/hooks/useDepth";
 import { useImagePick } from "@/hooks/useImagePick";
 import { sizeEstimate } from "@/model/size";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_DEPTH_MODEL,
   DEPTH_MODELS,
@@ -103,22 +104,13 @@ function DepthPage() {
       DEPTH_MODELS.find((m) => m.id === DEFAULT_DEPTH_MODEL) ?? DEPTH_MODELS[0],
   });
   const model = session.model.id;
+  const task = useDepth(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useDepth(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   // The frame the current result belongs to, kept so OUTPUT can show the source
   // beside its depth map. On a live feed that is the last frame the model saw,
@@ -157,8 +149,11 @@ useImagePick();
   });
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: DEPTH_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   const size = useMemo(
     () => sizeEstimate(session.model.params, session.model.bytes),
@@ -185,32 +180,14 @@ useImagePick();
       }
       labels={{ output: "Depth map" }}
       select={
-        <ModelPicker
-          models={DEPTH_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
         <div className="space-y-3">
           {isHeavy(session.model) && !session.isCached && (
             <HeavyModelNotice sizeLabel={size.label} />
           )}
-          <ModelStatus
-            status={status}
-            backend={backend}
-            loadProgress={loadProgress}
-            loadedInMs={loadedInMs}
-            cached={session.isCached}
-            error={loadError}
-            onLoad={session.onLoad(load)}
-            onCancel={session.onCancel(cancel)}
-            onRetry={retry}
-            disabled={busy}
-          />
+          <ModelStatus {...slots.status} />
         </div>
       }
       run={

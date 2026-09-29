@@ -39,7 +39,8 @@ import { Button } from "@/components/ui/button";
 import { useImagePick } from "@/hooks/useImagePick";
 import { useSuperRes, RunCancelled } from "@/hooks/useSuperRes";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import type { PixelBuffer, Pixels } from "@/vision/draw";
 import { downscale } from "@/vision/image";
 import { upscale } from "@/vision/resample";
@@ -67,26 +68,18 @@ function SuperResolutionPage() {
   });
   const model = session.model.id;
   const probe = useBackendProbe();
+  const task = useSuperRes(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
     backend,
     running,
     result,
     source,
     tiles,
-    error,
-    load,
-    retry,
-    cancel,
     run,
     stop,
     meta,
-  } = useSuperRes(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
     useImagePick();
@@ -115,8 +108,12 @@ function SuperResolutionPage() {
   }, [picked]);
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: SUPER_RES_MODELS,
+    busy,
+    backend: probe,
+  });
+  const { runError } = slots;
 
   // Quoted **before** the run starts. Discovering that an upscale is four
   // minutes long halfway through it is the difference between a slow page and a
@@ -156,29 +153,10 @@ function SuperResolutionPage() {
       }
       labels={{ output: "Comparison" }}
       select={
-        <ModelPicker
-          models={SUPER_RES_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          backend={probe}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

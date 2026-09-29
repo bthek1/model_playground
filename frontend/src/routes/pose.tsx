@@ -41,7 +41,8 @@ import { useCameraFrames } from "@/hooks/useCameraFrames";
 import { useImagePick } from "@/hooks/useImagePick";
 import { usePose } from "@/hooks/usePose";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import { drawPixels, OVERLAY_COLORS } from "@/vision/draw";
 import { downscale } from "@/vision/image";
 import { scalePeople } from "@/vision/pose/pose";
@@ -74,22 +75,14 @@ function PosePage() {
       POSE_MODELS.find((m) => m.id === DEFAULT_POSE_MODEL) ?? POSE_MODELS[0],
   });
   const model = session.model.id;
+  const task = usePose(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
     backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = usePose(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [threshold, setThreshold] = useState(DEFAULT_PERSON_THRESHOLD);
   const [maxPeople, setMaxPeople] = useState(DEFAULT_MAX_PEOPLE);
@@ -128,8 +121,12 @@ useImagePick();
   });
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: POSE_MODELS,
+    busy,
+    backend: backendProbe,
+  });
+  const { runError } = slots;
 
   // The skeletons come back in the inference frame's pixels while the canvas
   // shows the original. Scaling the boxes but not the joints would shrink each
@@ -166,29 +163,10 @@ useImagePick();
         ) : undefined
       }
       select={
-        <ModelPicker
-          models={POSE_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-          backend={backendProbe}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
