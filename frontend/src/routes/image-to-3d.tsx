@@ -23,9 +23,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Boxes, Loader2, RotateCcw } from "lucide-react";
+import { Boxes, RotateCcw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -197,20 +198,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load a depth model to build a point cloud. You can pick a picture first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !picked || live}
-              onClick={estimateCurrent}
+              onRun={estimateCurrent}
+              icon={Boxes}
+              running={running}
+              runningLabel="Estimating…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Estimating…
-                </>
-              ) : (
-                <>
-                  <Boxes className="size-4" /> Build point cloud
-                </>
-              )}
-            </Button>
+              Build point cloud
+            </RunButton>
           }
         >
           <ImageSourcePanel

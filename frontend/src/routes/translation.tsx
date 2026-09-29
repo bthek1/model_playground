@@ -25,8 +25,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Languages, Loader2 } from "lucide-react";
+import { Languages } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -166,20 +167,15 @@ function TranslationPage() {
           ready={ready}
           disabledHint="Load a direction to translate. You can write the text first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || running || text.trim().length === 0}
-              onClick={() => void translate().catch(() => {})}
+              onRun={() => translate()}
+              icon={Languages}
+              running={running}
+              runningLabel="Translating…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Translating…
-                </>
-              ) : (
-                <>
-                  <Languages className="size-4" /> Translate
-                </>
-              )}
-            </Button>
+              Translate
+            </RunButton>
           }
         >
           <div className="flex min-h-0 flex-1 flex-col gap-3">

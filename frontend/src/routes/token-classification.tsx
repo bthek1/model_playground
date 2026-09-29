@@ -22,8 +22,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, Copy, Loader2, ScanText } from "lucide-react";
+import { Check, Copy, ScanText } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -160,20 +161,15 @@ function TokenClassificationPage() {
           ready={ready}
           disabledHint="Load a model to tag entities. You can paste the text first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || running || text.trim().length === 0}
-              onClick={() => void tag().catch(() => {})}
+              onRun={() => tag()}
+              icon={ScanText}
+              running={running}
+              runningLabel="Tagging…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Tagging…
-                </>
-              ) : (
-                <>
-                  <ScanText className="size-4" /> Find entities
-                </>
-              )}
-            </Button>
+              Find entities
+            </RunButton>
           }
         >
           <div className="flex min-h-0 flex-1 flex-col gap-3">

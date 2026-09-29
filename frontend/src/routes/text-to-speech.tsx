@@ -8,11 +8,12 @@
 // every stage — Select, Load, Input, Output — is a shared component.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { AudioLines, Download, Loader2, Play, Volume2 } from "lucide-react";
+import { AudioLines, Download, Play, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { play, toWavBlob } from "@/audio/io";
 import { DEFAULT_TTS_MODEL, TTS_MODELS } from "@/audio/tts";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -113,17 +114,15 @@ function TextToSpeechPage() {
           ready={ready}
           disabledHint="Load a model to synthesise speech."
           controls={
-            <Button disabled={!ready || running || !text.trim()} onClick={onSpeak}>
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Synthesising…
-                </>
-              ) : (
-                <>
-                  <Volume2 className="size-4" /> Speak
-                </>
-              )}
-            </Button>
+            <RunButton
+              disabled={!ready || running || !text.trim()}
+              onRun={onSpeak}
+              icon={Volume2}
+              running={running}
+              runningLabel="Synthesising…"
+            >
+              Speak
+            </RunButton>
           }
         >
           {meta.voices && (

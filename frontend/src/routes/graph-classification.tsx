@@ -19,6 +19,7 @@ import { Boxes, Loader2, Play, Square } from "lucide-react";
 import { lazy, Suspense, useMemo, useState } from "react";
 
 import { ProteinGallery } from "@/components/graph/ProteinGallery";
+import { RunButton } from "@/components/model/RunButton";
 import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -128,17 +129,15 @@ function GraphClassificationPage() {
           <ErrorNote message={session.trainError} />
 
           <div className="sticky bottom-0 mt-2 flex flex-wrap items-center gap-2 border-t bg-background/80 pt-3 backdrop-blur">
-            <Button onClick={start} disabled={!ready || training}>
-              {training ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Training…
-                </>
-              ) : (
-                <>
-                  <Play className="size-4" /> Train
-                </>
-              )}
-            </Button>
+            <RunButton
+              onRun={start}
+              disabled={!ready || training}
+              icon={Play}
+              running={training}
+              runningLabel="Training…"
+            >
+              Train
+            </RunButton>
             <Button variant="outline" onClick={session.stop} disabled={!training}>
               <Square className="size-4" /> Stop
             </Button>

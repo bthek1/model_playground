@@ -30,9 +30,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Bot, Crosshair, Loader2 } from "lucide-react";
+import { Bot, Crosshair } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { CloningPage } from "@/components/robotics/CloningPage";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -42,7 +43,6 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
 import { OverlayCanvas } from "@/components/vision/OverlayCanvas";
 import { PhraseList } from "@/components/vision/PhraseList";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useCameraFrames } from "@/hooks/useCameraFrames";
 import { depthDims, type DepthResult } from "@/hooks/useDepth";
@@ -279,22 +279,15 @@ function GroundingPage({
           error={ioError}
           disabledHint="Load the pair to locate your phrases. You can write them and pick a picture first."
           controls={
-            <Button
-              disabled={
-                !ready || busy || !picked || live || queries.length === 0
-              }
-              onClick={locateCurrent}
+            <RunButton
+              disabled={ !ready || busy || !picked || live || queries.length === 0 }
+              onRun={locateCurrent}
+              icon={Crosshair}
+              running={running}
+              runningLabel="Locating…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Locating…
-                </>
-              ) : (
-                <>
-                  <Crosshair className="size-4" /> Locate
-                </>
-              )}
-            </Button>
+              Locate
+            </RunButton>
           }
         >
           <ImageSourcePanel

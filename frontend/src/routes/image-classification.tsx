@@ -11,15 +11,15 @@
 // Four-slot page pattern — docs/standards/model-page-pattern.md.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { ImageIcon, Loader2 } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
-import { Button } from "@/components/ui/button";
 import { useImageClassifier } from "@/hooks/useImageClassifier";
 import { useImagePick } from "@/hooks/useImagePick";
 import type { ClassLabel } from "@/model/types";
@@ -101,20 +101,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load a model to classify an image. You can pick a picture first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !picked}
-              onClick={classifyCurrent}
+              onRun={classifyCurrent}
+              icon={ImageIcon}
+              running={running}
+              runningLabel="Classifying…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Classifying…
-                </>
-              ) : (
-                <>
-                  <ImageIcon className="size-4" /> Classify
-                </>
-              )}
-            </Button>
+              Classify
+            </RunButton>
           }
         >
           <ImageSourcePanel

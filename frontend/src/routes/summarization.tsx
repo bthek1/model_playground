@@ -33,6 +33,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { FileText, Loader2, ShieldQuestion } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -252,20 +253,15 @@ function SummarizationPage() {
           disabledHint="Load a model to summarize. The lead-3 baseline already works — it needs no model."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || running || article.trim().length === 0}
-                onClick={() => void summarize().catch(() => {})}
+                onRun={() => summarize()}
+                icon={FileText}
+                running={running}
+                runningLabel="Summarizing…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Summarizing…
-                  </>
-                ) : (
-                  <>
-                    <FileText className="size-4" /> Summarize
-                  </>
-                )}
-              </Button>
+                Summarize
+              </RunButton>
               <span
                 data-testid="rerun-note"
                 className="text-xs text-muted-foreground"

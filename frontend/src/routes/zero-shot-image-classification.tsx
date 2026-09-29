@@ -21,9 +21,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Loader2, Tags } from "lucide-react";
+import { Tags } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -151,20 +152,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load a model to score your labels. You can write them and pick a picture first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !picked || live || labels.length === 0}
-              onClick={scoreCurrent}
+              onRun={scoreCurrent}
+              icon={Tags}
+              running={running}
+              runningLabel="Scoring…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Scoring…
-                </>
-              ) : (
-                <>
-                  <Tags className="size-4" /> Score labels
-                </>
-              )}
-            </Button>
+              Score labels
+            </RunButton>
           }
         >
           <ImageSourcePanel

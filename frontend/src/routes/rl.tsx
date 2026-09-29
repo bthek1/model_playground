@@ -29,9 +29,10 @@
 // "Run both" is the head-to-head: both policy gradients, one seed, in sequence.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Gamepad2, GitCompare, Loader2, Play, Square } from "lucide-react";
+import { Gamepad2, GitCompare, Play, Square } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelSlot } from "@/components/model/ModelPage";
 import { OutputPanel } from "@/components/model/OutputPanel";
@@ -321,17 +322,16 @@ function RlPage() {
               <ErrorNote message={rl.error} />
 
               <div className="sticky bottom-0 mt-2 flex flex-wrap items-center gap-2 border-t bg-background/80 pt-3 backdrop-blur">
-                <Button onClick={train} disabled={rl.training} data-testid="train-button">
-                  {rl.training ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" /> Training…
-                    </>
-                  ) : (
-                    <>
-                      <Play className="size-4" /> Train
-                    </>
-                  )}
-                </Button>
+                <RunButton
+                  onRun={train}
+                  disabled={rl.training}
+                  data-testid="train-button"
+                  icon={Play}
+                  running={rl.training}
+                  runningLabel="Training…"
+                >
+                  Train
+                </RunButton>
                 {env === "cartpole" && (
                   <Button variant="secondary" onClick={runBoth} disabled={rl.training} data-testid="run-both">
                     <GitCompare className="size-4" /> Run both

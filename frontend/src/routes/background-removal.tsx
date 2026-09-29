@@ -17,9 +17,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Loader2, Scissors, Scissors as Cut } from "lucide-react";
+import { Scissors, Scissors as Cut } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -156,20 +157,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load a model to remove a background. You can pick a picture first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !picked || live}
-              onClick={cutCurrent}
+              onRun={cutCurrent}
+              icon={Cut}
+              running={running}
+              runningLabel="Cutting out…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Cutting out…
-                </>
-              ) : (
-                <>
-                  <Cut className="size-4" /> Remove background
-                </>
-              )}
-            </Button>
+              Remove background
+            </RunButton>
           }
         >
           <ImageSourcePanel

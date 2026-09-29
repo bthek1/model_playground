@@ -23,8 +23,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Eraser, Loader2, SquareAsterisk, Wand2 } from "lucide-react";
+import { Eraser, SquareAsterisk, Wand2 } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -234,20 +235,15 @@ function FillMaskPage() {
           disabledHint="Load a model to fill the mask. You can write the sentence first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || running || blocked != null}
-                onClick={() => void fill().catch(() => {})}
+                onRun={() => fill()}
+                icon={Wand2}
+                running={running}
+                runningLabel="Filling…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Filling…
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="size-4" /> Fill the mask
-                  </>
-                )}
-              </Button>
+                Fill the mask
+              </RunButton>
               <Button
                 variant="outline"
                 disabled={!ready || running}

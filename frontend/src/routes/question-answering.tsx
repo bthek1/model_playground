@@ -26,8 +26,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { HelpCircle, Loader2, MessageCircleQuestion } from "lucide-react";
+import { HelpCircle, MessageCircleQuestion } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -157,20 +158,15 @@ function QuestionAnsweringPage() {
           ready={ready}
           disabledHint="Load a model to ask a question. You can write the passage and the question first."
           controls={
-            <Button
+            <RunButton
               disabled={!canAsk}
-              onClick={() => void ask().catch(() => {})}
+              onRun={() => ask()}
+              icon={HelpCircle}
+              running={running}
+              runningLabel="Reading…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Reading…
-                </>
-              ) : (
-                <>
-                  <HelpCircle className="size-4" /> Answer
-                </>
-              )}
-            </Button>
+              Answer
+            </RunButton>
           }
         >
           <div className="flex min-h-0 flex-1 flex-col gap-3">

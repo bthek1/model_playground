@@ -29,9 +29,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Loader2, ScanText } from "lucide-react";
+import { ScanText } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -40,7 +41,6 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
 import { OverlayCanvas } from "@/components/vision/OverlayCanvas";
 import { PhraseList } from "@/components/vision/PhraseList";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useCameraFrames } from "@/hooks/useCameraFrames";
 import { useImagePick } from "@/hooks/useImagePick";
@@ -186,22 +186,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load a model to detect your queries. You can write them and pick a picture first."
           controls={
-            <Button
-              disabled={
-                !ready || busy || !picked || live || queries.length === 0
-              }
-              onClick={detectCurrent}
+            <RunButton
+              disabled={ !ready || busy || !picked || live || queries.length === 0 }
+              onRun={detectCurrent}
+              icon={ScanText}
+              running={running}
+              runningLabel="Detecting…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Detecting…
-                </>
-              ) : (
-                <>
-                  <ScanText className="size-4" /> Detect
-                </>
-              )}
-            </Button>
+              Detect
+            </RunButton>
           }
         >
           <ImageSourcePanel

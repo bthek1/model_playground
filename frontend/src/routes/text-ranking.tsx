@@ -30,6 +30,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ListOrdered, Loader2, Search } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -235,21 +236,16 @@ function TextRankingPage() {
                   <>Embed the corpus ({corpus.length} passes)</>
                 )}
               </Button>
-              <Button
+              <RunButton
                 disabled={!ready || running || corpus.length === 0 || !query.trim()}
                 data-testid="search"
-                onClick={() => void runSearch().catch(() => {})}
+                onRun={() => runSearch()}
+                icon={Search}
+                running={running && !embedding}
+                runningLabel="Searching…"
               >
-                {running && !embedding ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Searching…
-                  </>
-                ) : (
-                  <>
-                    <Search className="size-4" /> Search
-                  </>
-                )}
-              </Button>
+                Search
+              </RunButton>
               <span
                 data-testid="cost-note"
                 className="basis-full text-xs text-muted-foreground"

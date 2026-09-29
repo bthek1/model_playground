@@ -25,9 +25,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Loader2, PersonStanding } from "lucide-react";
+import { PersonStanding } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -174,20 +175,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load both models to find poses. You can pick a picture first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !picked || live}
-              onClick={estimateCurrent}
+              onRun={estimateCurrent}
+              icon={PersonStanding}
+              running={running}
+              runningLabel="Estimating…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Estimating…
-                </>
-              ) : (
-                <>
-                  <PersonStanding className="size-4" /> Find poses
-                </>
-              )}
-            </Button>
+              Find poses
+            </RunButton>
           }
         >
           <ImageSourcePanel

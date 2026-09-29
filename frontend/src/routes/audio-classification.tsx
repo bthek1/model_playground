@@ -7,7 +7,7 @@
 // Four-slot page pattern — docs/standards/model-page-pattern.md.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Tags } from "lucide-react";
+import { Tags } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -18,12 +18,12 @@ import {
 import type { ClassLabel } from "@/audio/pipelineTypes";
 import { AUDIO_SAMPLES } from "@/audio/samples";
 import { AudioSourcePanel } from "@/components/audio/AudioSourcePanel";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAudioClassifier } from "@/hooks/useAudioClassifier";
 import { useAudioPick } from "@/hooks/useAudioPick";
@@ -102,20 +102,15 @@ function AudioClassificationPage() {
           error={input.error}
           disabledHint="Load a model to classify a sound. You can pick a clip first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !input.clip || (isZeroShot && labels.length === 0)}
-              onClick={classifyCurrent}
+              onRun={classifyCurrent}
+              icon={Tags}
+              running={running}
+              runningLabel="Classifying…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Classifying…
-                </>
-              ) : (
-                <>
-                  <Tags className="size-4" /> Classify
-                </>
-              )}
-            </Button>
+              Classify
+            </RunButton>
           }
         >
           <AudioSourcePanel

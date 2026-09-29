@@ -19,7 +19,7 @@
 // See docs/guides/adding-a-model.md §9 (a bare ONNX graph).
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Activity, Loader2 } from "lucide-react";
+import { Activity } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { AUDIO_SAMPLES } from "@/audio/samples";
@@ -33,12 +33,12 @@ import { formatTimestamp } from "@/audio/waveform";
 import { AudioSourcePanel } from "@/components/audio/AudioSourcePanel";
 import { VadTimeline } from "@/components/audio/VadTimeline";
 import { Waveform } from "@/components/audio/Waveform";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAudioPick } from "@/hooks/useAudioPick";
 import { useVad } from "@/hooks/useVad";
@@ -139,20 +139,15 @@ function VadPage() {
           error={input.error}
           disabledHint="Load a detector to analyse a clip. You can pick one first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !input.clip}
-              onClick={detectCurrent}
+              onRun={detectCurrent}
+              icon={Activity}
+              running={running}
+              runningLabel="Detecting…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Detecting…
-                </>
-              ) : (
-                <>
-                  <Activity className="size-4" /> Detect speech
-                </>
-              )}
-            </Button>
+              Detect speech
+            </RunButton>
           }
         >
           <AudioSourcePanel

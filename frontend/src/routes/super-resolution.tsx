@@ -24,9 +24,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Loader2, Maximize2, Square, Wand2 } from "lucide-react";
+import { Maximize2, Square, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -165,20 +166,15 @@ function SuperResolutionPage() {
           disabledHint="Load a model to upscale. You can pick a picture first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || busy || !input}
-                onClick={upscaleCurrent}
+                onRun={upscaleCurrent}
+                icon={Wand2}
+                running={running}
+                runningLabel="Upscaling…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Upscaling…
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="size-4" /> Upscale 2x
-                  </>
-                )}
-              </Button>
+                Upscale 2x
+              </RunButton>
               {running && (
                 <Button variant="outline" onClick={stop} data-testid="stop-run">
                   <Square className="size-4" /> Stop

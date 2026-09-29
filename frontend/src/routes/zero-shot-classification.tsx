@@ -31,8 +31,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, Loader2, Tags, X } from "lucide-react";
+import { AlertTriangle, Tags, X } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -209,20 +210,15 @@ function ZeroShotClassificationPage() {
           disabledHint="Load a model to classify. Write the text and the labels first — none of it costs anything."
           controls={
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <Button
+              <RunButton
                 disabled={!canRun}
-                onClick={() => void classify().catch(() => {})}
+                onRun={() => classify()}
+                icon={Tags}
+                running={running}
+                runningLabel="Classifying…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Classifying…
-                  </>
-                ) : (
-                  <>
-                    <Tags className="size-4" /> Classify
-                  </>
-                )}
-              </Button>
+                Classify
+              </RunButton>
               {/* The cost, in the model's units, derived from the list above —
                   which is why editing labels is free and pressing this is not. */}
               <span

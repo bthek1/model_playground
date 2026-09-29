@@ -22,9 +22,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Loader2, ScanSearch } from "lucide-react";
+import { ScanSearch } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -32,7 +33,6 @@ import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
 import { OverlayCanvas } from "@/components/vision/OverlayCanvas";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useCameraFrames } from "@/hooks/useCameraFrames";
 import { useImagePick } from "@/hooks/useImagePick";
@@ -171,20 +171,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load a model to detect objects. You can pick a picture first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !picked || live}
-              onClick={detectCurrent}
+              onRun={detectCurrent}
+              icon={ScanSearch}
+              running={running}
+              runningLabel="Detecting…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Detecting…
-                </>
-              ) : (
-                <>
-                  <ScanSearch className="size-4" /> Detect
-                </>
-              )}
-            </Button>
+              Detect
+            </RunButton>
           }
         >
           <ImageSourcePanel

@@ -28,6 +28,7 @@ import type { RawImage } from "@huggingface/transformers";
 import { Fingerprint, Loader2, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -198,20 +199,15 @@ useImagePick();
           disabledHint="Load a model to embed anything. You can pick a picture first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || busy || !picked || live}
-                onClick={embedCurrent}
+                onRun={embedCurrent}
+                icon={Fingerprint}
+                running={running && !indexing}
+                runningLabel="Embedding…"
               >
-                {running && !indexing ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Embedding…
-                  </>
-                ) : (
-                  <>
-                    <Fingerprint className="size-4" /> Embed
-                  </>
-                )}
-              </Button>
+                Embed
+              </RunButton>
               <Button
                 variant="outline"
                 disabled={!ready || busy || !picked || live}

@@ -32,6 +32,7 @@ import { Loader2, MessagesSquare, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Markdown } from "@/components/Markdown";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -197,17 +198,16 @@ function ImageTextToTextPage() {
           error={ioError}
           disabledHint="Load a model to ask about a picture. You can pick one and write your question first."
           controls={
-            <Button disabled={!canRun} onClick={askCurrent} title="Ask the model">
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Generating…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="size-4" /> Generate
-                </>
-              )}
-            </Button>
+            <RunButton
+              disabled={!canRun}
+              onRun={askCurrent}
+              title="Ask the model"
+              icon={Sparkles}
+              running={running}
+              runningLabel="Generating…"
+            >
+              Generate
+            </RunButton>
           }
         >
           <ImageSourcePanel

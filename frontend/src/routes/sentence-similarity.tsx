@@ -29,8 +29,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { GitCompareArrows, Loader2 } from "lucide-react";
+import { GitCompareArrows } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -198,20 +199,15 @@ function SentenceSimilarityPage() {
           disabledHint="Load a model to compare. You can write both sentences first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || running || !a.trim() || !b.trim()}
-                onClick={() => void compare([yours]).catch(() => {})}
+                onRun={() => compare([yours])}
+                icon={GitCompareArrows}
+                running={running}
+                runningLabel="Comparing…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Comparing…
-                  </>
-                ) : (
-                  <>
-                    <GitCompareArrows className="size-4" /> Compare
-                  </>
-                )}
-              </Button>
+                Compare
+              </RunButton>
               <Button
                 variant="outline"
                 disabled={!ready || running}

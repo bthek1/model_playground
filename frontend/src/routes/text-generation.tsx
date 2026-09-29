@@ -37,8 +37,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Sparkles, Wand2 } from "lucide-react";
+import { Sparkles, Wand2 } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -247,20 +248,15 @@ function TextGenerationPage() {
           disabledHint="Load a model to generate. You can write the prompt and set the strategy first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || running || prompt.trim().length === 0}
-                onClick={() => void once().catch(() => {})}
+                onRun={() => once()}
+                icon={Wand2}
+                running={running}
+                runningLabel="Generating…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Generating…
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="size-4" /> Generate
-                  </>
-                )}
-              </Button>
+                Generate
+              </RunButton>
               <Button
                 variant="outline"
                 disabled={!ready || running || prompt.trim().length === 0}

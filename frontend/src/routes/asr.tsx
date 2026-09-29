@@ -17,6 +17,7 @@ import { type AudioSample } from "@/audio/samples";
 import { ASR_MODELS, DEFAULT_ASR_MODEL } from "@/audio/types";
 import { formatTimestamp } from "@/audio/waveform";
 import { AudioTake, SampleClips } from "@/components/audio/AsrTransport";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -193,20 +194,15 @@ function AsrPage() {
                 onChange={onFile}
               />
 
-              <Button
+              <RunButton
                 disabled={!ready || busy || running || !pending}
-                onClick={transcribeCurrent}
+                onRun={transcribeCurrent}
+                icon={AudioLines}
+                running={running && !recording}
+                runningLabel="Transcribing…"
               >
-                {running && !recording ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Transcribing…
-                  </>
-                ) : (
-                  <>
-                    <AudioLines className="size-4" /> Transcribe
-                  </>
-                )}
-              </Button>
+                Transcribe
+              </RunButton>
             </>
           }
         >

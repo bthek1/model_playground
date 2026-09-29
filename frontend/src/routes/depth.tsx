@@ -20,9 +20,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { FlaskConical, Layers3, Loader2, Mountain } from "lucide-react";
+import { FlaskConical, Layers3, Mountain } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -30,7 +31,6 @@ import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
 import { OverlayCanvas } from "@/components/vision/OverlayCanvas";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -196,20 +196,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load a model to estimate depth. You can pick a picture first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !picked || live}
-              onClick={estimateCurrent}
+              onRun={estimateCurrent}
+              icon={Layers3}
+              running={running}
+              runningLabel="Estimating…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Estimating…
-                </>
-              ) : (
-                <>
-                  <Layers3 className="size-4" /> Estimate depth
-                </>
-              )}
-            </Button>
+              Estimate depth
+            </RunButton>
           }
         >
           <ImageSourcePanel

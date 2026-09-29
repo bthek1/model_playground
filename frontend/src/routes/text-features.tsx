@@ -29,8 +29,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Ruler, Waypoints } from "lucide-react";
+import { Ruler, Waypoints } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -175,20 +176,15 @@ function TextFeaturesPage() {
           disabledHint="Load a model to embed text. You can write it first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || running || text.trim().length === 0}
-                onClick={() => void embed().catch(() => {})}
+                onRun={() => embed()}
+                icon={Ruler}
+                running={running}
+                runningLabel="Embedding…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Embedding…
-                  </>
-                ) : (
-                  <>
-                    <Ruler className="size-4" /> Embed
-                  </>
-                )}
-              </Button>
+                Embed
+              </RunButton>
               {cached > 0 && (
                 <span
                   data-testid="embed-cache"

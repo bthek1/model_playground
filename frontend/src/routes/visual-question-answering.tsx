@@ -40,6 +40,7 @@ import { HelpCircle, Loader2, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Markdown } from "@/components/Markdown";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -215,17 +216,16 @@ function VisualQuestionAnsweringPage() {
           error={ioError}
           disabledHint="Load a model to ask a question. You can pick a picture and write the question first."
           controls={
-            <Button disabled={!canRun} onClick={askCurrent} title="Ask the model">
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Generating…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="size-4" /> Generate
-                </>
-              )}
-            </Button>
+            <RunButton
+              disabled={!canRun}
+              onRun={askCurrent}
+              title="Ask the model"
+              icon={Sparkles}
+              running={running}
+              runningLabel="Generating…"
+            >
+              Generate
+            </RunButton>
           }
         >
           <ImageSourcePanel

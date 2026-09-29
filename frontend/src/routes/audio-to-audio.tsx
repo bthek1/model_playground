@@ -13,7 +13,7 @@
 // See docs/guides/adding-a-model.md §9 (a bare ONNX graph).
 
 import { createFileRoute } from "@tanstack/react-router";
-import { AudioWaveform, Download, Loader2, Play } from "lucide-react";
+import { AudioWaveform, Download, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -25,6 +25,7 @@ import { play, toWavBlob } from "@/audio/io";
 import { AUDIO_SAMPLES } from "@/audio/samples";
 import { AudioSourcePanel } from "@/components/audio/AudioSourcePanel";
 import { Waveform } from "@/components/audio/Waveform";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -135,20 +136,15 @@ function AudioToAudioPage() {
           error={input.error}
           disabledHint="Load the model to enhance a clip. You can pick one first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !input.clip}
-              onClick={enhanceCurrent}
+              onRun={enhanceCurrent}
+              icon={AudioWaveform}
+              running={running}
+              runningLabel="Enhancing…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Enhancing…
-                </>
-              ) : (
-                <>
-                  <AudioWaveform className="size-4" /> Enhance
-                </>
-              )}
-            </Button>
+              Enhance
+            </RunButton>
           }
         >
           <AudioSourcePanel
