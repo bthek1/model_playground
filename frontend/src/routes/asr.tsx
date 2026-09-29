@@ -248,7 +248,7 @@ function AsrPage() {
               nothing, and a take already in progress picks it up on its next
               tick. It never touches Transcribe — a clip you asked for is
               always transcribed. */}
-          <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
+          <div className="space-y-0.5">
             <label className="flex items-center gap-2 text-sm font-medium">
               <input
                 type="checkbox"
@@ -258,12 +258,11 @@ function AsrPage() {
               />
               Skip silence while listening
             </label>
+            {/* Kept to one line on purpose: this sits between the clips and
+                the transport, and model-page.spec.ts guards that gap. */}
             <p className="text-xs text-muted-foreground">
-              Each live update re-transcribes the last 30 s. With this on, an
-              update whose new audio holds no speech is skipped — a level check,
-              no extra model. Whisper tends to hear “you” in an empty room, and a
-              skipped update is about a second of inference saved. The final
-              pass when you stop is never skipped.
+              Live updates with no new speech skip the model (Whisper hears
+              “you” in an empty room). Stop&apos;s final pass always runs.
             </p>
           </div>
 
