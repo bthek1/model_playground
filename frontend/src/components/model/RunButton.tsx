@@ -25,8 +25,8 @@ export type RunButtonProps = Omit<
   ComponentProps<typeof Button>,
   "onClick" | "children"
 > & {
-  /** The verb's icon, shown while idle. */
-  icon: LucideIcon;
+  /** The verb's icon, shown while idle. Omit for a bare verb. */
+  icon?: LucideIcon;
   /** The verb — "Classify", "Generate". */
   children: ReactNode;
   /** A run is in flight: show the spinner and `runningLabel` instead. */
@@ -55,10 +55,12 @@ export function RunButton({
         <>
           <Loader2 className="size-4 animate-spin" /> {runningLabel}
         </>
-      ) : (
+      ) : Icon ? (
         <>
           <Icon className="size-4" /> {children}
         </>
+      ) : (
+        children
       )}
     </Button>
   );

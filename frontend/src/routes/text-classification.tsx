@@ -14,10 +14,11 @@
 
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Type } from "lucide-react";
+import { Type } from "lucide-react";
 
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { RunButton } from "@/components/model/RunButton";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
@@ -194,21 +195,15 @@ function TextClassificationPage() {
           ready={primary.ready}
           disabledHint="Load a model to classify. You can write the sentence first."
           controls={
-            <Button
+            <RunButton
               disabled={!primary.ready || busy || text.trim().length === 0}
-              onClick={() => void classify().catch(() => {})}
+              onRun={() => classify()}
+              icon={Type}
+              running={running}
+              runningLabel="Classifying…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Classifying…
-                </>
-              ) : (
-                <>
-                  <Type className="size-4" />
-                  {compareLive ? "Classify with both" : "Classify"}
-                </>
-              )}
-            </Button>
+              {compareLive ? "Classify with both" : "Classify"}
+            </RunButton>
           }
         >
           <div className="flex min-h-0 flex-1 flex-col gap-3">

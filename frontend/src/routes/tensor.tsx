@@ -6,12 +6,13 @@
 // numeric grid. See docs/standards/model-visualization.md.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Sigma } from "lucide-react";
+import { Sigma } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { RunButton } from "@/components/model/RunButton";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Arrow, ParamChip, Stage } from "@/components/viz/schematic";
@@ -150,15 +151,14 @@ function TensorArithmeticPage() {
           error={shownError}
           disabledHint="This page needs a WebGPU device to compute."
           controls={
-            <Button onClick={onRun} disabled={running}>
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Computing…
-                </>
-              ) : (
-                "Compute"
-              )}
-            </Button>
+            <RunButton
+              onRun={onRun}
+              disabled={running}
+              running={running}
+              runningLabel="Computing…"
+            >
+              Compute
+            </RunButton>
           }
         >
           {/* Dataflow schematic: A ─(op)─▶ [B | scalar] ─(=)─▶ Result.

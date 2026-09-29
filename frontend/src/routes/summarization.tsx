@@ -31,7 +31,7 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { FileText, Loader2, ShieldQuestion } from "lucide-react";
+import { FileText, ShieldQuestion } from "lucide-react";
 
 import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
@@ -427,7 +427,7 @@ function SummarizationPage() {
                 <div className="space-y-2 border-t pt-4" data-testid="faithfulness">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-medium">Faithfulness</p>
-                    <Button
+                    <RunButton
                       size="sm"
                       variant="outline"
                       data-testid="check-faithfulness"
@@ -436,20 +436,14 @@ function SummarizationPage() {
                         faithful.running ||
                         summarySentences === 0
                       }
-                      onClick={() => void check().catch(() => {})}
+                      onRun={() => check()}
+                      icon={ShieldQuestion}
+                      running={faithful.running}
+                      runningLabel="Checking…"
                     >
-                      {faithful.running ? (
-                        <>
-                          <Loader2 className="size-4 animate-spin" /> Checking…
-                        </>
-                      ) : (
-                        <>
-                          <ShieldQuestion className="size-4" /> Check{" "}
-                          {summarySentences} sentence
-                          {summarySentences === 1 ? "" : "s"}
-                        </>
-                      )}
-                    </Button>
+                      Check {summarySentences} sentence
+                      {summarySentences === 1 ? "" : "s"}
+                    </RunButton>
                   </div>
                   <p className="text-xs leading-snug text-muted-foreground">
                     One forward pass per summary sentence, scored against the

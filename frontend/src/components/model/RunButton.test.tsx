@@ -22,6 +22,17 @@ describe("RunButton", () => {
     expect(screen.getByRole("button").querySelector(".animate-spin")).not.toBeNull();
   });
 
+  it("renders a bare verb when given no icon", () => {
+    render(
+      <RunButton running={false} runningLabel="Computing…" onRun={vi.fn()}>
+        Compute
+      </RunButton>,
+    );
+    const button = screen.getByRole("button");
+    expect(button.textContent).toBe("Compute");
+    expect(button.querySelector("svg")).toBeNull();
+  });
+
   it("runs on click, and not while disabled", () => {
     const onRun = vi.fn();
     const { rerender } = render(
