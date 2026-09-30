@@ -15,7 +15,9 @@ import { defineConfig, devices } from "@playwright/test";
 // preview` — in CI, the exact `VITE_BACKEND=off` artifact the deploy job
 // uploads (#57), so the shipped bytes are the tested bytes. `@api` specs
 // exercise the UI that build removes (sign-in, the registry catalogue) and are
-// excluded from it; they still run in the default, dev-server pass.
+// excluded from it; they still run in the default, dev-server pass. So are
+// `@devserver` specs, which import app modules by source URL (`/src/...`) —
+// only the dev server serves those; a built bundle has no /src/.
 // `E2E_DIST` points at a build directory other than `dist`.
 const useStatic = !!process.env.E2E_STATIC;
 // Its own port, and never a reused server: a dev server left running on 5180
@@ -40,6 +42,7 @@ const excludedTags = [
   useBackend ? null : "@backend",
   useSlow ? null : "@slow",
   useStatic ? "@api" : null,
+  useStatic ? "@devserver" : null,
 ].filter(Boolean);
 
 export default defineConfig({

@@ -1811,7 +1811,8 @@ CloudFront at https://playground.benedictthekkel.com, infrastructure in Pulumi
   stray `/api` call does not fail — it is rewritten to `index.html` and answered
   200 — so a new `/api` caller must be gated, and `staticBuild.test.tsx` /
   `static-build.spec.ts` are what catch one that is not. Specs that need the
-  backend UI are tagged `@api`; `E2E_STATIC=1` excludes them and serves the built
+  backend UI are tagged `@api`, and specs that `load("/src/...")` are tagged
+  `@devserver` (a build has no `/src/`); `E2E_STATIC=1` excludes both and serves the built
   bundle with `vite preview` on port 5181 (never a reused server).
 - **The deployed bytes are the tested bytes.** CI's `frontend` job builds the
   `VITE_BACKEND=off` artifact; `e2e-static` tests it; `deploy` uploads it and never

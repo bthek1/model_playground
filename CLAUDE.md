@@ -227,7 +227,8 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
     caller on it. On CloudFront a stray `/api` call is rewritten to `index.html`
     and answered **200**, so it does not fail — `staticBuild.test.tsx` and
     `static-build.spec.ts` assert *no request on the wire*. Backend-UI specs are
-    tagged `@api`, which the `E2E_STATIC=1` pass (built bundle, `vite preview`,
+    tagged `@api` and specs that `load("/src/...")` are tagged `@devserver`,
+    both of which the `E2E_STATIC=1` pass (built bundle, `vite preview`,
     port 5181, never a reused server) excludes.
   - **The deployed bytes are the tested bytes**: `frontend` builds the `off`
     artifact, `e2e-static` tests it, `deploy` uploads it and never rebuilds.

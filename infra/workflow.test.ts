@@ -131,3 +131,31 @@ describe("no other job can touch AWS", () => {
     expect(withToken).toEqual(["deploy", "preview"]);
   });
 });
+
+// The static pass serves a *build*, which has no /src/. A spec that imports app
+// modules by source URL can only run against the dev server, so it must carry
+// `@devserver` (excluded under E2E_STATIC) — or e2e-static fails in CI and
+// blocks every deploy, which is how this test came to exist.
+describe("e2e specs the static pass can run", () => {
+  const { readdirSync } = require("node:fs") as typeof import("node:fs");
+  const specsDir = join(__dirname, "../frontend/e2e/specs");
+  const specs = (readdirSync(specsDir, { recursive: true }) as string[])
+    .filter((f) => f.endsWith(".spec.ts"))
+    .map((f) => [f, readFileSync(join(specsDir, f), "utf8")] as const);
+
+  it("finds the specs", () => {
+    expect(specs.length).toBeGreaterThan(20);
+  });
+
+  it("tags every spec that loads /src/ modules @devserver", () => {
+    const untagged = specs
+      .filter(([, src]) => /["'`]\/src\//.test(src) && !src.includes("@devserver"))
+      .map(([f]) => f);
+    expect(untagged).toEqual([]);
+  });
+
+  it("and the Playwright config excludes that tag from the static pass", () => {
+    const config = readFileSync(join(__dirname, "../frontend/playwright.config.ts"), "utf8");
+    expect(config).toContain('useStatic ? "@devserver" : null');
+  });
+});
