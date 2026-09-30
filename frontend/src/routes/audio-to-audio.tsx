@@ -13,7 +13,7 @@
 // See docs/guides/adding-a-model.md §9 (a bare ONNX graph).
 
 import { createFileRoute } from "@tanstack/react-router";
-import { AudioWaveform, Download, Loader2, Play } from "lucide-react";
+import { AudioWaveform, Download, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -25,6 +25,7 @@ import { play, toWavBlob } from "@/audio/io";
 import { AUDIO_SAMPLES } from "@/audio/samples";
 import { AudioSourcePanel } from "@/components/audio/AudioSourcePanel";
 import { Waveform } from "@/components/audio/Waveform";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -33,10 +34,8 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { useAudioPick } from "@/hooks/useAudioPick";
 import { useEnhance } from "@/hooks/useEnhance";
-import {
-  useCacheRefresh,
-  useModelSelection,
-} from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 
 export const Route = createFileRoute("/audio-to-audio")({
   component: AudioToAudioPage,
@@ -58,22 +57,13 @@ function AudioToAudioPage() {
       ENHANCE_MODELS[0],
   });
   const model = session.model.id;
+  const task = useEnhance(model);
   const {
-    status,
-    loading,
     ready,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useEnhance(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   // 48 kHz, not the 16 kHz default — DeepFilterNet3 is natively 48 kHz and
   // resampling down would discard the band it exists to repair.
@@ -89,8 +79,11 @@ function AudioToAudioPage() {
   const busy = running || input.preparing !== null;
   // Each error in the slot that produced it (§4): capture failures in RUN, a
   // load failure in LOAD, an enhancement failure in OUTPUT.
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: ENHANCE_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   function playClip(samples: Float32Array) {
     void playbackRef.current?.close();
@@ -132,28 +125,10 @@ function AudioToAudioPage() {
         </>
       }
       select={
-        <ModelPicker
-          models={ENHANCE_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={busy || loading}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -161,20 +136,15 @@ function AudioToAudioPage() {
           error={input.error}
           disabledHint="Load the model to enhance a clip. You can pick one first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !input.clip}
-              onClick={enhanceCurrent}
+              onRun={enhanceCurrent}
+              icon={AudioWaveform}
+              running={running}
+              runningLabel="Enhancing…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Enhancing…
-                </>
-              ) : (
-                <>
-                  <AudioWaveform className="size-4" /> Enhance
-                </>
-              )}
-            </Button>
+              Enhance
+            </RunButton>
           }
         >
           <AudioSourcePanel

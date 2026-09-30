@@ -6,14 +6,10 @@ import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
 
 import type { LoadOpts } from "@/model/backend";
 import type { MeasuredBytes } from "@/model/size";
+import type { CatalogueEntry } from "@/model/catalogue";
 
 /** A selectable ASR model. Both are ONNX-exported with WebGPU + WASM support. */
-export interface AsrModel {
-  id: string;
-  label: string;
-  hint: string;
-  /** Parameter count in millions — drives the size-before-load estimate. */
-  params: number;
+export interface AsrModel extends CatalogueEntry {
   /**
    * Measured download bytes. ASR needs these because the WASM path keeps the
    * decoder at fp32 (`asrLoadOpts`), so a uniform-q8 estimate understates it ~3x.

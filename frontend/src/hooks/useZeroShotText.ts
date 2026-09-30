@@ -10,7 +10,7 @@
 // model's, which is why the route quotes the pass count beside GENERATE. See
 // `text/zeroShot.ts`.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   useTextPipeline,
@@ -22,6 +22,7 @@ import {
   ZERO_SHOT_TEXT_MODELS,
 } from "@/text/catalogue";
 import { DEFAULT_HYPOTHESIS_TEMPLATE } from "@/text/zeroShot";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 /** One press of GENERATE: the premise, the labels, and how to score them. */
 export interface ZeroShotRun {
@@ -58,12 +59,7 @@ export function useZeroShotText(
   model: string = DEFAULT_ZERO_SHOT_TEXT,
   autoLoad = false,
 ): UseZeroShotTextResult {
-  const meta = useMemo(
-    () =>
-      ZERO_SHOT_TEXT_MODELS.find((m) => m.id === model) ??
-      ZERO_SHOT_TEXT_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(ZERO_SHOT_TEXT_MODELS, model);
   const pipe = useTextPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

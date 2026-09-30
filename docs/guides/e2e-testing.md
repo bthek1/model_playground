@@ -65,6 +65,31 @@ Two kinds of `@backend` spec exist:
 clone has no auth file. That is fine: the specs which need it are `@backend`-tagged
 and filtered out of the default run, so a missing file never breaks `just fe-e2e`.
 
+### Running against the shipped static build
+
+```bash
+just fe-e2e-static    # VITE_BACKEND=off build, then E2E_STATIC=1 against it
+```
+
+The static deploy (#57, [deployment.md §10](./deployment.md)) ships a
+`VITE_BACKEND=off` build, and CI's `e2e-static` job runs the mocked suite
+against **that artifact** rather than the dev server, so the deployed bytes are
+the tested bytes. `E2E_STATIC=1` serves the build with `vite preview` on port
+**5181** and never reuses a running server — with the dev server's port and
+`reuseExistingServer`, a dev server left running would be tested in the build's
+place and pass. `E2E_DIST` points it at a build directory other than `dist`.
+
+Two tags follow from it:
+
+- **`@api`** marks specs for UI the static build removes (sign-in, the registry
+  catalogue, the landing page). `E2E_STATIC` excludes them; the default pass
+  still runs them. Tag a new spec `@api` only when the page genuinely does not
+  exist without a backend — not to make a static-pass failure go away.
+- **`static-build.spec.ts`** runs *only* under `E2E_STATIC` and asserts that no
+  page makes a request to `/api`, even with a stale token in storage. On
+  CloudFront a stray `/api` call is answered 200 with `index.html`, so "nothing
+  broke" is not evidence; the request log is.
+
 ### Running the slow model specs
 
 Specs tagged `@slow` are excluded by default. They download real ONNX weights
@@ -75,6 +100,7 @@ just fe-e2e-slow      # audio: sets E2E_SLOW=1 — ~2.5 min, needs network
 just fe-e2e-models    # the cheap half: every id, dtype file and sample URL (~45 s)
 just fe-e2e-enhance   # speech enhancement on both backends (~20 s + download)
 just fe-e2e-vad       # voice activity detection (~10 s, 2 MB download)
+just fe-e2e-asr-live  # /asr's silence gate: a fake mic plays silence → JFK → silence (~1 min)
 just fe-e2e-vision    # all thirteen vision routes — tens of minutes on a cold cache
 just fe-e2e-vision-one /pose      # one vision route at a time
 just fe-e2e-zeroshot  # split-tower scoring parity against the full CLIP graph
@@ -89,6 +115,105 @@ just fe-e2e-qa        # extractive QA, pinned by a character range rather than a
 just fe-e2e-zeroshot-text  # a known ranking, and a template proven to reach the model
 just fe-e2e-fillmask  # the same question through two tokenizers — the RoBERTa half is the test
 ```
+
+### A live microphone, with a known take
+
+`e2e/specs/asr-live.spec.ts` is the one spec that drives `/asr`'s **live** loop.
+Every other layer mocks some part of it: the hook test fakes `MediaRecorder` and
+the decode, and the mocked run never loads a model, so "Start listening" is never
+enabled. Chromium can play a WAV as the microphone
+(`--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<file>%noloop`,
+plus `--use-fake-ui-for-media-stream` to skip the permission prompt). Two things
+about it:
+
+- **The file is read at launch**, so the spec builds it first
+  (`e2e/utils/wav.ts`, from `jfk.wav`, cached in the OS temp directory) and then
+  launches its own browser through the `playwright` fixture. `test.use({ launchOptions })`
+  cannot work here: the path would have to exist before any test code runs.
+- **`%noloop`** plays the take once and then delivers silence. Without it the
+  clip repeats, and a spec about silence after speech never gets any.
+
+It asserts what the page shows (the "no speech — skipped N updates" line, then
+the words, then the line again, then the final transcript), not a count of
+worker requests. On a slow machine, updates that arrive while a transcription is
+still running get dropped anyway, so an exact count would pin the hardware
+rather than the gate.
+
+### The tabular and forecasting specs, which are neither slow nor mocked
+
+```bash
+just fe-e2e-tabular   # the whole ladder fitted in a real browser (~1.5 min)
+just fe-e2e-forecast  # the backtest spread against the single split (~10 s)
+```
+
+Neither is `@slow`, because **there is nothing to download**: these pages fit the
+model in the tab on data that ships with the app. `fe-e2e-tabular` runs in the
+`webgpu` project anyway, because half the ladder is real WGSL — the logistic, MLP,
+ridge and quantile rungs dispatch compute shaders, and the project's
+`--enable-unsafe-swiftshader` means a runner with no `/dev/dri` still executes
+them for real. `fe-e2e-forecast` is plain `chromium` and is part of the default
+`just fe-e2e` run.
+
+Three assertion shapes here are worth copying:
+
+- **`fe-e2e-tabular` asserts above the *majority baseline*, and reads both numbers
+  off the page** — the `fe-e2e-graphcls` shape, for the same reason. It also pins
+  the two claims the page makes *in words*: that the neural network loses to the
+  trees, and that the linear floor loses too. A page is not allowed to assert
+  "deep learning does not win on tabular data" in prose and leave it unchecked.
+- **`fe-e2e-forecast` asserts the spread is wide, not that it straddles.** The
+  single split *is* the last rolling origin, so "the single-split number lies
+  inside the window range" is true by construction and would pass on a backtest
+  that reused one split's numbers for every window — which renders as a perfectly
+  flat strip and is this page's most plausible bug. `max > 1.5 × min` is what
+  catches it. Measured on the airline sample: single 47.8 against 12.6–53.1.
+- **Both specs assert an absence.** The tabular one records every request whose
+  URL is not the dev server and asserts the list is empty across choosing a
+  dataset — the privacy claim reduced to a behaviour. The forecasting one replaces
+  `window.Worker` with a counting constructor in an init script and asserts zero
+  constructions, because "no worker" is a decision that a refactor can undo with
+  nothing visible changing.
+
+### The RL and behaviour-cloning specs, which train for real in the default run
+
+```bash
+just fe-e2e-rl        # /rl: FrozenLake against value iteration, CartPole head to head (seconds)
+just fe-e2e-discrete  # /discrete-maths: Petersen's diameter, C₈'s parity, no worker (seconds)
+just fe-e2e-cloning   # /robotics behaviour cloning: the failure beside its control (seconds)
+just fe-e2e-rl-phase0 # @slow benchmark: CPU vs GPU steps/s, per-step posting cost (logged)
+just fe-e2e-robotics  # @slow: a real OWLv2 + Depth Anything load (needs a shader-f16 GPU)
+```
+
+The first two are **not** `@slow` and run in `just fe-e2e`: nothing downloads, every
+step runs on the CPU in a real worker (`docs/roadmaps/rl.md` §0), and a whole run is
+about a second. The only honest test of "it learns" is to let it learn, so they do.
+Three assertion shapes:
+
+- **A named answer, never a rising curve.** A wrong Bellman update still finds the
+  goal on a 4×4 grid, so `fe-e2e-rl` asserts the arrow in cell 14 points right —
+  read from `policy-grid`, the text rendering of the table, because a canvas cannot
+  be read — and that the page reports 11 of 11 cells agreeing with value iteration.
+- **A band, not a floor, where a bug pushes the number up.** REINFORCE at seed 1 is
+  pinned between 150 and 490: a random policy balances ~22 steps, and a too-lenient
+  termination pins every run at the 500 cap. Actor-Critic is *not* asserted to win —
+  the spec asserts both runs are reported at the same seed.
+- **The failure and its control, from one page.** `fe-e2e-cloning` trains both
+  demonstration mixes at one seed and asserts the both-ways policy collides **and** the
+  one-way policy reaches. The failure alone would pass on a broken environment.
+
+All four assert an absence too: nothing leaves for the Hub or the API on arrival, and
+choosing an environment, an algorithm, a hyperparameter or a demonstration set trains
+nothing. `rl-phase0.spec.ts` imports the app's own modules through the dev server
+(`import("/src/rl/qLearning.ts")` inside `page.evaluate`), so it times the code that
+ships; hold the path in a variable, or the spec's own type-check tries to resolve it.
+Headless Chromium on a box with no `/dev/dri` only gets SwiftShader, so its GPU column
+is a software rasteriser — the spec prints the adapter it measured.
+
+**A control that the page says re-derives gets an E2E assertion too.** The
+threshold slider is checked by reading the `model-ready` line *before and after*
+the drag: the confusion matrix must change while the fit's duration and row count
+must not. That is what "it re-read the result instead of refitting" looks like
+from outside the process.
 
 `fe-e2e-graph` is the odd one: it is `@slow` without downloading anything, because
 `/graph` has no checkpoint and its dataset is bundled. What makes it slow is 200
@@ -118,6 +243,14 @@ written for a metric:
 **Ask which direction the silent failure moves the number.** A floor catches a
 model that got worse; only a ceiling catches one that got suspiciously better; and
 neither means anything unless the null model is known.
+
+The fourth case is **a number that is not wrong at all, only misread.** MASE on
+`/time-series-forecasting` divides by the in-sample *one-step* naive error, so at a
+horizon of 14 a perfectly correct naive forecast scores about 3.0 — and "1.0 means
+no better than naive", which is true one step out, invites reading that as broken.
+The fix was not a different metric but a horizon-aware note on the page, pinned by
+a unit test that measures the ratio at 1, at 4 and at 14 and asserts it *grows*.
+When a number looks wrong, check whether the copy explaining it is what is wrong.
 
 `fe-e2e-vlm` is the odd one in the other direction: **its failure has no number at
 all.** `/image-text-to-text` is driven by `apply_chat_template`, and a prompt built

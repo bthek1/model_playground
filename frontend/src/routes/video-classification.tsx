@@ -43,7 +43,8 @@ import {
   useVideoClassifier,
   type ClipScores,
 } from "@/hooks/useVideoClassifier";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import { pooledVerdict, slidingMean } from "@/vision/pool";
 import {
   applyTemplate,
@@ -77,24 +78,15 @@ function VideoClassificationPage() {
       ZERO_SHOT_MODELS[0],
   });
   const model = session.model.id;
+  const task = useVideoClassifier(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
     clipProgress,
-    load,
-    retry,
-    cancel,
     run,
     stop,
-  } = useVideoClassifier(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [sample, setSample] = useState<VideoSample>(VIDEO_SAMPLES[0]);
   const [labels, setLabels] = useState<string[]>([...VIDEO_SAMPLES[0].labels]);
@@ -148,8 +140,11 @@ function VideoClassificationPage() {
       });
   };
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: ZERO_SHOT_MODELS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   // Pure, on the main thread, and the whole point: moving the window re-derives
   // the chart from scores already in hand. Re-running would be N CLIP passes.
@@ -173,28 +168,10 @@ function VideoClassificationPage() {
       }
       labels={{ output: "Scores over time" }}
       select={
-        <ModelPicker
-          models={ZERO_SHOT_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || running}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={running}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

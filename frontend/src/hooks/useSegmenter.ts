@@ -10,7 +10,7 @@
 // over the masks already in hand. Neither re-runs the model, which is the whole
 // reason the masks are kept rather than a pre-composited canvas.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import type { RawImage } from "@huggingface/transformers";
 
 import {
@@ -19,6 +19,7 @@ import {
 } from "@/hooks/useVisionPipeline";
 import type { LabelledMask } from "@/vision/draw";
 import { DEFAULT_SEGMENTER, SEGMENTER_MODELS } from "@/vision/segmentation";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface SegmentMask {
   label: string;
@@ -45,10 +46,7 @@ export function useSegmenter(
   model: string = DEFAULT_SEGMENTER,
   autoLoad = false,
 ): UseSegmenterResult {
-  const meta = useMemo(
-    () => SEGMENTER_MODELS.find((m) => m.id === model) ?? SEGMENTER_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(SEGMENTER_MODELS, model);
   const pipe = useVisionPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

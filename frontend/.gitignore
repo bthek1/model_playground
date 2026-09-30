@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Any other build output dir (E2E_DIST=dist-static, a side-by-side comparison build).
+dist-*
 *.local
 
 # Vite writes a timestamped copy of the config next to it while loading ESM

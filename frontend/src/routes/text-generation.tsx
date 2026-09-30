@@ -37,8 +37,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Sparkles, Wand2 } from "lucide-react";
+import { Sparkles, Wand2 } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -47,7 +48,8 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { useTextGen } from "@/hooks/useTextGen";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DECODING_PRESETS,
   DEFAULT_TEXTGEN_MODEL,
@@ -94,22 +96,13 @@ function TextGenerationPage() {
   // download. #30's finding.
   const backendProbe = useBackendProbe({ requireShaderF16: true });
 
+  const task = useTextGen(model.id);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     run,
     partial,
-  } = useTextGen(model.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [prompt, setPrompt] = useState(TEXTGEN_SAMPLES[0].text);
   const [decoding, setDecoding] = useState<Decoding>(
@@ -119,8 +112,12 @@ function TextGenerationPage() {
   /** The other half of the head-to-head, when the user asks for one. */
   const [compare, setCompare] = useState<RunRecord | null>(null);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: TEXTGEN_MODELS,
+    busy: running,
+    backend: backendProbe,
+  });
+  const { runError } = slots;
 
   /**
    * Entries the machine cannot run because the adapter has no `shader-f16`.
@@ -214,15 +211,7 @@ function TextGenerationPage() {
       labels={{ run: "Prompt", output: "Continuation" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={TEXTGEN_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={loading || running}
-            cached={session.cached}
-            backend={backendProbe}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           <p className="text-xs leading-snug text-muted-foreground">
             {model.instruct
               ? "Instruction-tuned, so your prompt is wrapped in its chat template and it answers."
@@ -251,18 +240,7 @@ function TextGenerationPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={running}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -270,20 +248,15 @@ function TextGenerationPage() {
           disabledHint="Load a model to generate. You can write the prompt and set the strategy first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || running || prompt.trim().length === 0}
-                onClick={() => void once().catch(() => {})}
+                onRun={() => once()}
+                icon={Wand2}
+                running={running}
+                runningLabel="Generating…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Generating…
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="size-4" /> Generate
-                  </>
-                )}
-              </Button>
+                Generate
+              </RunButton>
               <Button
                 variant="outline"
                 disabled={!ready || running || prompt.trim().length === 0}

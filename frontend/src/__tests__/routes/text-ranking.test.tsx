@@ -2,22 +2,13 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseRankingResult } from "@/hooks/useRanking";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import { RANKING_CORPUS, RANKING_PAIRS } from "@/text/catalogue";
-
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
 
 /** Pair labels contain "+", which is a regex quantifier. */
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -35,27 +26,15 @@ const mockRerank = vi.fn(
 );
 const mockEmbedCorpus = vi.fn(async () => {});
 
-const base: UseRankingResult = {
+const base = idleTask<UseRankingResult>({
   pair: PAIR,
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  error: null,
-  running: false,
   embedding: null,
   embedded: 0,
   embedCorpus: mockEmbedCorpus,
   denseSearch: mockDense,
   rerank: mockRerank,
   clear: vi.fn(),
-};
+});
 
 let state: UseRankingResult = { ...base };
 const useRanking = vi.fn((id: string) => ({
@@ -66,11 +45,9 @@ vi.mock("@/hooks/useRanking", () => ({
   useRanking: (...args: unknown[]) => useRanking(...(args as [string])),
 }));
 
-const { Route } = await import("@/routes/text-ranking");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/text-ranking"));
 
 function renderPage() {
-  if (!Page) throw new Error("Text ranking route component not found");
   render(<Page />);
 }
 
@@ -78,7 +55,7 @@ const queryField = () => screen.getByLabelText(/^query$/i);
 const corpusField = () => screen.getByLabelText(/one document per line/i);
 
 function ready(extra: Partial<UseRankingResult> = {}) {
-  state = { ...base, status: "ready", idle: false, ready: true, ...extra };
+  state = readyTask<UseRankingResult>(base, extra);
 }
 
 describe("TextRankingPage", () => {
@@ -86,6 +63,16 @@ describe("TextRankingPage", () => {
     vi.clearAllMocks();
     state = { ...base };
     localStorage.clear();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useRanking,
+    base,
+    setState: (st) => {
+      state = st;
+    },
+    trigger: /^search$/i,
   });
 
   it("renders the heading and every pair", () => {
@@ -297,28 +284,5 @@ describe("TextRankingPage", () => {
     expect(mockDense).not.toHaveBeenCalled();
     // Vectors from another checkpoint are not comparable with these.
     expect(base.clear).toHaveBeenCalled();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    state = {
-      ...base,
-      status: "error",
-      idle: false,
-      error: "404 onnx/model_fp16.onnx not found",
-    };
-    renderPage();
-
-    const note = screen.getByText(/model_fp16\.onnx not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT", () => {
-    ready({ error: "Asked for 12 embeddings, got 11" });
-    renderPage();
-
-    const note = screen.getByText(/asked for 12 embeddings/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

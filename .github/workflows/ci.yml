@@ -11,6 +11,12 @@
 # Runtime session, so they still have to be run by hand before shipping a model
 # change (`just fe-e2e-slow`). The `@backend` specs need Postgres and a seeded
 # user; they run in the backend job below, where both exist.
+#
+# Continuous deployment (#57): a push to `main` is a release, and the `deploy`
+# job puts the static frontend on S3 + CloudFront. It uploads the `dist`
+# artifact the `frontend` job built — `VITE_BACKEND=off` — after `e2e-static`
+# ran the mocked suite against those same bytes. AWS access is OIDC: no keys
+# are stored anywhere. See docs/guides/deployment.md §10.
 
 name: CI
 
@@ -19,10 +25,12 @@ on:
     branches: [main, develop]
   pull_request:
 
-# A new push to the same branch cancels the previous run.
+# A new push to the same branch cancels the previous run — except on `main`,
+# where the run may be mid-upload. Cancelling that would leave a half-deployed
+# site; the next release queues behind it instead (see `deploy` too).
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   NODE_VERSION: "20"
@@ -127,7 +135,14 @@ jobs:
         run: npm run test
 
       # `tsc -b` covers src/, e2e/ and vite.config.ts.
+      #
+      # Built as the *shipped* bundle, `VITE_BACKEND=off` (#57): this artifact
+      # is what `e2e-static` tests and `deploy` uploads, so the deployed bytes
+      # are the tested bytes. The flag changes no types, and the backend-on app
+      # is still exercised by `e2e`, which runs the dev server.
       - name: Build
+        env:
+          VITE_BACKEND: "off"
         run: npm run build
 
       - name: Bundle budget
@@ -141,7 +156,7 @@ jobs:
           retention-days: 7
 
   e2e:
-    name: E2E (Playwright, mocked API)
+    name: E2E (Playwright, mocked API, dev server)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -172,6 +187,171 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report
           retention-days: 7
+
+  # The shipped bundle under the same mocked suite: `vite preview` serves the
+  # downloaded `dist`, and the `@api` specs (sign-in, the registry catalogue —
+  # UI that build removes) are excluded, while `static-build.spec.ts` asserts
+  # that no page asks /api anything.
+  e2e-static:
+    name: E2E (Playwright, the shipped static build)
+    needs: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: frontend/dist
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox
+
+      - name: Run E2E against dist
+        env:
+          E2E_STATIC: "1"
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-static
+          path: frontend/playwright-report
+          retention-days: 7
+
+  infra:
+    name: Infra (tsc + vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      # Policies, the site stack under Pulumi mocks, the SPA rewrite, and the
+      # upload script against a stub `aws`. No AWS credentials involved.
+      - name: Test
+        run: npx vitest run
+
+  # Read-only drift check on every push to develop, so an infrastructure change
+  # is visible before it is released. The preview role trusts exactly
+  # `ref:refs/heads/develop` — which is why this job must not set an
+  # `environment:` (that changes the OIDC subject). Skipped until the bootstrap
+  # stack has been applied and its output set as a repository variable.
+  preview:
+    name: Infra preview (read-only)
+    needs: infra
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && vars.AWS_PREVIEW_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+
+      - run: npm ci
+        working-directory: infra
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PREVIEW_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - uses: pulumi/actions@v6
+
+      - name: pulumi preview --refresh
+        working-directory: infra/site
+        run: pulumi preview --stack production --refresh --diff --non-interactive
+
+  # A push to main is a release. `environment: production` is what the deploy
+  # role's trust policy names, so no other job, branch or fork can assume it —
+  # and the environment can require an approval.
+  deploy:
+    name: Deploy (S3 + CloudFront)
+    needs: [frontend, e2e, e2e-static, infra]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://playground.benedictthekkel.com
+    permissions:
+      id-token: write
+      contents: read
+    # Two releases never race an upload: the second waits, it is not cancelled.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      AWS_REGION: ap-southeast-2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+
+      - run: npm ci
+        working-directory: infra
+
+      # The bytes `e2e-static` tested. Never rebuilt here.
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: frontend/dist
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - uses: pulumi/actions@v6
+
+      - name: pulumi up
+        working-directory: infra/site
+        run: pulumi up --stack production --yes --non-interactive
+
+      - name: Upload (assets first, index.html last, never delete)
+        run: scripts/deploy-frontend.sh frontend/dist
+
+      - name: Smoke test the live site
+        run: scripts/smoke-frontend.sh https://playground.benedictthekkel.com frontend/dist
 
   images:
     name: Production images build

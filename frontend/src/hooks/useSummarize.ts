@@ -8,7 +8,7 @@
 // inference. Same shape as `/video-text-to-text`'s reverse toggle and
 // `/zero-shot-classification`'s `multi_label`.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   useTextPipeline,
@@ -21,6 +21,7 @@ import {
   SUMMARY_MIN_TOKENS,
   type SummarizerModel,
 } from "@/text/catalogue";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 /** One press of GENERATE. */
 export interface SummarizeRun {
@@ -43,10 +44,7 @@ export function useSummarize(
   model: string = DEFAULT_SUMMARIZER,
   autoLoad = false,
 ): UseSummarizeResult {
-  const meta = useMemo(
-    () => SUMMARIZER_MODELS.find((m) => m.id === model) ?? SUMMARIZER_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(SUMMARIZER_MODELS, model);
   const pipe = useTextPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

@@ -11,19 +11,20 @@
 // Four-slot page pattern — docs/standards/model-page-pattern.md.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { ImageIcon, Loader2 } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
+import { ScoreList } from "@/components/model/ScoreList";
 import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
-import { Button } from "@/components/ui/button";
 import { useImageClassifier } from "@/hooks/useImageClassifier";
 import { useImagePick } from "@/hooks/useImagePick";
-import type { ClassLabel } from "@/model/types";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_IMAGE_CLASSIFIER,
   IMAGE_CLASSIFIER_MODELS,
@@ -43,22 +44,13 @@ function ImageClassificationPage() {
       IMAGE_CLASSIFIER_MODELS[0],
   });
   const model = session.model.id;
+  const task = useImageClassifier(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useImageClassifier(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   // Picking, the object-URL lifecycle and decode errors are the same on every
   // vision route, so they live in `useImagePick` rather than here.
@@ -68,8 +60,11 @@ useImagePick();
   const busy = running || preparing !== null;
   // Each error in the slot that produced it (§4): a failed decode belongs to
   // RUN, a failed download to LOAD, a failed inference to OUTPUT.
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: IMAGE_CLASSIFIER_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   const classifyCurrent = () => {
     if (!picked) return;
@@ -95,28 +90,10 @@ useImagePick();
       }
       labels={{ output: "Predictions" }}
       select={
-        <ModelPicker
-          models={IMAGE_CLASSIFIER_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -124,20 +101,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load a model to classify an image. You can pick a picture first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !picked}
-              onClick={classifyCurrent}
+              onRun={classifyCurrent}
+              icon={ImageIcon}
+              running={running}
+              runningLabel="Classifying…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Classifying…
-                </>
-              ) : (
-                <>
-                  <ImageIcon className="size-4" /> Classify
-                </>
-              )}
-            </Button>
+              Classify
+            </RunButton>
           }
         >
           <ImageSourcePanel
@@ -168,42 +140,10 @@ useImagePick();
           empty="Pick an image and its five most likely labels appear here, with their scores."
         >
           {result && result.length > 0 && (
-            <div className="space-y-4">
-              {margin != null && margin < 0.1 && (
-                <p className="text-xs text-amber-600 dark:text-amber-500">
-                  The top two are within {margin.toFixed(2)} of each other — this
-                  model is not confident, whatever the first row says.
-                </p>
-              )}
-              <ul className="space-y-2">
-                {result.map((p) => (
-                  <ScoreRow key={p.label} label={p.label} score={p.score} />
-                ))}
-              </ul>
-            </div>
+            <ScoreList scores={result} format="percent" />
           )}
         </OutputPanel>
       }
     />
-  );
-}
-
-function ScoreRow({ label, score }: ClassLabel) {
-  const pct = Math.round(score * 100);
-  return (
-    <li className="space-y-1">
-      <div className="flex items-baseline justify-between gap-3 text-sm">
-        <span className="truncate">{label}</span>
-        <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-          {pct}%
-        </span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${Math.max(2, pct)}%` }}
-        />
-      </div>
-    </li>
   );
 }

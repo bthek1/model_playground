@@ -1,23 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { routeComponent } from "@/test/taskPage";
 import type { GraphClassMetrics } from "@/webgpu/graphPool";
 import type { GraphLayoutPayload, ProteinSummary } from "@/webgpu/proteinSession";
-
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
 
 vi.mock("@/components/charts/EChart", () => ({
   default: () => <div data-testid="echart" />,
@@ -93,11 +79,9 @@ vi.mock("@/hooks/useGraphClassifier", () => ({
   useGraphClassifier: () => hookState,
 }));
 
-const { Route } = await import("@/routes/graph-classification");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/graph-classification"));
 
 function renderPage() {
-  if (!Page) throw new Error("Graph classification route component not found");
   render(<Page />);
 }
 

@@ -21,9 +21,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Loader2, Tags } from "lucide-react";
+import { Tags } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -40,7 +41,8 @@ import {
   useZeroShotImage,
   type TemplateScores,
 } from "@/hooks/useZeroShotImage";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import { downscale } from "@/vision/image";
 import { IMAGE_SAMPLES } from "@/vision/samples";
 import {
@@ -65,22 +67,13 @@ function ZeroShotImageClassificationPage() {
       ZERO_SHOT_MODELS[0],
   });
   const model = session.model.id;
+  const task = useZeroShotImage(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useZeroShotImage(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [labels, setLabels] = useState<string[]>(DEFAULT_LABELS);
   const [template, setTemplate] = useState<string>(TEMPLATES.photo);
@@ -122,8 +115,11 @@ useImagePick();
   });
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: ZERO_SHOT_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   const scoreCurrent = () => {
     if (!picked) return;
@@ -145,28 +141,10 @@ useImagePick();
       }
       labels={{ output: "Scores" }}
       select={
-        <ModelPicker
-          models={ZERO_SHOT_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -174,20 +152,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load a model to score your labels. You can write them and pick a picture first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !picked || live || labels.length === 0}
-              onClick={scoreCurrent}
+              onRun={scoreCurrent}
+              icon={Tags}
+              running={running}
+              runningLabel="Scoring…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Scoring…
-                </>
-              ) : (
-                <>
-                  <Tags className="size-4" /> Score labels
-                </>
-              )}
-            </Button>
+              Score labels
+            </RunButton>
           }
         >
           <ImageSourcePanel

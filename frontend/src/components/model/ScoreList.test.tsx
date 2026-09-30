@@ -35,6 +35,22 @@ describe("ScoreList", () => {
     expect(screen.getByText("0.49")).toBeInTheDocument();
   });
 
+  it("prints a percentage where the page reads that way", () => {
+    render(
+      <ScoreList
+        format="percent"
+        scores={[
+          { label: "tiger", score: 0.62 },
+          { label: "tabby", score: 0.21 },
+        ]}
+      />,
+    );
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("62%");
+    expect(rows[1]).toHaveTextContent("21%");
+    expect(rows[0]).not.toHaveTextContent("0.62");
+  });
+
   it("says so in words when the top two are within a hair of each other", () => {
     render(
       <ScoreList

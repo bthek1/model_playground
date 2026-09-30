@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { EChartsOption } from "echarts";
 import {
   BarChart3,
-  Loader2,
   Play,
   Settings2,
   SlidersHorizontal,
@@ -10,6 +9,7 @@ import {
 } from "lucide-react";
 import { lazy, Suspense, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { DatasetDialog } from "@/components/training/DatasetDialog";
 import { HyperparamsDialog } from "@/components/training/HyperparamsDialog";
@@ -189,17 +189,16 @@ function TrainingPage() {
             Open <span className="font-medium">Dataset</span> to load MNIST →
           </span>
         )}
-        <Button onClick={() => start(settings)} disabled={!canStart} size="sm">
-          {training ? (
-            <>
-              <Loader2 className="size-4 animate-spin" /> Training…
-            </>
-          ) : (
-            <>
-              <Play className="size-4" /> Start
-            </>
-          )}
-        </Button>
+        <RunButton
+          onRun={() => start(settings)}
+          disabled={!canStart}
+          size="sm"
+          icon={Play}
+          running={training}
+          runningLabel="Training…"
+        >
+          Start
+        </RunButton>
         <Button
           variant="outline"
           size="sm"

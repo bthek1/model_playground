@@ -60,7 +60,9 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Computer Vision roadmap** (13 of 20, plus the shared `src/vision/` module) | [`docs/roadmaps/vision.md`](docs/roadmaps/vision.md) |
 | **Graph ML roadmap** (**complete, 4 of 4**; no checkpoint, pure WGSL) | [`docs/roadmaps/graph.md`](docs/roadmaps/graph.md) |
 | **Multimodal roadmap** (**complete as scoped, 3 of 3**; VLMs, `q4f16`, streaming, video frames) | [`docs/roadmaps/multimodal.md`](docs/roadmaps/multimodal.md) |
-| **NLP roadmap** (complete as scoped: 10 of 11 shipped, the eleventh does not port; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
+| **NLP roadmap** (complete as scoped: **11 of the category's 12 taxonomy rows** shipped, across 10 of the file's 11 sections — §3.7 covers two rows with one engine — and Table QA does not port; encoders are free, decoders are a budget) | [`docs/roadmaps/nlp.md`](docs/roadmaps/nlp.md) |
+| **Tabular roadmap** (**complete as scoped, 3 of 3**; the fit is the feasibility bar, not the download) | [`docs/roadmaps/tabular.md`](docs/roadmaps/tabular.md) |
+| **Reinforcement Learning roadmap** (**complete as scoped, 2 of 2**; §0 is the measurement that put every step on the CPU; the environment is the work) | [`docs/roadmaps/rl.md`](docs/roadmaps/rl.md) |
 | Roadmaps for categories not yet built | **GitHub issues**, label [`roadmap`](https://github.com/bthek1/model_playground/issues?q=is%3Aissue+label%3Aroadmap) — each graduates to `docs/roadmaps/` when its first route ships |
 
 ---
@@ -89,6 +91,7 @@ just fe-e2e         # playwright end-to-end (mocked API, no backend needed)
 just fe-e2e-slow    # @slow specs: real model downloads + real ONNX sessions (minutes)
 just fe-e2e-enhance # @slow speech-enhancement specs (DeepFilterNet3, WASM + WebGPU)
 just fe-e2e-vad     # @slow voice-activity-detection specs (Silero VAD, seconds)
+just fe-e2e-asr-live # @slow: /asr's silence gate — a fake mic plays silence → JFK → silence into real Whisper
 just fe-e2e-vision  # @slow vision specs: real loads across all 14 routes (tens of minutes cold)
 just fe-e2e-superres # @slow: Swin2SR vs a bicubic baseline, by PSNR
 just fe-e2e-vision-one /pose   # one @slow vision route at a time
@@ -105,10 +108,25 @@ just fe-e2e-translate # @slow: translation — content words, then the **reverse
 just fe-e2e-summarize # @slow: summarization — two assertions and the Phase 0 latency, logged not asserted
 just fe-e2e-textgen # @slow: text generation — greedy twice must be **byte-identical**
 just fe-e2e-rank    # @slow: text ranking — the four stages must *disagree*, in a named direction
+just fe-e2e-tabular # the model ladder fitted in a real browser, pinned above the majority baseline
+just fe-e2e-forecast # the backtest spread against the single-split number (no model, no worker)
+just fe-e2e-rl      # /rl: a real training run, pinned by a named arrow and value iteration (seconds)
+just fe-e2e-discrete # /discrete-maths: BFS against published answers — Petersen in 2 steps, C₈'s parity (seconds)
+just fe-e2e-rl-phase0 # re-measure RL Phase 0: CPU vs GPU steps/s, per-step posting cost (logged)
+just fe-e2e-robotics # @slow: OWLv2 + Depth Anything — the nearer car must be ranked nearer (needs a shader-f16 GPU)
+just fe-e2e-cloning  # /robotics behaviour cloning: both-ways collides, one-way reaches, same seed (seconds)
 just fe-e2e-models  # check every model id (audio + vision + multimodal + text) resolves on the HF Hub (seconds)
+just fe-e2e-static  # VITE_BACKEND=off build + the mocked suite against the built bundle (what CI deploys)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
 just fe-lint        # eslint
+
+# Static deploy (S3 + CloudFront, #57) — needs the Pulumi CLI + AWS credentials
+just infra-test       # tsc + vitest over infra/: IAM policies + wiring, site stack (mocks), SPA rewrite, upload/smoke scripts (stubbed aws/curl), ci.yml invariants
+just infra-bootstrap  # one-time CI identity (OIDC roles) — an admin, locally, never CI
+just infra-preview    # pulumi preview --refresh on the site stack
+just infra-up         # pulumi up on the site stack (the first one locally: ACM + CloudFront take 5–30 min)
+just deploy-frontend  # VITE_BACKEND=off build → ordered upload → smoke test of the live site
 
 # Celery
 just celery-up      # redis + worker + beat (docker)
@@ -130,8 +148,13 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   first — phased, with a Testing section — opened as an issue with `gh issue create --label plan`
   (the plan is the issue body; see the template in the Copilot instructions). **Never add a plan
   markdown file to the repo.** Tick the phase checkboxes as work progresses, and **close the issue
-  once its work has been merged into `main`** (`gh issue close <n> --comment "..."`) — the closed
-  issue is the record. Reference the issue number in the commit message (`Closes #12`).
+  as soon as its work is complete** — every phase done, tests green, the commits on `develop`
+  (`gh issue close <n> --comment "..."`). That runs **unattended**: closing a finished issue is
+  bookkeeping, it is reversible from the GitHub UI, and leaving completed work open is the
+  failure mode this rule exists to prevent. Closing no longer waits for the `main` merge, so
+  **"closed" means done and integrated on `develop`, not shipped** — `main` is what has shipped,
+  and the merge is a separate release step that still prompts. The closed issue is the record.
+  Reference the issue number in the commit message (`Closes #12`).
 - **Never commit `.env` files.** `.env.example` is the source of truth for required vars.
 - **Backend ↔ frontend communicate only via the API contract** — never mix their concerns.
 - **All work lands on `develop`; `main` is what has shipped.** `develop` is the integration
@@ -142,16 +165,23 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   before committing; if it isn't `develop`, switch (`git switch develop`) rather than branching.
   Create a `<type>/<topic>` branch **only when the user asks for one** — a spike to be thrown
   away, or work that has to be reviewed as a PR in its own right — and branch it from `develop`.
-- **Merging into `main` is the completion step of an issue, not a step inside it.** When an
-  issue's phases are all ticked and its tests are green: `git switch main`, merge `develop`
-  (`git merge --no-ff develop`, so the issue's commits stay legible as one landing), push, then
-  `gh issue close <n>`. Merge only whole issues — `develop` holding half an issue is why the
-  merge waits, not a reason to cherry-pick. Never commit directly on `main`.
+  **Commit by path** (`git commit -- <paths>`): other sessions share this working tree
+  and may have staged changes of their own, which a bare `git commit` sweeps in — check
+  `git status` and `git log -3` first (see `docs/guides/ai-guardrails.md` §3).
+- **Merging into `main` is a release, not the thing that finishes an issue.** An issue is
+  finished — and closed — when its work is complete on `develop`. The merge is what makes that
+  work *shipped*: `git switch main`, merge `develop` (`git merge --no-ff develop`, so the
+  issue's commits stay legible as one landing), push. Merge only whole issues — `develop`
+  holding half an issue is why the merge waits, not a reason to cherry-pick. Both the merge and
+  the push prompt, because a release is outward-facing. Never commit directly on `main`.
 - **Commits are cheap; pushes are not.** Committing and switching run unattended — they are
   reversible, and `git reflog` recovers almost anything local. **Ask before anything
   outward-facing or unrecoverable:** `git push`, `git rebase`/`git merge` (the merge into `main`
-  included), `gh pr create`/`gh pr merge`, create/edit/close a GitHub issue (`gh issue …`),
-  `docker compose down -v`, deleting migrations, or modifying shared `.env` files. **Never**
+  included), `gh pr create`/`gh pr merge`, `gh issue create`/`gh issue edit`,
+  `docker compose down -v`, deleting migrations, or modifying shared `.env` files.
+  **`gh issue close` is the exception and runs unattended** — it publishes no content, it is
+  undone with one click, and an issue whose work has landed should not stay open waiting for a
+  prompt. **Never**
   force-push, `git reset --hard`, `git clean`, `git branch -D`, or `git checkout .` — those are
   denied outright in `.claude/settings.json`. See
   [`docs/guides/ai-guardrails.md`](docs/guides/ai-guardrails.md) and the full list in the Copilot
@@ -189,6 +219,37 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   the mocked Playwright suite and both image builds. It does **not** run the
   `@slow` specs — those still need `just fe-e2e-slow` by hand.
   See [`docs/guides/deployment.md`](docs/guides/deployment.md).
+- **The static frontend is a second deployment** (#57, deployment.md §10):
+  `VITE_BACKEND=off`, S3 + CloudFront at `https://playground.benedictthekkel.com`,
+  Pulumi in `infra/`, deployed by CI on each push to `main` through **OIDC** (no
+  AWS keys anywhere). Rules that fail silently if broken:
+  - **Read the flag only via `src/lib/features.ts`**, and gate any new `/api`
+    caller on it. On CloudFront a stray `/api` call is rewritten to `index.html`
+    and answered **200**, so it does not fail — `staticBuild.test.tsx` and
+    `static-build.spec.ts` assert *no request on the wire*. Backend-UI specs are
+    tagged `@api`, which the `E2E_STATIC=1` pass (built bundle, `vite preview`,
+    port 5181, never a reused server) excludes.
+  - **The deployed bytes are the tested bytes**: `frontend` builds the `off`
+    artifact, `e2e-static` tests it, `deploy` uploads it and never rebuilds.
+  - **Uploads are `scripts/deploy-frontend.sh`, never Pulumi resources**: assets
+    first, explicit `application/wasm`, `index.html` last, **never `--delete`**
+    (superseded assets are tagged `stale` *once*; a lifecycle rule expires them
+    30 days on, so open tabs keep their chunks). Deep links are a CloudFront
+    Function, never a custom error response.
+  - **Trust is the exact OIDC `sub`** — deploy on the `production` environment,
+    read-only preview on `refs/heads/develop` (so `preview` must not declare an
+    environment). Route 53 writes are limited to the `playground` names in a zone
+    the stack only looks up; ACM/CloudFront deletes need the
+    `project=model-playground` tag. The GitHub OIDC provider is account-wide and
+    looked up, never owned.
+  - **CI never cancels an in-progress run on `main`**: cancelling mid-upload
+    half-deploys.
+  - **A new `/api` caller fails `conventions.test.ts` by name.** Every module
+    outside `src/api/` that imports from it is on `API_CALLERS` with the reason
+    the static build never reaches it; gate the new one on `BACKEND_ENABLED`,
+    then add it with its reason. None of this can be tested by deploying, so
+    the CD half of `ci.yml` is itself under test (`infra/workflow.test.ts`) and
+    the two scripts run against stub `aws`/`curl` — see deployment.md §10.9.
 
 ### Backend essentials
 
@@ -206,11 +267,13 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - React 19 + TypeScript ~6.0 + Vite 8 (dev server on `:5180`). Functional components only.
 - All API calls go through `src/api/client.ts` (Axios + JWT with silent 401 refresh). Its base URL is **empty by default** — requests hit `/api` on the page's own origin and the Vite dev server proxies them to `VITE_API_PROXY_TARGET`. This keeps LAN/HTTPS access working: a page served from `https://192.168.x.x:5180` calling `http://localhost:8006` directly is blocked by mixed content, CORS, and Local Network Access.
 - Server state lives in TanStack Query; global UI flags in Zustand + Immer (`src/store/`, one file per concern) — never put server data in Zustand.
-- The sidebar is **taxonomy-driven**: categories/tasks live in `components/layout/taskTaxonomy.ts` (data), rendered by `components/layout/Sidebar.tsx`. To add a task, add a data entry — map it to a real route via `REAL_ROUTES` (e.g. the Theory tools Linear Model Training → `/training` and Tensor Arithmetic → `/tensor`), else it falls through to the generic `routes/tasks.$slug.tsx` placeholder. Per-category expand state is in `store/ui.ts`.
+- The sidebar is **taxonomy-driven**: categories/tasks live in `components/layout/taskTaxonomy.ts` (data), rendered by `components/layout/Sidebar.tsx`. To add a task, add a data entry — map it to a real route via `REAL_ROUTES` (e.g. the Theory tools Linear Model Training → `/training` and Tensor Arithmetic → `/tensor`). **The sidebar lists only tasks that have a page** (#59): `task()` throws on a label with no route, and there is no `/tasks/$slug` placeholder any more. A Hub task with no page is absent from the sidebar, and why it has none lives in its category roadmap. Per-category expand state is in `store/ui.ts`.
 - Forms use React Hook Form + Zod schemas (`src/schemas/`, one file per domain).
 - Styling is Tailwind v4 (CSS-first, no config file) + shadcn/ui in the **`base-nova`** style, built on **`@base-ui/react`** primitives (NOT Radix). Add components with `npx shadcn@latest add <component>`.
 - Charts: ECharts, always via the lazy `src/components/charts/EChart.tsx` wrapper (`echarts` is heavy — keep it code-split). Render Markdown/LLM output with `src/components/Markdown.tsx` (`react-markdown` + `remark-gfm`).
+- **A dynamic `import()` of a module something else imports statically does nothing.** Rolldown says so — `[INEFFECTIVE_DYNAMIC_IMPORT] … is dynamically imported by X but also statically imported by Y, dynamic import will not move module into another chunk` — and it is a **build warning, not an error**, so it survives a green `npm run build` indefinitely. `useRanking` awaited `import("@/model/similarity")` while four other modules imported it statically: the module stayed in the entry chunk and the await bought nothing but a microtask on the dense-search path. Code-splitting works only if **every** importer is lazy, which is why `EChart.tsx` is a wrapper rather than a convention — one static import of `echarts` anywhere undoes it, and `npm run check:bundle` is what fails then. Grep for the module's other importers before reaching for `await import`.
 - **Every task page is the same pipeline: Select → Load → Run → Output** — pick a model, load its weights, run it on an input, show the result. This is the standard in [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md); read it before adding a task route. Two state machines, kept orthogonal: **load** (`idle → loading → ready | error`, with `progress` as a self-loop, `retry(overrides?)` out of `error` and `cancel()` back to `idle`) and **run** (id-correlated requests, `running` derived from an in-flight *count*, never a boolean). The plumbing lives once in `model/useModelWorker.ts`; task hooks (`useTts`, `useAsr`, `usePipeline`, `useAudioClassifier`, `useEnhance`, `useVad`) are thin wrappers returning the same contract — `status`/`idle`/`loading`/`ready`/`progress`/`loadProgress`/`loadedInMs`/`backend`/`load`/`retry`/`cancel`/`run`/`running`/`result`/`error`. The shell is `components/model/` (`ModelPage` + `ModelPicker`/`ModelStatus`/`InputPanel`/`OutputPanel`, plus `DeviceStatus` for pages that probe a GPU instead of downloading weights). Never re-derive the pending map, the teardown, or a bespoke page shape. Nothing downloads until the user asks: `idle` is the default and the size estimate + large-model warning are shown first — quoted **once**, by `ModelPicker`; `ModelStatus` must not repeat the number. Errors render in the slot that produced them.
+- **The route-to-shell wiring is shared too (#58, page-pattern §4c).** `model/useTaskSlots.ts` returns `picker`/`status` props to spread onto `ModelPicker`/`ModelStatus`, the error split as two **named** fields (`loadError`, `runError`), and re-probes the cache on `ready`; `components/model/RunButton.tsx` is the GENERATE trigger (spinner + running label, and it swallows a rejected `onRun` because the hook already reports it in OUTPUT). A route overrides one field *after* the spread rather than abandoning the helper; the bespoke pages (`/rl`, `/graph`, tabular) wire by hand where it does not fit. `useModelSelection` has no `onLoad`/`onCancel` any more — they were pass-throughs. Catalogue entry types extend `CatalogueEntry` (`model/catalogue.ts`: id/label/hint/params/bytes/backends, named once — `ModelPicker`'s `PickableModel` is now an alias) and task hooks look entries up with `useCatalogueEntry`. A ranked label list is `components/model/ScoreList.tsx` whatever the modality (`format="percent"` where a page reads that way); the graph pages share `components/graph/ArchPicker.tsx` and the `Fact`/`Score` cells in `components/viz/readout.tsx`. `src/__tests__/conventions.test.ts` reads the source and fails, naming the file, if a route that calls `useModelSelection` skips `useTaskSlots` or its test skips `describeTaskPageContract`, if a route hand-writes the error split, `useCacheRefresh` or a spinner trigger, or if a hook hand-writes the catalogue lookup.
 - **Two buttons on a task page spend anything, and they are LOAD and GENERATE.** SELECT and INPUT are *choices* — free, reversible, and they commit to nothing. **Only LOAD loads:** not arriving at the page, not switching models, not returning to a page you used before, and **not a cache hit** (cached weights make the click cheap, not unnecessary — they still cost memory, a GPU device and a warm-up). **Only GENERATE runs:** picking a sample, dropping a file, finishing a recording, placing a point on a picture, or editing a prompt/label/template beside the input all land in INPUT and stop there. A row of five samples that each ran the model meant browsing cost five inferences; that is the failure mode. The corollary: **the input sources are not gated on `ready`** — only the GENERATE trigger is. A control that merely re-reads a result in hand (`/vad`'s threshold, detection's floor, segmentation's opacity) still re-derives on the main thread without a press, because it spends nothing.
 - **A model page survives a refresh by restoring the selection, not the session and not the load.** A Worker cannot outlive a page load. `store/models.ts` persists the selected model and *only* that — it declares `partialize` so a stale `autoResume` key from an older build cannot revive the auto-resume behaviour. `model/cache.ts` still probes Transformers.js's `transformers-cache` bucket (answering "not cached" on any failure), but only to change the LOAD button's words to "Load model (cached)" — an informed click, never an absent one. The LOAD slot's bar reports the **aggregate** from `model/progress.ts` — monotonic percent by bytes, indeterminate until a size is known, warm-up as its own phase, no ETA — never a raw per-file `progress_callback` event, which restarts at zero for each of a model's 4–8 files.
 - **The input is held state, not an event.** `hooks/useImagePick.ts` and `hooks/useAudioPick.ts` (with `components/vision/ImageSourcePanel.tsx` / `components/audio/AudioSourcePanel.tsx`) own the decode and hand the run a copy — `useAudioPick`'s `take()` returns `clip.audio.slice()` because every audio worker detaches the buffer it is given, and `toPayload` copies by default for the same reason. Neither pick hook takes an "on picked" callback; `useImagePick` used to, thirteen routes fired an inference from it, and the parameter is **gone** rather than unused so it cannot return one route at a time. Pressing GENERATE twice, or changing a parameter and pressing again, must cost one decode and two inferences. OUTPUT renders the frame/clip captured **inside** the run, never the input currently held, or a new pick restyles the previous result.
@@ -231,12 +294,14 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   scroll won't engage and a wide result pushes the page sideways; the height clamp starts at `md` so
   a phone is never trapped in a scroll container. The transport row is `sticky bottom-0`, never
   `mt-auto`-pinned — pinning opens a chasm on any task whose input is short.
+- **Route tests start from `src/test/taskPage.tsx`** (#58): `idleTask`/`readyTask`/`loadingTask`/`loadErrorTask` build the mocked hook result, `routeComponent()` reads the page off the real `createFileRoute` (no router mock), and `describeTaskPageContract()` registers the checks identical on every page — no load on arrival, LOAD from slot 2, four slots with `output-empty`, GENERATE shut until `ready`, each error in its slot. It is **additive**: "choosing an input runs nothing" and "the input survives its run" stay in the route's own file. `token-classification.test.tsx` is the reference.
 - **Testing a task page** has a fixed shape (see §8 of the page-pattern standard, which lists the `data-testid` contract — `slot-1`…`slot-4`, `output-panel`, `output-empty`, `model-ready`, `error-note` — shared by Vitest and Playwright). Every task page test asserts: nothing downloads on mount (hook called with **no `autoLoad` argument** — its default is `idle` — **and** `load` not called); a refresh restores the selection and leaves the page `idle` **even with the weights cached**; **choosing an input runs nothing** (pick a sample while `ready`, assert `run` was not called and `output-empty` is still there, then press the trigger and assert it was — the single most valuable assertion here, because an input that silently starts an inference looks like a working page); **the input survives its run** (press twice, assert one `fetch`/`decodeToMono`/`recordMic` against two `run` calls); `load`/`retry` fire from the LOAD slot; all four slots render with `output-empty` before any run; the GENERATE trigger is disabled until `ready` while the input sources are not; and errors land in the slot that produced them. A band is a labelled `region`, so `getByLabelText` can match both a band and a field inside it — query by role, or by the field's own control. **Layout is never a Vitest assertion** — jsdom has no geometry, so route tests check presence and order only, and the arrangement (side-by-side columns, output above the fold, no horizontal overflow, no transport chasm) is asserted in `e2e/specs/model-page.spec.ts`.
+- **Testing a *task hook* is a different job from testing its route, and one assertion carries most of it: which model id reached the pipeline.** A task hook is a thin wrapper, so the bugs available to it are all of the form "the control changed a label and not the checkpoint" — `useTranslate` is the pure case, since a Marian pair *is* a direction, so a hook that accepted `{ from, to }` and dropped them would keep translating correctly in the direction it was built for and every output assertion would still pass. Assert `useTextPipeline` was called with `(meta.task, meta.id, autoLoad, meta.dtypes)`, across **every** catalogue entry rather than one. Two mechanics that matter: **hoist the `load` mock so it is stable across renders** — returning a fresh `vi.fn()` from the mock factory makes every re-render look like a new hook, and `setResult` re-renders, so "did it load" becomes unanswerable and a call-count assertion fails for the wrong reason; and **`expect.anything()` rejects `undefined`**, so an entry with no `dtypes` needs the real value (`meta.dtypes`) rather than a wildcard — which is worth asserting explicitly, since "no precision pin" is a catalogue answer and a pin arriving later should be a deliberate edit with a measurement behind it.
 - **Visualizing models & their structure** follows [`docs/standards/model-visualization.md`](docs/standards/model-visualization.md) — a shared grammar of stage/arrow schematics, canvas weight/activation heatmaps (diverging red=+/blue=−, alpha=magnitude), param chips, theme-token colors, and lazy charts. The primitives live in `components/viz/` (`schematic.tsx`: Stage/Arrow/ParamChip · `heatmap.tsx`: HeatmapTile/DivergingLegend · `PanZoom.tsx`: a drag/wheel/fit surface for any child, with an optional `onScaleChange` for a canvas that must keep its strokes a constant size on screen); the Training route (`components/training/`) and Tensor route (`routes/tensor.tsx`) are the reference callers, and the three graph routes use `PanZoom`. Reuse those primitives; don't invent parallel ones.
 - **The system panel reports load and capacity, never utilisation — and samples nothing while it is shut.** `src/telemetry/` (samplers + the 1 Hz loop), `components/telemetry/` (the cards) and `components/layout/RightPanel.tsx` (docked `aside` at `lg`, a Sheet below it, `Alt+Shift+M`). A browser exposes **no** host CPU percent, **no** GPU utilisation and **no** VRAM, so every metric is a `Metric<T>` — `{ status: "ok", value }` or `{ status: "unavailable", reason }`, never a zero standing in for "unknown" (`telemetry/types.ts`), and each card carries one line saying what its number *is*. The observer-effect rules are the acceptance criteria: one interval, only while open **and** the tab visible; samples in fixed-capacity ring buffers behind refs (never Zustand, never TanStack Query); the cache walk every 10th tick; a slow tick **skipped, not queued**; closing clears the history rather than drawing a chart across the gap. Sparklines are inline SVG per the viz standard §5 — no `echarts` in this panel. GPU bytes are a **ledger, not a probe** (`webgpu/allocations.ts`): free buffers with `releaseBuffer()` instead of `.destroy()`, and because every kernel runs in a worker realm the worker publishes its ledger to the page over a `MessagePort` handed out by `createWebGPUWorker()` — a `BroadcastChannel` is origin-wide and would fold a second tab's allocations into this page's total. `useModelWorker` reports its inflight count and download bytes to `telemetry/activity.ts` (nothing outside the hook can observe either); the `ModelRequest`/`ModelResponse` envelope does **not** grow a telemetry variant. See [`docs/explanations/telemetry-panel.md`](docs/explanations/telemetry-panel.md).
 - Tests: Vitest + Testing Library + MSW (`src/test/server.ts`, `handlers.ts`). `src/test/setup.ts` also polyfills `localStorage` because Node ≥25 ships a stub that shadows the DOM env's.
 - **End-to-end tests are Playwright** (`e2e/`), covering what happy-dom can't: routing/app shell, real-browser auth, and WebGPU. Default run is fully mocked (no backend); `@backend`-tagged specs need `just be-seed-e2e`, and
-  `@slow`-tagged specs (real Hugging Face downloads + real ONNX sessions) need `just fe-e2e-slow` (or the per-route `fe-e2e-enhance` / `fe-e2e-vad` / `fe-e2e-vision` / `fe-e2e-link` / `fe-e2e-graphcls`; `fe-e2e-models` is the seconds-long id + dtype check in `model-ids.spec.ts`, across every modality). Import `test`/`expect` from `e2e/fixtures/base`, not `@playwright/test`. Shared page-object verbs (`load`, `waitForReady`, `backend`, `sizeNote`, `blockModelDownloads`) live on `ModelPageObject`, not on a modality subclass. Two traps: never `page.route("**/api/**")` (it also matches `/src/api/*` module URLs and stops the app booting), and keep the `test.include`/`test.exclude` block in `vite.config.ts` pinned to `src/` or Vitest swallows the E2E specs. **A `@slow` spec asserts a known label on a known input** — "a result appeared" would have passed while a quantized model called a tiger a snake. See [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md).
+  `@slow`-tagged specs (real Hugging Face downloads + real ONNX sessions) need `just fe-e2e-slow` (or the per-route `fe-e2e-enhance` / `fe-e2e-vad` / `fe-e2e-asr-live` / `fe-e2e-vision` / `fe-e2e-link` / `fe-e2e-graphcls`; `fe-e2e-models` is the seconds-long id + dtype check in `model-ids.spec.ts`, across every modality). Import `test`/`expect` from `e2e/fixtures/base`, not `@playwright/test`. Shared page-object verbs (`load`, `waitForReady`, `backend`, `sizeNote`, `blockModelDownloads`) live on `ModelPageObject`, not on a modality subclass. Two traps: never `page.route("**/api/**")` (it also matches `/src/api/*` module URLs and stops the app booting), and keep the `test.include`/`test.exclude` block in `vite.config.ts` pinned to `src/` or Vitest swallows the E2E specs. **A `@slow` spec asserts a known label on a known input** — "a result appeared" would have passed while a quantized model called a tiger a snake. See [`docs/guides/e2e-testing.md`](docs/guides/e2e-testing.md).
 
 ### WebGPU essentials (`src/webgpu/`)
 
@@ -448,6 +513,18 @@ runtimes never mix. See [`docs/guides/adding-a-model.md`](docs/guides/adding-a-m
     leaves nothing for a GPU to win, and its LSTM/`If` ops aren't covered by ORT's WebGPU provider.
     The threshold→segment step (`segments.ts`) is pure and runs on the main thread, so dragging the
     threshold re-derives segments without re-running the model.
+  - **Its second life is the live-ASR gate (#55), and the gate is *not* Silero.** `useLiveAsr`
+    re-transcribed the last 30 s every 1.5 s tick, silence included, and Whisper answers room tone
+    with "you". `audio/vad/liveGate.ts` skips a tick whose new audio holds no speech, using the
+    energy baseline's arithmetic against the **window's** floor (10th-percentile frame + 12 dB),
+    judging **only the audio since the last scored tick**. Judging the whole window stops skipping a
+    second into a take, and judging the slice alone reads one sustained vowel as silence. Measured
+    (`frontend/scripts/measure-live-asr-gate.mjs`, real Silero + real Whisper per tick): it skipped
+    25 of the 28 silent ticks Silero skipped, and never a speech tick, so Silero's second model, LOAD
+    and worker would buy three passes. It **fails open**: no floor under 3 s of take, a scoring error
+    transcribes, and the final pass on Stop and `transcribeClip` are never gated. The page says
+    when it is skipping, because a still transcript is otherwise a hang. `just fe-e2e-asr-live` is
+    the only end-to-end guard: Chromium's fake mic plays silence → JFK → silence into a real Whisper.
 - **Unit tests mock the network and ORT, so they cannot catch a broken model.** Both DeepFilterNet
   bugs above shipped past a green suite, and a 512-sample VAD window would too. The `@slow` E2E specs
   (`e2e/specs/audio-models.spec.ts`) are the guard; `just fe-e2e-enhance` additionally measures a real
@@ -1174,7 +1251,14 @@ thin task hooks over `useTextPipeline`. See [`docs/roadmaps/nlp.md`](docs/roadma
   through" failure from the other direction. **`combineProgress`** sums the bytes against
   the catalogue entry's *measured combined size* — a constant, so the percent is monotonic
   by construction rather than by a stored clamp. Use it for any load spread over two
-  workers.
+  workers. **The same split is why there is no `Promise.allSettled` teardown here**, and
+  the plan asking for one was reading across from `/pose`: one worker owning two models
+  can get a combined teardown wrong, so it needs the combinator. A worker each cannot —
+  the engine rule ("one model live at a time") holds per worker unmodified, each engine
+  disposes its single model with `disposeQuietly`, and `useModelWorker` terminates each
+  worker independently, so a dispose that throws in one is structurally unable to reach
+  the other. Read a borrowed bullet against the shape you actually built: `allSettled`
+  stays right for `/pose` and is dead code here.
 - **RRF does not have the property its name suggests.** "A document both lists rank second
   beats one first in one list and last in the other" is the intuitive reading and is false:
   `1/(k+r)` is convex, so by Jensen the extreme pair wins (at `k=60`, 0.032796 against
@@ -1198,6 +1282,386 @@ thin task hooks over `useTextPipeline`. See [`docs/roadmaps/nlp.md`](docs/roadma
   stage ranks identically is satisfied by a page quietly rendering one list four times,
   which is this page's most plausible bug.
 
+### In-browser tabular models (`src/tabular/` — `/tabular-classification`, `/tabular-regression`)
+
+The fifth modality, and the one that inverts the question. Every other category asks
+whether the *weights* fit in a tab; here there are no weights at all — the model is
+**fitted in the tab on the user's own CSV**, so the question is whether the *training*
+fits. Nothing is downloaded, nothing is uploaded, and a reload loses the file by design.
+See [`docs/roadmaps/tabular.md`](docs/roadmaps/tabular.md).
+
+- **The dataset is the memory budget, so there is no row type anywhere in the module.** One
+  `Float32Array` per column, a `string[]` level table for a categorical one, and an explicit
+  `Uint8Array` missing mask — never a sentinel, because `NaN` and `0` are both real values in
+  real data and any sentinel silently becomes one of them on some file. The parser is ours
+  rather than `papaparse`'s for exactly this reason: a general-purpose parser returns an array
+  of row objects, which is the memory problem the module exists to avoid.
+- **`Number("")` is `0`**, and that is the single most expensive coercion in JavaScript for a
+  file parser: one empty cell in a numeric column becomes a real zero and shifts every mean,
+  every split threshold and every coefficient that column touches, with nothing failing
+  anywhere. A **ragged row is rejected with its line number**, never padded — a best-effort
+  recovery fits a model on shifted columns, which trains happily and is wrong everywhere.
+  Blank lines are skipped on a multi-column file and **kept as a missing value on a
+  single-column one**, because there the two are the same characters and only the width
+  decides.
+- **Phase 0 was a *timing* measurement, not a size one, and it set the caps** (`limits.ts`
+  carries the table). 20 columns, 2 classes, CPU-reference matmul: at 10 000 rows the whole
+  ladder is ≤ 3 s; at 50 000 the worst case is 12 s; at 200 000 boosting at depth 6 is
+  **51 s**. So `MAX_ROWS = 50_000`, boosting's depth caps at **6** and the forest's at 12, and
+  **nothing was cut from the ladder**. Rows past the cap are **sampled evenly**, never
+  truncated to a prefix: the first 50 000 rows of a file sorted by date is a different dataset,
+  and saying "50 000 rows" about it would be true and misleading.
+- **FIT is LOAD relabelled by the route, and the fit itself is a `run`.** Machine A is
+  untouched and no page invents a `fitting` status. `load` hands typed arrays already in the
+  tab to a worker in the same tab and spends nothing; the *fit* costs, so it is a request —
+  which is what puts its metrics on `partial`, with `running` an inflight count and Machine A
+  staying `ready`. The FIT button posts `load` and its `run` together and `fitEngine.ts`
+  **serialises them with a chain** rather than trusting message order; `stop` jumps that queue,
+  or it would be delivered after the fit it was meant to interrupt.
+- **A fit's progress is determinate, and `model/progress.ts` is neither touched nor reused.**
+  Its indeterminate mode is the obvious reach for a page with no bytes and is the wrong one:
+  epochs, trees and rows are hyperparameters the user set a moment ago. The counter is
+  route-owned and the engine **throttles it to ~20 posts a second** — `useModelWorker` sets
+  React state from every `partial`, so a booster posting per tree would re-render a hundred
+  times in eight seconds. (`useLinearTraining` rAF-batches for the same reason; batching one
+  step earlier also skips the `postMessage`.)
+- **Two buttons spend, one per band: FIT in slot 2, PREDICT in the RUN transport.** Choosing a
+  sample, dropping a file, picking the target, toggling a feature and moving a hyperparameter
+  are all *choices*. This is the page where §1.2 is easiest to break — "pick a target column
+  and it fits" feels responsive and is the five-samples-five-inferences failure with a dropdown
+  in front of it. **The threshold slider is the legitimate re-derivation**: it recomputes
+  precision, recall and the whole confusion matrix from the held-out probabilities the fit
+  already returned, on the main thread, with no worker message.
+- **Every encoding decision is fitted on the training rows only** — the imputation mean, the
+  standardiser's variance, the level tables — and `design.ts` takes the training indices
+  explicitly so the rule is impossible to forget. Fitting them over the whole frame raises the
+  held-out score and looks like a better page: `/link-prediction`'s leakage lesson in its
+  cheapest form, and it fails *upward*.
+- **Trees are TypeScript in a Worker with no GPU at all, and the page says why.** Recursive
+  splitting is branch-heavy and does not vectorise; the linear and MLP rungs go through the
+  same `MatmulFn` seam `webgpu/linearModel.ts` uses — which is **reused, not reimplemented**
+  (softmax, cross-entropy and the SGD loop included). The engine reports the compute it
+  *actually* used, so a silent CPU fallback cannot make the page's one sentence untrue.
+- **The MLP ships because it loses.** Asserting "deep learning does not win on tabular data",
+  or omitting the model and explaining why, proves nothing — so it is a genuine fit on the same
+  split, and `just fe-e2e-tabular` asserts it comes in under the boosting model, because that
+  claim is on screen. Measured on the bundled synthetic sample: baseline 0.556, logistic 0.611,
+  forest **0.731**, boosting 0.700, MLP 0.631.
+- **A sample every family gets right demonstrates nothing about any of them**, and is satisfied
+  by a page that fits one model and draws it four times. Penguins (CC0) and wine (CC BY 4.0)
+  are real and near-separable — the linear *floor* wins on both — so the third sample is
+  **generated** (`scripts/make-tabular-samples.mjs`), built around an interaction no straight
+  line can express, and labelled synthetic everywhere it appears. Every sample renders its
+  licence.
+- **Permutation importance has two silent failures.** Forgetting to **restore** a shuffled
+  column poisons every column measured afterwards and still returns a complete, ordered,
+  plausible ranking; and sharing one random stream across columns makes each shuffle depend on
+  how many came before it, so the ranking moves when an unrelated feature is toggled off. It is
+  grouped by the **source** column, not the design column — shuffling one indicator of a
+  one-hot city produces an impossible row rather than a measurement.
+- **Nothing is persisted and nothing is uploaded, and the claim is asserted rather than
+  stated.** `lib/mnistCache.ts` and `lib/proteinsCache.ts` cache their dataset to IndexedDB and
+  are right to — they cache a public benchmark; this would be caching someone's payroll. A
+  reload loses the file, by design. **No route posts an `InferenceRun`** (`createInferenceRun`
+  still has no caller anywhere in `src/`), and tests spy on `fetch`, `indexedDB.open` and
+  `Storage.setItem` during a real fit.
+- **The parse gets its own one-shot worker**, not a message on the fit worker, and the reason
+  is the shared envelope: `ModelResponse`'s `ready` carries `{ model, backend }` and nothing
+  else, so a parse riding Machine A could not hand the column list back — and the page needs
+  the columns *before* it can offer a target.
+- **The bundled CSVs are loaded by dynamic `import()`**, not static `?raw`. Three of them are
+  ~97 KB of text no minifier can compress, and a static import puts every byte in the entry
+  chunk — `npm run check:bundle` fails on exactly that. It works only because nothing imports
+  them statically; one static importer anywhere and the dynamic import buys a microtask and
+  nothing else.
+
+- **`/tabular-regression` is the same worker, engine, hook and ladder — only the diagnostics
+  differ**, and a reviewer should be able to diff the two route files and see exactly that. It
+  is a second route rather than a branch for the `/visual-question-answering` reason: same
+  engine, different question, separate Hub tags, and no shared diagnostics — residuals replace
+  the confusion matrix and an interval replaces a threshold.
+- **Ridge is a Cholesky *solve*, not an inverse, and that is the page's teaching point.**
+  `XᵀX` and `Xᵀy` are `O(n·d²)` and `O(n·d)` in the row count and go to the GPU; the `d×d`
+  factorisation is microseconds and stays on the CPU — dispatching a kernel to invert a matrix
+  smaller than one workgroup is the trees lesson pointing the other way. And `λ > 0` is exactly
+  what makes `XᵀX + λI` positive definite, which is what makes the factorisation legitimate:
+  that is what the penalty buys, and it is why this is ridge rather than plain least squares.
+  At `λ = 0` on a design with two identical columns the factorisation **cannot complete**, and
+  the page says so — an inverse would have returned one of infinitely many coefficient vectors
+  and looked entirely fine.
+- **`transform.ts` owns the units so the route cannot mislabel them.** A fit on `log1p(y)`
+  produces a smaller RMSE for the same reason a logarithm is smaller; reading it beside a raw
+  fit's RMSE and concluding the transform helped is the mistake the toggle exists to
+  demonstrate. So the comparable numbers are **always** the back-transformed ones in the
+  target's own units, the log-space ones are a *separate* labelled field, and the page renders
+  what it is handed. `forwardTarget` also refuses a target at or below −1 rather than emitting
+  `NaN`s a gradient loop then propagates through every weight while the fit still "completes".
+- **The log toggle spends, and the page says so before the click.** A fit on `log1p(y)` cannot
+  be re-derived from a fit on `y`, so flipping it runs nothing and the next FIT is a real second
+  fit — same class as `/video-text-to-text`'s reverse toggle and `/zero-shot-classification`'s
+  `multi_label`.
+- **A band of the wrong width looks entirely correct**, so the quantile route reports its
+  **measured coverage** of the held-out rows and the E2E spec pins that to a range rather than
+  asserting a band was drawn. The quantile lines are fitted independently and can cross; they
+  are sorted per row, which changes no line's level and only relabels which is which where they
+  had already crossed.
+- **The residual plot is a main panel because the aggregate number hides the failure.** A model
+  with a respectable R² and a funnel-shaped residual plot is systematically worse at one end,
+  and no scalar on the page says so.
+- **`REGRESSION_FAMILIES` is a separate list, not an `objective` flag on the classification
+  four.** A depth that suits a Gini split is not automatically right for variance reduction, and
+  the defaults here were measured on this page's own samples — `/link-prediction` paid 0.19 of
+  AUC for the lesson that reuse which looks like a decision is often an inheritance.
+
+### In-browser forecasting (`src/forecast/` — `/time-series-forecasting`)
+
+The one route in the app with **no model, no download and no worker**, and each of those is
+a decision rather than an omission. See [`docs/roadmaps/tabular.md`](docs/roadmaps/tabular.md) §3.3.
+
+- **Both foundation forecasters are unavailable, and it is a missing *export*.** Neither
+  `google/timesfm-2.0-500m-pytorch` nor `ibm-granite/granite-timeseries-patchtst` publishes ONNX
+  weights (re-checked 2026-09-25 — the check is one API call each and a plan that says "checked"
+  about someone else's repo owes a date). No amount of quantization reaches that, so it is
+  `adding-a-task-page.md` §0 **question 1** the row fails, not question 2. It does not stop the
+  page, because the baselines *are* the page.
+- **There is no worker, and the page asserts that it still has none.** Naive is `last`, seasonal
+  naive is `last season`, drift is a straight line through the first and last points, and a
+  rolling backtest is a loop over slices — the whole page is O(points × windows) on a few
+  thousand points. Wrapping that in a worker to look consistent would add a protocol, a mock and
+  an asynchronous boundary with nothing to put across it. "No worker" is invisible when a
+  refactor undoes it, so the E2E spec **counts `Worker` constructions** and the unit test stubs
+  the constructor.
+- **Three bands, and the fourth is explained where it would have been.** FIT is absent — nothing
+  to download, nothing to fit — and `DeviceStatus` would be wrong too, since the page raises no
+  GPU question. An unexplained gap reads as an oversight, and here the absence is the category's
+  point. `slot-4` genuinely is not rendered and a test asserts it; model-page-pattern §7 carries
+  the row, because four bands is the default precisely so that three is a decision someone wrote
+  down.
+- **The backtest must be rolling-origin, never k-fold, and the leakage fails *upward*.** Shuffled
+  cross-validation on a time series trains on the future and scores the past — the
+  `/link-prediction` lesson in its oldest form — and the metric *improves*. `noLeakage()` is a
+  function rather than a comment, and the most valuable test in the module calls it on every
+  window of every mode.
+- **One split's number is shown next to the distribution of numbers**, and both come out of **one**
+  backtest call. Two calls could differ in the season, the horizon or the method, and the gap the
+  page draws would be attributed to the splitting. A page that showed only the spread would be
+  correct and would not make the point; one that showed only the single number would be every
+  other forecasting tutorial.
+- **The single split *is* one of the windows** — the last rolling origin is the notebook split —
+  so "the spread straddles it" is trivially true and useless as an assertion. `just
+  fe-e2e-forecast` asserts the spread is **wide** (`max > 1.5 × min`), which is exactly what a
+  backtest reusing one split's numbers for every window would fail. Measured on the airline
+  sample: single 47.8 against a window range of 12.6–53.1.
+- **MASE is the column to read, and its denominator is where it goes wrong.** It divides by the
+  **in-sample** naive error, so 1.0 means "no better than repeating the last value". Scaled by the
+  test window instead, or with a season of 1 where the metric is meant to be seasonal, it is still
+  a small number near 1 and nothing looks broken. MAPE returns **null**, not `Infinity` and not an
+  average over the non-zero rows — that average describes a different test set from every other
+  number in the object.
+- **The season length is a control, never detected.** Guessing the period and being wrong produces
+  a confident, plausible forecast off by a phase, with no symptom. Same reason **gaps and irregular
+  spacing are reported rather than interpolated**: a filled gap gives a seasonal forecast off by a
+  phase and the error is then blamed on the method.
+- **Drift is the mean per-step change, `(last − first)/(n − 1)`, not the regression slope.** The two
+  agree exactly on a straight line — which is the series everyone checks a drift forecast against —
+  so the wrong one survives review. `regressionSlope` is exported *only* so a test can assert drift
+  is not it.
+- **The implied frequency is the *modal* step.** A mean is dragged by one long gap; so is a median
+  on a short series, where three monthly points with one month missing give diffs
+  `[1 month, 2 months]` whose upper median is the gap itself — and the page then reports the
+  regular interval as the anomaly.
+- **The honesty note is a correctness requirement**, the third of its kind after
+  `/video-classification`'s frame-level disclaimer and `/question-answering`'s cannot-abstain note:
+  the page says it has no learned model, in OUTPUT's **empty state** so it is read before a forecast
+  exists, and a test pins the copy.
+
+- **A fitting page's test list is the standard one with three substitutions.** "Nothing
+  downloads on mount" becomes **nothing fits on mount** (no `autoLoad` argument *and* neither
+  `load` nor `fit` called); "choosing an input runs nothing" becomes **choosing a dataset, a
+  target, a feature or a hyperparameter fits nothing**; and the cached-weights case has no
+  analogue, so what replaces it is stronger — **spy on `fetch`, `indexedDB.open` and
+  `Storage.setItem` across a real fit**, because the privacy claim is a behaviour and gets an
+  assertion rather than a sentence. Plus one addition: assert the defaults are **swapped with
+  the family**, not inherited.
+- **A page with no worker owes an assertion that it still has none.** Stub `globalThis.Worker`
+  in the unit test and count constructions in an init script in the spec. happy-dom ships no
+  `Worker` at all, so the stub is what makes the assertion reachable *and* proves a hook
+  reaching for one would have found something — `vi.spyOn(globalThis, "Worker")` throws
+  "property is not defined" instead.
+- **Assert a chart's option object, never its pixels.** Mock the lazy `EChart` wrapper, capture
+  what it was handed, and check the parts that encode a decision: series order (ECharts draws a
+  horizontal category axis bottom-up, so "most important at the top" means *ascending* data),
+  colour by sign, whether a forecast is drawn only across the held-out region, whether a big
+  cloud was thinned. **Mock `getCSSVar` to echo its token name** too — happy-dom resolves no CSS
+  custom properties, so every colour comes back `""` and "positive and negative differ" is
+  unassertable.
+- **`<caption>` is a table's accessible *name*, not its description.** `toHaveAccessibleDescription`
+  on a `<table>` whose only annotation is a caption fails; `toHaveAccessibleName` is the query.
+- **`new RegExp(someCatalogueString)` is a trap in a catalogue test.** Licence strings contain
+  brackets, so "CC0 1.0 (public domain…)" becomes a capture group and matches nothing. Match with
+  a predicate against `textContent` instead.
+- **Two renders in one test need an explicit `cleanup()`.** Rendering a second instance to compare
+  two prop sets leaves both in the DOM, and the next `getByTestId` fails with "found multiple" —
+  a failure that has nothing to do with what the test is about. `render(<div />)` does not unmount
+  the first one.
+- **MASE near 1.0 is a *one-step* property, and reading it otherwise is the mistake available on
+  `/time-series-forecasting`.** The denominator is the in-sample **one-step** naive error by
+  definition, so a multi-step forecast is scored against a one-step benchmark: on the bundled
+  random walk a naive forecast measures ~1.0 one step out, 1.8 at four and ~3.0 at fourteen, with
+  nothing wrong. The page's note is therefore **horizon-aware** — at 1 it says 1.0 is break-even,
+  beyond it says 1.0 is not and to compare the methods against each other — and a test measures
+  the ratio at three horizons and asserts it grows. When a number looks wrong, check whether the
+  copy explaining it is what is wrong.
+
+### In-browser discrete maths (`src/theory/` — `/discrete-maths`)
+
+Theory's last row (#56), and **one topic rather than a syllabus**: `(Aᵏ)[s][v]` counts the
+walks of length k from s to v, the fact the three Graph ML pages stand on. A k-layer GCN
+multiplies by `Âᵏ`, so node s hears only from the nodes where row s of that power is nonzero.
+The page steps a BFS one layer per press and shows that row beside it. See
+[`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md) §7.
+
+- **The claim is a theorem, and it is tested as one.** Row s of `(A + I)ᵏ` is nonzero
+  *exactly* on the BFS ball of radius k. Without the self-loop, on a bipartite graph, it is
+  nonzero exactly at the distances with k's parity, so at odd k the source cannot hear
+  itself. That is why GCN adds `I` (`/graph`'s kernel adds it rather than storing it).
+  `theory/walks.test.ts` proves both over every catalogue graph, every source and every k
+  the page can show. The page's ✓/✗ is **computed** from the two halves, never narrated, so
+  a bug in either one surfaces on screen.
+- **Every reference is independent of the thing it checks.** BFS is checked against
+  Floyd–Warshall, and walk counts against brute-force enumeration of walks. The
+  `bipartite` flag is checked against "no closed walk of odd length", not against a BFS
+  2-colouring. Petersen is pinned to its spectrum (`trace(Aᵏ) = 3ᵏ + 5 + 4(−2)ᵏ`), and the
+  karate club to networkx: 78 edges, the full degree sequence, 45 triangles, diameter 5.
+  **Zachary's data came from networkx's own matrix, not from memory.** The matrix's
+  *weights* are asymmetric (22–33 is nonzero in one direction only); networkx adds an edge
+  wherever either direction is nonzero, and so does `theory/graphs.ts`.
+- **Three bands, no worker, and still a trigger.** Nothing to load (explained in
+  `no-load-band`), microseconds of arithmetic, and a stubbed `Worker` in the route test.
+  But **Step** is a real trigger: the frontier growing layer by layer is the lesson. So
+  choosing a graph or a source runs nothing and *clears* the result, and the A / A + I
+  switch sits in OUTPUT because it re-reads the k on screen.
+- **Small graphs are SVG**, not the canvas `/graph` needs for 2708 animated dots. Each node
+  is an element carrying `data-dist`/`data-walks`, so a spec names a node's distance
+  instead of guessing at pixels. `just fe-e2e-discrete` asserts published answers: Petersen
+  reaches all 10 nodes in 2 steps, and on C₈ one step of `A` leaves node 0 with 0 walks
+  back to itself.
+
+### In-browser reinforcement learning (`src/rl/` — `/rl`)
+
+The sixth modality, and the first page whose subject is **a loop the user watches**: the
+agent acts, the environment answers, and the Q-table's arrows turn around on screen while it
+learns. No checkpoint, no download, nothing to dispose — the constraint that replaces model
+size is the **environment**, which has to be written in TypeScript. See
+[`docs/roadmaps/rl.md`](docs/roadmaps/rl.md).
+
+- **The CPU is the answer, and it was measured, not assumed.** The roadmap handed the page
+  a `DeviceStatus` "as `/tensor` does". Phase 0 of #51 (`rl/limits.ts`,
+  `just fe-e2e-rl-phase0`) measured a Q-learning step at ~15 M/s and a 4→128→2 policy
+  forward at ~400 k/s on the CPU, against ~66/s through `runMatmul` — flat across a 16×
+  width change, because at batch 1 the GPU cost *is* the round trip. So `src/rl/` touches no
+  GPU, and **`/rl` is three bands** like `/time-series-forecasting`, explaining the absent
+  one in `no-load-band`. A band a roadmap assigns is a hypothesis.
+- **The loop must yield a *macrotask*, or Stop cannot arrive.** A CPU loop that only awaits
+  resolved promises never lets the event loop deliver a message, so `cancel` would queue
+  behind the run it was meant to interrupt. `webgpu/worker.ts` gets away without it because
+  its awaits are real GPU work; `session.ts` yields through a `MessageChannel`
+  (`setTimeout(0)` clamps to 4 ms). Cancel and live controls are handled synchronously on
+  arrival, and a Stop that beats its own run is remembered.
+- **Post render state on a wall-clock interval, never per step** — measured at **50×**
+  (32 ms vs 1614 ms for the same 230 956-step run). `session.test.ts` counts posts against
+  steps. The speed dial is a **simulation** dial, not a frame rate.
+- **A transferred buffer is gone.** The first `session.ts` put the last progress post's
+  Q-table in the result as well; that post had *transferred* it, so the result could not be
+  cloned and every run failed on its last line — in a real browser only. The unit harness
+  passed because it handed objects by reference. It now does what `postMessage` does
+  (`structuredClone(m, { transfer })`), and fails four tests on the old code. **A worker
+  test harness that does not clone cannot see a transfer bug.**
+- **Transcribe the environment, never invent it.** `envs/gridWorld.ts` is Gymnasium's
+  FrozenLake letter for letter — maps, LEFT/DOWN/RIGHT/UP order, walls, the 100/200 time
+  limits, and the slip rule (intended direction or either **perpendicular**, a third each,
+  **never backwards**). A plausible variant makes every published comparison wrong with
+  nothing on screen to say so. `terminated` and `truncated` stay separate: a learner
+  bootstraps through a time limit and not through a hole.
+- **Value iteration is the reference; a rising curve is not evidence.** A wrong Bellman
+  update still finds the goal on a 4×4 grid. `valueIteration.ts` solves the MDP exactly and
+  the tests compare entry for entry — deterministic to 10⁻³, slippery to 0.02 under
+  Robbins–Monro step sizes (a constant α leaves noise of order α, and a tolerance loose
+  enough for that passes a wrong update). The page runs the same check on the table in hand.
+- **The agent and the environment must not share a random stream.** Found by that check:
+  seeded alike, each action draw and the next slip were the *same number*, the dynamics
+  stopped matching the model, and Q-learning converged — confidently, with a rising curve —
+  to values **4× too high**. `QLearningRun` seeds the agent with `seed ^ 0x51ed27`, and a
+  test pins the failure.
+- **Ties go to the first action (`np.argmax`), and the ε = 0 lesson depends on it.** A cold
+  table's greedy action is LEFT, into the wall, forever. Random tie-breaking (Gymnasium's
+  tutorial) explores by accident and hides the lesson. The same rule makes a small
+  *constant* ε useless — 0 goals in 2000 episodes at ε = 0.2 — so ε **decays** by default.
+- **Defaults are per (map, slipperiness), swapped with the environment.** α = 0.5 suits a
+  deterministic grid and hurts a slippery one; the 8×8 needs ~20 000 episodes and one seed in
+  three never finds its goal, which the page leaves visible.
+- **Only Train spends; two controls steer a run in progress.** The speed dial and a live ε
+  change the behaviour of the loop already running — not a re-run — and live in RUN, saying
+  so. Everything in SELECT is a choice. The Q-table is also rendered **as text**
+  (`policy-grid`, `data-state`/`data-action`) so a spec can name an arrow the canvas hides.
+- **`/graph`'s trio is the precedent, not `useModelWorker`**: `session.ts` +
+  `trainRlInWorker` + `useRlTraining` (worker on the first Train, never on mount; rAF-batched;
+  a history of one entry per configuration). Learners plug in through `stepper.ts`, one
+  environment step at a time, so the loop never learns which algorithm it holds.
+- **CartPole is pinned to a trajectory Gymnasium generated, not to our expectations.** A
+  sign error in the pole update trains happily — the agent learns whatever physics it is
+  given — so `scripts/make-cartpole-fixture.py` runs Gymnasium itself and `cartPole.test.ts`
+  matches it to 12 decimals. The constants were verified against `cartpole.py` too
+  (half-length 0.5, the falling step still pays 1, 500 is a truncation).
+- **REINFORCE and Actor-Critic are one gradient with two weights**, `−(1/T)Σ wₜ log π`:
+  the return Gₜ, or a GAE(λ) advantage against a critic. Each learner is checked by finite
+  differences of its own loss, and "an exact critic gives zero advantage" is asserted as a
+  property. They plug in through `stepper.ts` — no new worker, hook or protocol; the hook
+  only gained `startAll` for "Run both" (sequential, one seed, Stop ends the queue).
+- **Each algorithm has its own measured defaults, and "Run both" keeps them.** At
+  Actor-Critic's rate REINFORCE collapses (79 ± 56, one seed at 9); at its own it is
+  258 ± 34 against Actor-Critic's 500 ± 1. Normalising REINFORCE's returns lifts it to
+  428 ± 20 — so that switch is off by default and says what it does. The page and its test
+  assert a **spread across seeds**, never a per-seed winner.
+- **Read the model card before writing the sentence.** §3.5's prose names the alignment
+  method SmolLM2-360M-Instruct's card states — SFT then **DPO**, not PPO-style RLHF.
+- **A caveat in OUTPUT's description must not squeeze the result.** The §3.4/§3.5 notes sit
+  there only while there is no result, then move below it; left in place they pushed the
+  page's own controls under the card edge, which the E2E spec caught.
+- **`/robotics` is a pair from two catalogues in two workers**, and the roadmap's teardown
+  advice was wrong for it. §3.6 asked for "`/pose`'s treatment: one combined size, and
+  `Promise.allSettled` on teardown". The size half is right — `vision/grounding.ts` builds
+  the pair *from* the shipped OWLv2 and Depth Anything entries, summing their measured
+  `bytes` and intersecting their `backends`, so nothing can drift. The teardown half is
+  not: `/pose` holds both models in **one** worker; here each half rides its own hook and
+  worker (`/text-ranking`'s shape), so a throwing dispose cannot reach the other, and
+  `useGrounding.test.ts` asserts that rather than adding an `allSettled` that could never
+  fire. Depth is **inverse** and relative — the page reports an ordering, sampled as a
+  median over the box's centre, never metres. **OWLv2's q8 export does not open on WASM**
+  (`Cast(13) … /class_head/Cast`), which also breaks `/zero-shot-object-detection`'s CPU
+  path; `just fe-e2e-robotics` needs a `shader-f16` GPU.
+- **A failure you ship needs a control that succeeds.** `/robotics`' behaviour-cloning entry
+  trains the same network, budget and seed on demonstrations that go round an obstacle both
+  ways (the policy averages them and collides, 5 seeds in 6) *and* one way (it reaches,
+  6 of 6), and shows the verdicts side by side — the failure alone is indistinguishable
+  from a bug in the page. The test pins it at the **action field** (heading 0–10° off the
+  obstacle against 16–39°), not only the rollout. And **check the demonstrator before the
+  learner**: the first scripted expert cut a corner and 3 of its 20 demonstrations
+  collided. It is a zero-byte entry beside the grounding pair; the route branches on
+  `kind` and each view owns its hooks, so choosing it mounts no grounding worker.
+- **Testing this category has four fixed shapes.** (1) **Every learner goes through the
+  session**, not only its own class: `session.test.ts` drives Q-learning, REINFORCE,
+  Actor-Critic and cloning through one harness that `structuredClone`s with `transfer`, so a
+  render state that reuses or re-references a transferred buffer fails in Vitest instead of
+  in a browser. (2) **Compare against an exact or outside reference** — value iteration for
+  the Q-table, a Gymnasium-generated trajectory for CartPole, finite differences for every
+  gradient — never "the curve went up". (3) **A canvas test asserts its accessible name**
+  (the angle, the outcome, the map); the painting is unreachable in happy-dom, so the
+  geometry lives in pure `*Geometry.ts` modules with their own tests. (4) **The E2E specs
+  train for real and are not `@slow`** (`fe-e2e-rl`, `fe-e2e-cloning` run in `just fe-e2e`):
+  nothing downloads and a run is a second, so asserting a named arrow, a return *band* and
+  a failure-beside-its-control costs nothing. See `docs/guides/e2e-testing.md`.
+
 ### Three routes were built and then cut for size — read this before adding one
 
 `/text-to-audio` (MusicGen: **599 MB** WASM / **1127 MB** WebGPU),
@@ -1215,11 +1679,13 @@ lighter entry to fall back on.** Two heavy *entries* went with them: Depth Pro
   *beside light ones*; it cannot rescue a page that is nothing but a heavy entry.
 - **§0 is cheap and skipping it is not.** The measurement that condemned each page
   was available before a line was written. Ask the three questions first.
-- **The taxonomy row stays; the route goes.** All three fall through to
-  `/tasks/$slug`, asserted by a test in `taskTaxonomy.test.ts` so none can be
-  re-mapped without a smaller model to point at. The sidebar mirrors the Hub, not
-  our build state, and a documented "too heavy, here are the numbers" is a
-  finished piece of work.
+- **The route goes, and so does the row.** The sidebar used to keep every Hub
+  row and send the unbuilt ones to a `/tasks/$slug` "on the roadmap" placeholder;
+  #59 removed those 15 rows and the placeholder, because the roadmaps had already
+  ruled each of them out and the page said otherwise. `taskTaxonomy.test.ts`
+  asserts none is listed, so re-adding one needs a route and a smaller model to
+  point at. A documented "too heavy, here are the numbers" in the roadmap is
+  still a finished piece of work.
 - **Rewrite a mechanism rather than deleting it with its subject.** `isHeavy` was
   a Depth Pro id check and is now a size threshold (`HEAVY_MODEL_BYTES`), so the
   `/depth` gate outlived the entry it was written for; `DepthModel.metric` stays
@@ -1276,9 +1742,11 @@ lighter entry to fall back on.** Two heavy *entries* went with them: Depth Pro
 `just be-test`, `just fe-e2e`, `uv run …`) is friction-free, then fences the dangerous edges —
 deny beats ask beats allow:
 
-- **allow** — everything, including `git add`/`commit`/`switch`/`checkout -b`/`stash`.
+- **allow** — everything, including `git add`/`commit`/`switch`/`checkout -b`/`stash`, and
+  **`gh issue close`**: it publishes no content, one click undoes it, and a finished issue
+  should not stay open waiting for a prompt.
 - **ask** — `git push`, `git rebase`, `git merge`, `gh pr create|merge`,
-  `gh issue create|edit|close`, `docker compose down`, `rm -rf`, plus the two `just` recipes that
+  `gh issue create|edit`, `docker compose down`, `rm -rf`, plus the two `just` recipes that
   wrap `docker compose down -v` (`just down-v`, `just db-reset`) — a wrapper is a different
   command string, so it needs its own rule. `git merge` prompting is deliberate and is the
   point at which `develop` lands on `main`: it is a release, so it is confirmed each time.

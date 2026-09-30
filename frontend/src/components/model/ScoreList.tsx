@@ -1,5 +1,5 @@
-// The NLP category's one shared output component: a sorted bar per label with
-// the score printed beside it.
+// The shared output for any classifier — text, image or audio: a sorted bar per
+// label with the score printed beside it.
 //
 // **It refuses to render a single row, and that is the whole design.** A
 // classifier's argmax is the least informative thing it produces: "POSITIVE"
@@ -25,10 +25,13 @@ export function ScoreList({
   caption,
   /** Silence the near-tie note where the page makes the point itself. */
   quiet = false,
+  /** `0.62`, or `62%` where the page reads as a percentage. */
+  format = "score",
   className,
   "data-testid": testId = "score-list",
 }: {
   scores: readonly ClassLabel[];
+  format?: "score" | "percent";
   caption?: React.ReactNode;
   quiet?: boolean;
   className?: string;
@@ -45,7 +48,7 @@ export function ScoreList({
     <div className={cn("space-y-3", className)} data-testid={testId}>
       <ul className="space-y-2">
         {ranked.map((s) => (
-          <ScoreRow key={s.label} label={s.label} score={s.score} />
+          <ScoreRow key={s.label} label={s.label} score={s.score} format={format} />
         ))}
       </ul>
 
@@ -75,14 +78,18 @@ export function ScoreList({
   );
 }
 
-function ScoreRow({ label, score }: ClassLabel) {
+function ScoreRow({
+  label,
+  score,
+  format,
+}: ClassLabel & { format: "score" | "percent" }) {
   const pct = Math.round(score * 100);
   return (
     <li className="space-y-1">
       <div className="flex items-baseline justify-between gap-3 text-sm">
         <span className="truncate">{label}</span>
         <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-          {score.toFixed(2)}
+          {format === "percent" ? `${pct}%` : score.toFixed(2)}
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">

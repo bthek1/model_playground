@@ -103,6 +103,9 @@ frontend/
 │   │   ├── models.ts      Registry API (list/get models, record runs)
 │   │   └── queryKeys.ts   Centralised TanStack Query key constants
 │   ├── components/        Shared / reusable UI components
+│   │   ├── model/         The task-page shell: ModelPage, ModelPicker, ModelStatus,
+│   │   │                    InputPanel, OutputPanel, RunButton, ScoreList
+│   │   ├── viz/           Model-visualization primitives (schematic, heatmap, PanZoom, readout)
 │   │   └── ui/            shadcn/ui copy-paste components (Button, Input, Form, Card…)
 │   ├── webgpu/            Raw-WebGPU runtime (no ML framework — see below)
 │   │   ├── capabilities.ts  detectWebGPU() — adapter/features/limits probe
@@ -131,8 +134,20 @@ frontend/
 │   │   ├── offsets.ts       The character offsets Transformers.js does not return
 │   │   ├── highlight.ts, mask.ts, zeroShot.ts  Pure derivations over a result in hand
 │   │   └── qa/              Its own engine: the span survives only if the tokens do
+│   ├── tabular/           Models fitted in the tab on the user's CSV (no checkpoint)
+│   ├── forecast/          Forecasting baselines + rolling backtest (no model, no worker)
+│   ├── rl/                Reinforcement learning, trained in the tab on the CPU
+│   │   ├── envs/            FrozenLake, CartPole (transcribed from Gymnasium), a toy reacher
+│   │   ├── session.ts       Pure worker handler: pacing, ≤ 60 Hz posts, Stop between steps
+│   │   ├── stepper.ts       The seam every learner plugs into, one env step at a time
+│   │   ├── qLearning.ts, valueIteration.ts   Tabular learner + its exact reference
+│   │   ├── policyGradient.ts, policyNet.ts   REINFORCE / Actor-Critic, backward by hand
+│   │   └── behaviourCloning.ts, demos.ts     /robotics' cloning entry and its demonstrator
 │   ├── model/             Shared across modalities: backend probe, size guardrail,
 │   │                        worker lifecycle, aggregate progress, weight cache
+│   │   ├── useModelWorker.ts   The two state machines every task hook wraps
+│   │   ├── useTaskSlots.ts     Task hook → ModelPicker/ModelStatus props + the error split
+│   │   └── catalogue.ts        CatalogueEntry (every entry type extends it) + useCatalogueEntry
 │   ├── telemetry/         The system panel's samplers, ring buffer and 1 Hz loop
 │   │                        (load and capacity only — see telemetry-panel.md)
 │   ├── hooks/             Custom hooks encapsulating business logic
@@ -154,7 +169,11 @@ frontend/
 │   │   ├── ui.ts          UI flags (sidebar, system panel, theme)
 │   │   └── auth.ts        Client-side auth flags
 │   ├── test/
-│   │   └── setup.ts       Vitest setup (imports @testing-library/jest-dom)
+│   │   ├── setup.ts       Vitest setup (imports @testing-library/jest-dom)
+│   │   └── taskPage.tsx   Route-test harness: hook-state builders + the §8 contract suite
+│   ├── __tests__/
+│   │   ├── routes/        One test per route, each registering the §8 contract
+│   │   └── conventions.test.ts  Fails if a route or hook drifts back to hand-wiring
 │   ├── types/
 │   │   └── auth.ts        TypeScript types matching API contracts
 │   └── main.tsx           App entry point (QueryClient, RouterProvider)

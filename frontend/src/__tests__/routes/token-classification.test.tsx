@@ -2,22 +2,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseNerResult } from "@/hooks/useNer";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import type { EntitySpan } from "@/text/highlight";
-
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
 
 // Offsets into NER_SAMPLES[0]: "Priya Raman flew from Wellington to Berlin …"
 const SPANS: EntitySpan[] = [
@@ -28,24 +19,11 @@ const SPANS: EntitySpan[] = [
 ];
 
 const mockRun = vi.fn().mockResolvedValue(SPANS);
-const base: UseNerResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const base = idleTask<UseNerResult>({
   result: null,
   unplaced: [],
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseNerResult = { ...base };
 let writeText: ReturnType<typeof vi.fn>;
 const useNer = vi.fn(() => mockState);
@@ -54,21 +32,13 @@ vi.mock("@/hooks/useNer", () => ({
   useNer: (...args: unknown[]) => useNer(...(args as [])),
 }));
 
-const { Route } = await import("@/routes/token-classification");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/token-classification"));
 
 function renderPage() {
-  if (!Page) throw new Error("Token classification route component not found");
   render(<Page />);
 }
 
-const ready = (extra: Partial<UseNerResult> = {}) => ({
-  ...base,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseNerResult> = {}) => readyTask(base, extra);
 
 /** Load, tag, and wait for the overlay. */
 async function tagged() {
@@ -90,6 +60,16 @@ describe("TokenClassificationPage", () => {
       value: { writeText },
       configurable: true,
     });
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useNer,
+    base,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: /find entities/i,
   });
 
   it("renders the heading and both model options", () => {
@@ -234,26 +214,5 @@ describe("TokenClassificationPage", () => {
   it("names the entity types the selected head can emit", () => {
     renderPage();
     expect(screen.getByText(/PER, ORG, LOC, MISC/)).toBeInTheDocument();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = {
-      ...base,
-      status: "error",
-      idle: false,
-      error: "404 model not found",
-    };
-    renderPage();
-    const note = screen.getByText(/404 model not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Input is too long" });
-    renderPage();
-    const note = screen.getByText(/input is too long/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

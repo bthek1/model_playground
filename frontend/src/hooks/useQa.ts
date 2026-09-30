@@ -10,7 +10,7 @@
 // docs/standards/model-page-pattern.md §2 are not re-derived here; the only
 // thing this hook owns is the catalogue lookup and the run's typed shape.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { LoadProgress } from "@/model/progress";
 import type { ModelProgress, ModelStatus } from "@/model/types";
@@ -18,6 +18,7 @@ import { useModelWorker } from "@/model/useModelWorker";
 import { DEFAULT_QA_MODEL, QA_MODELS } from "@/text/catalogue";
 import { createQaWorker } from "@/text/qa/client";
 import type { QaAnswer } from "@/text/qa/types";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface UseQaResult {
   status: ModelStatus;
@@ -45,10 +46,7 @@ export function useQa(
   model: string = DEFAULT_QA_MODEL,
   autoLoad = false,
 ): UseQaResult {
-  const meta = useMemo(
-    () => QA_MODELS.find((m) => m.id === model) ?? QA_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(QA_MODELS, model);
 
   const worker = useModelWorker<QaAnswer>({
     createWorker: createQaWorker,

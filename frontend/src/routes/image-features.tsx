@@ -28,6 +28,7 @@ import type { RawImage } from "@huggingface/transformers";
 import { Fingerprint, Loader2, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -39,7 +40,8 @@ import { Label } from "@/components/ui/label";
 import { useCameraFrames } from "@/hooks/useCameraFrames";
 import { useImageFeatures, type IndexEntry } from "@/hooks/useImageFeatures";
 import { useImagePick } from "@/hooks/useImagePick";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_FEATURE_MODEL,
   DEFAULT_K,
@@ -69,27 +71,18 @@ function ImageFeaturesPage() {
       FEATURE_MODELS[0],
   });
   const model = session.model.id;
+  const task = useImageFeatures(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
     index,
     indexing,
     buildIndex,
     addToIndex,
     clearIndex,
-  } = useImageFeatures(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [kind, setKind] = useState<VectorKind>("cls");
   const [k, setK] = useState(DEFAULT_K);
@@ -127,8 +120,11 @@ useImagePick();
   });
 
   const busy = running || preparing !== null || indexing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: FEATURE_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   // Which vectors this checkpoint actually offers. Derived from a real result
   // rather than from the catalogue, so a model whose output shape surprises us
@@ -191,28 +187,10 @@ useImagePick();
       }
       labels={{ output: "Nearest neighbours" }}
       select={
-        <ModelPicker
-          models={FEATURE_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -221,20 +199,15 @@ useImagePick();
           disabledHint="Load a model to embed anything. You can pick a picture first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || busy || !picked || live}
-                onClick={embedCurrent}
+                onRun={embedCurrent}
+                icon={Fingerprint}
+                running={running && !indexing}
+                runningLabel="Embedding…"
               >
-                {running && !indexing ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Embedding…
-                  </>
-                ) : (
-                  <>
-                    <Fingerprint className="size-4" /> Embed
-                  </>
-                )}
-              </Button>
+                Embed
+              </RunButton>
               <Button
                 variant="outline"
                 disabled={!ready || busy || !picked || live}

@@ -25,9 +25,27 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const assets = join(root, "dist", "assets");
 
-/** Measured 2026-09-14: 1,589 KB raw / 487 KB gzip. */
-const ENTRY_BUDGET_GZIP_KB = 560;
-const ENTRY_BUDGET_RAW_KB = 1800;
+/**
+ * Measured 2026-09-14: 1,589 KB raw / 487 KB gzip.
+ * Measured 2026-09-25: 1,803 KB raw / 543 KB gzip, after the three Tabular
+ * routes landed. Raw raised 1800 → 1860; gzip left where it was, because that
+ * is the number a user actually waits for and it still has headroom.
+ *
+ * The raise is app code, not a leaked library: the three routes add ~46 KB raw
+ * and ~13 KB gzip between them, `echarts` is still split, and the bundled CSVs
+ * and series are behind dynamic imports for exactly this reason — a static
+ * `?raw` import of the six sample files put 97 KB of incompressible text into
+ * this chunk and is what caught them.
+ * Measured 2026-09-28: 1,861 KB raw / 561 KB gzip, after `/rl` (#51, #52) and
+ * `/robotics` (#53). Raw raised 1860 → 1900 and gzip 560 → 575. Again app code:
+ * `echarts` is still split, the CartPole fixture is test-only, and the RL
+ * module is plain arithmetic with no library behind it. Every route is in this
+ * chunk — there is no route-level code splitting — so each new page moves it;
+ * lazy route components are the structural fix, and the next raise should be
+ * that instead.
+ */
+const ENTRY_BUDGET_GZIP_KB = 575;
+const ENTRY_BUDGET_RAW_KB = 1900;
 
 /**
  * Markers that must not appear in the entry chunk. Each is a string the library

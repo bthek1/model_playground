@@ -30,6 +30,7 @@ import {
 } from "@/hooks/useTextPipeline";
 import { FAITHFULNESS_MODEL, ZERO_SHOT_TEXT_MODELS } from "@/text/catalogue";
 import { BARE_HYPOTHESIS_TEMPLATE } from "@/text/zeroShot";
+import { findEntry } from "@/model/catalogue";
 
 /** One sentence, and how well the passage supports it. */
 export interface Entailment {
@@ -55,9 +56,7 @@ export interface UseEntailmentResult extends Omit<UseTextPipelineResult, "run"> 
 }
 
 export function useEntailment(autoLoad = false): UseEntailmentResult {
-  const meta =
-    ZERO_SHOT_TEXT_MODELS.find((m) => m.id === FAITHFULNESS_MODEL) ??
-    ZERO_SHOT_TEXT_MODELS[0];
+  const meta = findEntry(ZERO_SHOT_TEXT_MODELS, FAITHFULNESS_MODEL);
   const pipe = useTextPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

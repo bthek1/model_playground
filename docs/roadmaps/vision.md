@@ -20,7 +20,7 @@ ship —
 [`/background-removal`](../../frontend/src/routes/background-removal.tsx),
 [`/super-resolution`](../../frontend/src/routes/super-resolution.tsx) and
 [`/image-to-3d`](../../frontend/src/routes/image-to-3d.tsx).
-The other seven tasks in the sidebar render the `/tasks/$slug` placeholder:
+The other seven Hub tasks are not in the sidebar (#59 removed their placeholder rows):
 §3.12 says why six of them stay on a server, and §3.9 records the seventh —
 **Image to Text shipped and was then cut for size** (Florence-2 544 MB,
 vit-gpt2 482 MB; that was the entire catalogue). This file is
@@ -917,7 +917,7 @@ defensible reason.
 ### 3.12 The tasks that stay on a server
 
 Nine tasks, and each has a structural reason rather than a missing export. Six
-keep their `/tasks/$slug` placeholders outright; **Image to Image and Image to 3D
+have no route and no sidebar row; **Image to Image and Image to 3D
 now have routes covering the single-pass part of each**, and the generative part
 of both stays here.
 

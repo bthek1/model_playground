@@ -2,21 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseTextClassifierResult } from "@/hooks/useTextClassifier";
-
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 const POSITIVE = [
   { label: "POSITIVE", score: 0.97 },
@@ -24,23 +15,10 @@ const POSITIVE = [
 ];
 
 const mockRun = vi.fn().mockResolvedValue(POSITIVE);
-const base: UseTextClassifierResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const base = idleTask<UseTextClassifierResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 
 // The route calls the hook twice — once for the model it classifies with, once
 // for the optional comparison. States are keyed by model id so a test can put
@@ -56,24 +34,17 @@ vi.mock("@/hooks/useTextClassifier", () => ({
     useTextClassifier(...(args as [string])),
 }));
 
-const { Route } = await import("@/routes/text-classification");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/text-classification"));
 
 function renderPage() {
-  if (!Page) throw new Error("Text classification route component not found");
   render(<Page />);
 }
 
 const DISTILBERT = "Xenova/distilbert-base-uncased-finetuned-sst-2-english";
 const FINBERT = "Xenova/finbert";
 
-const ready = (extra: Partial<UseTextClassifierResult> = {}) => ({
-  ...base,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseTextClassifierResult> = {}) =>
+  readyTask(base, extra);
 
 /** Put the primary model in `ready`, leaving the comparison hook idle. */
 function primaryReady(extra: Partial<UseTextClassifierResult> = {}) {
@@ -85,6 +56,16 @@ describe("TextClassificationPage", () => {
     vi.clearAllMocks();
     states = new Map();
     fallback = { ...base };
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useTextClassifier,
+    base,
+    setState: (st) => {
+      fallback = st;
+    },
+    trigger: /^classify$/i,
   });
 
   it("renders the heading and every model option", () => {
@@ -259,24 +240,5 @@ describe("TextClassificationPage", () => {
     expect(compareRun).toHaveBeenCalledTimes(1);
     // Both answers came from the same captured sentence.
     expect(mockRun.mock.calls[0][0]).toBe(compareRun.mock.calls[0][0]);
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    fallback = { ...base, status: "error", idle: false, error: "404 model not found" };
-    renderPage();
-
-    const note = screen.getByText(/404 model not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    states.set(DISTILBERT, ready({ error: "Input is too long" }));
-    fallback = ready({ error: "Input is too long" });
-    renderPage();
-
-    const note = screen.getByText(/input is too long/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

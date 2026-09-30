@@ -94,30 +94,6 @@ describe("useModelSelection — selecting never loads", () => {
   });
 });
 
-describe("useModelSelection — the LOAD actions", () => {
-  it("onLoad runs the load it was handed, and records nothing", () => {
-    const load = vi.fn();
-    const { result } = setup();
-
-    act(() => result.current.onLoad(load)());
-
-    expect(load).toHaveBeenCalledOnce();
-    // Nothing about the load is persisted, so the next visit asks again.
-    expect(
-      Object.keys(JSON.parse(localStorage.getItem("model-prefs") ?? "{}").state ?? {}),
-    ).toEqual(["selected"]);
-  });
-
-  it("onCancel runs the cancel it was handed", () => {
-    const cancel = vi.fn();
-    const { result } = setup();
-
-    act(() => result.current.onCancel(cancel)());
-
-    expect(cancel).toHaveBeenCalledOnce();
-  });
-});
-
 describe("useModelSelection — eviction", () => {
   it("drops the weights and re-probes", async () => {
     probeReturns("small");

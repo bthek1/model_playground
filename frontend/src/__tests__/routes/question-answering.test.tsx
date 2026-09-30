@@ -2,22 +2,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseQaResult } from "@/hooks/useQa";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import type { QaAnswer } from "@/text/qa/types";
-
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
 
 const DISTILBERT = "Xenova/distilbert-base-cased-distilled-squad";
 
@@ -35,27 +26,16 @@ const GUSTAVE: QaAnswer = {
 };
 
 const mockRun = vi.fn<UseQaResult["run"]>().mockResolvedValue(GUSTAVE);
-const base: UseQaResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const base = idleTask<UseQaResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 
 let state: UseQaResult = { ...base };
 const useQa = vi.fn(() => state);
-vi.mock("@/hooks/useQa", () => ({ useQa: () => useQa() }));
+vi.mock("@/hooks/useQa", () => ({
+  useQa: (...args: unknown[]) => useQa(...(args as [])),
+}));
 
 // The cache probe, so the "cached weights still do not load themselves"
 // assertion below has something to probe.
@@ -65,21 +45,13 @@ vi.mock("@/model/cache", () => ({
   evictModel: () => Promise.resolve(),
 }));
 
-const { Route } = await import("@/routes/question-answering");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/question-answering"));
 
 function renderPage() {
-  if (!Page) throw new Error("Question-answering route component not found");
   render(<Page />);
 }
 
-const ready = (extra: Partial<UseQaResult> = {}): UseQaResult => ({
-  ...base,
-  status: "ready",
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseQaResult> = {}) => readyTask(base, extra);
 
 const passage = () => screen.getByLabelText(/^passage$/i);
 const questionBox = () => screen.getByLabelText(/^question$/i);
@@ -91,6 +63,16 @@ describe("QuestionAnsweringPage", () => {
     state = { ...base };
     cached = new Set();
     mockRun.mockResolvedValue(GUSTAVE);
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useQa,
+    base,
+    setState: (st) => {
+      state = st;
+    },
+    trigger: /^answer$/i,
   });
 
   it("renders the heading and the single catalogue entry", () => {
@@ -298,29 +280,6 @@ describe("QuestionAnsweringPage", () => {
       expect(screen.getByTestId("answer-truncated")).toBeInTheDocument(),
     );
     expect(screen.getByTestId("answer-truncated")).toHaveTextContent(/512/);
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    state = {
-      ...base,
-      status: "error",
-      idle: false,
-      error: "404 model not found",
-    };
-    renderPage();
-
-    const note = screen.getByText(/404 model not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    state = ready({ error: "There is no passage to answer from." });
-    renderPage();
-
-    const note = screen.getByText(/no passage to answer from/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });
 

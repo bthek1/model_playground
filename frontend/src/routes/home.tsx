@@ -7,6 +7,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { BenchmarkCard } from "@/components/home/BenchmarkCard";
 import { GpuCapabilitiesCard } from "@/components/home/GpuCapabilitiesCard";
 import { ModelCatalogCard } from "@/components/home/ModelCatalogCard";
+import { BACKEND_ENABLED } from "@/lib/features";
 
 export const Route = createFileRoute("/home")({
   component: HomePage,
@@ -19,7 +20,7 @@ function HomePage() {
         <h1 className="mb-1 text-2xl font-semibold">Model Playground</h1>
         <p className="text-sm text-muted-foreground">
           Run ML models directly on your GPU via raw WebGPU. Nothing is sent to a
-          server — the backend only serves the model catalog.
+          server{BACKEND_ENABLED && " — the backend only serves the model catalog"}.
         </p>
       </div>
 
@@ -28,7 +29,8 @@ function HomePage() {
         <BenchmarkCard />
       </div>
 
-      <ModelCatalogCard />
+      {/* The registry is the only thing here that needs /api (#57). */}
+      {BACKEND_ENABLED && <ModelCatalogCard />}
     </div>
   );
 }

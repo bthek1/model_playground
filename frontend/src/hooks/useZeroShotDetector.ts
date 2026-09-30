@@ -15,7 +15,7 @@
 // the page displays. The slider re-filters the returned list on the main
 // thread — the same pure-derivation trick `/object-detection` and `/vad` use.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import type { RawImage } from "@huggingface/transformers";
 
 import {
@@ -28,6 +28,7 @@ import {
   MODEL_THRESHOLD,
   ZERO_SHOT_DETECTOR_MODELS,
 } from "@/vision/zeroShotDetection";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface UseZeroShotDetectorResult
   extends Omit<UseVisionPipelineResult, "run"> {
@@ -49,12 +50,7 @@ export function useZeroShotDetector(
   model: string = DEFAULT_ZERO_SHOT_DETECTOR,
   autoLoad = false,
 ): UseZeroShotDetectorResult {
-  const meta = useMemo(
-    () =>
-      ZERO_SHOT_DETECTOR_MODELS.find((m) => m.id === model) ??
-      ZERO_SHOT_DETECTOR_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(ZERO_SHOT_DETECTOR_MODELS, model);
   const pipe = useVisionPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

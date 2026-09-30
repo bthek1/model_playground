@@ -9,7 +9,7 @@
 // download. The mask literal is neither — it is a fact about the tokenizer, and
 // the engine reconciles what the page sends against what it actually loaded.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   useTextPipeline,
@@ -23,6 +23,7 @@ import {
 } from "@/text/catalogue";
 import { cleanFill } from "@/text/mask";
 import type { FillMaskResult, RawFilling } from "@/text/types";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface FillMaskOutcome {
   /**
@@ -56,10 +57,7 @@ export function useFillMask(
   model: string = DEFAULT_FILL_MASK,
   autoLoad = false,
 ): UseFillMaskResult {
-  const meta = useMemo(
-    () => FILL_MASK_MODELS.find((m) => m.id === model) ?? FILL_MASK_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(FILL_MASK_MODELS, model);
   const pipe = useTextPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

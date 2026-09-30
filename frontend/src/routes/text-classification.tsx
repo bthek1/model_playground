@@ -14,19 +14,21 @@
 
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Type } from "lucide-react";
+import { Type } from "lucide-react";
 
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { RunButton } from "@/components/model/RunButton";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
-import { ScoreList } from "@/components/text/ScoreList";
+import { ScoreList } from "@/components/model/ScoreList";
 import { Button } from "@/components/ui/button";
 import { useTextClassifier } from "@/hooks/useTextClassifier";
 import type { ClassLabel } from "@/model/types";
 import { formatBytes } from "@/model/size";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   CLASSIFIER_SAMPLES,
   DEFAULT_TEXT_CLASSIFIER,
@@ -62,7 +64,6 @@ function TextClassificationPage() {
   const model = session.model;
 
   const primary = useTextClassifier(model.id);
-  useCacheRefresh(session, primary.ready);
 
   // The head-to-head's second model. `null` until the user opts in, because it
   // is a second download — see `compareCost` below, which is on screen before
@@ -80,8 +81,11 @@ function TextClassificationPage() {
 
   // Each error in the slot that produced it (§4): a failed download belongs to
   // LOAD, a failed inference to OUTPUT.
-  const loadError = primary.status === "error" ? primary.error : null;
-  const runError = primary.status === "error" ? null : primary.error;
+  const slots = useTaskSlots(session, primary, {
+    models: TEXT_CLASSIFIER_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   const compareLive = compareModel != null && compare.ready;
 
@@ -114,14 +118,7 @@ function TextClassificationPage() {
       labels={{ run: "Text", output: "Scores" }}
       select={
         <div className="space-y-4">
-          <ModelPicker
-            models={TEXT_CLASSIFIER_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={primary.loading || busy}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
 
           <div className="space-y-1.5 border-t pt-3">
             <p className="text-xs font-medium">Compare against</p>
@@ -167,18 +164,7 @@ function TextClassificationPage() {
       }
       load={
         <div className="space-y-4">
-          <ModelStatus
-            status={primary.status}
-            backend={primary.backend}
-            loadProgress={primary.loadProgress}
-            loadedInMs={primary.loadedInMs}
-            cached={session.isCached}
-            error={loadError}
-            onLoad={session.onLoad(primary.load)}
-            onCancel={session.onCancel(primary.cancel)}
-            onRetry={primary.retry}
-            disabled={busy}
-          />
+          <ModelStatus {...slots.status} />
 
           {compareModel && (
             <div
@@ -209,21 +195,15 @@ function TextClassificationPage() {
           ready={primary.ready}
           disabledHint="Load a model to classify. You can write the sentence first."
           controls={
-            <Button
+            <RunButton
               disabled={!primary.ready || busy || text.trim().length === 0}
-              onClick={() => void classify().catch(() => {})}
+              onRun={() => classify()}
+              icon={Type}
+              running={running}
+              runningLabel="Classifying…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Classifying…
-                </>
-              ) : (
-                <>
-                  <Type className="size-4" />
-                  {compareLive ? "Classify with both" : "Classify"}
-                </>
-              )}
-            </Button>
+              {compareLive ? "Classify with both" : "Classify"}
+            </RunButton>
           }
         >
           <div className="flex min-h-0 flex-1 flex-col gap-3">

@@ -15,7 +15,7 @@
 // normalises per frame — without that a relative-depth map renders uniformly
 // black or white and the page looks broken rather than wrong.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import type { RawImage } from "@huggingface/transformers";
 
 import {
@@ -23,6 +23,7 @@ import {
   type UseVisionPipelineResult,
 } from "@/hooks/useVisionPipeline";
 import { DEFAULT_DEPTH_MODEL, DEPTH_MODELS } from "@/vision/depth";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 /** The tensor half of the pipeline's output, as it crosses the worker boundary. */
 export interface DepthTensor {
@@ -61,10 +62,7 @@ export function useDepth(
   model: string = DEFAULT_DEPTH_MODEL,
   autoLoad = false,
 ): UseDepthResult {
-  const meta = useMemo(
-    () => DEPTH_MODELS.find((m) => m.id === model) ?? DEPTH_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(DEPTH_MODELS, model);
   const pipe = useVisionPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

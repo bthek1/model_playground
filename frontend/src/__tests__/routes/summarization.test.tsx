@@ -3,22 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseEntailmentResult } from "@/hooks/useEntailment";
 import type { UseSummarizeResult } from "@/hooks/useSummarize";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import { ARTICLE_SAMPLES, SUMMARIZER_MODELS } from "@/text/catalogue";
-
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
 
 vi.mock("@/model/useBackendProbe", () => ({
   useBackendProbe: () => "webgpu",
@@ -33,24 +24,11 @@ const mockRun = vi.fn(async (request: unknown) => {
   void request;
   return SUMMARY;
 });
-const base: UseSummarizeResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const base = idleTask<UseSummarizeResult>({
   meta: T5,
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 
 const entailRun = vi.fn(async (_p: string, sentences: readonly string[]) =>
   sentences.map((sentence, i) => ({ sentence, score: i === 0 ? 0.9 : 0.2 })),
@@ -74,11 +52,9 @@ vi.mock("@/hooks/useEntailment", () => ({
   useEntailment: () => entail,
 }));
 
-const { Route } = await import("@/routes/summarization");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/summarization"));
 
 function renderPage() {
-  if (!Page) throw new Error("Summarization route component not found");
   render(<Page />);
 }
 
@@ -86,7 +62,7 @@ const box = () => screen.getByRole("textbox");
 const trigger = () => screen.getByRole("button", { name: /^summarize$/i });
 
 function ready(extra: Partial<UseSummarizeResult> = {}) {
-  state = { ...base, status: "ready", idle: false, ready: true, ...extra };
+  state = readyTask(base, extra);
 }
 
 function entailReady() {
@@ -112,6 +88,16 @@ describe("SummarizationPage", () => {
       load: vi.fn(),
     } as unknown as UseEntailmentResult;
     localStorage.clear();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useSummarize,
+    base,
+    setState: (st) => {
+      state = st;
+    },
+    trigger: /^summarize$/i,
   });
 
   it("renders the heading and every model option", () => {
@@ -345,28 +331,5 @@ describe("SummarizationPage", () => {
         /out of\s+distribution/i,
       );
     });
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    state = {
-      ...base,
-      status: "error",
-      idle: false,
-      error: "Can't create a session. qdq_actions.cc:137",
-    };
-    renderPage();
-
-    const note = screen.getByText(/qdq_actions/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT", () => {
-    ready({ error: "Input is too long for this encoder" });
-    renderPage();
-
-    const note = screen.getByText(/too long for this encoder/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

@@ -23,19 +23,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Eraser, Loader2, SquareAsterisk, Wand2 } from "lucide-react";
+import { Eraser, SquareAsterisk, Wand2 } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
-import { ScoreList } from "@/components/text/ScoreList";
+import { ScoreList } from "@/components/model/ScoreList";
 import { SpanOverlay } from "@/components/text/SpanOverlay";
 import { Button } from "@/components/ui/button";
 import { useFillMask } from "@/hooks/useFillMask";
 import type { ClassLabel } from "@/model/types";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_FILL_MASK,
   FILL_MASK_MODELS,
@@ -93,21 +95,12 @@ function FillMaskPage() {
   const model = session.model;
   const mask = model.maskToken;
 
+  const task = useFillMask(model.id);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useFillMask(model.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
   const [text, setText] = useState(() =>
@@ -142,8 +135,11 @@ function FillMaskPage() {
   const masks = countMasks(text, mask);
   const blocked = maskProblem(masks, mask);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: FILL_MASK_MODELS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   // OUTPUT's sentence: the user's own string with the top filling spliced in,
   // and the span drawn over the characters it now occupies. Never the
@@ -220,14 +216,7 @@ function FillMaskPage() {
       labels={{ run: "Sentence", output: "Fillings" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={FILL_MASK_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={loading || running}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           <p className="text-xs leading-snug text-muted-foreground">
             Pretrained on {model.domain}. Its mask token is{" "}
             <code data-testid="mask-token" className="rounded bg-muted px-1 font-mono">
@@ -238,18 +227,7 @@ function FillMaskPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={running}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -257,20 +235,15 @@ function FillMaskPage() {
           disabledHint="Load a model to fill the mask. You can write the sentence first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || running || blocked != null}
-                onClick={() => void fill().catch(() => {})}
+                onRun={() => fill()}
+                icon={Wand2}
+                running={running}
+                runningLabel="Filling…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Filling…
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="size-4" /> Fill the mask
-                  </>
-                )}
-              </Button>
+                Fill the mask
+              </RunButton>
               <Button
                 variant="outline"
                 disabled={!ready || running}

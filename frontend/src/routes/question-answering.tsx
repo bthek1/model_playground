@@ -26,8 +26,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { HelpCircle, Loader2, MessageCircleQuestion } from "lucide-react";
+import { HelpCircle, MessageCircleQuestion } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -36,7 +37,8 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { SpanOverlay } from "@/components/text/SpanOverlay";
 import { Button } from "@/components/ui/button";
 import { useQa } from "@/hooks/useQa";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   ANSWER_LABEL,
   DEFAULT_QA_MODEL,
@@ -73,28 +75,22 @@ function QuestionAnsweringPage() {
   });
   const model = session.model;
 
+  const task = useQa(model.id);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useQa(model.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [context, setContext] = useState(QA_SAMPLES[0].context);
   const [question, setQuestion] = useState(QA_SAMPLES[0].question);
   const [ran, setRan] = useState<RunRecord | null>(null);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: QA_MODELS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   // The highlight is derived from the captured passage and the captured
   // offsets, so it is pinned to the pair that produced it.
@@ -146,14 +142,7 @@ function QuestionAnsweringPage() {
       labels={{ run: "Passage & question", output: "Answer" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={QA_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={loading || running}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           <p className="text-xs leading-snug text-muted-foreground">
             Fine-tuned on {model.domain}. It is the only extractive reader with
             an ONNX export — the SQuAD 2.0 checkpoints that can decline to
@@ -162,38 +151,22 @@ function QuestionAnsweringPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={running}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
           ready={ready}
           disabledHint="Load a model to ask a question. You can write the passage and the question first."
           controls={
-            <Button
+            <RunButton
               disabled={!canAsk}
-              onClick={() => void ask().catch(() => {})}
+              onRun={() => ask()}
+              icon={HelpCircle}
+              running={running}
+              runningLabel="Reading…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Reading…
-                </>
-              ) : (
-                <>
-                  <HelpCircle className="size-4" /> Answer
-                </>
-              )}
-            </Button>
+              Answer
+            </RunButton>
           }
         >
           <div className="flex min-h-0 flex-1 flex-col gap-3">

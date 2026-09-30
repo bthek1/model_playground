@@ -2,6 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseDepthResult } from "@/hooks/useDepth";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import { DEPTH_MODELS, isHeavy } from "@/vision/depth";
 
 // The image helpers reach for RawImage / canvas / getUserMedia, none of which
@@ -18,42 +24,14 @@ vi.mock("@/vision/image", () => ({
   openCamera: vi.fn().mockResolvedValue(() => {}),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const DEPTH = {
   predicted_depth: { data: new Float32Array([0, 1, 2, 3]), dims: [1, 2, 2] },
 };
 const mockRun = vi.fn().mockResolvedValue(DEPTH);
-const baseState: UseDepthResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseDepthResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseDepthResult = { ...baseState };
 const useDepth = vi.fn(() => mockState);
 
@@ -62,11 +40,9 @@ vi.mock("@/hooks/useDepth", async (importOriginal) => {
   return { ...actual, useDepth: (...a: unknown[]) => useDepth(...(a as [])) };
 });
 
-const { Route } = await import("@/routes/depth");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/depth"));
 
 function renderPage() {
-  if (!Page) throw new Error("Depth route component not found");
   render(<Page />);
 }
 
@@ -82,13 +58,8 @@ async function pickAndRun(sample: RegExp) {
   fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
 }
 
-const ready = (extra: Partial<UseDepthResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseDepthResult> = {}) =>
+  readyTask(baseState, extra);
 
 describe("DepthPage", () => {
   beforeEach(() => {
@@ -97,6 +68,16 @@ describe("DepthPage", () => {
     mockRun.mockResolvedValue(DEPTH);
     URL.createObjectURL = vi.fn(() => "blob:preview");
     URL.revokeObjectURL = vi.fn();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useDepth,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
   });
 
   it("renders the heading and every model option", () => {
@@ -127,11 +108,6 @@ describe("DepthPage", () => {
     expect(screen.getByTestId("slot-1")).toBeInTheDocument();
     expect(screen.getByTestId("slot-4")).toBeInTheDocument();
     expect(screen.getByTestId("output-empty")).toBeInTheDocument();
-  });
-
-  it("keeps the run control disabled until a model is ready", () => {
-    renderPage();
-    expect(screen.getByRole("button", { name: /estimate depth/i })).toBeDisabled();
   });
 
   it("shows no heavy-model notice, because no entry is heavy any more", () => {
@@ -198,21 +174,5 @@ describe("DepthPage", () => {
     const note = await screen.findByText(/unsupported image type/i);
     expect(screen.getByTestId("slot-3")).toContainElement(note);
     expect(mockRun).not.toHaveBeenCalled();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = { ...baseState, status: "error", idle: false, error: "404 not found" };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Non-zero status code" });
-    renderPage();
-    const note = screen.getByText(/non-zero status code/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

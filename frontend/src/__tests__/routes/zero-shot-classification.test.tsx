@@ -2,21 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseZeroShotTextResult } from "@/hooks/useZeroShotText";
-
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 const SCORES = [
   { label: "billing", score: 0.91 },
@@ -25,23 +16,10 @@ const SCORES = [
 ];
 
 const mockRun = vi.fn().mockResolvedValue(SCORES);
-const base: UseZeroShotTextResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const base = idleTask<UseZeroShotTextResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 
 let state: UseZeroShotTextResult = { ...base };
 /** The id the hook was last keyed on — selecting a model must re-key it. */
@@ -56,23 +34,16 @@ vi.mock("@/hooks/useZeroShotText", () => ({
     useZeroShotText(...(args as [string])),
 }));
 
-const { Route } = await import("@/routes/zero-shot-classification");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/zero-shot-classification"));
 
 function renderPage() {
-  if (!Page) throw new Error("Zero-shot classification route not found");
   render(<Page />);
 }
 
 const DEBERTA = "Xenova/nli-deberta-v3-xsmall";
 
-const ready = (extra: Partial<UseZeroShotTextResult> = {}) => ({
-  ...base,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseZeroShotTextResult> = {}) =>
+  readyTask(base, extra);
 
 const textBox = () => screen.getByLabelText(/text to classify/i);
 const labelBox = () => screen.getByLabelText(/^labels/i);
@@ -85,6 +56,16 @@ describe("ZeroShotClassificationPage", () => {
     state = { ...base };
     lastModel = null;
     localStorage.clear();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useZeroShotText,
+    base,
+    setState: (st) => {
+      state = st;
+    },
+    trigger: /^classify$/i,
   });
 
   it("renders the heading and every model option", () => {
@@ -369,23 +350,5 @@ describe("ZeroShotClassificationPage", () => {
     // default — and stating the cost is still not spending it.
     expect(lastModel).toBe("Xenova/bart-large-mnli");
     expect(base.load).not.toHaveBeenCalled();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    state = { ...base, status: "error", idle: false, error: "404 model not found" };
-    renderPage();
-
-    const note = screen.getByText(/404 model not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    state = ready({ error: "Input is too long" });
-    renderPage();
-
-    const note = screen.getByText(/input is too long/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

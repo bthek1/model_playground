@@ -15,6 +15,7 @@
 import type { Backend, DtypeSpec } from "@/model/backend";
 import type { ModelProgress, ModelRequest, ModelResponse } from "@/model/types";
 import type { MeasuredBytes } from "@/model/size";
+import type { CatalogueEntry } from "@/model/catalogue";
 
 /**
  * The decoding strategy, in full.
@@ -72,15 +73,10 @@ export interface TextGenResult {
 }
 
 /** A text-generation checkpoint. */
-export interface TextGenModel {
-  id: string;
-  label: string;
-  hint: string;
-  params: number;
+export interface TextGenModel extends CatalogueEntry {
   bytes: MeasuredBytes;
   /** Where the weights came from / what it was tuned for. */
   domain: string;
-  backends?: readonly Backend[];
   graphs?: readonly string[];
   dtypes?: Partial<Record<Backend, DtypeSpec>>;
   /**

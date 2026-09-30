@@ -32,6 +32,7 @@ import { Loader2, MessagesSquare, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Markdown } from "@/components/Markdown";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -43,7 +44,8 @@ import { useImagePick } from "@/hooks/useImagePick";
 import { useVlm } from "@/hooks/useVlm";
 import { supportsShaderF16 } from "@/model/backend";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_VLM_MODEL,
   MAX_INFERENCE_SIDE,
@@ -88,23 +90,15 @@ function ImageTextToTextPage() {
       VLM_MODELS.find((m) => m.id === DEFAULT_VLM_MODEL) ?? VLM_MODELS[0],
   });
   const model = session.model.id;
+  const task = useVlm(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
     backend,
     running,
     result,
     partial,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useVlm(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   // The question. Held state: editing it costs nothing until GENERATE.
   const [prompt, setPrompt] = useState<string>(DEFAULT_PROMPT);
@@ -129,8 +123,12 @@ function ImageTextToTextPage() {
   const f16Missing = backendProbe === "wasm" && hasF16 === false;
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: VLM_MODELS,
+    busy,
+    backend: backendProbe,
+  });
+  const { runError } = slots;
   const canRun = ready && !busy && picked != null && prompt.trim().length > 0;
 
   const ask = useCallback(
@@ -173,15 +171,7 @@ function ImageTextToTextPage() {
       }
       select={
         <div className="space-y-3">
-          <ModelPicker
-            models={VLM_MODELS}
-            value={model}
-            onChange={session.setModel}
-            disabled={loading || busy}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-            backend={backendProbe}
-          />
+          <ModelPicker {...slots.picker} />
           {/* The probe folds "no GPU" and "a GPU without f16" into one answer,
               which is right for gating and wrong for explaining. A machine with a
               working adapter deserves to be told what it is actually missing. */}
@@ -200,18 +190,7 @@ function ImageTextToTextPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -219,17 +198,16 @@ function ImageTextToTextPage() {
           error={ioError}
           disabledHint="Load a model to ask about a picture. You can pick one and write your question first."
           controls={
-            <Button disabled={!canRun} onClick={askCurrent} title="Ask the model">
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Generating…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="size-4" /> Generate
-                </>
-              )}
-            </Button>
+            <RunButton
+              disabled={!canRun}
+              onRun={askCurrent}
+              title="Ask the model"
+              icon={Sparkles}
+              running={running}
+              runningLabel="Generating…"
+            >
+              Generate
+            </RunButton>
           }
         >
           <ImageSourcePanel

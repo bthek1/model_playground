@@ -8,14 +8,10 @@
 // "Unauthorized access to file". Verified against the Hub API before changing.
 
 import type { PipelineTask } from "./pipelineTypes";
+import type { CatalogueEntry } from "@/model/catalogue";
 
-export interface ClassifierModel {
-  id: string;
-  label: string;
-  hint: string;
+export interface ClassifierModel extends CatalogueEntry {
   task: PipelineTask;
-  /** Parameter count in millions — drives the size-before-load estimate. */
-  params: number;
 }
 
 export const CLASSIFIER_MODELS: ClassifierModel[] = [

@@ -9,6 +9,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { IndexEntry, UseImageFeaturesResult } from "@/hooks/useImageFeatures";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import { poolEmbedding } from "@/vision/features";
 import { GALLERY_IMAGES } from "@/vision/gallery";
 
@@ -26,21 +32,6 @@ vi.mock("@/vision/image", () => ({
   fromVideo: (...a: unknown[]) => fromVideo(...(a as [])),
   openCamera: (...a: unknown[]) => openCamera(...a),
 }));
-
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
 
 /** `[1, 3, 2]` — CLS then two patches, so both poolings exist and differ. */
 const embedding = (cls: [number, number], p1: [number, number]) =>
@@ -62,28 +53,15 @@ const buildIndex = vi.fn().mockResolvedValue(undefined);
 const addToIndex = vi.fn().mockResolvedValue(undefined);
 const clearIndex = vi.fn();
 
-const baseState: UseImageFeaturesResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseImageFeaturesResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
   index: [],
   indexing: null,
   buildIndex,
   addToIndex,
   clearIndex,
-};
+});
 let mockState: UseImageFeaturesResult = { ...baseState };
 const useImageFeatures = vi.fn(() => mockState);
 
@@ -95,23 +73,16 @@ vi.mock("@/hooks/useImageFeatures", async (importOriginal) => {
   };
 });
 
-const { Route } = await import("@/routes/image-features");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/image-features"));
 
 function renderPage() {
-  if (!Page) throw new Error("Image features route component not found");
   return render(<Page />);
 }
 
 const RUN_BUTTON = /^embed$/i;
 
-const ready = (extra: Partial<UseImageFeaturesResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseImageFeaturesResult> = {}) =>
+  readyTask(baseState, extra);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -126,6 +97,16 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ImageFeaturesPage", () => {
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useImageFeatures,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
+  });
+
   it("renders the heading and every model option", () => {
     renderPage();
     expect(
@@ -287,25 +268,5 @@ describe("ImageFeaturesPage", () => {
     const note = await screen.findByText(/unsupported image type/i);
     expect(screen.getByTestId("slot-3")).toContainElement(note);
     expect(mockRun).not.toHaveBeenCalled();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = {
-      ...baseState,
-      status: "error",
-      idle: false,
-      error: "404 not found",
-    };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Non-zero status code" });
-    renderPage();
-    const note = screen.getByText(/non-zero status code/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
   });
 });

@@ -22,7 +22,7 @@
 //     from a different checkpoint are not comparable with these, so switching
 //     models drops the index; switching the pooling does not.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { RawImage } from "@huggingface/transformers";
 
 import {
@@ -39,6 +39,7 @@ import {
 import type { GalleryImage } from "@/vision/gallery";
 import { downscale, fromUrl } from "@/vision/image";
 import type { PlainTensor } from "@/model/serialize";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 /** One embedded gallery picture. */
 export interface IndexEntry {
@@ -75,10 +76,7 @@ export function useImageFeatures(
   model: string = DEFAULT_FEATURE_MODEL,
   autoLoad = false,
 ): UseImageFeaturesResult {
-  const meta = useMemo(
-    () => FEATURE_MODELS.find((m) => m.id === model) ?? FEATURE_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(FEATURE_MODELS, model);
   const pipe = useVisionPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

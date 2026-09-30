@@ -10,7 +10,7 @@
 // page's slider re-filters the returned list, which is a pure derivation and
 // needs no second inference — the same trick `/vad` uses for its threshold.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import type { RawImage } from "@huggingface/transformers";
 
 import {
@@ -23,6 +23,7 @@ import {
   DETECTOR_MODELS,
   MODEL_THRESHOLD,
 } from "@/vision/detection";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface UseObjectDetectorResult
   extends Omit<UseVisionPipelineResult, "run"> {
@@ -38,10 +39,7 @@ export function useObjectDetector(
   model: string = DEFAULT_DETECTOR,
   autoLoad = false,
 ): UseObjectDetectorResult {
-  const meta = useMemo(
-    () => DETECTOR_MODELS.find((m) => m.id === model) ?? DETECTOR_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(DETECTOR_MODELS, model);
   const pipe = useVisionPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

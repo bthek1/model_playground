@@ -28,13 +28,10 @@ function suffix(name: string): string {
 
 /** Route path -> task label, built once from the taxonomy. */
 const BY_ROUTE = new Map<string, string>();
-/** Task slug -> label, for the generic `/tasks/$slug` placeholder. */
-const BY_SLUG = new Map<string, string>();
 
 for (const category of taskCategories) {
   for (const t of category.tasks) {
     if (!BY_ROUTE.has(t.to)) BY_ROUTE.set(t.to, t.label);
-    BY_SLUG.set(t.slug, t.label);
   }
 }
 
@@ -54,11 +51,6 @@ export function titleForPath(pathname: string): string {
 
   const byRoute = BY_ROUTE.get(path);
   if (byRoute) return suffix(byRoute);
-
-  if (path.startsWith("/tasks/")) {
-    const label = BY_SLUG.get(path.slice("/tasks/".length));
-    if (label) return suffix(label);
-  }
 
   return APP_NAME;
 }

@@ -1,23 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { routeComponent } from "@/test/taskPage";
 import type { LinkMetrics } from "@/webgpu/linkPredictor";
 import type { LinkSummary, LinkTrainResult } from "@/webgpu/linkSession";
-
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
 
 vi.mock("@/components/charts/EChart", () => ({
   default: () => <div data-testid="echart" />,
@@ -102,11 +88,9 @@ vi.mock("@/hooks/useLinkPrediction", () => ({
   useLinkPrediction: () => hookState,
 }));
 
-const { Route } = await import("@/routes/link-prediction");
-const LinkPage = Route?.options?.component as React.ComponentType | undefined;
+const LinkPage = routeComponent(await import("@/routes/link-prediction"));
 
 function renderPage() {
-  if (!LinkPage) throw new Error("Link prediction route component not found");
   render(<LinkPage />);
 }
 

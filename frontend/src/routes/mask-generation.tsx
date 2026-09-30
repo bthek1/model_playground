@@ -42,7 +42,8 @@ import { OverlayCanvas } from "@/components/vision/OverlayCanvas";
 import { Button } from "@/components/ui/button";
 import { useImagePick } from "@/hooks/useImagePick";
 import { useSam } from "@/hooks/useSam";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import { drawMasks, drawPixels, OVERLAY_COLORS } from "@/vision/draw";
 import { downscale } from "@/vision/image";
 import { coverage } from "@/vision/sam/sam";
@@ -67,27 +68,19 @@ function MaskGenerationPage() {
       SAM_MODELS.find((m) => m.id === DEFAULT_SAM_MODEL) ?? SAM_MODELS[0],
   });
   const model = session.model.id;
+  const task = useSam(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
     backend,
     running,
     result,
-    error,
     encoding,
     encoded,
     encodedInMs,
     encode,
     run,
     reset,
-    load,
-    retry,
-    cancel,
-  } = useSam(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [points, setPoints] = useState<SamPoint[]>([]);
   const [candidate, setCandidate] = useState(0);
@@ -120,8 +113,11 @@ function MaskGenerationPage() {
   }, [picked, reset]);
 
   const busy = running || encoding || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: SAM_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   // Clicking the picture places a point. It does **not** decode: on this route
   // the pointer is the input device, so a click that ran the model made the
@@ -184,28 +180,10 @@ function MaskGenerationPage() {
         ) : undefined
       }
       select={
-        <ModelPicker
-          models={SAM_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel

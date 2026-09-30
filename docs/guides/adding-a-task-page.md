@@ -7,9 +7,11 @@
 > are the per-category model lookup tables it sends you to.
 
 Every task in [`taskTaxonomy.ts`](../../frontend/src/components/layout/taskTaxonomy.ts)
-answers "I have this input and want that output, what should I use". Most of
-them currently render the `/tasks/$slug` placeholder. Turning one into a real
-page is mechanical enough to write down, which is what this file does.
+answers "I have this input and want that output, what should I use", and
+every one of them has a page — the sidebar lists nothing else (#59). A Hugging
+Face task that is not in it yet is either unbuilt or ruled out in its category
+roadmap. Turning one into a real page is mechanical enough to write down, which
+is what this file does.
 
 The model research behind these guides comes from a companion collection of
 Python notebooks, which is a separate project — the checkpoints, the input
@@ -45,10 +47,54 @@ does not become a page. Three questions, in order:
    care makes them.
 
 If the answer to any of these is no, the task still gets a row in its
-category guide's feasibility table saying so and why, and it keeps its
-`/tasks/$slug` placeholder. **A documented "server-side, and here is the
-reason" is a finished piece of work.** It stops the next person spending three
+category guide's feasibility table saying so and why, and it stays out of the
+sidebar — there is no placeholder page to park it on (#59). **A documented
+"server-side, and here is the reason" is a finished piece of work.** It stops the next person spending three
 days rediscovering it.
+
+### One whole category answers all three questions vacuously, and needs a different bar
+
+The **Tabular** rows — `/tabular-classification`, `/tabular-regression`,
+`/time-series-forecasting` — have no checkpoint at all. The model is *fitted in
+the tab* on the user's own CSV, so question 1 has nothing to look for,
+question 2 is satisfied by zero bytes, and question 3 is not the right axis
+either. Answering "yes, yes, yes" and moving on would have skipped the only
+measurement that could have cut a page.
+
+**The bar that actually applies there is whether the *fit* fits**, and it had to
+be measured before the pages were designed around it. Synthetic data of 20
+columns and 2 classes, fitted in Node against the CPU-reference matmul:
+
+| rows | forest 60×d8 | boosting 120×d4 | boosting 120×d6 | logistic 30ep | MLP 40ep |
+|---|---|---|---|---|---|
+| 10 000 | 1.0 s | 1.7 s | **3.0 s** | 0.14 s | 1.8 s |
+| 50 000 | 4.6 s | 7.7 s | **12.2 s** | 0.71 s | 9.2 s |
+| 200 000 | 16.9 s | 31.4 s | **51.0 s** | 3.20 s | 38.0 s |
+
+Nothing was cut — but the table is what set `MAX_ROWS` to 50 000 and capped
+boosting's depth at 6, and it is recorded in
+[`tabular/limits.ts`](../../frontend/src/tabular/limits.ts) beside the constants
+rather than in a commit message. **Before writing a page, work out which
+resource it actually spends, and measure that one.** For every other category so
+far that is the download; it does not have to be.
+
+**Reinforcement Learning was the second vacuous category, and measuring its real
+resource reversed its own roadmap.** `/rl` and half of `/robotics` download nothing, so
+the resource is *step rate*. The roadmap assumed policy networks would run as WGSL
+matmuls and handed the LOAD band a `DeviceStatus`; Phase 0 of #51 measured ~15 M
+Q-learning steps/s and ~400 k policy forwards/s on the CPU against ~66/s through the GPU
+matmul, flat across widths because at batch 1 the GPU's cost is its round trip. So
+`src/rl/` has no GPU code and `/rl` has three bands
+([`rl/limits.ts`](../../frontend/src/rl/limits.ts), [`rl.md`](../roadmaps/rl.md) §0).
+**A band a roadmap assigns is a hypothesis; measure before you build it.**
+
+A second thing generalises from the same place: **question 1's "no" has two
+different causes, and they are not equally final.** A task whose only weights are
+PyTorch is a missing *export* — `/time-series-forecasting`'s two foundation
+forecasters are that case, and no amount of quantization reaches them. A task
+whose cheapest export is 600 MB is a *size* problem, which a smaller checkpoint
+can later solve. Say which one you found, and date it: the check is one API call
+and the answer can change.
 
 ### Question 2 has teeth, and three shipped routes proved it
 
@@ -114,7 +160,7 @@ choice**, and two shipped things prove it:
   would make them slower.
 
 What is *not* acceptable is a task that needs a server. That is the line —
-`/tasks/$slug` and a documented reason, per the rule above.
+no sidebar row and a documented reason, per the rule above.
 
 The one exception is the raw WebGPU path
 ([`frontend/src/webgpu/`](../../frontend/src/webgpu/)). A task with no ONNX
@@ -580,30 +626,49 @@ function DepthPage() {
     fallback: DEPTH_MODELS[0],
   });
   const task = useDepth(session.model.id);   // no autoLoad: the default is `idle`
-  useCacheRefresh(session, task.ready);
+  const input = useImagePick();
 
-  // A load error belongs in LOAD, a run error in OUTPUT. `status` splits them.
-  const loadError = task.status === "error" ? task.error : null;
-  const runError  = task.status === "error" ? null : task.error;
+  // The SELECT and LOAD wiring, once (#58): picker + status props to spread,
+  // the cache re-probe on `ready`, and the error split as two named fields —
+  // a load error belongs in LOAD (already inside `slots.status`), a run error
+  // in OUTPUT.
+  const slots = useTaskSlots(session, task, {
+    models: DEPTH_MODELS,
+    busy: task.running || input.preparing !== null,
+  });
+
+  const estimate = () => {
+    if (!input.picked) return;
+    return task.run(input.picked.image);   // RunButton swallows the rejection
+  };
 
   return (
     <ModelPage
       icon={Mountain}
       title="Depth Estimation"
       description="Relative depth from a single image, entirely in your browser."
-      select={
-        <ModelPicker
-          models={DEPTH_MODELS}
-          value={session.model.id}
-          onChange={session.setModel}
-          disabled={task.loading || task.running}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+      select={<ModelPicker {...slots.picker} />}
+      load={<ModelStatus {...slots.status} />}
+      run={
+        <InputPanel
+          ready={task.ready}
+          error={input.error}
+          controls={
+            <RunButton
+              icon={Mountain}
+              running={task.running}
+              runningLabel="Estimating…"
+              onRun={estimate}
+              disabled={!task.ready || task.running || !input.picked}
+            >
+              Estimate depth
+            </RunButton>
+          }
+        >
+          …
+        </InputPanel>
       }
-      load={<ModelStatus {...task} error={loadError} />}
-      run={<InputPanel … />}
-      output={<OutputPanel … error={runError} />}
+      output={<OutputPanel … error={slots.runError} />}
     />
   );
 }
@@ -651,18 +716,26 @@ task, beside the worker, shaped like
 [`audio/classification.ts`](../../frontend/src/audio/classification.ts):
 
 ```ts
-export interface DepthModel {
-  id: string;      // the Hub id, verified — this is what `just fe-e2e-models` checks
-  label: string;   // what the picker shows
-  hint: string;    // one line: what makes this model different from its neighbour
-  params: number;  // millions. Drives the size estimate in `model/size.ts`
-  bytes?: MeasuredBytes;  // per-backend override, when the estimate would mislead
+// CatalogueEntry (model/catalogue.ts) already carries the fields every entry has:
+//   id       the Hub id, verified — this is what `just fe-e2e-models` checks
+//   label    what the picker shows
+//   hint     one line: what makes this model different from its neighbour
+//   params   millions. Drives the size estimate in `model/size.ts`
+//   bytes?   per-backend override, when the estimate would mislead
+//   backends? only when a backend genuinely cannot run it
+export interface DepthModel extends CatalogueEntry {
   graphs?: readonly string[];   // ONNX base names, when the repo has no `model.onnx`
-  backends?: readonly Backend[]; // only when a backend genuinely cannot run it
+  // …and whatever else is specific to the task
 }
 export const DEPTH_MODELS: DepthModel[] = [ /* … */ ];
 export const DEFAULT_DEPTH_MODEL = DEPTH_MODELS[0].id;
 ```
+
+Extend `CatalogueEntry` (or the modality's `VisionModel`/`TextModel`, which do) rather
+than restating its fields. An entry type may *narrow* one — text entries require `bytes`
+— but never redefine it. In the task hook, look the entry up with
+`useCatalogueEntry(DEPTH_MODELS, model)`, which falls back to the first entry for an id
+the catalogue no longer has.
 
 `graphs` and `backends` are both about *not lying*, and both were added because the
 absence bit. `graphs` names the files the model actually downloads — CLIP as a feature
@@ -681,10 +754,11 @@ none.
 
 **The frontend taxonomy.** The sidebar is data. Categories and tasks live in
 [`components/layout/taskTaxonomy.ts`](../../frontend/src/components/layout/taskTaxonomy.ts)
-and are mapped to real routes through `REAL_ROUTES`. An unmapped task falls
-through to the generic `/tasks/$slug` placeholder, which is how the full Hugging
-Face taxonomy is displayed without every task existing. Adding a page means
-adding one `REAL_ROUTES` entry keyed by the slugified task label.
+and are mapped to real routes through `REAL_ROUTES`. The sidebar lists only
+tasks with a page: `task()` throws on a label with no `REAL_ROUTES` entry, so a
+row cannot be added ahead of its route. Adding a page means adding the task
+label to its category **and** one `REAL_ROUTES` entry keyed by the slugified
+label.
 
 **The backend registry**, optionally. One `ModelCard` per checkpoint the page
 offers — but note that `task` is a **fixed choice set**
@@ -725,12 +799,38 @@ card.
 
 ## 9. Tests: the same contract on every page
 
-Every task page asserts the identical list. Copy it from the nearest existing
-spec rather than writing it fresh.
+Every task page asserts the identical list, and half of it is now shared code.
+[`src/test/taskPage.tsx`](../../frontend/src/test/taskPage.tsx) (#58) provides the
+mocked-hook state builders (`idleTask`, `readyTask`, `loadingTask`,
+`loadErrorTask`), `routeComponent()` to get the page without a router mock, and
+`describeTaskPageContract()`. That registers the checks that read the same on every
+page: nothing loads on arrival, LOAD fires from slot 2, four slots with
+`output-empty`, GENERATE shut until `ready`, and each error in its own slot. Call
+it inside your route's `describe`, then write the input-specific half yourself.
+Skipping it is not an option you can take quietly: `src/__tests__/conventions.test.ts`
+fails for any route that calls `useModelSelection` and whose test does not register the
+contract, and likewise for a route that wires LOAD by hand or builds its own spinner
+trigger instead of a `RunButton`.
+[`token-classification.test.tsx`](../../frontend/src/__tests__/routes/token-classification.test.tsx)
+is the model:
 
-**Vitest, mocked network and mocked ONNX Runtime** (`src/__tests__/routes/`,
-with [`asr.test.tsx`](../../frontend/src/__tests__/routes/asr.test.tsx) as the
-model):
+```tsx
+const base = idleTask<UseNerResult>({ run: vi.fn(), result: null, … });
+const Page = routeComponent(await import("@/routes/token-classification"));
+
+describe("/token-classification", () => {
+  describeTaskPageContract({
+    render: renderPage, hook: useNer, base,
+    setState: (st) => { mockState = st; },
+    trigger: /find entities/i,
+  });
+  it("choosing a sample runs nothing", () => { … });   // stays local, always
+});
+```
+
+**Vitest, mocked network and mocked ONNX Runtime** (`src/__tests__/routes/`). The
+full list — the contract suite covers the on-mount, LOAD, four-slot, gating and
+error-slot items; the refresh, input and re-derive items are yours:
 
 - nothing downloads on mount: the hook was called with **no `autoLoad` argument**
   **and** `load` was not called
@@ -860,7 +960,7 @@ structurally: the run controls simply do not work until the load machine says
 [ ] Hook wraps useModelWorker, returns the §3 contract verbatim, adds no alias
 [ ] Selection persisted through useModelSelection with the route's own routeKey
 [ ] Route renders all four slots; autoLoad from the session; DOM order 1-4
-[ ] REAL_ROUTES entry added; placeholder retired; taxonomy test flipped
+[ ] Task row + REAL_ROUTES entry added; taxonomy test asserts the route
 [ ] Added to model-page.spec.ts's route table, and to model-ids.spec.ts's imports
 [ ] ModelCard rows created if used; task is a ModelTask choice, not a pipeline
 [ ] Vitest contract asserted, including which controls re-derive and which re-run

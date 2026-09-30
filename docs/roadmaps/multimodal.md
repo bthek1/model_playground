@@ -596,7 +596,7 @@ why" is a finished piece of work.
 
 **Any to Any is the closest call.** A Janus-understanding page is legitimate *if it is
 labelled for what it is*. Do not ship a page called "Any to Any" that only does one
-direction — rename the route, or leave the placeholder. Same rule `/super-resolution` and
+direction — rename the route, or leave it out of the sidebar. Same rule `/super-resolution` and
 `/image-to-3d` follow.
 
 Rule of thumb: **if the output is text, there is probably a page; if the output is pixels

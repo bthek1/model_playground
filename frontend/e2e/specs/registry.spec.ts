@@ -1,8 +1,9 @@
 import { mockModels } from "../../src/test/fixtures/models";
 import { expect, test } from "../fixtures/base";
 
-// Runs fully mocked — no Django, no Postgres.
-test.describe("model catalog", () => {
+// Runs fully mocked — no Django, no Postgres. @api: the static build
+// (VITE_BACKEND=off) renders no catalogue at all.
+test.describe("model catalog @api", () => {
   test("lists models from the registry", async ({ page, mockApi }) => {
     await mockApi();
     await page.goto("/home");

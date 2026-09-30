@@ -8,11 +8,12 @@
 // every stage — Select, Load, Input, Output — is a shared component.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { AudioLines, Download, Loader2, Play, Volume2 } from "lucide-react";
+import { AudioLines, Download, Play, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { play, toWavBlob } from "@/audio/io";
 import { DEFAULT_TTS_MODEL, TTS_MODELS } from "@/audio/tts";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -21,10 +22,8 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useTts } from "@/hooks/useTts";
-import {
-  useCacheRefresh,
-  useModelSelection,
-} from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 
 export const Route = createFileRoute("/text-to-speech")({
   component: TextToSpeechPage,
@@ -43,22 +42,8 @@ function TextToSpeechPage() {
     fallback: TTS_MODELS.find((m) => m.id === DEFAULT_TTS_MODEL) ?? TTS_MODELS[0],
   });
   const model = session.model.id;
-  const {
-    status,
-    ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
-    result,
-    running,
-    error,
-    synthesize,
-    load,
-    retry,
-    cancel,
-  } = useTts(model);
-  useCacheRefresh(session, ready);
+  const task = useTts(model);
+  const { ready, result, running, synthesize } = task;
 
   const meta = session.model;
   const [voice, setVoice] = useState(meta.voices?.[0]?.id);
@@ -101,8 +86,11 @@ function TextToSpeechPage() {
   const seconds = result ? result.audio.length / result.sampleRate : 0;
   // A load failure belongs in LOAD; anything else came from a run, so it belongs
   // in OUTPUT (§4).
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: TTS_MODELS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   return (
     <ModelPage
@@ -111,46 +99,30 @@ function TextToSpeechPage() {
       description="Turn text into speech entirely in your browser — the model runs on your GPU (WebGPU) or CPU (WASM) in a Web Worker. Nothing is uploaded."
       select={
         <ModelPicker
-          models={TTS_MODELS}
-          value={model}
+          {...slots.picker}
           onChange={(m) => {
             session.setModel(m);
             setVoice(m.voices?.[0]?.id);
           }}
-          disabled={loading || running}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
         />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
           ready={ready}
           disabledHint="Load a model to synthesise speech."
           controls={
-            <Button disabled={!ready || running || !text.trim()} onClick={onSpeak}>
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Synthesising…
-                </>
-              ) : (
-                <>
-                  <Volume2 className="size-4" /> Speak
-                </>
-              )}
-            </Button>
+            <RunButton
+              disabled={!ready || running || !text.trim()}
+              onRun={onSpeak}
+              icon={Volume2}
+              running={running}
+              runningLabel="Synthesising…"
+            >
+              Speak
+            </RunButton>
           }
         >
           {meta.voices && (

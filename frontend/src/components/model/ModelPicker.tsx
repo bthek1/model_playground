@@ -16,29 +16,16 @@
 import { AlertTriangle, HardDrive, Trash2 } from "lucide-react";
 
 import type { Backend } from "@/model/backend";
-import { sizeEstimate, type MeasuredBytes } from "@/model/size";
+import type { CatalogueEntry } from "@/model/catalogue";
+import { sizeEstimate } from "@/model/size";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** The shape every audio model catalogue entry shares. */
-export interface PickableModel {
-  id: string;
-  label: string;
-  hint: string;
-  /** Parameter count in millions. */
-  params: number;
-  /** Measured download bytes, where the params estimate would mislead. */
-  bytes?: MeasuredBytes;
-  /**
-   * Backends this model is known to run on. Omitted means "both".
-   *
-   * A catalogue could always *declare* this; until `backend` below existed
-   * nothing consumed it, so a WebGPU-only model was still offered on a CPU-only
-   * machine and the limitation surfaced as a failed download. Declaring a
-   * constraint that nothing enforces is worse than not declaring it.
-   */
-  backends?: readonly Backend[];
-}
+/**
+ * What the picker needs of an entry — every modality's catalogue type extends
+ * it. The name predates `model/catalogue.ts` and is kept for the callers.
+ */
+export type PickableModel = CatalogueEntry;
 
 export function ModelPicker<T extends PickableModel>({
   models,

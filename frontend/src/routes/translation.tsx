@@ -25,8 +25,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Languages, Loader2 } from "lucide-react";
+import { Languages } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -35,7 +36,8 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { useTranslate } from "@/hooks/useTranslate";
 import { formatBytes, sizeEstimate } from "@/model/size";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_TRANSLATION_MODEL,
   NLLB_BYTES,
@@ -66,28 +68,22 @@ function TranslationPage() {
   });
   const model = session.model;
 
+  const task = useTranslate(model.id);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useTranslate(model.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const samples = TRANSLATION_SAMPLES[model.source] ?? [];
   const [text, setText] = useState(() => samples[0]?.text ?? "");
   const [ran, setRan] = useState<RunRecord | null>(null);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: TRANSLATION_MODELS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   const size = useMemo(
     () => sizeEstimate(model.params, model.bytes),
@@ -130,14 +126,7 @@ function TranslationPage() {
       labels={{ select: "Direction", run: "Source text", output: "Translation" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={TRANSLATION_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={loading || running}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           {/* The most likely misreading of this page, stated where the control
               that invites it lives. */}
           <p
@@ -171,38 +160,22 @@ function TranslationPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={running}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
           ready={ready}
           disabledHint="Load a direction to translate. You can write the text first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || running || text.trim().length === 0}
-              onClick={() => void translate().catch(() => {})}
+              onRun={() => translate()}
+              icon={Languages}
+              running={running}
+              runningLabel="Translating…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Translating…
-                </>
-              ) : (
-                <>
-                  <Languages className="size-4" /> Translate
-                </>
-              )}
-            </Button>
+              Translate
+            </RunButton>
           }
         >
           <div className="flex min-h-0 flex-1 flex-col gap-3">

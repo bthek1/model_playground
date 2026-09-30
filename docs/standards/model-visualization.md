@@ -74,8 +74,10 @@ five; render the ones that apply, in this order of prominence.
 These are the reusable primitives. New model views should **compose these**, not invent
 parallel ones. The canonical implementations live in
 [`components/viz/`](../../frontend/src/components/viz/) — `schematic.tsx` (Stage / Arrow /
-ParamChip) and `heatmap.tsx` (HeatmapTile / DivergingLegend). Both the Training route
-(`components/training/`) and the Tensor route (`routes/tensor.tsx`) compose them.
+ParamChip), `heatmap.tsx` (HeatmapTile / DivergingLegend) and `readout.tsx` (Fact / Score,
+the `<dt>`/`<dd>` cells of a metrics readout — the three graph pages use them). Both the
+Training route (`components/training/`) and the Tensor route (`routes/tensor.tsx`) compose
+them.
 
 ### Stage
 A labelled box for one phase of the pipeline (INPUT LAYER, WEIGHTS + BIAS, OUTPUT). Title
@@ -205,6 +207,26 @@ Two extensions, both from `/link-prediction`, and both general:
   drawing never could. `pixelsToNode` — the click's inverse of `layoutToPixels` —
   is pure and exported for the reason §3's SAM note gives: a mis-mapped click
   returns a *plausible* node.
+
+**A small graph is SVG, and the canvas rule does not apply to it.**
+`/discrete-maths`
+([`components/theory/GraphDiagram.tsx`](../../frontend/src/components/theory/GraphDiagram.tsx))
+draws at most 34 nodes, redrawn once per button press rather than every epoch. At that
+size SVG costs nothing and buys an element per node: the distance and walk count sit in
+the DOM (`data-dist`, `data-walks`, a `<title>`), where a screen reader and a spec can read
+them. A canvas would show them only as pixels. The criterion is the one this section already
+states, read the other way: *is it repainted continuously, or are there thousands of marks?*
+If neither, draw marks as elements. Three details carry over from the canvas:
+
+- The fit is pure and exported (`graphGeometry.fitToBox`), to the layout's **own extent**
+  as `ProteinGallery` fits its tiles. The path graph's y values span ±0.08, and fitting the
+  unit square instead draws it as a line through an empty box.
+- Distance is a **sequential** magnitude (`reachedOpacity`: near = strong, capped so the
+  printed number stays legible) and is always also printed on the node. The frontier is
+  ringed *and* dashed, not only shaded.
+- The walk-count matrix is sequential on a **log** scale (`countOpacity`), because one row
+  spans 1 to thousands. A zero cell is drawn empty and nothing else: "no walk of length k"
+  is the fact the page is about, and it must not read as "few".
 
 ### Small multiples (graph ML)
 

@@ -29,8 +29,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Ruler, Waypoints } from "lucide-react";
+import { Ruler, Waypoints } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -39,7 +40,8 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { VectorStrip } from "@/components/text/VectorStrip";
 import { Button } from "@/components/ui/button";
 import { useTextEmbed } from "@/hooks/useTextEmbed";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_EMBED_MODEL,
   EMBED_MODELS,
@@ -71,31 +73,25 @@ function TextFeaturesPage() {
   });
   const model = session.model;
 
+  const task = useTextEmbed(model.id);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     run,
     compose,
     cached,
-  } = useTextEmbed(model.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [text, setText] = useState(FEATURE_TEXT_SAMPLES[0].text);
   const [ran, setRan] = useState<RunRecord | null>(null);
   /** Dimensions kept. `null` means "all of them" — the honest default. */
   const [keep, setKeep] = useState<number | null>(null);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: EMBED_MODELS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   const steps = useMemo(
     () => truncationSteps(ran?.vector.length ?? model.dim),
@@ -143,14 +139,7 @@ function TextFeaturesPage() {
       labels={{ run: "Text", output: "Vector" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={EMBED_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={loading || running}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           <p className="text-xs leading-snug text-muted-foreground">
             <span data-testid="embed-dim">{model.dim}</span> dimensions, pooled
             by{" "}
@@ -179,18 +168,7 @@ function TextFeaturesPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={running}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -198,20 +176,15 @@ function TextFeaturesPage() {
           disabledHint="Load a model to embed text. You can write it first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || running || text.trim().length === 0}
-                onClick={() => void embed().catch(() => {})}
+                onRun={() => embed()}
+                icon={Ruler}
+                running={running}
+                runningLabel="Embedding…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Embedding…
-                  </>
-                ) : (
-                  <>
-                    <Ruler className="size-4" /> Embed
-                  </>
-                )}
-              </Button>
+                Embed
+              </RunButton>
               {cached > 0 && (
                 <span
                   data-testid="embed-cache"

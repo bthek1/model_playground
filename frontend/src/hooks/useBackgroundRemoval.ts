@@ -9,7 +9,7 @@
 // re-align — everything the page draws, `vision/matte.ts` derives from this one
 // buffer.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import type { RawImage } from "@huggingface/transformers";
 
 import {
@@ -22,6 +22,7 @@ import {
   type MatteModel,
 } from "@/vision/backgroundRemoval";
 import type { RgbaImage } from "@/vision/matte";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface UseBackgroundRemovalResult
   extends Omit<UseVisionPipelineResult, "run"> {
@@ -36,10 +37,7 @@ export function useBackgroundRemoval(
   model: string = DEFAULT_MATTE_MODEL,
   autoLoad = false,
 ): UseBackgroundRemovalResult {
-  const meta = useMemo(
-    () => MATTE_MODELS.find((m) => m.id === model) ?? MATTE_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(MATTE_MODELS, model);
   const pipe = useVisionPipeline(meta.task, meta.id, autoLoad, meta.dtypes);
   const { run: post } = pipe;
 

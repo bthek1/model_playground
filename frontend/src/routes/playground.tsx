@@ -6,6 +6,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Cpu } from "lucide-react";
 
 import { ModelCatalogCard } from "@/components/home/ModelCatalogCard";
+import { BACKEND_ENABLED } from "@/lib/features";
 import {
   Card,
   CardContent,
@@ -55,7 +56,8 @@ function PlaygroundPage() {
         </p>
       </div>
 
-      <ModelCatalogCard />
+      {/* The registry needs /api; a static build (#57) has none. */}
+      {BACKEND_ENABLED && <ModelCatalogCard />}
 
       <Card>
         <CardHeader>

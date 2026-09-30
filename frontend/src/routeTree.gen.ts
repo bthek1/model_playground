@@ -19,17 +19,22 @@ import { Route as VadRouteImport } from './routes/vad'
 import { Route as TranslationRouteImport } from './routes/translation'
 import { Route as TrainingRouteImport } from './routes/training'
 import { Route as TokenClassificationRouteImport } from './routes/token-classification'
+import { Route as TimeSeriesForecastingRouteImport } from './routes/time-series-forecasting'
 import { Route as TextToSpeechRouteImport } from './routes/text-to-speech'
 import { Route as TextRankingRouteImport } from './routes/text-ranking'
 import { Route as TextGenerationRouteImport } from './routes/text-generation'
 import { Route as TextFeaturesRouteImport } from './routes/text-features'
 import { Route as TextClassificationRouteImport } from './routes/text-classification'
 import { Route as TensorRouteImport } from './routes/tensor'
+import { Route as TabularRegressionRouteImport } from './routes/tabular-regression'
+import { Route as TabularClassificationRouteImport } from './routes/tabular-classification'
 import { Route as SuperResolutionRouteImport } from './routes/super-resolution'
 import { Route as SummarizationRouteImport } from './routes/summarization'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SentenceSimilarityRouteImport } from './routes/sentence-similarity'
 import { Route as SegmentationRouteImport } from './routes/segmentation'
+import { Route as RoboticsRouteImport } from './routes/robotics'
+import { Route as RlRouteImport } from './routes/rl'
 import { Route as QuestionAnsweringRouteImport } from './routes/question-answering'
 import { Route as PoseRouteImport } from './routes/pose'
 import { Route as PlaygroundRouteImport } from './routes/playground'
@@ -45,13 +50,13 @@ import { Route as HomeRouteImport } from './routes/home'
 import { Route as GraphClassificationRouteImport } from './routes/graph-classification'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as FillMaskRouteImport } from './routes/fill-mask'
+import { Route as DiscreteMathsRouteImport } from './routes/discrete-maths'
 import { Route as DepthRouteImport } from './routes/depth'
 import { Route as BackgroundRemovalRouteImport } from './routes/background-removal'
 import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
 import { Route as AudioClassificationRouteImport } from './routes/audio-classification'
 import { Route as AsrRouteImport } from './routes/asr'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as TasksSlugRouteImport } from './routes/tasks.$slug'
 
 const ZeroShotObjectDetectionRoute = ZeroShotObjectDetectionRouteImport.update({
   id: '/zero-shot-object-detection',
@@ -104,6 +109,11 @@ const TokenClassificationRoute = TokenClassificationRouteImport.update({
   path: '/token-classification',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TimeSeriesForecastingRoute = TimeSeriesForecastingRouteImport.update({
+  id: '/time-series-forecasting',
+  path: '/time-series-forecasting',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TextToSpeechRoute = TextToSpeechRouteImport.update({
   id: '/text-to-speech',
   path: '/text-to-speech',
@@ -134,6 +144,16 @@ const TensorRoute = TensorRouteImport.update({
   path: '/tensor',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TabularRegressionRoute = TabularRegressionRouteImport.update({
+  id: '/tabular-regression',
+  path: '/tabular-regression',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TabularClassificationRoute = TabularClassificationRouteImport.update({
+  id: '/tabular-classification',
+  path: '/tabular-classification',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SuperResolutionRoute = SuperResolutionRouteImport.update({
   id: '/super-resolution',
   path: '/super-resolution',
@@ -157,6 +177,16 @@ const SentenceSimilarityRoute = SentenceSimilarityRouteImport.update({
 const SegmentationRoute = SegmentationRouteImport.update({
   id: '/segmentation',
   path: '/segmentation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoboticsRoute = RoboticsRouteImport.update({
+  id: '/robotics',
+  path: '/robotics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RlRoute = RlRouteImport.update({
+  id: '/rl',
+  path: '/rl',
   getParentRoute: () => rootRouteImport,
 } as any)
 const QuestionAnsweringRoute = QuestionAnsweringRouteImport.update({
@@ -234,6 +264,11 @@ const FillMaskRoute = FillMaskRouteImport.update({
   path: '/fill-mask',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DiscreteMathsRoute = DiscreteMathsRouteImport.update({
+  id: '/discrete-maths',
+  path: '/discrete-maths',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DepthRoute = DepthRouteImport.update({
   id: '/depth',
   path: '/depth',
@@ -264,11 +299,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TasksSlugRoute = TasksSlugRouteImport.update({
-  id: '/tasks/$slug',
-  path: '/tasks/$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -277,6 +307,7 @@ export interface FileRoutesByFullPath {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/discrete-maths': typeof DiscreteMathsRoute
   '/fill-mask': typeof FillMaskRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
@@ -292,17 +323,22 @@ export interface FileRoutesByFullPath {
   '/playground': typeof PlaygroundRoute
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
+  '/rl': typeof RlRoute
+  '/robotics': typeof RoboticsRoute
   '/segmentation': typeof SegmentationRoute
   '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
   '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
+  '/tabular-classification': typeof TabularClassificationRoute
+  '/tabular-regression': typeof TabularRegressionRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
   '/text-generation': typeof TextGenerationRoute
   '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
+  '/time-series-forecasting': typeof TimeSeriesForecastingRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
   '/translation': typeof TranslationRoute
@@ -313,7 +349,6 @@ export interface FileRoutesByFullPath {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
-  '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -322,6 +357,7 @@ export interface FileRoutesByTo {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/discrete-maths': typeof DiscreteMathsRoute
   '/fill-mask': typeof FillMaskRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
@@ -337,17 +373,22 @@ export interface FileRoutesByTo {
   '/playground': typeof PlaygroundRoute
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
+  '/rl': typeof RlRoute
+  '/robotics': typeof RoboticsRoute
   '/segmentation': typeof SegmentationRoute
   '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
   '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
+  '/tabular-classification': typeof TabularClassificationRoute
+  '/tabular-regression': typeof TabularRegressionRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
   '/text-generation': typeof TextGenerationRoute
   '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
+  '/time-series-forecasting': typeof TimeSeriesForecastingRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
   '/translation': typeof TranslationRoute
@@ -358,7 +399,6 @@ export interface FileRoutesByTo {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
-  '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -368,6 +408,7 @@ export interface FileRoutesById {
   '/audio-to-audio': typeof AudioToAudioRoute
   '/background-removal': typeof BackgroundRemovalRoute
   '/depth': typeof DepthRoute
+  '/discrete-maths': typeof DiscreteMathsRoute
   '/fill-mask': typeof FillMaskRoute
   '/graph': typeof GraphRoute
   '/graph-classification': typeof GraphClassificationRoute
@@ -383,17 +424,22 @@ export interface FileRoutesById {
   '/playground': typeof PlaygroundRoute
   '/pose': typeof PoseRoute
   '/question-answering': typeof QuestionAnsweringRoute
+  '/rl': typeof RlRoute
+  '/robotics': typeof RoboticsRoute
   '/segmentation': typeof SegmentationRoute
   '/sentence-similarity': typeof SentenceSimilarityRoute
   '/signup': typeof SignupRoute
   '/summarization': typeof SummarizationRoute
   '/super-resolution': typeof SuperResolutionRoute
+  '/tabular-classification': typeof TabularClassificationRoute
+  '/tabular-regression': typeof TabularRegressionRoute
   '/tensor': typeof TensorRoute
   '/text-classification': typeof TextClassificationRoute
   '/text-features': typeof TextFeaturesRoute
   '/text-generation': typeof TextGenerationRoute
   '/text-ranking': typeof TextRankingRoute
   '/text-to-speech': typeof TextToSpeechRoute
+  '/time-series-forecasting': typeof TimeSeriesForecastingRoute
   '/token-classification': typeof TokenClassificationRoute
   '/training': typeof TrainingRoute
   '/translation': typeof TranslationRoute
@@ -404,7 +450,6 @@ export interface FileRoutesById {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
-  '/tasks/$slug': typeof TasksSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -415,6 +460,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/discrete-maths'
     | '/fill-mask'
     | '/graph'
     | '/graph-classification'
@@ -430,17 +476,22 @@ export interface FileRouteTypes {
     | '/playground'
     | '/pose'
     | '/question-answering'
+    | '/rl'
+    | '/robotics'
     | '/segmentation'
     | '/sentence-similarity'
     | '/signup'
     | '/summarization'
     | '/super-resolution'
+    | '/tabular-classification'
+    | '/tabular-regression'
     | '/tensor'
     | '/text-classification'
     | '/text-features'
     | '/text-generation'
     | '/text-ranking'
     | '/text-to-speech'
+    | '/time-series-forecasting'
     | '/token-classification'
     | '/training'
     | '/translation'
@@ -451,7 +502,6 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
-    | '/tasks/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -460,6 +510,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/discrete-maths'
     | '/fill-mask'
     | '/graph'
     | '/graph-classification'
@@ -475,17 +526,22 @@ export interface FileRouteTypes {
     | '/playground'
     | '/pose'
     | '/question-answering'
+    | '/rl'
+    | '/robotics'
     | '/segmentation'
     | '/sentence-similarity'
     | '/signup'
     | '/summarization'
     | '/super-resolution'
+    | '/tabular-classification'
+    | '/tabular-regression'
     | '/tensor'
     | '/text-classification'
     | '/text-features'
     | '/text-generation'
     | '/text-ranking'
     | '/text-to-speech'
+    | '/time-series-forecasting'
     | '/token-classification'
     | '/training'
     | '/translation'
@@ -496,7 +552,6 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
-    | '/tasks/$slug'
   id:
     | '__root__'
     | '/'
@@ -505,6 +560,7 @@ export interface FileRouteTypes {
     | '/audio-to-audio'
     | '/background-removal'
     | '/depth'
+    | '/discrete-maths'
     | '/fill-mask'
     | '/graph'
     | '/graph-classification'
@@ -520,17 +576,22 @@ export interface FileRouteTypes {
     | '/playground'
     | '/pose'
     | '/question-answering'
+    | '/rl'
+    | '/robotics'
     | '/segmentation'
     | '/sentence-similarity'
     | '/signup'
     | '/summarization'
     | '/super-resolution'
+    | '/tabular-classification'
+    | '/tabular-regression'
     | '/tensor'
     | '/text-classification'
     | '/text-features'
     | '/text-generation'
     | '/text-ranking'
     | '/text-to-speech'
+    | '/time-series-forecasting'
     | '/token-classification'
     | '/training'
     | '/translation'
@@ -541,7 +602,6 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
-    | '/tasks/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -551,6 +611,7 @@ export interface RootRouteChildren {
   AudioToAudioRoute: typeof AudioToAudioRoute
   BackgroundRemovalRoute: typeof BackgroundRemovalRoute
   DepthRoute: typeof DepthRoute
+  DiscreteMathsRoute: typeof DiscreteMathsRoute
   FillMaskRoute: typeof FillMaskRoute
   GraphRoute: typeof GraphRoute
   GraphClassificationRoute: typeof GraphClassificationRoute
@@ -566,17 +627,22 @@ export interface RootRouteChildren {
   PlaygroundRoute: typeof PlaygroundRoute
   PoseRoute: typeof PoseRoute
   QuestionAnsweringRoute: typeof QuestionAnsweringRoute
+  RlRoute: typeof RlRoute
+  RoboticsRoute: typeof RoboticsRoute
   SegmentationRoute: typeof SegmentationRoute
   SentenceSimilarityRoute: typeof SentenceSimilarityRoute
   SignupRoute: typeof SignupRoute
   SummarizationRoute: typeof SummarizationRoute
   SuperResolutionRoute: typeof SuperResolutionRoute
+  TabularClassificationRoute: typeof TabularClassificationRoute
+  TabularRegressionRoute: typeof TabularRegressionRoute
   TensorRoute: typeof TensorRoute
   TextClassificationRoute: typeof TextClassificationRoute
   TextFeaturesRoute: typeof TextFeaturesRoute
   TextGenerationRoute: typeof TextGenerationRoute
   TextRankingRoute: typeof TextRankingRoute
   TextToSpeechRoute: typeof TextToSpeechRoute
+  TimeSeriesForecastingRoute: typeof TimeSeriesForecastingRoute
   TokenClassificationRoute: typeof TokenClassificationRoute
   TrainingRoute: typeof TrainingRoute
   TranslationRoute: typeof TranslationRoute
@@ -587,7 +653,6 @@ export interface RootRouteChildren {
   ZeroShotClassificationRoute: typeof ZeroShotClassificationRoute
   ZeroShotImageClassificationRoute: typeof ZeroShotImageClassificationRoute
   ZeroShotObjectDetectionRoute: typeof ZeroShotObjectDetectionRoute
-  TasksSlugRoute: typeof TasksSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -662,6 +727,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TokenClassificationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/time-series-forecasting': {
+      id: '/time-series-forecasting'
+      path: '/time-series-forecasting'
+      fullPath: '/time-series-forecasting'
+      preLoaderRoute: typeof TimeSeriesForecastingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/text-to-speech': {
       id: '/text-to-speech'
       path: '/text-to-speech'
@@ -704,6 +776,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TensorRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tabular-regression': {
+      id: '/tabular-regression'
+      path: '/tabular-regression'
+      fullPath: '/tabular-regression'
+      preLoaderRoute: typeof TabularRegressionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tabular-classification': {
+      id: '/tabular-classification'
+      path: '/tabular-classification'
+      fullPath: '/tabular-classification'
+      preLoaderRoute: typeof TabularClassificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/super-resolution': {
       id: '/super-resolution'
       path: '/super-resolution'
@@ -737,6 +823,20 @@ declare module '@tanstack/react-router' {
       path: '/segmentation'
       fullPath: '/segmentation'
       preLoaderRoute: typeof SegmentationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/robotics': {
+      id: '/robotics'
+      path: '/robotics'
+      fullPath: '/robotics'
+      preLoaderRoute: typeof RoboticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rl': {
+      id: '/rl'
+      path: '/rl'
+      fullPath: '/rl'
+      preLoaderRoute: typeof RlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/question-answering': {
@@ -844,6 +944,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FillMaskRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/discrete-maths': {
+      id: '/discrete-maths'
+      path: '/discrete-maths'
+      fullPath: '/discrete-maths'
+      preLoaderRoute: typeof DiscreteMathsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/depth': {
       id: '/depth'
       path: '/depth'
@@ -886,13 +993,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/tasks/$slug': {
-      id: '/tasks/$slug'
-      path: '/tasks/$slug'
-      fullPath: '/tasks/$slug'
-      preLoaderRoute: typeof TasksSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -903,6 +1003,7 @@ const rootRouteChildren: RootRouteChildren = {
   AudioToAudioRoute: AudioToAudioRoute,
   BackgroundRemovalRoute: BackgroundRemovalRoute,
   DepthRoute: DepthRoute,
+  DiscreteMathsRoute: DiscreteMathsRoute,
   FillMaskRoute: FillMaskRoute,
   GraphRoute: GraphRoute,
   GraphClassificationRoute: GraphClassificationRoute,
@@ -918,17 +1019,22 @@ const rootRouteChildren: RootRouteChildren = {
   PlaygroundRoute: PlaygroundRoute,
   PoseRoute: PoseRoute,
   QuestionAnsweringRoute: QuestionAnsweringRoute,
+  RlRoute: RlRoute,
+  RoboticsRoute: RoboticsRoute,
   SegmentationRoute: SegmentationRoute,
   SentenceSimilarityRoute: SentenceSimilarityRoute,
   SignupRoute: SignupRoute,
   SummarizationRoute: SummarizationRoute,
   SuperResolutionRoute: SuperResolutionRoute,
+  TabularClassificationRoute: TabularClassificationRoute,
+  TabularRegressionRoute: TabularRegressionRoute,
   TensorRoute: TensorRoute,
   TextClassificationRoute: TextClassificationRoute,
   TextFeaturesRoute: TextFeaturesRoute,
   TextGenerationRoute: TextGenerationRoute,
   TextRankingRoute: TextRankingRoute,
   TextToSpeechRoute: TextToSpeechRoute,
+  TimeSeriesForecastingRoute: TimeSeriesForecastingRoute,
   TokenClassificationRoute: TokenClassificationRoute,
   TrainingRoute: TrainingRoute,
   TranslationRoute: TranslationRoute,
@@ -939,7 +1045,6 @@ const rootRouteChildren: RootRouteChildren = {
   ZeroShotClassificationRoute: ZeroShotClassificationRoute,
   ZeroShotImageClassificationRoute: ZeroShotImageClassificationRoute,
   ZeroShotObjectDetectionRoute: ZeroShotObjectDetectionRoute,
-  TasksSlugRoute: TasksSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

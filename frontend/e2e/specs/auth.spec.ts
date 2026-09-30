@@ -3,7 +3,8 @@ import { AppShell } from "../pages/AppShell";
 import { MOCK_USER } from "../fixtures/mockApi";
 import { expect, test } from "../fixtures/base";
 
-test.describe("authentication (mocked API)", () => {
+// @api: sign-in exists only in a build with a backend (VITE_BACKEND=on).
+test.describe("authentication (mocked API) @api", () => {
   test("signs in and lands on /home", async ({ page, mockApi }) => {
     await mockApi({ authenticated: true });
     const login = new LoginPage(page);

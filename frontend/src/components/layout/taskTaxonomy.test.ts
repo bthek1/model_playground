@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  categoryForPath,
-  taskCategories,
-  tasksBySlug,
-} from "./taskTaxonomy";
+import { categoryForPath, taskCategories } from "./taskTaxonomy";
 
 describe("taskCategories", () => {
   it("exposes the eight top-level categories in order", () => {
@@ -40,7 +36,7 @@ describe("taskCategories", () => {
     expect(new Set(slugs).size).toBe(slugs.length);
   });
 
-  it("routes mapped tasks to their real route and the rest to /tasks/$slug", () => {
+  it("routes every task to its real route", () => {
     const all = taskCategories.flatMap((c) => c.tasks);
     const textGen = all.find((t) => t.slug === "text-generation")!;
     const textToSpeech = all.find((t) => t.slug === "text-to-speech")!;
@@ -54,25 +50,36 @@ describe("taskCategories", () => {
     expect(audioToAudio.to).toBe("/audio-to-audio");
     expect(vad.to).toBe("/vad");
 
-    // Unmapped tasks still fall through to the generic placeholder route.
-    const discreteMaths = all.find((t) => t.slug === "discrete-maths")!;
-    expect(discreteMaths.to).toBe("/tasks/discrete-maths");
+    // #59: there is no placeholder route any more, so nothing may point at one.
+    for (const t of all) expect(t.to, t.slug).not.toMatch(/^\/tasks\//);
   });
 
-  it("leaves the three heavy-only tasks on the placeholder", () => {
-    // These had routes and lost them: every checkpoint each task has is a
-    // several-hundred-megabyte download with no lighter alternative, which is
-    // `adding-a-task-page.md` §0's second question answered "no". The rows stay
-    // in the sidebar — the taxonomy mirrors the Hub, not our build state — but
-    // they must not map to a route again without a smaller model to point at.
-    const all = taskCategories.flatMap((c) => c.tasks);
-    const at = (slug: string) => all.find((t) => t.slug === slug)!.to;
-
-    expect(at("text-to-audio")).toBe("/tasks/text-to-audio");
-    expect(at("image-to-text")).toBe("/tasks/image-to-text");
-    expect(at("document-question-answering")).toBe(
-      "/tasks/document-question-answering",
-    );
+  it("lists no Hub task that has no page", () => {
+    // #59. These rows used to stay in the sidebar and fall through to a
+    // "/tasks/$slug — on the roadmap" placeholder, for tasks the roadmaps had
+    // already measured and ruled out: three built and cut for size, the rest
+    // diffusion-sized or with no export. The reasons live in docs/roadmaps/;
+    // the sidebar lists only what it can open. Re-adding one needs a route.
+    const slugs = new Set(taskCategories.flatMap((c) => c.tasks.map((t) => t.slug)));
+    for (const slug of [
+      "text-to-audio",
+      "text-to-image",
+      "image-to-text",
+      "image-to-video",
+      "unconditional-image-generation",
+      "text-to-video",
+      "text-to-3d",
+      "video-to-video",
+      "audio-text-to-text",
+      "image-text-to-image",
+      "image-text-to-video",
+      "document-question-answering",
+      "visual-document-retrieval",
+      "any-to-any",
+      "table-question-answering",
+    ]) {
+      expect(slugs.has(slug), slug).toBe(false);
+    }
   });
 
   it("maps the real Theory tools to their implemented routes", () => {
@@ -86,6 +93,12 @@ describe("taskCategories", () => {
     expect(training.to).toBe("/training");
     expect(tensor.label).toBe("Tensor Arithmetic");
     expect(tensor.to).toBe("/tensor");
+  });
+
+  // #56: Theory's last row.
+  it("maps Discrete Maths to its route", () => {
+    const theory = taskCategories.find((c) => c.label === "Theory")!;
+    expect(theory.tasks.find((t) => t.slug === "discrete-maths")!.to).toBe("/discrete-maths");
   });
 
   it("maps the implemented Computer Vision tasks to their real routes", () => {
@@ -119,11 +132,6 @@ describe("taskCategories", () => {
     // Image to 3D likewise covers the depth-to-cloud subset; full
     // reconstruction is diffusion and stays server-side.
     expect(at("image-to-3d")).toBe("/image-to-3d");
-
-    // The rest of the category is still research — they keep the placeholder
-    // until their own route ships (see the sub-issues of #2).
-    expect(at("text-to-image")).toBe("/tasks/text-to-image");
-    expect(at("image-to-video")).toBe("/tasks/image-to-video");
   });
 
   it("maps the implemented Audio tasks to their real routes", () => {
@@ -139,14 +147,6 @@ describe("taskCategories", () => {
   });
 });
 
-describe("tasksBySlug", () => {
-  it("indexes every task by its slug", () => {
-    const count = taskCategories.reduce((n, c) => n + c.tasks.length, 0);
-    expect(Object.keys(tasksBySlug)).toHaveLength(count);
-    expect(tasksBySlug["object-detection"].label).toBe("Object Detection");
-  });
-});
-
 describe("categoryForPath", () => {
   it("returns the category owning a mapped route", () => {
     // `/playground` belongs to **Theory** now, not to NLP. §3.8 took the
@@ -159,6 +159,7 @@ describe("categoryForPath", () => {
     );
     expect(categoryForPath("/tensor")).toBe("Theory");
     expect(categoryForPath("/training")).toBe("Theory");
+    expect(categoryForPath("/discrete-maths")).toBe("Theory");
     expect(categoryForPath("/audio-classification")).toBe("Audio");
     expect(categoryForPath("/asr")).toBe("Audio");
     expect(categoryForPath("/image-classification")).toBe("Computer Vision");
@@ -185,18 +186,6 @@ describe("the Multimodal category", () => {
     expect(at("image-text-to-text")).toBe("/image-text-to-text");
     expect(at("visual-question-answering")).toBe("/visual-question-answering");
     expect(at("video-text-to-text")).toBe("/video-text-to-text");
-  });
-
-  it("leaves the rest of the category on the placeholder", () => {
-    // Cut for size or blocked on NLP, each with measured numbers in
-    // docs/roadmaps/multimodal.md. The rows stay because the sidebar mirrors
-    // the Hub, not our build state.
-    expect(at("audio-text-to-text")).toBe("/tasks/audio-text-to-text");
-    expect(at("visual-document-retrieval")).toBe(
-      "/tasks/visual-document-retrieval",
-    );
-    expect(at("image-text-to-image")).toBe("/tasks/image-text-to-image");
-    expect(at("any-to-any")).toBe("/tasks/any-to-any");
   });
 });
 
@@ -230,16 +219,55 @@ describe("Natural Language Processing", () => {
     // client-side, two of them with no model at all.
     expect(at("text-ranking")).toBe("/text-ranking");
   });
+});
 
-  it("leaves Table Question Answering on the placeholder", () => {
-    // §3.11's decision, pinned so it cannot be re-mapped without a model to
-    // point at. TAPAS and TAPEX have no ONNX export and their table-aware
-    // position embeddings mean a generic encoder is not a substitute;
-    // text-to-SQL needs a ~1 GB coder model *and* a database. The row stays
-    // in the sidebar because the taxonomy mirrors the Hub, not our build
-    // state.
-    expect(at("table-question-answering")).toBe(
-      "/tasks/table-question-answering",
-    );
+describe("the Tabular category", () => {
+  const all = taskCategories.flatMap((c) => c.tasks);
+  const at = (slug: string) => all.find((t) => t.slug === slug)!.to;
+
+  it("maps all three of its rows, because the category shipped whole", () => {
+    // The only category with no checkpoint anywhere in it: the model is fitted
+    // in the tab on the user's own CSV, so the feasibility bar is the *fit*
+    // rather than the download, and every row cleared it.
+    expect(at("tabular-classification")).toBe("/tabular-classification");
+    expect(at("tabular-regression")).toBe("/tabular-regression");
+    expect(at("time-series-forecasting")).toBe("/time-series-forecasting");
+  });
+
+  it("lists exactly its three rows", () => {
+    const tabular = taskCategories.find((c) => c.label === "Tabular")!;
+    expect(tabular.tasks).toHaveLength(3);
+  });
+
+  it("puts every tabular route in the Tabular category, not in Theory", () => {
+    // These pages train in the tab, which makes them look like the Theory
+    // surfaces (`/training`, `/tensor`). They are not: they answer Hub task
+    // rows and take the user's own data, so they belong to the taxonomy's own
+    // category rather than to this repo's invented one.
+    for (const path of [
+      "/tabular-classification",
+      "/tabular-regression",
+      "/time-series-forecasting",
+    ]) {
+      expect(categoryForPath(path), path).toBe("Tabular");
+    }
   });
 });
+
+describe("the Reinforcement Learning category", () => {
+  const at = (slug: string) =>
+    taskCategories.flatMap((c) => c.tasks).find((t) => t.slug === slug)!.to;
+
+  it("maps both rows — the category is complete as scoped", () => {
+    // `/rl` holds three algorithms on two environments; `/robotics` holds the
+    // grounding pair and the behaviour-cloning entry (docs/roadmaps/rl.md).
+    expect(at("reinforcement-learning")).toBe("/rl");
+    expect(at("robotics")).toBe("/robotics");
+  });
+
+  it("files both routes under the category in the sidebar", () => {
+    expect(categoryForPath("/rl")).toBe("Reinforcement Learning");
+    expect(categoryForPath("/robotics")).toBe("Reinforcement Learning");
+  });
+});
+

@@ -24,9 +24,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Loader2, Maximize2, Square, Wand2 } from "lucide-react";
+import { Maximize2, Square, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -39,7 +40,8 @@ import { Button } from "@/components/ui/button";
 import { useImagePick } from "@/hooks/useImagePick";
 import { useSuperRes, RunCancelled } from "@/hooks/useSuperRes";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import type { PixelBuffer, Pixels } from "@/vision/draw";
 import { downscale } from "@/vision/image";
 import { upscale } from "@/vision/resample";
@@ -67,26 +69,18 @@ function SuperResolutionPage() {
   });
   const model = session.model.id;
   const probe = useBackendProbe();
+  const task = useSuperRes(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
     backend,
     running,
     result,
     source,
     tiles,
-    error,
-    load,
-    retry,
-    cancel,
     run,
     stop,
     meta,
-  } = useSuperRes(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const { picked, preparing, error: ioError, clearError, pickFile, pickSample } =
     useImagePick();
@@ -115,8 +109,12 @@ function SuperResolutionPage() {
   }, [picked]);
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: SUPER_RES_MODELS,
+    busy,
+    backend: probe,
+  });
+  const { runError } = slots;
 
   // Quoted **before** the run starts. Discovering that an upscale is four
   // minutes long halfway through it is the difference between a slow page and a
@@ -156,29 +154,10 @@ function SuperResolutionPage() {
       }
       labels={{ output: "Comparison" }}
       select={
-        <ModelPicker
-          models={SUPER_RES_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          backend={probe}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -187,20 +166,15 @@ function SuperResolutionPage() {
           disabledHint="Load a model to upscale. You can pick a picture first."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || busy || !input}
-                onClick={upscaleCurrent}
+                onRun={upscaleCurrent}
+                icon={Wand2}
+                running={running}
+                runningLabel="Upscaling…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Upscaling…
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="size-4" /> Upscale 2x
-                  </>
-                )}
-              </Button>
+                Upscale 2x
+              </RunButton>
               {running && (
                 <Button variant="outline" onClick={stop} data-testid="stop-run">
                   <Square className="size-4" /> Stop

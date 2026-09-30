@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRegister } from '@/hooks/useAuth'
@@ -16,8 +16,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { BackendStatus } from '@/components/ui/BackendStatus'
+import { BACKEND_ENABLED } from '@/lib/features'
 
 export const Route = createFileRoute('/signup')({
+  // See /login: a static build (#57) has no accounts to create.
+  beforeLoad: () => {
+    if (!BACKEND_ENABLED) throw redirect({ to: '/home', replace: true })
+  },
   component: SignupPage,
 })
 

@@ -31,8 +31,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { FileText, Loader2, ShieldQuestion } from "lucide-react";
+import { FileText, ShieldQuestion } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -43,7 +44,8 @@ import { useEntailment, type Entailment } from "@/hooks/useEntailment";
 import { useSummarize } from "@/hooks/useSummarize";
 import { formatBytes, sizeEstimate } from "@/model/size";
 import { useBackendProbe } from "@/model/useBackendProbe";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   ARTICLE_SAMPLES,
   DEFAULT_SUMMARIZER,
@@ -86,21 +88,12 @@ function SummarizationPage() {
   // with the reason on it, instead of a download that fails at the end.
   const backendProbe = useBackendProbe();
 
+  const task = useSummarize(model.id);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useSummarize(model.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   // The faithfulness model: opt-in, so `null` until the user asks for it.
   const [checking, setChecking] = useState(false);
@@ -115,8 +108,12 @@ function SummarizationPage() {
   const [ran, setRan] = useState<RunRecord | null>(null);
   const [scored, setScored] = useState<Entailment[] | null>(null);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: SUMMARIZER_MODELS,
+    busy: running,
+    backend: backendProbe,
+  });
+  const { runError } = slots;
 
   /** The baseline for whatever is in the box right now. Pure, free, live. */
   const preview = useMemo(
@@ -169,15 +166,7 @@ function SummarizationPage() {
       labels={{ run: "Article", output: "Summary" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={SUMMARIZER_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={loading || running}
-            cached={session.cached}
-            backend={backendProbe}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           <p className="text-xs leading-snug text-muted-foreground">
             Fine-tuned on {model.domain}, which is what its output will sound
             like.
@@ -234,18 +223,7 @@ function SummarizationPage() {
       }
       load={
         <div className="space-y-3">
-          <ModelStatus
-            status={status}
-            backend={backend}
-            loadProgress={loadProgress}
-            loadedInMs={loadedInMs}
-            cached={session.isCached}
-            error={loadError}
-            onLoad={session.onLoad(load)}
-            onCancel={session.onCancel(cancel)}
-            onRetry={retry}
-            disabled={running}
-          />
+          <ModelStatus {...slots.status} />
           {checking && (
             // A second model gets a second LOAD, in the LOAD slot — the
             // `/text-classification` head-to-head's shape.
@@ -275,20 +253,15 @@ function SummarizationPage() {
           disabledHint="Load a model to summarize. The lead-3 baseline already works — it needs no model."
           controls={
             <>
-              <Button
+              <RunButton
                 disabled={!ready || running || article.trim().length === 0}
-                onClick={() => void summarize().catch(() => {})}
+                onRun={() => summarize()}
+                icon={FileText}
+                running={running}
+                runningLabel="Summarizing…"
               >
-                {running ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Summarizing…
-                  </>
-                ) : (
-                  <>
-                    <FileText className="size-4" /> Summarize
-                  </>
-                )}
-              </Button>
+                Summarize
+              </RunButton>
               <span
                 data-testid="rerun-note"
                 className="text-xs text-muted-foreground"
@@ -454,7 +427,7 @@ function SummarizationPage() {
                 <div className="space-y-2 border-t pt-4" data-testid="faithfulness">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-medium">Faithfulness</p>
-                    <Button
+                    <RunButton
                       size="sm"
                       variant="outline"
                       data-testid="check-faithfulness"
@@ -463,20 +436,14 @@ function SummarizationPage() {
                         faithful.running ||
                         summarySentences === 0
                       }
-                      onClick={() => void check().catch(() => {})}
+                      onRun={() => check()}
+                      icon={ShieldQuestion}
+                      running={faithful.running}
+                      runningLabel="Checking…"
                     >
-                      {faithful.running ? (
-                        <>
-                          <Loader2 className="size-4 animate-spin" /> Checking…
-                        </>
-                      ) : (
-                        <>
-                          <ShieldQuestion className="size-4" /> Check{" "}
-                          {summarySentences} sentence
-                          {summarySentences === 1 ? "" : "s"}
-                        </>
-                      )}
-                    </Button>
+                      Check {summarySentences} sentence
+                      {summarySentences === 1 ? "" : "s"}
+                    </RunButton>
                   </div>
                   <p className="text-xs leading-snug text-muted-foreground">
                     One forward pass per summary sentence, scored against the

@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { VadResult } from "@/audio/vad/types";
 import type { ModelTask } from "@/model/types";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 // No Web Audio in the test env: decoding and capture are mocked.
 const decodeToMono = vi.fn(async () => new Float32Array([0.1, 0.2, 0.3]));
@@ -22,18 +28,6 @@ vi.mock("@/components/audio/Waveform", () => ({
   LiveWaveform: () => <div data-testid="live-waveform" />,
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({ path, options: opts }),
-      ),
-  };
-});
-
 const mockRun = vi.fn<(audio: Float32Array) => Promise<VadResult>>();
 const mockLoad = vi.fn();
 const mockRetry = vi.fn();
@@ -41,23 +35,12 @@ const useVadSpy = vi.fn();
 
 type VadTask = ModelTask<Float32Array, VadResult>;
 
-const baseState: VadTask = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
+const baseState = idleTask<VadTask>({
   load: mockLoad,
   retry: mockRetry,
-  cancel: vi.fn(),
   run: mockRun,
-  running: false,
   result: null,
-  error: null,
-};
+});
 let mockState: VadTask = { ...baseState };
 
 vi.mock("@/hooks/useVad", () => ({
@@ -67,11 +50,9 @@ vi.mock("@/hooks/useVad", () => ({
   },
 }));
 
-const { Route } = await import("@/routes/vad");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/vad"));
 
 function renderPage() {
-  if (!Page) throw new Error("VAD route component not found");
   render(<Page />);
 }
 
@@ -92,13 +73,7 @@ async function uploadAndDetect(name = "a.wav") {
   fireEvent.click(screen.getByRole("button", { name: /detect speech/i }));
 }
 
-const readyState: VadTask = {
-  ...baseState,
-  status: "ready",
-  idle: false,
-  ready: true,
-  backend: "wasm",
-};
+const readyState: VadTask = readyTask(baseState, { backend: "wasm" });
 
 /** 12 frames: quiet, then loud, then quiet — one segment in the middle. */
 function detection(): VadResult {
@@ -112,6 +87,16 @@ describe("VadPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState = { ...baseState };
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useVadSpy,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: /detect speech/i,
   });
 
   it("renders all four slots, with the output empty before any run", () => {

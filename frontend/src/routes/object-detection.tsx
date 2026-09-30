@@ -22,9 +22,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type { RawImage } from "@huggingface/transformers";
-import { Loader2, ScanSearch } from "lucide-react";
+import { ScanSearch } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -32,7 +33,6 @@ import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
 import { OverlayCanvas } from "@/components/vision/OverlayCanvas";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useCameraFrames } from "@/hooks/useCameraFrames";
 import { useImagePick } from "@/hooks/useImagePick";
@@ -40,7 +40,8 @@ import {
   aboveThreshold,
   useObjectDetector,
 } from "@/hooks/useObjectDetector";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_DETECTOR,
   DEFAULT_THRESHOLD,
@@ -70,22 +71,14 @@ function ObjectDetectionPage() {
       DETECTOR_MODELS[0],
   });
   const model = session.model.id;
+  const task = useObjectDetector(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
     backend,
     running,
     result,
-    error,
-    load,
-    retry,
-    cancel,
     run,
-  } = useObjectDetector(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
   const [live, setLive] = useState(false);
@@ -127,8 +120,11 @@ useImagePick();
   });
 
   const busy = running || preparing !== null;
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: DETECTOR_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   // Pure, and on the main thread on purpose: dragging the slider re-derives the
   // visible boxes from detections already in hand. Nothing is re-run.
@@ -164,28 +160,10 @@ useImagePick();
         ) : undefined
       }
       select={
-        <ModelPicker
-          models={DETECTOR_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -193,20 +171,15 @@ useImagePick();
           error={ioError}
           disabledHint="Load a model to detect objects. You can pick a picture first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !picked || live}
-              onClick={detectCurrent}
+              onRun={detectCurrent}
+              icon={ScanSearch}
+              running={running}
+              runningLabel="Detecting…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Detecting…
-                </>
-              ) : (
-                <>
-                  <ScanSearch className="size-4" /> Detect
-                </>
-              )}
-            </Button>
+              Detect
+            </RunButton>
           }
         >
           <ImageSourcePanel

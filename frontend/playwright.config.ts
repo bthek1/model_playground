@@ -11,7 +11,18 @@ import { defineConfig, devices } from "@playwright/test";
 //  2. WebGPU availability depends on the machine's GPU and driver, so GPU specs
 //     live in their own project and self-skip when no device can be acquired.
 
-const BASE_URL = process.env.E2E_BASE_URL ?? "https://localhost:5180";
+// `E2E_STATIC=1` runs the suite against a *built* bundle served by `vite
+// preview` — in CI, the exact `VITE_BACKEND=off` artifact the deploy job
+// uploads (#57), so the shipped bytes are the tested bytes. `@api` specs
+// exercise the UI that build removes (sign-in, the registry catalogue) and are
+// excluded from it; they still run in the default, dev-server pass.
+// `E2E_DIST` points at a build directory other than `dist`.
+const useStatic = !!process.env.E2E_STATIC;
+// Its own port, and never a reused server: a dev server left running on 5180
+// would otherwise be tested in the build's place, and pass.
+const PORT = useStatic ? 5181 : 5180;
+
+const BASE_URL = process.env.E2E_BASE_URL ?? `https://localhost:${PORT}`;
 
 // `@backend` specs need a running Django + Postgres and a seeded user. They are
 // excluded by default so `just fe-e2e` works with nothing but Node installed.
@@ -28,6 +39,7 @@ const useSlow = !!process.env.E2E_SLOW;
 const excludedTags = [
   useBackend ? null : "@backend",
   useSlow ? null : "@slow",
+  useStatic ? "@api" : null,
 ].filter(Boolean);
 
 export default defineConfig({
@@ -124,12 +136,14 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 5180",
+    command: useStatic
+      ? `npx vite preview --host 127.0.0.1 --port ${PORT} --strictPort --outDir ${process.env.E2E_DIST ?? "dist"}`
+      : `npm run dev -- --host 127.0.0.1 --port ${PORT}`,
     url: BASE_URL,
     // Without this the health check can't fetch the self-signed URL and
     // Playwright hangs until timeout against a server it can already reach.
     ignoreHTTPSErrors: true,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !process.env.CI && !useStatic,
     timeout: 120_000,
     stdout: "pipe",
     stderr: "pipe",

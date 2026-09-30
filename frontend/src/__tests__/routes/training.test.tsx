@@ -4,18 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrainMetrics, TrainResult } from "@/webgpu/linearModel";
 import type { WeightSnapshot } from "@/webgpu/workerClient";
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({ path, options: opts }),
-      ),
-  };
-});
-
 // Stub the lazily-imported chart so we don't pull echarts into the test.
 vi.mock("@/components/charts/EChart", () => ({
   default: () => <div data-testid="echart" />,

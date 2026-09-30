@@ -8,6 +8,9 @@ import {
   type ColorBy,
   GraphCanvas,
 } from "@/components/graph/GraphCanvas";
+import { RunButton } from "@/components/model/RunButton";
+import { ArchPicker } from "@/components/graph/ArchPicker";
+import { Fact } from "@/components/viz/readout";
 import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -15,7 +18,6 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { PanZoom } from "@/components/viz/PanZoom";
 import { CORA_CLASSES } from "@/lib/cora";
-import { cn } from "@/lib/utils";
 import { useGraphTraining } from "@/hooks/useGraphTraining";
 import { useTheme } from "@/hooks/useTheme";
 import { useWebGPU } from "@/hooks/useWebGPU";
@@ -28,7 +30,6 @@ export const Route = createFileRoute("/graph")({
   component: GraphPage,
 });
 
-const ARCHES: GnnArch[] = ["gcn", "sage", "gin", "gat"];
 const MIN_LAYERS = 2;
 const MAX_LAYERS = 8;
 
@@ -82,7 +83,12 @@ function GraphPage() {
       }
       labels={{ select: "Architecture", load: "Data & device", run: "Train", output: "The graph" }}
       select={
-        <ArchPicker value={arch} onChange={setArch} disabled={training} />
+        <ArchPicker
+          value={arch}
+          onChange={setArch}
+          disabled={training}
+          showNotes
+        />
       }
       load={
         <div className="space-y-2">
@@ -118,17 +124,15 @@ function GraphPage() {
           {/* Sticky, not pushed down by mt-auto: this input is short, and a
               pinned transport row would open a chasm above it. */}
           <div className="sticky bottom-0 mt-2 flex flex-wrap items-center gap-2 border-t bg-background/80 pt-3 backdrop-blur">
-            <Button onClick={start} disabled={!ready || training}>
-              {training ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Training…
-                </>
-              ) : (
-                <>
-                  <Play className="size-4" /> Train
-                </>
-              )}
-            </Button>
+            <RunButton
+              onRun={start}
+              disabled={!ready || training}
+              icon={Play}
+              running={training}
+              runningLabel="Training…"
+            >
+              Train
+            </RunButton>
             <Button variant="outline" onClick={session.stop} disabled={!training}>
               <Square className="size-4" /> Stop
             </Button>
@@ -223,64 +227,6 @@ function GraphPage() {
         </OutputPanel>
       }
     />
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-2">
-      <dt>{label}</dt>
-      <dd className="font-mono text-foreground tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-function ArchPicker({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: GnnArch;
-  onChange: (arch: GnnArch) => void;
-  disabled: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      {ARCHES.map((arch) => {
-        const meta = GNN_ARCHITECTURES[arch];
-        const selected = arch === value;
-        return (
-          <Button
-            key={arch}
-            variant={selected ? "default" : "outline"}
-            disabled={disabled}
-            aria-pressed={selected}
-            onClick={() => onChange(arch)}
-            className="h-auto w-full flex-col items-start gap-0.5 px-3 py-2 text-left whitespace-normal"
-          >
-            <span className="flex w-full items-baseline gap-2 text-sm font-medium">
-              {meta.label}
-              <span
-                className={cn(
-                  "font-mono text-[0.65rem] font-normal",
-                  selected ? "text-primary-foreground/70" : "text-muted-foreground",
-                )}
-              >
-                {meta.aggregation}
-              </span>
-            </span>
-            <span
-              className={cn(
-                "w-full text-xs leading-snug font-normal",
-                selected ? "text-primary-foreground/75" : "text-muted-foreground",
-              )}
-            >
-              {meta.note}
-            </span>
-          </Button>
-        );
-      })}
-    </div>
   );
 }
 

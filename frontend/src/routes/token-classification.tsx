@@ -22,8 +22,9 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, Copy, Loader2, ScanText } from "lucide-react";
+import { Check, Copy, ScanText } from "lucide-react";
 
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
@@ -32,7 +33,8 @@ import { OutputPanel } from "@/components/model/OutputPanel";
 import { SpanOverlay } from "@/components/text/SpanOverlay";
 import { Button } from "@/components/ui/button";
 import { useNer } from "@/hooks/useNer";
-import { useCacheRefresh, useModelSelection } from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_NER_MODEL,
   DEFAULT_REDACTED,
@@ -61,22 +63,13 @@ function TokenClassificationPage() {
   });
   const model = session.model;
 
+  const task = useNer(model.id);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
     unplaced,
-    load,
-    retry,
-    cancel,
     run,
-  } = useNer(model.id);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [text, setText] = useState(NER_SAMPLES[0].text);
   const [ran, setRan] = useState<RunRecord | null>(null);
@@ -88,8 +81,11 @@ function TokenClassificationPage() {
   );
   const [copied, setCopied] = useState(false);
 
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: NER_MODELS,
+    busy: running,
+  });
+  const { runError } = slots;
 
   const marked = useMemo(
     () => (ran ? highlight(ran.text, ran.spans) : null),
@@ -149,14 +145,7 @@ function TokenClassificationPage() {
       labels={{ run: "Text", output: "Entities" }}
       select={
         <div className="space-y-2">
-          <ModelPicker
-            models={NER_MODELS}
-            value={model.id}
-            onChange={session.setModel}
-            disabled={loading || running}
-            cached={session.cached}
-            onEvict={(m) => void session.evict(m.id)}
-          />
+          <ModelPicker {...slots.picker} />
           <p className="text-xs leading-snug text-muted-foreground">
             This head tags{" "}
             <span className="font-medium">{model.entities.join(", ")}</span> —
@@ -165,38 +154,22 @@ function TokenClassificationPage() {
         </div>
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={running}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
           ready={ready}
           disabledHint="Load a model to tag entities. You can paste the text first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || running || text.trim().length === 0}
-              onClick={() => void tag().catch(() => {})}
+              onRun={() => tag()}
+              icon={ScanText}
+              running={running}
+              runningLabel="Tagging…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Tagging…
-                </>
-              ) : (
-                <>
-                  <ScanText className="size-4" /> Find entities
-                </>
-              )}
-            </Button>
+              Find entities
+            </RunButton>
           }
         >
           <div className="flex min-h-0 flex-1 flex-col gap-3">

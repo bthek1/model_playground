@@ -2,6 +2,12 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseObjectDetectorResult } from "@/hooks/useObjectDetector";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 const fakeImage = { width: 8, height: 8, channels: 3, data: [] } as never;
 const fromFile = vi.fn().mockResolvedValue(fakeImage);
@@ -18,21 +24,6 @@ vi.mock("@/vision/image", () => ({
   openCamera: (...a: unknown[]) => openCamera(...a),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const DETECTIONS = [
   { label: "person", score: 0.91, box: { xmin: 0, ymin: 0, xmax: 4, ymax: 8 } },
   { label: "car", score: 0.42, box: { xmin: 4, ymin: 2, xmax: 8, ymax: 6 } },
@@ -40,23 +31,10 @@ const DETECTIONS = [
 ];
 
 const mockRun = vi.fn().mockResolvedValue(DETECTIONS);
-const baseState: UseObjectDetectorResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseObjectDetectorResult>({
   result: null,
   run: mockRun,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 let mockState: UseObjectDetectorResult = { ...baseState };
 const useObjectDetector = vi.fn(() => mockState);
 
@@ -68,11 +46,9 @@ vi.mock("@/hooks/useObjectDetector", async (importOriginal) => {
   };
 });
 
-const { Route } = await import("@/routes/object-detection");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/object-detection"));
 
 function renderPage() {
-  if (!Page) throw new Error("Object detection route component not found");
   return render(<Page />);
 }
 
@@ -88,13 +64,8 @@ async function pickAndRun(sample: RegExp) {
   fireEvent.click(screen.getByRole("button", { name: RUN_BUTTON }));
 }
 
-const ready = (extra: Partial<UseObjectDetectorResult> = {}) => ({
-  ...baseState,
-  status: "ready" as const,
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseObjectDetectorResult> = {}) =>
+  readyTask(baseState, extra);
 
 /** Hand-driven rAF, so a test can pump exactly N frames. */
 let ticks: FrameRequestCallback[] = [];
@@ -136,6 +107,16 @@ async function pump(n: number) {
 }
 
 describe("ObjectDetectionPage", () => {
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useObjectDetector,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
+  });
+
   it("renders the heading and every model option", () => {
     renderPage();
     expect(
@@ -161,11 +142,6 @@ describe("ObjectDetectionPage", () => {
     expect(screen.getAllByRole("region")).toHaveLength(4);
     expect(screen.getByTestId("slot-3")).toBeInTheDocument();
     expect(screen.getByTestId("output-empty")).toBeInTheDocument();
-  });
-
-  it("keeps the run control disabled until a model is ready", () => {
-    renderPage();
-    expect(screen.getByRole("button", { name: /^detect$/i })).toBeDisabled();
   });
 
   it("picks a sample without running, then detects when asked, on a capped frame", async () => {
@@ -271,20 +247,5 @@ describe("ObjectDetectionPage", () => {
     const note = await screen.findByText(/unsupported image type/i);
     expect(screen.getByTestId("slot-3")).toContainElement(note);
     expect(mockRun).not.toHaveBeenCalled();
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = { ...baseState, status: "error", idle: false, error: "404 not found" };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT, where the model stays loaded", () => {
-    mockState = ready({ error: "Non-zero status code" });
-    renderPage();
-    const note = screen.getByText(/non-zero status code/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
   });
 });

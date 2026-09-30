@@ -1,10 +1,16 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { HeroBanner } from "@/components/home/HeroBanner";
 import { useMe } from "@/hooks/useAuth";
+import { BACKEND_ENABLED } from "@/lib/features";
 
 export const Route = createFileRoute("/")({
+  // The landing page is a sign-in prompt. With no backend there is nothing to
+  // sign in to, so go straight to the app — before `useMe` could run (#57).
+  beforeLoad: () => {
+    if (!BACKEND_ENABLED) throw redirect({ to: "/home", replace: true });
+  },
   component: LandingPage,
 });
 

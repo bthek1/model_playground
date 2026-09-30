@@ -357,6 +357,44 @@ timeline, and the page shows a comparison that was never computed.
 
 ---
 
+### 4c. The wiring is written once
+
+The shell above is shared, and since #58 so is the code that *connects* a task hook to
+it. A task route writes the task-specific parts and spreads the rest:
+
+```tsx
+const task = useImageClassifier(session.model.id);      // idle by default
+const slots = useTaskSlots(session, task, { models: IMAGE_CLASSIFIER_MODELS, busy });
+
+select={<ModelPicker {...slots.picker} />}
+load={<ModelStatus {...slots.status} />}
+run={<InputPanel … controls={
+  <RunButton icon={ImageIcon} running={task.running} runningLabel="Classifying…"
+             onRun={classify} disabled={!task.ready || busy || !picked}>
+    Classify
+  </RunButton>} />}
+output={<OutputPanel … error={slots.runError} />}
+```
+
+- **[`useTaskSlots`](../../frontend/src/model/useTaskSlots.ts)** returns `picker` and
+  `status` props for the two setup slots. It also returns the §2 error split as two
+  **named** fields, `loadError` (already inside `status`) and `runError`, and re-probes
+  the cache when the model reaches `ready`. The split stays visible because "errors render
+  where they came from" is a rule the route has to be seen to follow. A third error source
+  (a failed decode belongs to RUN) the route still passes itself. `busy` shuts LOAD and the
+  picker while anything else is in flight. `backend` (from `useBackendProbe`) turns on the
+  picker's row gating.
+- **[`RunButton`](../../frontend/src/components/model/RunButton.tsx)** is the GENERATE
+  trigger: a spinner and the present-participle label while running, the icon and verb
+  otherwise. If `onRun` returns a promise, the button swallows the rejection, because the
+  hook has already reported it in OUTPUT. `disabled` stays the route's call. A page with
+  two triggers (`/text-ranking`'s embed + search, `/fill-mask`'s probes) uses two.
+- **Override after the spread, don't abandon the helper.** A route that needs one field
+  different writes `<ModelPicker {...slots.picker} onChange={…} />`. The bespoke pages
+  (`/rl`, `/graph`, the tabular routes) wire by hand where a helper does not fit, and no
+  page is bent to fit one. `useModelSelection` no longer has `onLoad`/`onCancel`: they were
+  pass-throughs, kept only "so the call sites stay uniform", and `useTaskSlots` does that now.
+
 ## 5. Size before load
 
 The guardrail that motivates `idle`. Before any bytes move, the user sees the estimate:
@@ -473,14 +511,20 @@ Not every page downloads weights, and that's fine — the stages still hold:
 | Background Removal | model catalogue **+ its licence** | weight download | image / camera frame | cut-out on a checkerboard, backdrop swap, raw matte, PNG |
 | Super Resolution | model catalogue | weight download | an image, **plus the tile count and time it will cost** | a draggable split against a bicubic baseline |
 | Image to 3D | depth catalogue, reused | weight download **and** a GPU probe | image / camera, focal + density sliders | an orbitable point cloud, or the depth map and why not |
-| `/tasks/$slug` placeholder | — | — | — | "not available yet" |
+| Tabular Classification | the **model family** and its hyperparameters | **FIT** — there are no weights, so the band holds the fit and its determinate iteration counter | the CSV, the target column, the feature set, and a row to predict | accuracy **against the majority baseline**, the confusion matrix, permutation importance, and a threshold slider that only re-reads |
+| Tabular Regression | the **regression** ladder — ridge, trees, quantile — with its own defaults, not §3.1's | **FIT**, as above | the CSV, a numeric target, and a **log-transform toggle that spends** | RMSE/MAE/R² against the train-mean baseline **in named units**, predicted-vs-actual, the residual plot, and a quantile band with its measured coverage |
+| Time Series Forecasting | the baseline and the **season length** | **absent** — nothing to download and nothing to fit, and the page says so where the band would have been | the series, the horizon, and the backtest settings | the forecast over a marked held-out region, MASE beside MAE and RMSE, and the window spread with the single split drawn across it |
+| Reinforcement Learning (`/rl`) | **(environment, algorithm)** — FrozenLake with Q-learning, CartPole with REINFORCE or Actor-Critic; invalid pairs disabled **with the reason on the row** — then that pair's hyperparameters and the seed, **all choices** | **absent** — no download, and Phase 0 of #51 measured that the page raises no GPU question either, so `DeviceStatus` would be wrong too | Train / Stop, **Run both** (two runs, one seed, in sequence) for CartPole, plus the two controls that steer a run **in progress** without restarting it: the simulation speed and (Q-learning only) a live ε | the Q-table as arrows over the grid with agreement against value iteration — or the cart and pole, the raw return curve beside the other algorithm's at the same seed, and the **spread** across seeds |
+| Robotics (`/robotics`) | **a pair from two catalogues** — `/zero-shot-object-detection`'s detector and `/depth`'s model, composed as one entry | both downloads, **two workers**, one aggregate bar from `combineProgress` against the pair's measured sum | phrases, an image or camera frame, a threshold that only re-derives | boxes over the frame, the depth map, the **nearest** match — and "grounding, not control" in the description |
+| Robotics — behaviour cloning | a **zero-byte entry beside a 357 MB pair** in the same picker (`/vad`'s energy baseline, the other way round), plus the demonstration mix, count, obstacle, width and seed | answered at once — nothing to download, and the band still renders so both entries keep one rhythm | the demonstrations, **drawn live** as the set changes (generation is pure and cheap), and Train / Stop | the rollout over the demonstrations, the action field, a reached / collided / stalled verdict — and **the two mixes side by side** at one seed |
+| Discrete Maths (`/discrete-maths`) | a small **graph** — six, chosen in contrasting pairs (C₈ against C₇, the path against Petersen, plus Zachary's karate club) | **absent** — exact integer arithmetic on ≤ 34 nodes, no download, no worker, no GPU, said where the band would have been | the source node, and **Step** / Run to end / Reset — the one control that advances anything | the BFS ball drawn with each node's distance, and row *s* of (A + I)ᵏ or Aᵏ beside it, with a computed ✓/✗ against the ball; the A / A + I switch **re-reads** the same k |
 
 Where LOAD is fast and free (a shader compile), it may auto-run — pass `autoLoad`. The
 slot still renders, so the page keeps the same four-band rhythm as its neighbours; use
 [`DeviceStatus`](../../frontend/src/components/model/DeviceStatus.tsx) there, which answers
-the question those pages actually raise — is there a GPU, or nothing to compute on. The
-placeholder route uses the same shell with empty slots, so an unimplemented task reads
-as *the same kind of page*, not a different app.
+the question those pages actually raise — is there a GPU, or nothing to compute on.
+There is no placeholder page for an unbuilt task: the sidebar lists only tasks with a
+route (#59).
 
 **A result the user can re-read without re-running belongs on the main thread.** `/vad` returns
 per-frame speech probabilities and lets the user drag a threshold; the segments that threshold
@@ -525,6 +569,89 @@ ones. (That last one needed a fix: `model/progress.ts` keys its file table on **
 file**, because both checkpoints publish an `onnx/model_fp16.onnx` and the second was
 overwriting the first's entry — the bar reached 100% halfway through and the second
 download read as a stall.)
+
+**LOAD may be a fit rather than a download, and the machine does not change.**
+The Tabular routes have no checkpoint at all: the model is *trained in the tab* on
+the user's own CSV. So slot 2 is labelled **Fit** by the route — a relabelling, not a
+renamed status. Machine A stays `idle → loading → ready | error`, and no page invents
+a `fitting` state: `useModelWorker` owns that enum, and a category that renames it
+costs the one vocabulary that makes every other page readable.
+
+Three consequences worth writing down, because each is a plausible wrong turn:
+
+- **The fit is a `run`, not the load.** What `load` does here is hand typed arrays
+  that are already in the tab to a worker in the same tab — no bytes, no allocation
+  that was not already made. What *costs* is the fit, so the fit is a request, its
+  metrics ride `partial` (progress inside one run, correlated to its id), and
+  `running` stays an inflight count. The FIT button posts the `load` and its `run`
+  together, and the engine serialises the two rather than trusting message order.
+- **A fit's progress is determinate, and `model/progress.ts` is not reused for it.**
+  That module is written around a byte count, and its indeterminate mode is the
+  obvious reach for a page with no bytes. It is the wrong reach: epochs, trees and
+  rows are hyperparameters the user set a moment ago, so `{ done, total }` is known
+  before the fit starts. An indeterminate bar in front of a number the page already
+  has is worse than no bar. The counter is route-owned; a shared module written
+  around bytes must not grow a second meaning for one category.
+- **The `data-testid` contract shifts by one name, not by one slot.** All four bands
+  are present and `slot-1`…`slot-4`, `output-panel`, `output-empty` and `error-note`
+  are unchanged. `model-ready` is emitted by the FIT band when a fit completes rather
+  than when weights land — the same question ("is there something to run?") asked of a
+  page with nothing to download.
+
+**A fitting page's two spending buttons are one per band.** FIT lives in slot 2, the
+slot it replaced; PREDICT lives in the RUN transport row with the row it reads. Putting
+a second Fit button in the transport would make the one control that costs seconds
+appear twice and mean the same thing. Everything else — choosing a sample, dropping a
+file, picking the target, toggling a feature, moving a hyperparameter — is a *choice*
+and spends nothing. This is the page where §1.2 is easiest to break: "pick a target
+column and it fits" feels responsive, and is the five-samples-five-inferences failure
+with a dropdown in front of it.
+
+**A page may have three bands, and the missing one has to be explained.**
+`/time-series-forecasting` has no model, no download and no worker: naive, seasonal
+naive and drift are closed-form arithmetic over one array, and a rolling backtest is a
+loop over slices. There is nothing to fit, so FIT is **absent** rather than empty —
+and `DeviceStatus` would be wrong too, because the page raises no GPU question. What
+the pattern requires in exchange is that the absence is *stated where the band would
+have been*: an unexplained gap reads as an oversight, and here the absence is the
+category's whole point. Three consequences for §8's contract, which assumes four
+bands: `slot-4` is genuinely not rendered and a test asserts that; `output-empty`,
+`output-panel` and `error-note` are unchanged; and there is no `model-ready`, because
+nothing ever becomes ready. **No route may drop a band without adding a row to the
+table above and a paragraph here** — four bands is the default precisely so that
+three is a decision someone had to write down.
+
+**The second three-band page is a *training* page, and its absent band is a measurement.**
+`/rl` has no download, like `/time-series-forecasting` — but it does have a worker and a
+long-running loop, and the roadmap handed its LOAD band a `DeviceStatus`, "as `/tensor`
+does". Phase 0 of #51 measured that instead of assuming it: at batch 1 an RL step is
+thousands of *tiny* matmuls a second, and the GPU round trip costs more than the
+arithmetic (`rl/limits.ts`, [`rl.md`](../roadmaps/rl.md) §0). So the page raises no GPU
+question and the band is absent, explained where it would have been (`no-load-band`), and
+its route test asserts `slot-4` is absent exactly as the forecasting page's does. Two things
+generalise. **A band a roadmap assigns is a hypothesis** — `/tensor` compiles WGSL and this
+page would not. And **"only Train spends" admits controls that steer a run in progress**:
+`/rl`'s speed dial and live ε change the behaviour of the loop already running, which is not
+a re-run, so they live in RUN and say which kind they are. What they must never do is start
+one — dragging ε and watching it retrain is the five-samples-five-inferences failure with a
+slider in front of it.
+
+**The third three-band page has nothing to measure, and still has a trigger.**
+`/discrete-maths` (#56) is a breadth-first search and a matrix power on at most 34 nodes —
+microseconds, on the main thread. The LOAD band is absent for the forecasting page's reason
+and explained in `no-load-band`. Unlike the forecasting page, though, it does not re-derive
+everything live. **Step** advances the search one layer per press, because watching the
+frontier grow is the lesson, and a slider for k would hide the layers it jumps over. So the
+usual rules hold even with nothing to spend: choosing a graph or a source runs nothing and
+*clears* the result (a stale ball drawn over a new source is the page's most plausible bug),
+and the one control that re-derives without a press — the A / A + I switch — lives in OUTPUT,
+because it re-reads the k already on screen rather than choosing a new one.
+
+**A page with no worker owes an assertion that it still has none.** "No worker" is a
+design decision that a later refactor can quietly undo, and nothing visible changes
+when it does. `/time-series-forecasting` counts `Worker` constructions in its E2E spec
+and stubs the constructor in its unit tests, the same way the pages that must not fetch
+assert zero Hub requests.
 
 **A run whose cost the user cannot guess must be quoted before it starts.**
 `/super-resolution` is many inferences, and how many depends on the picture: the RUN
@@ -610,7 +737,7 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 
 | Test id | Where | Means |
 |---|---|---|
-| `slot-1` … `slot-4` | `ModelPage` | The four bands, in pipeline order. Always exactly four. |
+| `slot-1` … `slot-4` | `ModelPage` | The bands, in pipeline order. Four on every page that has a model — `ModelPage` cannot render fewer. The exceptions are `/time-series-forecasting`, `/rl` and `/discrete-maths`, which compose their own shell with **three** and say where the fourth would have been; §7 carries the rule, and each route test asserts `slot-4` is absent. |
 | `model-size-note` | `ModelPicker` | The selected model's hint, params and per-backend download. |
 | `model-size-warning` | `ModelPicker` | The large-model guardrail. Absent below `LARGE_MODEL_BYTES`. |
 | `model-ready` | `ModelStatus` | The model loaded; carries the resolved backend and the load time. |
@@ -652,6 +779,28 @@ tests in two suites at once. Add to this table rather than inventing an ad-hoc i
 | `ran-text` · `ran-question` | text routes | The input the result on screen was **actually** produced from, captured inside the run. |
 | `compare-load` · `compare-cost` | `/text-classification` | The head-to-head's second model: a second download and a second model in memory, quoted before the click. |
 | `score-near-tie` · `score-single` | `ScoreList` | A near-tie stated in words, and the refusal to render a lone 1.00 as certainty. |
+| `dataset-panel` · `dataset-summary` | tabular routes | The input surface — samples, the file picker, the privacy claim — and the shape of what was parsed. The summary quotes **both** row counts when the cap bit, and names the line of the first skipped row. |
+| `column-picker` | tabular routes | Target and features. The target is never offered as a feature, and only the right *kind* of column is offered as a target. |
+| `family-compute` · `fit-estimate` | tabular routes | Where the chosen rung's arithmetic runs and why, and roughly what one press will cost on this many rows. Both are derivations over the choice — neither runs anything. |
+| `fit-button` · `fit-stop` · `fit-progress` | tabular routes | The FIT band's three states. `fit-progress` is **determinate** (`phase · done/total`), because a fit's total is a hyperparameter the user just set — see §7. |
+| `metric-block` · `baseline-note` | `/tabular-classification` | The scores, and the majority baseline **in the same object** so the two cannot come from different splits. The note states the margin in points and says plainly when there is none. |
+| `confusion-matrix` · `threshold-control` | `/tabular-classification` | The matrix as a real `<table>`, and the decision threshold. Moving the threshold re-derives the whole block from held-out probabilities on the main thread — it never refits. |
+| `importance-bars` | tabular routes | Permutation importance, grouped by the **source** column. A negative bar is kept rather than clipped, and the causal caveat is beside it. |
+| `regression-metrics` · `regression-baseline` · `log-space-metrics` | `/tabular-regression` | Scores with their **units named**, the train-mean baseline in those units, and — separately — the same fit scored in log space. The separation is the point: side by side and unlabelled *is* the mistake the toggle demonstrates. |
+| `predicted-vs-actual` · `residual-plot` · `band-coverage` | `/tabular-regression` | The two plots that show what a scalar cannot, and the quantile band's **measured** coverage of the held-out rows. |
+| `coefficients` · `rank-deficient` · `log-toggle` | `/tabular-regression` | Ridge's coefficients on the standardised design, the report that the normal equations had no unique solution, and the transform toggle that **spends**. |
+| `prediction` · `predict-button` | tabular routes | The RUN band's transport and its result. PREDICT is the second of the page's two spending buttons; typing in the row form runs nothing. |
+| `dropped-rows` | tabular routes | Rows left out because the **target** was blank. Dropped rather than imputed or refused — and the count is said out loud, because a missing categorical target reads as class 0, which is a real class. |
+| `series-panel` · `series-summary` · `series-gaps` · `series-irregular` | `/time-series-forecasting` | The series and what was found in it. Gaps and irregular spacing are **reported, never interpolated** — a filled gap gives a seasonal forecast off by a phase and the error gets blamed on the method. |
+| `backtest-controls` · `backtest-strip` · `backtest-spread` | `/time-series-forecasting` | The rolling-origin settings, the per-window chart with the single split drawn across it, and the same three numbers as text. |
+| `metric-table` · `mase-horizon-note` | `/time-series-forecasting` | All four baselines on one window, and the note that **1.0 is break-even only at a horizon of 1** — the denominator is the in-sample *one-step* error, so a naive forecast measures ~1.0 one step out and ~3.0 fourteen steps out with nothing wrong. |
+| `no-fit-band` · `no-model-note` | `/time-series-forecasting` | Why there is no FIT band, and the standing note that the page has no learned model — in OUTPUT's **empty state**, so it is read before a forecast exists. |
+| `no-load-band` · `train-button` · `rl-progress` · `rl-empty` | `/rl` | Why there is no LOAD band (the Phase 0 measurement, in words), the one spending button, and the episode / ε line of the run in progress. |
+| `grid-canvas` · `policy-grid` · `rl-scoreboard` · `success-rate` · `greedy-rate` · `policy-agreement` · `rl-history` · `return-chart` · `epsilon-lesson` | `/rl` | The Q-table drawn and **as text** (`policy-grid` carries `data-state` / `data-action` per cell, so a spec can name an arrow — the canvas cannot be read), the scores including agreement with value iteration's exact policy, and the ε = 0 claim the E2E spec checks. |
+| `algorithm-picker` · `pairing-reason-<algorithm>` · `run-both` · `run-both-note` · `rl-notes` | `/rl` | (Environment, algorithm) with each invalid pair's **reason on its row**; the head-to-head trigger and its fixed seed; the Decision Transformer / RL-for-LLMs notes, in OUTPUT's description until a result exists and below it after. |
+| `cartpole-canvas` · `pg-scoreboard` · `pg-mean-return` · `pg-weight` · `seed-spread` · `spread-reinforce` · `spread-actor-critic` · `pg-history` · `normalise-note` | `/rl` (CartPole) | The cart and pole; the mean return and the **weight on ∇log π** (\|G\| or \|A\|, where the variance went); the per-algorithm spread across seeds — the claim is a spread, never a per-seed winner. |
+| `no-load-band` · `graph-facts` · `step-count` · `graph-diagram` · `node-<v>` · `bfs-stats` · `stat-ball` · `stat-frontier` · `stat-walks` · `stat-ecc` · `bfs-done` · `walk-matrix` · `walk-support` · `verdict` | `/discrete-maths` | The drawing **as data**: each `node-<v>` carries `data-reached`, `data-dist` and `data-walks`, so a spec can name a node's distance and walk count, which the picture shows only as shading. `walk-support` lists the row's nonzero nodes (`data-count`), and `verdict` carries `data-match`: the support compared with the BFS ball, **computed**, never narrated. |
+| `demo-preview` · `demo-summary` · `cloning-result` · `cloning-verdict` · `cloning-pair` · `verdict-both` · `verdict-one` · `cloning-fix` | `/robotics` (behaviour cloning) | The demonstrations drawn live; the rollout, action field and a `data-outcome` of `reached` / `collided` / `stalled`; **both mixes side by side** at one seed; and the named fix (action chunking, diffusion policies) that the page does not demonstrate. |
 
 The testids are unchanged by the horizontal arrangement — `slot-N` is bound to the
 step number, not to a position in the layout.
@@ -668,6 +817,34 @@ no natural accessible name (a band, an empty panel). Note that a band is a label
 `region`, so its heading text participates in accessible-name lookups —
 `getByLabelText(/text/i)` will match both a band named "Text" and a field inside it.
 That ambiguity is one reason §4's band labels stay generic.
+
+**The shared set-up lives in [`src/test/taskPage.tsx`](../../frontend/src/test/taskPage.tsx)**
+(#58). `idleTask` / `readyTask` / `loadingTask` / `loadErrorTask` build a mocked hook
+result from a route's own base, so a test no longer hand-writes all fifteen `ModelTask`
+fields. `routeComponent(await import("@/routes/x"))` reads the page off the real
+`createFileRoute`, so there is no router mock. `describeTaskPageContract({ render, hook,
+base, setState, trigger })`, called inside the route's own `describe`, registers the six
+checks that read identically on every page: no load on arrival, LOAD fires `load()` from
+slot 2, four slots with `output-empty`, GENERATE shut until `ready`, a load error in LOAD
+and a run error in OUTPUT with the model still loaded. The suite is tested against a
+deliberately broken page (`taskPage.test.tsx`), so it is known to fail when it should.
+
+**[`src/__tests__/conventions.test.ts`](../../frontend/src/__tests__/conventions.test.ts)
+keeps the shared wiring from drifting back.** It reads the source and fails, naming the
+file, when a route that calls `useModelSelection` skips `useTaskSlots` or its test skips
+`describeTaskPageContract`. It also fails when a route hand-writes the error split, calls
+`useCacheRefresh`, or builds a spinner trigger instead of a `RunButton`, and when a hook
+hand-writes the catalogue lookup. A copy of an old pattern renders fine and passes its own
+tests, so a render cannot catch it. Only a check on how the file is written can. Each
+assertion was verified against the pre-#58 source, and the widened spinner check found
+three triggers the migration had missed.
+[`token-classification.test.tsx`](../../frontend/src/__tests__/routes/token-classification.test.tsx)
+is the reference.
+
+The contract suite is **additive**. Everything that depends on how *this* page takes its
+input stays in the route's own file — above all "choosing an input runs nothing" and "the
+input survives its run". Delete a local assertion only where the suite checks the same
+thing against the same page.
 
 **What every task page's tests should cover**, beyond the task's own behaviour:
 
@@ -694,6 +871,37 @@ That ambiguity is one reason §4's band labels stay generic.
 - Where a route declares `backends`, an unsupported model is offered but not selectable —
   and an undecided probe gates nothing.
 
+**A page that fits instead of downloading** owes the same list with three substitutions,
+and one addition:
+
+- "Nothing downloads on mount" becomes **"nothing fits on mount"** — the hook is called
+  with no `autoLoad` argument *and* neither `load` nor `fit` has been called.
+- "Choosing an input runs nothing" becomes **"choosing a dataset, a target, a feature or a
+  hyperparameter fits nothing"**. This is the assertion most worth writing on these pages,
+  for the same reason as on the others: "pick a target column and it fits" feels responsive
+  and is the five-samples-five-inferences failure with a dropdown in front of it.
+- There is no cached-weights case to assert, because there are no weights. What replaces it
+  is stronger: **assert that nothing is persisted and nothing is uploaded** — spy on `fetch`,
+  `indexedDB.open` and `Storage.setItem` across a real fit. The privacy claim is a
+  behaviour, so it gets an assertion rather than a sentence.
+- **Assert the hyperparameter defaults are swapped with the family**, not inherited. A depth
+  that suits one criterion is not right for another, and reuse that looks like a decision is
+  usually an inheritance.
+
+**A page with no worker owes an assertion that it still has none.** "No worker" is a design
+decision a later refactor can quietly undo, and nothing visible changes when it does. Stub
+`globalThis.Worker` in the unit test and count constructions in the spec — the same shape as
+the pages that must not fetch asserting zero Hub requests. (happy-dom ships no `Worker` at
+all, so the stub is what makes the assertion reachable *and* proves a hook reaching for one
+would have found something.)
+
+**Where a component's own decision lives in a chart option**, assert the option object
+rather than the pixels: happy-dom has no layout engine, so mock the lazy `EChart` wrapper,
+capture what it was handed, and check the parts that encode a decision — series order,
+colour by sign, whether a forecast is drawn only across the held-out region. Mock
+`getCSSVar` to echo its token name too, or every colour resolves to `""` and "positive and
+negative differ" is unassertable.
+
 ## 9. Checklist — adding a task page
 
 - [ ] Model catalogue entry: `id`, `label`, `hint`, `params`, measured `bytes` per backend
@@ -714,8 +922,12 @@ That ambiguity is one reason §4's band labels stay generic.
 - [ ] A parameter beside the input re-runs on the next GENERATE, never on the keystroke
 - [ ] OUTPUT has an empty state, a running state, and an error state
 - [ ] Errors land in the slot that produced them
-- [ ] Unit tests for the hook's state machine; a route test covering §8's list
-- [ ] Sidebar taxonomy entry mapped in `REAL_ROUTES`, and the taxonomy test flipped
+- [ ] SELECT/LOAD wired through `useTaskSlots`; GENERATE is a `RunButton` (§4c) —
+      `conventions.test.ts` fails the build otherwise
+- [ ] Unit tests for the hook's state machine; a route test that calls
+      `describeTaskPageContract` and adds the input-specific half of §8's list
+- [ ] Task row added to its category and mapped in `REAL_ROUTES` — the sidebar lists
+      only tasks with a page, and a row without a route throws
 - [ ] Added to `e2e/specs/model-page.spec.ts`'s route table and to `model-ids.spec.ts`
 - [ ] A `@slow` spec that asserts a **property**, never a count
 
@@ -735,6 +947,8 @@ That ambiguity is one reason §4's band labels stay generic.
 | State machines | [`frontend/src/model/useModelWorker.ts`](../../frontend/src/model/useModelWorker.ts) |
 | Contract types | [`frontend/src/model/types.ts`](../../frontend/src/model/types.ts) |
 | Shell + slots | [`frontend/src/components/model/`](../../frontend/src/components/model/) |
+| The slot wiring | [`model/useTaskSlots.ts`](../../frontend/src/model/useTaskSlots.ts) + [`components/model/RunButton.tsx`](../../frontend/src/components/model/RunButton.tsx) (§4c) |
+| The route-test harness | [`src/test/taskPage.tsx`](../../frontend/src/test/taskPage.tsx) — state builders and the §8 contract suite |
 | A weight-downloading page | [`routes/text-to-speech.tsx`](../../frontend/src/routes/text-to-speech.tsx) |
 | The smallest complete page | [`routes/image-classification.tsx`](../../frontend/src/routes/image-classification.tsx) — an image in, a ranked list out; read this one first |
 | A compile-only page | [`routes/tensor.tsx`](../../frontend/src/routes/tensor.tsx) |
@@ -744,5 +958,4 @@ That ambiguity is one reason §4's band labels stay generic.
 | A page that holds two models | [`routes/pose.tsx`](../../frontend/src/routes/pose.tsx) — one combined size, one aggregate bar, controls that re-run on purpose |
 | A page whose framing is a requirement | [`routes/video-classification.tsx`](../../frontend/src/routes/video-classification.tsx) — a frame-level baseline, said so in copy an E2E spec asserts |
 | A page whose answer streams | [`routes/image-text-to-text.tsx`](../../frontend/src/routes/image-text-to-text.tsx) — the encode is named, the tokens arrive over seconds, and `partial` carries both |
-| The empty case | [`routes/tasks.$slug.tsx`](../../frontend/src/routes/tasks.$slug.tsx) |
 | The contract, asserted | [`frontend/e2e/specs/model-page.spec.ts`](../../frontend/e2e/specs/model-page.spec.ts) |

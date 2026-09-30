@@ -7,7 +7,7 @@
 // Four-slot page pattern — docs/standards/model-page-pattern.md.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Tags } from "lucide-react";
+import { Tags } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -15,22 +15,20 @@ import {
   DEFAULT_CLASSIFIER_MODEL,
   DEFAULT_ZERO_SHOT_LABELS,
 } from "@/audio/classification";
-import type { ClassLabel } from "@/audio/pipelineTypes";
 import { AUDIO_SAMPLES } from "@/audio/samples";
 import { AudioSourcePanel } from "@/components/audio/AudioSourcePanel";
+import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
-import { Button } from "@/components/ui/button";
+import { ScoreList } from "@/components/model/ScoreList";
 import { Label } from "@/components/ui/label";
 import { useAudioClassifier } from "@/hooks/useAudioClassifier";
 import { useAudioPick } from "@/hooks/useAudioPick";
-import {
-  useCacheRefresh,
-  useModelSelection,
-} from "@/model/useModelSelection";
+import { useModelSelection } from "@/model/useModelSelection";
+import { useTaskSlots } from "@/model/useTaskSlots";
 
 export const Route = createFileRoute("/audio-classification")({
   component: AudioClassificationPage,
@@ -47,23 +45,14 @@ function AudioClassificationPage() {
       CLASSIFIER_MODELS[0],
   });
   const model = session.model.id;
+  const task = useAudioClassifier(model);
   const {
-    status,
     ready,
-    loading,
-    loadProgress,
-    loadedInMs,
-    backend,
     running,
-    error,
     isZeroShot,
     result,
     classify,
-    load,
-    retry,
-    cancel,
-  } = useAudioClassifier(model);
-  useCacheRefresh(session, ready);
+  } = task;
 
   const [labelsText, setLabelsText] = useState(
     DEFAULT_ZERO_SHOT_LABELS.join("\n"),
@@ -90,8 +79,11 @@ function AudioClassificationPage() {
 
   // Capture failures (mic denied, undecodable file) belong in RUN; the model's
   // own errors split between LOAD and OUTPUT by status (§4).
-  const loadError = status === "error" ? error : null;
-  const runError = status === "error" ? null : error;
+  const slots = useTaskSlots(session, task, {
+    models: CLASSIFIER_MODELS,
+    busy,
+  });
+  const { runError } = slots;
 
   return (
     <ModelPage
@@ -99,28 +91,10 @@ function AudioClassificationPage() {
       title="Audio Classification"
       description="Tag a sound entirely in your browser. Fixed-label models return the most likely tags; CLAP scores the clip against your own text prompts. The model runs on your GPU (WebGPU) or CPU (WASM) in a Web Worker — nothing is uploaded."
       select={
-        <ModelPicker
-          models={CLASSIFIER_MODELS}
-          value={model}
-          onChange={session.setModel}
-          disabled={loading || busy}
-          cached={session.cached}
-          onEvict={(m) => void session.evict(m.id)}
-        />
+        <ModelPicker {...slots.picker} />
       }
       load={
-        <ModelStatus
-          status={status}
-          backend={backend}
-          loadProgress={loadProgress}
-          loadedInMs={loadedInMs}
-          cached={session.isCached}
-          error={loadError}
-          onLoad={session.onLoad(load)}
-          onCancel={session.onCancel(cancel)}
-          onRetry={retry}
-          disabled={busy}
-        />
+        <ModelStatus {...slots.status} />
       }
       run={
         <InputPanel
@@ -128,20 +102,15 @@ function AudioClassificationPage() {
           error={input.error}
           disabledHint="Load a model to classify a sound. You can pick a clip first."
           controls={
-            <Button
+            <RunButton
               disabled={!ready || busy || !input.clip || (isZeroShot && labels.length === 0)}
-              onClick={classifyCurrent}
+              onRun={classifyCurrent}
+              icon={Tags}
+              running={running}
+              runningLabel="Classifying…"
             >
-              {running ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" /> Classifying…
-                </>
-              ) : (
-                <>
-                  <Tags className="size-4" /> Classify
-                </>
-              )}
-            </Button>
+              Classify
+            </RunButton>
           }
         >
           <AudioSourcePanel
@@ -193,34 +162,11 @@ function AudioClassificationPage() {
           empty="Pick a clip, then press Classify — the ranked tags appear here."
         >
           {result && result.length > 0 && (
-            <ul className="space-y-2">
-              {result.map((p) => (
-                <ScoreRow key={p.label} label={p.label} score={p.score} />
-              ))}
-            </ul>
+            // `quiet`: this page reports the ranking without the near-tie note.
+            <ScoreList scores={result} format="percent" quiet />
           )}
         </OutputPanel>
       }
     />
-  );
-}
-
-function ScoreRow({ label, score }: ClassLabel) {
-  const pct = Math.round(score * 100);
-  return (
-    <li className="space-y-1">
-      <div className="flex items-baseline justify-between gap-3 text-sm">
-        <span className="truncate">{label}</span>
-        <span className="shrink-0 font-mono text-xs text-muted-foreground">
-          {pct}%
-        </span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${Math.max(2, pct)}%` }}
-        />
-      </div>
-    </li>
   );
 }

@@ -8,6 +8,11 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseLiveAsrResult } from "@/hooks/useLiveAsr";
+import {
+  describeTaskPageContract,
+  idleTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 // No Web Audio in happy-dom — stub decode/playback/encode. decodeToMono returns
 // a fixed clip so the sample-clip flow can be exercised without a real WAV;
@@ -26,50 +31,29 @@ vi.mock("@/audio/io", () => ({
   toWavBlob: vi.fn(() => new Blob()),
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const mockStart = vi.fn();
 const mockStop = vi.fn();
 const mockTranscribeClip = vi.fn();
 const mockLoad = vi.fn();
 const mockRetry = vi.fn();
-const baseState: UseLiveAsrResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
+const mockSetSkipSilence = vi.fn();
+const baseState = idleTask<UseLiveAsrResult>({
   recording: false,
-  running: false,
   stream: null,
   clip: null,
   sampleRate: 16000,
   text: "",
   chunks: [],
-  error: null,
   start: mockStart,
   stop: mockStop,
   transcribeClip: mockTranscribeClip,
   load: mockLoad,
   retry: mockRetry,
-  cancel: vi.fn(),
-};
+  skipSilence: true,
+  setSkipSilence: mockSetSkipSilence,
+  silent: false,
+  skippedTicks: 0,
+});
 let mockState: UseLiveAsrResult = { ...baseState };
 
 // Forwarded verbatim, arity included: the route passes the model and *nothing
@@ -90,15 +74,13 @@ vi.mock("@/model/cache", () => ({
   evictModel: vi.fn(() => Promise.resolve()),
 }));
 
-const { Route } = await import("@/routes/asr");
+const AsrPage = routeComponent(await import("@/routes/asr"));
 const { useModelPrefs } = await import("@/store/models");
 const { ASR_MODELS } = await import("@/audio/types");
 const WHISPER = ASR_MODELS[0].id;
 const MOONSHINE = ASR_MODELS[1].id;
-const AsrPage = Route?.options?.component as React.ComponentType | undefined;
 
 function renderPage() {
-  if (!AsrPage) throw new Error("ASR route component not found");
   render(<AsrPage />);
 }
 
@@ -111,6 +93,16 @@ describe("AsrPage", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useLiveAsrArgs,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: /^transcribe$/i,
   });
 
   it("renders the heading and both model options", () => {
@@ -258,6 +250,54 @@ describe("AsrPage", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText(/listening…/i)).toBeInTheDocument();
     expect(screen.getByText("hello")).toBeInTheDocument();
+  });
+
+  // #55: the gate is a choice about the live loop. On by default, available
+  // before a model is loaded, and flipping it runs nothing.
+  it("offers the silence gate as an input that runs nothing when flipped", () => {
+    renderPage();
+    const toggle = screen.getByTestId("skip-silence-toggle");
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeEnabled();
+
+    fireEvent.click(toggle);
+    expect(mockSetSkipSilence).toHaveBeenCalledWith(false);
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(mockTranscribeClip).not.toHaveBeenCalled();
+    expect(mockLoad).not.toHaveBeenCalled();
+  });
+
+  // A transcript standing still during a pause looks like a hang unless the
+  // page says why.
+  it("says when live updates are being skipped for silence", () => {
+    mockState = {
+      ...baseState,
+      status: "ready",
+      idle: false,
+      ready: true,
+      recording: true,
+      silent: true,
+      skippedTicks: 3,
+    };
+    renderPage();
+    expect(screen.getByTestId("asr-silent")).toHaveTextContent(
+      "no speech — skipped 3 updates",
+    );
+  });
+
+  it("does not claim silence once the take has stopped", () => {
+    mockState = {
+      ...baseState,
+      status: "ready",
+      idle: false,
+      ready: true,
+      recording: false,
+      silent: true,
+      skippedTicks: 3,
+      text: "done",
+    };
+    renderPage();
+    expect(screen.queryByTestId("asr-silent")).not.toBeInTheDocument();
   });
 
   it("renders the final transcript text when present and idle", () => {

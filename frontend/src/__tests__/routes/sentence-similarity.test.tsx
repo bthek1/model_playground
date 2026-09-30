@@ -2,22 +2,13 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseTextEmbedResult } from "@/hooks/useTextEmbed";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import { EMBED_MODELS, PAIR_SAMPLES } from "@/text/catalogue";
-
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
 
 const MINILM = EMBED_MODELS[0];
 const DIM = 384;
@@ -39,26 +30,13 @@ const mockRun = vi.fn(async (texts: string | string[]) =>
   (Array.isArray(texts) ? texts : [texts]).map(vectorFor),
 );
 
-const base: UseTextEmbedResult = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const base = idleTask<UseTextEmbedResult>({
   meta: MINILM,
   run: mockRun,
   cached: 0,
   clearCache: vi.fn(),
   compose: (t: string) => t,
-  load: vi.fn(),
-  retry: vi.fn(),
-  cancel: vi.fn(),
-};
+});
 
 // Keyed by model id, so a test can assert *which* entry the page asked for —
 // the pooling and the width are per model, and picking the wrong one is this
@@ -70,11 +48,9 @@ vi.mock("@/hooks/useTextEmbed", () => ({
   useTextEmbed: (...args: unknown[]) => useTextEmbed(...(args as [string])),
 }));
 
-const { Route } = await import("@/routes/sentence-similarity");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/sentence-similarity"));
 
 function renderPage() {
-  if (!Page) throw new Error("Sentence similarity route component not found");
   render(<Page />);
 }
 
@@ -83,7 +59,7 @@ const fieldB = () => screen.getByLabelText(/sentence b/i);
 const trigger = () => screen.getByRole("button", { name: /^compare$/i });
 
 function ready(extra: Partial<UseTextEmbedResult> = {}) {
-  state = { ...base, status: "ready", idle: false, ready: true, ...extra };
+  state = readyTask(base, extra);
 }
 
 describe("SentenceSimilarityPage", () => {
@@ -92,6 +68,16 @@ describe("SentenceSimilarityPage", () => {
     states = new Map();
     state = { ...base };
     localStorage.clear();
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useTextEmbed,
+    base,
+    setState: (st) => {
+      state = st;
+    },
+    trigger: /^compare$/i,
   });
 
   it("renders the heading and the model options", () => {
@@ -244,23 +230,5 @@ describe("SentenceSimilarityPage", () => {
 
     fireEvent.change(fieldA(), { target: { value: "edited afterwards" } });
     expect(screen.getByTestId("pair-yours")).toHaveTextContent("the original A");
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    state = { ...base, status: "error", idle: false, error: "404 model not found" };
-    renderPage();
-
-    const note = screen.getByText(/404 model not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT", () => {
-    ready({ error: "Asked for 2 embeddings, got 1" });
-    renderPage();
-
-    const note = screen.getByText(/asked for 2 embeddings, got 1/i);
-    expect(screen.getByTestId("slot-4")).toContainElement(note);
-    expect(screen.getByTestId("slot-2")).not.toContainElement(note);
   });
 });

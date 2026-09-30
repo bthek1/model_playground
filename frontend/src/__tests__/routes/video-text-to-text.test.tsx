@@ -2,6 +2,12 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseVlmResult } from "@/hooks/useVlm";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 import type { SampledFrame } from "@/vision/video";
 
 // The decode path, mocked: happy-dom has no video decoder and no canvas, and
@@ -28,43 +34,16 @@ vi.mock("@/model/backend", async (importOriginal) => {
   };
 });
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({
-          path,
-          options: opts,
-        }),
-      ),
-  };
-});
-
 const mockRun = vi.fn();
 const mockLoad = vi.fn();
 
-const baseState = (): UseVlmResult => ({
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
-  running: false,
-  error: null,
+const baseState = idleTask<UseVlmResult>({
   result: null,
   partial: null,
   run: mockRun,
   load: mockLoad,
-  retry: vi.fn(),
-  cancel: vi.fn(),
 });
-let mockState: UseVlmResult = baseState();
+let mockState: UseVlmResult = { ...baseState };
 const useVlm = vi.fn(() => mockState);
 vi.mock("@/hooks/useVlm", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -77,14 +56,12 @@ vi.mock("@/model/cache", () => ({
   evictModel: vi.fn(() => Promise.resolve()),
 }));
 
-const { Route } = await import("@/routes/video-text-to-text");
+const Page = routeComponent(await import("@/routes/video-text-to-text"));
 const { useModelPrefs } = await import("@/store/models");
 const { VIDEO_VLM_MODELS } = await import("@/multimodal/types");
 const MODEL = VIDEO_VLM_MODELS[0].id;
-const Page = Route?.options?.component as React.ComponentType | undefined;
 
 function renderPage() {
-  if (!Page) throw new Error("Video-text-to-text route component not found");
   return render(<Page />);
 }
 
@@ -99,17 +76,12 @@ function frames(n: number): SampledFrame[] {
 const RUN_BUTTON = /^generate$/i;
 const CLIP = /^interview$/i;
 
-const ready = (extra: Partial<UseVlmResult> = {}): UseVlmResult => ({
-  ...baseState(),
-  status: "ready",
-  idle: false,
-  ready: true,
-  ...extra,
-});
+const ready = (extra: Partial<UseVlmResult> = {}): UseVlmResult =>
+  readyTask(baseState, extra);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockState = baseState();
+  mockState = { ...baseState };
   cached = new Set();
   useModelPrefs.setState({ selected: {} });
   // The default frame count is 4, so the decode answers with four frames
@@ -133,6 +105,16 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("VideoTextToTextPage — the four-slot contract", () => {
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useVlm,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: RUN_BUTTON,
+  });
+
   it("renders the heading and the video catalogue", () => {
     renderPage();
     expect(
@@ -412,27 +394,6 @@ describe("VideoTextToTextPage — gating and errors", () => {
     renderPage();
     await waitFor(() =>
       expect(screen.getByTestId("f16-note")).toHaveTextContent(/shader-f16/),
-    );
-  });
-
-  it("puts a load failure in the LOAD slot, not in OUTPUT", () => {
-    mockState = {
-      ...baseState(),
-      status: "error",
-      idle: false,
-      error: "404 not found",
-    };
-    renderPage();
-    const note = screen.getByText(/404 not found/i);
-    expect(screen.getByTestId("slot-2")).toContainElement(note);
-    expect(screen.getByTestId("slot-4")).not.toContainElement(note);
-  });
-
-  it("puts an inference failure in OUTPUT", () => {
-    mockState = ready({ error: "out of memory" });
-    renderPage();
-    expect(screen.getByTestId("slot-4")).toContainElement(
-      screen.getByText(/out of memory/i),
     );
   });
 

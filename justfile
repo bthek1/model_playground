@@ -97,6 +97,38 @@ prod-backup:
         | gzip > "backups/$(date +%Y%m%d-%H%M%S).sql.gz"
     @ls -lh backups | tail -1
 
+# ── Static deploy (S3 + CloudFront, #57) ───────────────────────────────────────
+# The backend-free frontend at playground.benedictthekkel.com. Needs the Pulumi
+# CLI, AWS credentials and PULUMI_CONFIG_PASSPHRASE. CI does infra-up +
+# deploy-frontend on every push to main; these are for the first deploy and for
+# looking. See docs/guides/deployment.md §8.
+
+# Install the infra dependencies (Pulumi programs + their tests)
+infra-install:
+    cd infra && npm ci
+
+# Unit-test the infra: IAM policies + wiring, the site stack (mocks), SPA rewrite, upload + smoke scripts (stubbed), ci.yml
+infra-test:
+    cd infra && npx tsc --noEmit && npx vitest run
+
+# Apply the one-time CI identity (OIDC roles). Admin credentials, run locally — never from CI
+infra-bootstrap:
+    cd infra/bootstrap && pulumi up --stack production
+
+# Show what `infra-up` would change, with drift from a refresh
+infra-preview:
+    cd infra/site && pulumi preview --stack production --refresh --diff
+
+# Apply the site stack (bucket, CloudFront, certificate, DNS)
+infra-up:
+    cd infra/site && pulumi up --stack production
+
+# Build the static bundle and upload it in cache-safe order, then smoke-test the live site
+deploy-frontend:
+    cd frontend && VITE_BACKEND=off npm run build
+    scripts/deploy-frontend.sh frontend/dist
+    scripts/smoke-frontend.sh https://playground.benedictthekkel.com frontend/dist
+
 # ── Backend ────────────────────────────────────────────────────────────────────
 
 # Install backend dependencies (uv)
@@ -202,6 +234,10 @@ fe-e2e-install:
 fe-e2e:
     cd frontend && npm run test:e2e
 
+# Build the static bundle (VITE_BACKEND=off) and run the mocked suite against it — what CI ships
+fe-e2e-static:
+    cd frontend && VITE_BACKEND=off npm run build && E2E_STATIC=1 npx playwright test
+
 # Run E2E tests against the real Django API (needs `just dev` + `just be-seed-e2e`)
 fe-e2e-full: be-seed-e2e
     cd frontend && E2E_BACKEND=1 npm run test:e2e
@@ -229,6 +265,12 @@ fe-data-cora:
 # Run the @slow voice-activity-detection specs (Silero VAD, ~2 MB, seconds)
 fe-e2e-vad:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --grep "voice activity detection"
+
+# Run the @slow live-ASR silence-gate spec: real Whisper-base, and Chromium's fake
+# mic playing silence → JFK → silence. Asserts the page skips the silent updates
+# and still transcribes the speech (~1 min warm)
+fe-e2e-asr-live:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=chromium asr-live.spec.ts
 
 # Run the @slow vision specs: real loads of MobileNetV4, Depth Anything V2,
 # D-FINE nano, SegFormer-B0, CLIP, OWLv2, DINOv2, SlimSAM, the D-FINE+ViTPose
@@ -444,6 +486,72 @@ fe-e2e-rank:
 # that scales every similarity by an arbitrary factor.
 fe-e2e-embed:
     cd frontend && E2E_SLOW=1 npx playwright test --project=chromium --workers=1 text-models.spec.ts -g "embedding"
+
+# Run the Tabular specs: the whole model ladder fitted in a real browser on a
+# bundled sample, in the `webgpu` project because half of it is real WGSL.
+#
+# **The assertion is above the majority-class baseline**, never "a number
+# appeared". A class prior is the easiest thing in any dataset to learn, so a
+# page whose fit is broken still renders a confident accuracy — /graph-classification
+# settled this. The spec also pins the two claims the page makes in words: the
+# neural network loses to the trees, and the threshold slider re-reads the fit
+# rather than refitting it.
+#
+# Not @slow: nothing is downloaded, so the whole file is seconds.
+fe-e2e-tabular:
+    cd frontend && npx playwright test --project=webgpu --workers=1 webgpu/tabular.spec.ts
+
+# Run the forecasting spec. Not @slow and not in the webgpu project: the page
+# downloads nothing, fits nothing and constructs no Worker — which is the first
+# thing the spec asserts, because a later refactor could quietly add one.
+#
+# **The assertion is that the window spread is wide around the single split.**
+# "A chart appeared" would pass while the backtest reused one split's numbers
+# for every window, which is this page's most plausible bug and renders as a
+# perfectly flat strip. It is part of `just fe-e2e`; this recipe runs it alone.
+fe-e2e-forecast:
+    cd frontend && npx playwright test --project=chromium --workers=1 forecast.spec.ts
+
+# Run the /rl spec: a real worker trains the default FrozenLake grid and the
+# page's arrows are checked against value iteration's exact optimal policy.
+# Not @slow — nothing is downloaded and Phase 0 put every step on the CPU, so
+# a full run is seconds. It is part of `just fe-e2e`; this runs it alone.
+#
+# **The assertion is a named arrow and 11-of-11 agreement, never "a curve went
+# up"** — a wrong Bellman update still finds the goal on a 4×4 grid.
+# Runs /rl's spec alone: a real training run, pinned by a named arrow (seconds)
+fe-e2e-rl:
+    cd frontend && npx playwright test --project=chromium --workers=1 rl.spec.ts
+
+# Runs /discrete-maths' spec alone: BFS and walk counts against published answers
+# (the Petersen graph's diameter, an even cycle's parity), no worker, no request (seconds)
+fe-e2e-discrete:
+    cd frontend && npx playwright test --project=chromium --workers=1 discrete-maths.spec.ts
+
+# Re-measure RL's Phase 0: steps per second on the CPU against the GPU matmul,
+# and the cost of posting render state per step against 60 Hz. Logged, not
+# asserted — it is the table `src/rl/limits.ts` records. @slow because it is a
+# benchmark, not a test.
+# Re-measures RL Phase 0: CPU vs GPU steps/s, and per-step posting's cost
+fe-e2e-rl-phase0:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/rl-phase0.spec.ts
+
+# Run the @slow /robotics spec: a real OWLv2 + Depth Anything load on the city
+# street sample, pinned by **geometry** — the hatchback in the foreground must be
+# ranked nearer than the car up the road. That is the only assertion that
+# catches an inverted depth convention; every count-based check passes it.
+# Needs a GPU with shader-f16: OWLv2's q8 export does not open on WASM.
+# Runs /robotics' real grounding spec (needs a shader-f16 GPU)
+fe-e2e-robotics:
+    cd frontend && E2E_SLOW=1 npx playwright test --project=webgpu --workers=1 webgpu/robotics.spec.ts
+
+# Run /robotics' behaviour-cloning specs: train both demonstration mixes at one
+# seed and assert **both** halves — the both-ways policy collides and the
+# one-way policy reaches. The failure alone is not evidence. Not @slow: nothing
+# downloads, and a run is under a second; it is part of `just fe-e2e`.
+# Runs /robotics' cloning specs: the failure beside its control (seconds)
+fe-e2e-cloning:
+    cd frontend && npx playwright test --project=chromium --workers=1 robotics.spec.ts -g "behaviour cloning"
 
 # Check every model id (audio + vision + multimodal + text) still resolves on
 # the Hugging Face Hub, that each vision entry publishes the dtypes both backends

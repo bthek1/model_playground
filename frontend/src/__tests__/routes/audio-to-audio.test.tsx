@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EnhanceResult } from "@/audio/enhance/types";
 import type { ModelTask } from "@/model/types";
+import {
+  describeTaskPageContract,
+  idleTask,
+  readyTask,
+  routeComponent,
+} from "@/test/taskPage";
 
 // No Web Audio in the test env: decoding, playback and WAV encoding are mocked.
 const play = vi.fn<(...args: unknown[]) => { close: () => void }>(() => ({
@@ -24,67 +30,47 @@ vi.mock("@/components/audio/Waveform", () => ({
   LiveWaveform: () => <div data-testid="live-waveform" />,
 }));
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    createFileRoute: vi
-      .fn()
-      .mockImplementation(
-        (path: string) => (opts: Record<string, unknown>) => ({ path, options: opts }),
-      ),
-  };
-});
-
 const mockRun = vi.fn<(audio: Float32Array) => Promise<EnhanceResult>>();
 const mockLoad = vi.fn();
 const mockRetry = vi.fn();
 
 type EnhanceTask = ModelTask<Float32Array, EnhanceResult>;
 
-const baseState: EnhanceTask = {
-  status: "idle",
-  idle: true,
-  loading: false,
-  ready: false,
-  progress: null,
-  loadProgress: null,
-  loadedInMs: null,
-  backend: null,
+const baseState = idleTask<EnhanceTask>({
   load: mockLoad,
   retry: mockRetry,
-  cancel: vi.fn(),
   run: mockRun,
-  running: false,
   result: null,
-  error: null,
-};
+});
 let mockState: EnhanceTask = { ...baseState };
 
+const useEnhance = vi.fn(() => mockState);
 vi.mock("@/hooks/useEnhance", () => ({
-  useEnhance: () => mockState,
+  useEnhance: (...args: unknown[]) => useEnhance(...(args as [])),
 }));
 
-const { Route } = await import("@/routes/audio-to-audio");
-const Page = Route?.options?.component as React.ComponentType | undefined;
+const Page = routeComponent(await import("@/routes/audio-to-audio"));
 
 function renderPage() {
-  if (!Page) throw new Error("Audio-to-audio route component not found");
   render(<Page />);
 }
 
-const readyState: EnhanceTask = {
-  ...baseState,
-  status: "ready",
-  idle: false,
-  ready: true,
-  backend: "wasm",
-};
+const readyState: EnhanceTask = readyTask(baseState, { backend: "wasm" });
 
 describe("AudioToAudioPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState = { ...baseState };
+  });
+
+  describeTaskPageContract({
+    render: renderPage,
+    hook: useEnhance,
+    base: baseState,
+    setState: (st) => {
+      mockState = st;
+    },
+    trigger: /^enhance$/i,
   });
 
   it("renders the heading and the single model option", () => {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { decodeToMono } from "@/audio/io";
+import { sliceHasSpeech } from "@/audio/vad/liveGate";
+import { FRAME_SAMPLES } from "@/audio/vad/vad";
 import {
   DEFAULT_ASR_MODEL,
   type AsrChunk,
@@ -68,6 +70,21 @@ export interface UseLiveAsrResult {
    */
   chunks: AsrChunk[];
   error: string | null;
+  /**
+   * Whether live ticks with no new speech skip the model (default on). Applies
+   * to the live loop only — never to the final pass on `stop()`, and never to
+   * `transcribeClip`. Flipping it runs nothing; the next tick reads it.
+   */
+  skipSilence: boolean;
+  setSkipSilence: (on: boolean) => void;
+  /**
+   * True while the latest live tick was skipped for silence — the transcript is
+   * standing still because nothing was said, not because the model hung.
+   * Cleared by the next transcribed tick, by `stop()` and by `start()`.
+   */
+  silent: boolean;
+  /** Live ticks skipped for silence in this take. */
+  skippedTicks: number;
   /** Begin live capture + transcription. Requests mic permission. */
   start: () => Promise<void>;
   /** Stop capture; runs one final transcription over the full take. */
@@ -93,7 +110,9 @@ export interface UseLiveAsrResult {
  * {@link WINDOW_SECONDS} through the ASR worker — so the transcript updates live
  * as the user speaks. Overlapping ticks are skipped (one transcription in flight
  * at a time); the growing audio keeps accumulating and the next free tick catches
- * up. The full take is retained as `clip` when capture stops, so the UI can
+ * up. Ticks whose new audio holds no speech skip the model too
+ * (`audio/vad/liveGate.ts`): Whisper transcribes room tone as "you", and each
+ * skipped pass is ~0.75 s of inference saved. The full take is retained as `clip` when capture stops, so the UI can
  * visualize, replay, download, or re-transcribe it. Built on {@link useAsr}, so
  * model loading/backends are shared.
  */
@@ -110,11 +129,25 @@ export function useLiveAsr(
   const [text, setText] = useState("");
   const [chunks, setChunks] = useState<AsrChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [skipSilence, setSkipSilence] = useState(true);
+  const [silent, setSilent] = useState(false);
+  const [skippedTicks, setSkippedTicks] = useState(0);
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const busyRef = useRef(false);
+  // Read by the tick, not captured by it: a toggle mid-take applies to the next
+  // tick rather than waiting for a new `runWindow` closure.
+  const skipSilenceRef = useRef(true);
+  const setSkip = useCallback((on: boolean) => {
+    skipSilenceRef.current = on;
+    setSkipSilence(on);
+  }, []);
+  // Samples of the take already judged by the gate. Advanced on every scored
+  // tick — transcribed or skipped — but not on a tick dropped because another
+  // was in flight, so the next free tick judges everything that arrived since.
+  const scoredRef = useRef(0);
 
   // Decode the take-so-far and transcribe its tail window. On the final pass
   // (recorder stopped) the full take is retained as `clip`. Silent on transient
@@ -133,6 +166,29 @@ export function useLiveAsr(
         const maxSamples = WINDOW_SECONDS * TARGET_RATE;
         const start = Math.max(0, full.length - maxSamples);
         const windowed = full.slice(start);
+
+        // The gate never touches the final pass: the last transcript must
+        // reflect the whole take, silent tail or not.
+        if (!final && skipSilenceRef.current) {
+          // One frame of overlap, so a word whose onset straddles the tick
+          // boundary is judged with its start.
+          const from = Math.max(0, scoredRef.current - FRAME_SAMPLES) - start;
+          scoredRef.current = full.length;
+          let speech = true; // fail open: a gate that errors transcribes
+          try {
+            speech = sliceHasSpeech(windowed, from, TARGET_RATE).speech;
+          } catch {
+            /* keep speech = true */
+          }
+          if (!speech) {
+            setSilent(true);
+            setSkippedTicks((n) => n + 1);
+            return;
+          }
+        }
+        scoredRef.current = full.length;
+        setSilent(false);
+
         const res = await transcribe(windowed);
         setText(res.text);
         setChunks(shiftChunks(res.chunks, start / TARGET_RATE));
@@ -153,6 +209,7 @@ export function useLiveAsr(
     recorderRef.current = null;
     setStream(null);
     setRecording(false);
+    setSilent(false);
   }, []);
 
   const start = useCallback(async () => {
@@ -164,6 +221,9 @@ export function useLiveAsr(
     setText("");
     setChunks([]);
     setClip(null);
+    setSilent(false);
+    setSkippedTicks(0);
+    scoredRef.current = 0;
     try {
       const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = mic;
@@ -228,6 +288,10 @@ export function useLiveAsr(
     text,
     chunks,
     error: error ?? asr.error,
+    skipSilence,
+    setSkipSilence: setSkip,
+    silent,
+    skippedTicks,
     start,
     stop,
     transcribeClip,

@@ -28,6 +28,7 @@ import type {
   TextGenPartial,
   TextGenResult,
 } from "@/text/textgenTypes";
+import { useCatalogueEntry } from "@/model/catalogue";
 
 export interface UseTextGenResult {
   status: ModelStatus;
@@ -59,10 +60,7 @@ export function useTextGen(
   model: string = DEFAULT_TEXTGEN_MODEL,
   autoLoad = false,
 ): UseTextGenResult {
-  const meta = useMemo(
-    () => TEXTGEN_MODELS.find((m) => m.id === model) ?? TEXTGEN_MODELS[0],
-    [model],
-  );
+  const meta = useCatalogueEntry(TEXTGEN_MODELS, model);
 
   const loadMessage = useMemo(
     () => ({
