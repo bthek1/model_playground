@@ -116,9 +116,17 @@ just fe-e2e-rl-phase0 # re-measure RL Phase 0: CPU vs GPU steps/s, per-step post
 just fe-e2e-robotics # @slow: OWLv2 + Depth Anything — the nearer car must be ranked nearer (needs a shader-f16 GPU)
 just fe-e2e-cloning  # /robotics behaviour cloning: both-ways collides, one-way reaches, same seed (seconds)
 just fe-e2e-models  # check every model id (audio + vision + multimodal + text) resolves on the HF Hub (seconds)
+just fe-e2e-static  # VITE_BACKEND=off build + the mocked suite against the built bundle (what CI deploys)
 just fe-e2e-install # download the playwright browsers (once)
 just fe-e2e-ui      # playwright interactive UI
 just fe-lint        # eslint
+
+# Static deploy (S3 + CloudFront, #57) — needs the Pulumi CLI + AWS credentials
+just infra-test       # tsc + vitest over infra/: IAM policies, site stack (mocks), SPA rewrite, upload script
+just infra-bootstrap  # one-time CI identity (OIDC roles) — an admin, locally, never CI
+just infra-preview    # pulumi preview --refresh on the site stack
+just infra-up         # pulumi up on the site stack (the first one locally: ACM + CloudFront take 5–30 min)
+just deploy-frontend  # VITE_BACKEND=off build → ordered upload → smoke test of the live site
 
 # Celery
 just celery-up      # redis + worker + beat (docker)
@@ -211,6 +219,31 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   the mocked Playwright suite and both image builds. It does **not** run the
   `@slow` specs — those still need `just fe-e2e-slow` by hand.
   See [`docs/guides/deployment.md`](docs/guides/deployment.md).
+- **The static frontend is a second deployment** (#57, deployment.md §10):
+  `VITE_BACKEND=off`, S3 + CloudFront at `https://playground.benedictthekkel.com`,
+  Pulumi in `infra/`, deployed by CI on each push to `main` through **OIDC** (no
+  AWS keys anywhere). Rules that fail silently if broken:
+  - **Read the flag only via `src/lib/features.ts`**, and gate any new `/api`
+    caller on it. On CloudFront a stray `/api` call is rewritten to `index.html`
+    and answered **200**, so it does not fail — `staticBuild.test.tsx` and
+    `static-build.spec.ts` assert *no request on the wire*. Backend-UI specs are
+    tagged `@api`, which the `E2E_STATIC=1` pass (built bundle, `vite preview`,
+    port 5181, never a reused server) excludes.
+  - **The deployed bytes are the tested bytes**: `frontend` builds the `off`
+    artifact, `e2e-static` tests it, `deploy` uploads it and never rebuilds.
+  - **Uploads are `scripts/deploy-frontend.sh`, never Pulumi resources**: assets
+    first, explicit `application/wasm`, `index.html` last, **never `--delete`**
+    (superseded assets are tagged `stale` *once*; a lifecycle rule expires them
+    30 days on, so open tabs keep their chunks). Deep links are a CloudFront
+    Function, never a custom error response.
+  - **Trust is the exact OIDC `sub`** — deploy on the `production` environment,
+    read-only preview on `refs/heads/develop` (so `preview` must not declare an
+    environment). Route 53 writes are limited to the `playground` names in a zone
+    the stack only looks up; ACM/CloudFront deletes need the
+    `project=model-playground` tag. The GitHub OIDC provider is account-wide and
+    looked up, never owned.
+  - **CI never cancels an in-progress run on `main`**: cancelling mid-upload
+    half-deploys.
 
 ### Backend essentials
 

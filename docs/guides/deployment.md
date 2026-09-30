@@ -3,9 +3,18 @@
 How to put Model Playground on the internet, and why the pieces are arranged the
 way they are.
 
-The stack is `docker-compose.prod.yml`: **Caddy** (TLS) → **nginx** (the built
-SPA, and `/api` forwarding) → **gunicorn** (Django) → **Postgres** + **Redis**,
-with a Celery worker and beat alongside.
+There are two deployments, and they are not alternatives to choose between
+once — they answer different questions:
+
+- **The full stack** (§1–§9) is `docker-compose.prod.yml`: **Caddy** (TLS) →
+  **nginx** (the built SPA, and `/api` forwarding) → **gunicorn** (Django) →
+  **Postgres** + **Redis**, with a Celery worker and beat alongside. It needs a
+  VM, and it is the only one with sign-in and the registry.
+- **The static frontend** (§10) is `frontend/dist` built with
+  `VITE_BACKEND=off`, in S3 behind CloudFront at
+  **https://playground.benedictthekkel.com**, for about $1 a month. Every model
+  page works there, because every model page runs in the browser. CI deploys it
+  on each push to `main`.
 
 ---
 
@@ -33,11 +42,13 @@ the SPA and forwards `/api`, `/admin` and `/static` to Django on the same
 hostname. In that shape **CORS is not involved at all**, which is why
 `CORS_ALLOWED_ORIGINS` defaults to empty in `core/settings/prod.py`.
 
-> **Splitting the frontend onto a static host** (Vercel, Netlify, S3) is
-> possible, but it re-opens exactly the problem above: you must set
-> `VITE_API_BASE_URL`, serve the API over HTTPS on its own domain, and maintain
-> a CORS allowlist. You gain a CDN for a bundle that is already cached
-> immutably. Prefer the single origin unless you have a reason.
+> **Splitting the frontend onto a static host while keeping a backend** re-opens
+> exactly the problem above: you must set `VITE_API_BASE_URL`, serve the API
+> over HTTPS on its own domain, and maintain a CORS allowlist. That objection is
+> about the *backend*. With no backend at all (`VITE_BACKEND=off`) there is
+> nothing cross-origin to call, and a static host is the cheaper answer — §10.
+> When that deploy grows a backend, it stays single-origin by adding the API as
+> a second CloudFront origin (§10.8), not by pointing the SPA elsewhere.
 
 What is *not* a deployment problem: **model weights**. The browser fetches them
 straight from the Hugging Face CDN (`ModelCard.weights_url`), never through
@@ -272,4 +283,205 @@ session, and both DeepFilterNet bugs of 2026-09-01 shipped past a green unit
 suite. Run `just fe-e2e-slow` by hand before shipping a model change; see
 [e2e-testing.md](./e2e-testing.md).
 
-Nothing deploys automatically. `just deploy` is a person typing it.
+The **full stack** never deploys automatically: `just deploy` is a person
+typing it. The **static frontend** does — a push to `main` runs the `deploy`
+job (§10.4), gated on the unit suite, both Playwright passes (the dev server,
+and the shipped `VITE_BACKEND=off` bundle) and the infra tests, and ending in a
+smoke test against the live site.
+
+---
+
+## 10. Static frontend on S3 + CloudFront
+
+**https://playground.benedictthekkel.com** — the app with no backend (#57).
+
+### 10.1 What it is, and why a backend is not needed
+
+Every model page runs in the browser and fetches its weights straight from the
+Hugging Face CDN. Only three things ever call `/api`: sign-in (and `useMe`,
+which the navbar and `/` use), the registry catalogue on `/home` and
+`/playground`, and the Celery `TaskTrigger`, which no route renders.
+`VITE_BACKEND=off` removes all three, read in exactly one place
+(`src/lib/features.ts`): `/` redirects to `/home`, `/login` and `/signup` do
+too, and the catalogue is not rendered. The assertion is **no request to
+`/api` on the wire** (`src/__tests__/staticBuild.test.tsx`,
+`e2e/specs/static-build.spec.ts`), not "no sign-in button" — on this deploy a
+request to `/api` does not fail, it is rewritten to `index.html` and answered
+200, and a JSON parser gets a page of HTML.
+
+The pieces, all in `infra/` (Pulumi, TypeScript) and `scripts/`:
+
+| Piece | Where | Applied by |
+|-------|-------|------------|
+| State bucket | AWS CLI, below | an admin, once |
+| CI identity: deploy + preview roles | `infra/bootstrap` | an admin, once (`just infra-bootstrap`) |
+| Bucket, CloudFront, certificate, DNS | `infra/site` | CI on `main`; first time locally (`just infra-up`) |
+| The files | `scripts/deploy-frontend.sh` | CI on `main`, after `pulumi up` |
+| Smoke test | `scripts/smoke-frontend.sh` | CI on `main`, last |
+
+The hostname is `playground`, not `model_playground`: certificates may not
+contain `_` (CA/Browser Forum, since 2019), and no certificate means no HTTPS,
+which means no `navigator.gpu`.
+
+### 10.2 Bootstrap (once, locally, with admin credentials)
+
+This is a person at a terminal on purpose: CI cannot create the identity it
+authenticates with.
+
+**1. The state bucket.** Pulumi keeps state in S3, not Pulumi Cloud, so there
+is no long-lived `PULUMI_ACCESS_TOKEN`. The bucket cannot be managed by the
+stack whose state it holds, so it is made by hand:
+
+```bash
+B=model-playground-pulumi-state-762233760445
+aws s3api create-bucket --bucket $B --region ap-southeast-2 \
+  --create-bucket-configuration LocationConstraint=ap-southeast-2
+aws s3api put-bucket-versioning --bucket $B --versioning-configuration Status=Enabled
+aws s3api put-public-access-block --bucket $B --public-access-block-configuration \
+  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws s3api put-bucket-encryption --bucket $B --server-side-encryption-configuration \
+  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+```
+
+Both `Pulumi.yaml` files name it under `backend.url`, so no `pulumi login` is
+needed anywhere.
+
+**2. The GitHub OIDC provider.** It is an account-wide singleton that other
+projects' roles already trust, so `infra/bootstrap` **looks it up and never
+owns it** — the same rule as the Route 53 zone. It exists in this account. In
+an account without one:
+
+```bash
+aws iam create-open-id-connect-provider \
+  --url https://token.actions.githubusercontent.com --client-id-list sts.amazonaws.com
+```
+
+**3. The stacks.** A passphrase secrets provider: neither stack holds a secret
+value, so the passphrase protects nothing sensitive today. If one is ever
+added, move to `awskms://` (about $1/month).
+
+```bash
+export PULUMI_CONFIG_PASSPHRASE=...        # the same value goes to GitHub below
+just infra-install
+(cd infra/bootstrap && pulumi stack init production --secrets-provider passphrase)
+(cd infra/site      && pulumi stack init production --secrets-provider passphrase)
+git add infra/*/Pulumi.production.yaml     # init added an encryptionsalt; commit it
+just infra-bootstrap                       # prints deployRoleArn and previewRoleArn
+```
+
+**4. GitHub.** In the repository settings:
+
+- an **environment** named `production`, deployment branches limited to `main`
+  (and required reviewers, if a release should wait for a click);
+- **repository variables** `AWS_DEPLOY_ROLE_ARN` and `AWS_PREVIEW_ROLE_ARN`,
+  from the bootstrap outputs. Repository-level because a job's `if:` can only
+  read those; the `deploy` and `preview` jobs are skipped while they are unset;
+- a **repository secret** `PULUMI_CONFIG_PASSPHRASE`.
+
+### 10.3 The first site deploy (locally)
+
+```bash
+just infra-up          # 5–30 minutes the first time: ACM DNS validation + CloudFront propagation
+just deploy-frontend   # VITE_BACKEND=off build, upload, smoke test
+```
+
+Run the first `pulumi up` by hand rather than leaving it to CI: validation and
+first propagation can outlast a patient job, and a half-created distribution is
+easier to watch from a terminal. After that, CI owns it.
+
+### 10.4 What CI does
+
+On every push to `develop`, `preview` assumes the **read-only** role and runs
+`pulumi preview --refresh`, so drift and pending infrastructure changes are
+visible before a release.
+
+On every push to `main`, `deploy` — after `frontend`, `e2e`, `e2e-static` and
+`infra` pass — assumes the **deploy** role, runs `pulumi up`, runs the upload
+script on the **same `dist` artifact** `frontend` built and `e2e-static`
+tested (it is never rebuilt), then the smoke test. The job has
+`concurrency: deploy-production` without cancellation, and the workflow no
+longer cancels in-progress runs on `main`: a release queues behind the one
+uploading, rather than killing it halfway.
+
+The smoke test (`scripts/smoke-frontend.sh`) checks, against the live site:
+`/` is 200 and `no-cache`; a real `/assets/*.js` is `immutable`; a real
+`.wasm` is `application/wasm`; `/asr` returns the app shell; `http://`
+redirects to `https://`; every request verifies the certificate (no `-k`);
+and the bucket's own URL answers 403.
+
+### 10.5 The trust model
+
+The repository is public, and the account holds other things — other
+certificates in us-east-1, another CloudFront site, and a shared zone whose
+apex and mail records belong to nobody in this repo. So:
+
+- **Trust is the OIDC `sub` claim, exact-matched.** The deploy role trusts
+  `repo:bthek1/model_playground:environment:production` — an *environment*,
+  not a branch, so a fork's pull request cannot claim it and the environment
+  can require approval. The preview role trusts
+  `repo:bthek1/model_playground:ref:refs/heads/develop`, which is why the
+  `preview` job must not declare an `environment:` (that changes the subject).
+  Never widen either to `repo:bthek1/model_playground:*`.
+- **Route 53 writes are scoped to one zone and to this site's names.**
+  `route53:ChangeResourceRecordSetsNormalizedRecordNames` allows only
+  `playground.benedictthekkel.com` and `_*.playground.benedictthekkel.com`
+  (the ACM validation record), in record types A, AAAA and CNAME. A bad
+  `pulumi up` cannot rewrite the apex or the mail records. The stack looks the
+  zone up with `getZone` and never creates, imports or deletes it.
+- **Where a resource cannot be named in advance, it is scoped by tag.** ACM
+  certificate and CloudFront distribution ARNs are random, so deleting or
+  updating one requires `project=model-playground`, which the site stack sets
+  and the other projects' resources do not carry. Certificates can be
+  requested only for this domain, only in us-east-1.
+- **No `*:*`.** The site bucket's `s3:*` is scoped to that bucket; reads that
+  AWS cannot scope (`List*`) are the only unscoped statements.
+  `infra/bootstrap/policies.test.ts` asserts all of this.
+
+### 10.6 The upload, and why it is ordered
+
+Files are **not** Pulumi resources. One `BucketObject` per file is hundreds of
+resources, and it deletes the previous build's hashed chunks the moment the new
+build lands — which breaks every open tab whose cached `index.html` still
+references them, the next time it lazy-loads a route. The upload script:
+
+1. uploads `assets/**` first, `public, max-age=31536000, immutable`;
+2. uploads `*.wasm` with an **explicit** `application/wasm` — ONNX Runtime's
+   streaming compilation refuses anything else, and the CLI's MIME guess is
+   not a contract;
+3. uploads `site.webmanifest` and then `index.html` **last**,
+   `no-cache, must-revalidate` — the switch-over;
+4. **never deletes.** An asset the new build no longer references is
+   re-written in place tagged `stale=true`, once; the bucket's lifecycle rule
+   expires tagged objects 30 days later (`site:staleAssetDays`). Re-writing
+   resets the object's age, so the 30 days run from when it went stale, not
+   from when it was built — and it is tagged only once, or every deploy would
+   restart its clock. A chunk a later build brings back is re-uploaded
+   untagged, which takes it out of the rule;
+5. invalidates only `/index.html` and `/site.webmanifest`. A hashed name never
+   changes meaning, so it never needs invalidating.
+
+SPA deep links (`/asr`) are a CloudFront Function (`infra/site/spa-rewrite.js`)
+that serves `/index.html` for any path whose last segment has no dot — **not**
+a distribution-wide custom error response, which would also turn a future
+`/api` origin's 404s into the app shell. A route containing a dot would bypass
+it; none does, and `spa-rewrite.test.ts` checks that against the generated
+route tree. There is **no CSP**, for §1's reason.
+
+### 10.7 Cost
+
+About **$0** for S3 and CloudFront inside the always-free tier — ~1 TB/month of
+CloudFront transfer, which is tens of thousands of visits at ~25 MB per cold
+visitor (model weights come from Hugging Face, not from here). The hosted zone
+($0.50/month) and the domain were already paid for; the ACM certificate is
+free. The only way this gets expensive is a traffic spike past the free tier —
+a CloudWatch billing alarm is the guard, if one is wanted.
+
+### 10.8 Adding a backend later
+
+Add Django as a **second CloudFront origin** with ordered cache behaviours for
+`/api/*`, `/admin/*` and `/static/*` ahead of the default, caching disabled and
+all methods allowed. The site stays single-origin, so there is still no CORS,
+and the SPA's empty `VITE_API_BASE_URL` keeps working. Then build with
+`VITE_BACKEND=on`. Until then, know that `/api/anything` on this deploy is
+rewritten to `index.html` and returns 200 — nothing calls it, which is what the
+static-build tests assert.

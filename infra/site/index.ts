@@ -7,7 +7,7 @@
 // Files are NOT Pulumi resources. `scripts/deploy-frontend.sh` uploads them
 // after `pulumi up`, ordered so an open tab never loses a chunk it references;
 // one `BucketObject` per file would delete the previous build's hashed chunks
-// the moment the new build landed. See docs/guides/deployment.md §8.
+// the moment the new build landed. See docs/guides/deployment.md §10.6.
 
 import * as aws from "@pulumi/aws";
 import * as pulumi from "@pulumi/pulumi";

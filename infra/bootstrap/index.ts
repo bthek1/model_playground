@@ -8,7 +8,7 @@
 // The GitHub OIDC provider is an account-wide singleton (one per issuer URL)
 // that other projects' roles already trust, so it is looked up, never created
 // or owned here — the same rule as the Route 53 zone. `docs/guides/deployment.md`
-// §8 has the one CLI command for an account that lacks it.
+// §10.2 has the one CLI command for an account that lacks it.
 
 import * as aws from "@pulumi/aws";
 import * as pulumi from "@pulumi/pulumi";

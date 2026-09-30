@@ -1683,6 +1683,11 @@ Key commands:
 | `just fe-e2e-cloning` | /robotics behaviour cloning: the both-ways policy collides and the one-way policy reaches, same seed, one page (seconds, not @slow) |
 | `just fe-e2e-graphcls` | @slow graph classification, pinned **above its majority baseline**, not above chance |
 | `just fe-e2e-models` | Check every model id (audio + vision) resolves on the HF Hub (seconds) |
+| `just fe-e2e-static` | Build with `VITE_BACKEND=off` and run the mocked suite against the built bundle — what CI deploys |
+| `just infra-test` | Unit-test `infra/`: IAM policies, the site stack under Pulumi mocks, the SPA rewrite, the upload script |
+| `just infra-bootstrap` | Apply the one-time CI identity (OIDC roles) — an admin, locally, never CI |
+| `just infra-preview` / `just infra-up` | `pulumi preview --refresh` / `pulumi up` on the static site stack |
+| `just deploy-frontend` | Build the static bundle, upload it in cache-safe order, smoke-test the live site |
 | `just be-seed-e2e` | Create/reset the E2E test user (dev only) |
 | `just be-startapp name` | Scaffold a new Django app |
 
@@ -1796,7 +1801,38 @@ Consequences worth knowing before changing any of it:
 - **Model weights never touch the server**; the browser fetches them from the HF
   CDN. Any CSP you add must not block it.
 
-Full procedure, backups and troubleshooting: `docs/guides/deployment.md`.
+**The static frontend is a second deployment, not a replacement** (#57):
+`frontend/dist` built with `VITE_BACKEND=off`, in a private S3 bucket behind
+CloudFront at https://playground.benedictthekkel.com, infrastructure in Pulumi
+(`infra/bootstrap`, `infra/site`), deployed by CI on every push to `main`.
+
+- **`VITE_BACKEND=off` means no request to `/api`, asserted on the wire.** Read the
+  flag only through `src/lib/features.ts` (`BACKEND_ENABLED`). On CloudFront a
+  stray `/api` call does not fail — it is rewritten to `index.html` and answered
+  200 — so a new `/api` caller must be gated, and `staticBuild.test.tsx` /
+  `static-build.spec.ts` are what catch one that is not. Specs that need the
+  backend UI are tagged `@api`; `E2E_STATIC=1` excludes them and serves the built
+  bundle with `vite preview` on port 5181 (never a reused server).
+- **The deployed bytes are the tested bytes.** CI's `frontend` job builds the
+  `VITE_BACKEND=off` artifact; `e2e-static` tests it; `deploy` uploads it and never
+  rebuilds.
+- **AWS access is OIDC, trusted on the exact `sub`:** the deploy role on the
+  `production` *environment*, the read-only preview role on `refs/heads/develop`.
+  Route 53 writes are scoped to the `playground` names in one shared zone that the
+  stack only looks up; ACM/CloudFront deletes need the `project=model-playground`
+  tag. `infra/bootstrap/policies.test.ts` pins it. The GitHub OIDC provider is
+  account-wide and looked up, never owned.
+- **Files are uploaded by `scripts/deploy-frontend.sh`, never as Pulumi
+  resources**: assets first, `.wasm` with an explicit `application/wasm`,
+  `index.html` last, **never `--delete`** — superseded assets are tagged `stale`
+  once and a lifecycle rule expires them 30 days later, so an open tab keeps its
+  chunks. SPA deep links are a CloudFront Function, not a custom error response
+  (that would mask a future `/api` origin's 404s). No CSP.
+- **The workflow does not cancel in-progress runs on `main`**, and `deploy` has
+  its own non-cancelling concurrency group: cancelling mid-upload half-deploys.
+
+Full procedure, backups and troubleshooting: `docs/guides/deployment.md` (§10 for
+the static deploy).
 
 ---
 

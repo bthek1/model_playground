@@ -97,6 +97,38 @@ prod-backup:
         | gzip > "backups/$(date +%Y%m%d-%H%M%S).sql.gz"
     @ls -lh backups | tail -1
 
+# ── Static deploy (S3 + CloudFront, #57) ───────────────────────────────────────
+# The backend-free frontend at playground.benedictthekkel.com. Needs the Pulumi
+# CLI, AWS credentials and PULUMI_CONFIG_PASSPHRASE. CI does infra-up +
+# deploy-frontend on every push to main; these are for the first deploy and for
+# looking. See docs/guides/deployment.md §8.
+
+# Install the infra dependencies (Pulumi programs + their tests)
+infra-install:
+    cd infra && npm ci
+
+# Unit-test the infra: policies, the site stack under mocks, the SPA rewrite, the upload script
+infra-test:
+    cd infra && npx tsc --noEmit && npx vitest run
+
+# Apply the one-time CI identity (OIDC roles). Admin credentials, run locally — never from CI
+infra-bootstrap:
+    cd infra/bootstrap && pulumi up --stack production
+
+# Show what `infra-up` would change, with drift from a refresh
+infra-preview:
+    cd infra/site && pulumi preview --stack production --refresh --diff
+
+# Apply the site stack (bucket, CloudFront, certificate, DNS)
+infra-up:
+    cd infra/site && pulumi up --stack production
+
+# Build the static bundle and upload it in cache-safe order, then smoke-test the live site
+deploy-frontend:
+    cd frontend && VITE_BACKEND=off npm run build
+    scripts/deploy-frontend.sh frontend/dist
+    scripts/smoke-frontend.sh https://playground.benedictthekkel.com frontend/dist
+
 # ── Backend ────────────────────────────────────────────────────────────────────
 
 # Install backend dependencies (uv)
@@ -201,6 +233,10 @@ fe-e2e-install:
 # Run the Playwright end-to-end tests (mocked API — no backend needed)
 fe-e2e:
     cd frontend && npm run test:e2e
+
+# Build the static bundle (VITE_BACKEND=off) and run the mocked suite against it — what CI ships
+fe-e2e-static:
+    cd frontend && VITE_BACKEND=off npm run build && E2E_STATIC=1 npx playwright test
 
 # Run E2E tests against the real Django API (needs `just dev` + `just be-seed-e2e`)
 fe-e2e-full: be-seed-e2e

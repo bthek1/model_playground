@@ -4,7 +4,7 @@
 #   scripts/deploy-frontend.sh [dist-dir]      # default: frontend/dist
 #
 # Bucket and distribution come from $BUCKET / $DISTRIBUTION_ID, or from the
-# `site` stack's outputs (`pulumi -C infra/site stack output ...`) when unset.
+# `site` stack's outputs (`pulumi -C infra/site stack output --stack production ...`) when unset.
 # Run it after `pulumi up`, never instead of it.
 #
 # The ORDER is the point. A browser tab holding the previous index.html will
@@ -33,7 +33,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 }
 [[ -d "$DIST/assets" ]] || { echo "no $DIST/assets" >&2; exit 1; }
 
-output() { pulumi -C "$ROOT/infra/site" stack output "$1"; }
+output() { pulumi -C "$ROOT/infra/site" stack output --stack production "$1"; }
 BUCKET="${BUCKET:-$(output bucketName)}"
 DISTRIBUTION_ID="${DISTRIBUTION_ID:-$(output distributionId)}"
 

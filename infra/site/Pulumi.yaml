@@ -1,5 +1,10 @@
 name: site
 description: Static frontend on S3 + CloudFront at playground.benedictthekkel.com (#57)
+# Self-managed state (#57): no Pulumi Cloud, so no long-lived access token.
+# The bucket is created once by hand — deployment.md §10.2 — because it cannot
+# be managed by a stack whose state it holds.
+backend:
+  url: s3://model-playground-pulumi-state-762233760445?region=ap-southeast-2
 runtime:
   name: nodejs
   options:

@@ -65,6 +65,31 @@ Two kinds of `@backend` spec exist:
 clone has no auth file. That is fine: the specs which need it are `@backend`-tagged
 and filtered out of the default run, so a missing file never breaks `just fe-e2e`.
 
+### Running against the shipped static build
+
+```bash
+just fe-e2e-static    # VITE_BACKEND=off build, then E2E_STATIC=1 against it
+```
+
+The static deploy (#57, [deployment.md §10](./deployment.md)) ships a
+`VITE_BACKEND=off` build, and CI's `e2e-static` job runs the mocked suite
+against **that artifact** rather than the dev server, so the deployed bytes are
+the tested bytes. `E2E_STATIC=1` serves the build with `vite preview` on port
+**5181** and never reuses a running server — with the dev server's port and
+`reuseExistingServer`, a dev server left running would be tested in the build's
+place and pass. `E2E_DIST` points it at a build directory other than `dist`.
+
+Two tags follow from it:
+
+- **`@api`** marks specs for UI the static build removes (sign-in, the registry
+  catalogue, the landing page). `E2E_STATIC` excludes them; the default pass
+  still runs them. Tag a new spec `@api` only when the page genuinely does not
+  exist without a backend — not to make a static-pass failure go away.
+- **`static-build.spec.ts`** runs *only* under `E2E_STATIC` and asserts that no
+  page makes a request to `/api`, even with a stale token in storage. On
+  CloudFront a stray `/api` call is answered 200 with `index.html`, so "nothing
+  broke" is not evidence; the request log is.
+
 ### Running the slow model specs
 
 Specs tagged `@slow` are excluded by default. They download real ONNX weights
