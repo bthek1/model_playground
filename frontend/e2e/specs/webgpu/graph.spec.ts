@@ -115,7 +115,10 @@ test.describe("Graph machine learning", () => {
     expect(external).toEqual([]);
   });
 
-  test("the aggregation kernel agrees with the CPU reference", async ({
+  // @devserver: imports the kernel and its CPU reference by source URL, which
+  // only the dev server serves — a built bundle has no /src/. The static pass
+  // (E2E_STATIC) excludes it; the dev-server pass still runs it.
+  test("the aggregation kernel agrees with the CPU reference @devserver", async ({
     page,
     mockApi,
     webgpuStatus,

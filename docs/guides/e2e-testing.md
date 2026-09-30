@@ -85,6 +85,11 @@ Two tags follow from it:
   catalogue, the landing page). `E2E_STATIC` excludes them; the default pass
   still runs them. Tag a new spec `@api` only when the page genuinely does not
   exist without a backend — not to make a static-pass failure go away.
+- **`@devserver`** marks specs that import app modules by source URL
+  (`load("/src/webgpu/gnnRuntime.ts")`) — only the dev server serves `/src/`,
+  so `E2E_STATIC` excludes them. `infra/workflow.test.ts` fails on a spec that
+  loads `/src/` without the tag: an untagged one failed `e2e-static` in CI and
+  blocked the first deploy.
 - **`static-build.spec.ts`** runs *only* under `E2E_STATIC` and asserts that no
   page makes a request to `/api`, even with a stale token in storage. On
   CloudFront a stray `/api` call is answered 200 with `index.html`, so "nothing

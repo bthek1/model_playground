@@ -12,7 +12,7 @@ import { expect, test } from "../../fixtures/base";
 // measures the code that ships, in the realm that runs it, rather than a
 // re-implementation inside `page.evaluate`.
 
-test.describe("@slow RL Phase 0", () => {
+test.describe("@slow @devserver RL Phase 0", () => {
   test("steps per second, CPU against the GPU matmul, and the cost of posting per step", async ({
     page,
   }) => {
