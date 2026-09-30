@@ -1,0 +1,9 @@
+# Applied locally by an admin, never by CI. `pulumi stack init production
+# --secrets-provider passphrase` adds an `encryptionsalt:` line here.
+config:
+  aws:region: ap-southeast-2
+  bootstrap:repo: bthek1/model_playground
+  bootstrap:stateBucket: model-playground-pulumi-state-762233760445
+  bootstrap:siteBucket: model-playground-site-762233760445
+  bootstrap:domain: playground.benedictthekkel.com
+  bootstrap:zoneId: Z08957092MQHNE94LIHJK

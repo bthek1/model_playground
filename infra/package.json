@@ -1,0 +1,19 @@
+{
+  "name": "model-playground-infra",
+  "private": true,
+  "description": "Pulumi programs for the static frontend deploy (#57): bootstrap (OIDC roles, run once by an admin) and site (S3 + CloudFront).",
+  "type": "commonjs",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pulumi/aws": "^7.48.0",
+    "@pulumi/pulumi": "^3.265.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.0",
+    "vitest": "^4.1.9"
+  }
+}

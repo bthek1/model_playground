@@ -1,4 +1,9 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  redirect,
+  useNavigate,
+} from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLogin } from "@/hooks/useAuth";
@@ -22,8 +27,15 @@ import {
 } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { BackendStatus } from "@/components/ui/BackendStatus";
+import { BACKEND_ENABLED } from "@/lib/features";
 
 export const Route = createFileRoute("/login")({
+  // No backend, no accounts (#57): a form that posts to /api would get the
+  // SPA's index.html back. Nothing links here in that build; a typed URL lands
+  // on the app instead.
+  beforeLoad: () => {
+    if (!BACKEND_ENABLED) throw redirect({ to: "/home", replace: true });
+  },
   component: LoginPage,
 });
 

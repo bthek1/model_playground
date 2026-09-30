@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getMe, login, register } from '../api/auth'
 import { queryKeys } from '../api/queryKeys'
+import { BACKEND_ENABLED } from '../lib/features'
 import type { LoginPayload, RegisterPayload } from '../types/auth'
 
 export function useMe() {
   return useQuery({
     queryKey: queryKeys.auth.me,
     queryFn: getMe,
-    enabled: !!localStorage.getItem('access_token'),
+    // A static build has no /api to ask (#57); a stale token must not make it try.
+    enabled: BACKEND_ENABLED && !!localStorage.getItem('access_token'),
     retry: false,
   })
 }

@@ -1,0 +1,21 @@
+name: bootstrap
+description: One-time, admin-applied CI identity for the static deploy (#57) — OIDC roles, scoped policies
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+    packagemanager: npm
+config:
+  bootstrap:repo:
+    type: string
+  bootstrap:stateBucket:
+    type: string
+  bootstrap:siteBucket:
+    type: string
+    description: Must match site:bucketName.
+  bootstrap:domain:
+    type: string
+    description: Must match site:domain.
+  bootstrap:zoneId:
+    type: string
+    description: The zone site:zoneName resolves to. Route 53 writes are scoped to it.

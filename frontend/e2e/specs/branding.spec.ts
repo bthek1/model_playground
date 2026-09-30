@@ -6,7 +6,9 @@ import { expect, test } from "../fixtures/base";
  * assertions are cheap and they are the reason that cannot happen again.
  */
 test.describe("branding", () => {
-  test("the tab is named for the product, not the scaffold", async ({
+  // @api: `/` is the landing page only with a backend; the static build
+  // redirects it to /home, whose title the next test covers.
+  test("the tab is named for the product, not the scaffold @api", async ({
     page,
     mockApi,
   }) => {
