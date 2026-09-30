@@ -122,7 +122,7 @@ just fe-e2e-ui      # playwright interactive UI
 just fe-lint        # eslint
 
 # Static deploy (S3 + CloudFront, #57) — needs the Pulumi CLI + AWS credentials
-just infra-test       # tsc + vitest over infra/: IAM policies, site stack (mocks), SPA rewrite, upload script
+just infra-test       # tsc + vitest over infra/: IAM policies + wiring, site stack (mocks), SPA rewrite, upload/smoke scripts (stubbed aws/curl), ci.yml invariants
 just infra-bootstrap  # one-time CI identity (OIDC roles) — an admin, locally, never CI
 just infra-preview    # pulumi preview --refresh on the site stack
 just infra-up         # pulumi up on the site stack (the first one locally: ACM + CloudFront take 5–30 min)
@@ -244,6 +244,12 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
     looked up, never owned.
   - **CI never cancels an in-progress run on `main`**: cancelling mid-upload
     half-deploys.
+  - **A new `/api` caller fails `conventions.test.ts` by name.** Every module
+    outside `src/api/` that imports from it is on `API_CALLERS` with the reason
+    the static build never reaches it; gate the new one on `BACKEND_ENABLED`,
+    then add it with its reason. None of this can be tested by deploying, so
+    the CD half of `ci.yml` is itself under test (`infra/workflow.test.ts`) and
+    the two scripts run against stub `aws`/`curl` — see deployment.md §10.9.
 
 ### Backend essentials
 

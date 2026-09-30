@@ -57,7 +57,9 @@ beforeAll(() => {
         "assets/index-old.js",
         "assets/index-older.js",
       ].join("\t"),
-      STUB_STALE: "assets/index-older.js",
+      // index-new.js was stale after an earlier deploy and this build brings it
+      // back: the upload re-writes it untagged, and it must not be re-marked.
+      STUB_STALE: "assets/index-older.js assets/index-new.js",
     },
     stdio: "pipe",
   });
@@ -112,6 +114,17 @@ describe("deploy-frontend.sh", () => {
     // Metadata survives the in-place rewrite.
     expect(copies[0]).toContain("--content-type text/javascript");
     expect(copies[0]).toContain("--cache-control public, max-age=31536000, immutable");
+  });
+
+  it("never inspects or rewrites an asset this build uses, even one stale before", () => {
+    const touched = calls.filter(
+      (c) =>
+        /^s3api (get-object-tagging|head-object|copy-object)/.test(c) &&
+        /--key assets\/(index-new\.js|ort-new\.wasm) /.test(c),
+    );
+    expect(touched).toEqual([]);
+    // It is back as a fresh, untagged upload: a plain `s3 cp` of assets/.
+    expect(calls.some((c) => c.startsWith("s3 cp") && c.includes("s3://site-bucket/assets"))).toBe(true);
   });
 
   it("marks stale only after the new index.html is live", () => {

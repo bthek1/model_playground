@@ -5,3 +5,4 @@ config:
   site:domain: playground.benedictthekkel.com
   site:zoneName: benedictthekkel.com
   site:bucketName: model-playground-site-762233760445
+encryptionsalt: v1:jloN1RtHfo0=:v1:Acp2P1TvK5QwM6JJ:9OpENnUa+4Pa4ahriY5xyq5AYGrcCw==

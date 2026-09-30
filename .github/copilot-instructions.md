@@ -1684,7 +1684,7 @@ Key commands:
 | `just fe-e2e-graphcls` | @slow graph classification, pinned **above its majority baseline**, not above chance |
 | `just fe-e2e-models` | Check every model id (audio + vision) resolves on the HF Hub (seconds) |
 | `just fe-e2e-static` | Build with `VITE_BACKEND=off` and run the mocked suite against the built bundle — what CI deploys |
-| `just infra-test` | Unit-test `infra/`: IAM policies, the site stack under Pulumi mocks, the SPA rewrite, the upload script |
+| `just infra-test` | Unit-test `infra/`: IAM policies + wiring, the site stack under Pulumi mocks, the SPA rewrite, the upload and smoke scripts (stubbed `aws`/`curl`), and `ci.yml`'s CD invariants |
 | `just infra-bootstrap` | Apply the one-time CI identity (OIDC roles) — an admin, locally, never CI |
 | `just infra-preview` / `just infra-up` | `pulumi preview --refresh` / `pulumi up` on the static site stack |
 | `just deploy-frontend` | Build the static bundle, upload it in cache-safe order, smoke-test the live site |
@@ -1830,6 +1830,12 @@ CloudFront at https://playground.benedictthekkel.com, infrastructure in Pulumi
   (that would mask a future `/api` origin's 404s). No CSP.
 - **The workflow does not cancel in-progress runs on `main`**, and `deploy` has
   its own non-cancelling concurrency group: cancelling mid-upload half-deploys.
+- **A new `/api` caller fails `conventions.test.ts` by name.** Every module outside
+  `src/api/` that imports from it is listed in `API_CALLERS` with the reason the
+  static build never reaches it; gate a new one on `BACKEND_ENABLED` and add it
+  with its reason. Nothing here is testable by deploying, so `ci.yml`'s CD half
+  is under test (`infra/workflow.test.ts`) and both scripts run against stub
+  `aws`/`curl` — see `docs/guides/deployment.md` §10.9.
 
 Full procedure, backups and troubleshooting: `docs/guides/deployment.md` (§10 for
 the static deploy).

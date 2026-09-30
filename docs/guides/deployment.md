@@ -407,7 +407,9 @@ The smoke test (`scripts/smoke-frontend.sh`) checks, against the live site:
 `/` is 200 and `no-cache`; a real `/assets/*.js` is `immutable`; a real
 `.wasm` is `application/wasm`; `/asr` returns the app shell; `http://`
 redirects to `https://`; every request verifies the certificate (no `-k`);
-and the bucket's own URL answers 403.
+and the bucket's own URL answers 403. It retries `/` for up to five minutes
+(`SMOKE_ATTEMPTS` × `SMOKE_WAIT` seconds, 30 × 10 by default) while a new
+distribution or an invalidation settles.
 
 ### 10.5 The trust model
 
@@ -485,3 +487,28 @@ and the SPA's empty `VITE_API_BASE_URL` keeps working. Then build with
 `VITE_BACKEND=on`. Until then, know that `/api/anything` on this deploy is
 rewritten to `index.html` and returns 200 — nothing calls it, which is what the
 static-build tests assert.
+
+### 10.9 How it is tested
+
+None of this can be exercised by deploying it — a wrong IAM condition, a
+rebuilt artifact or a cancelled upload all look fine until the day they
+matter. So each property has a test that runs without AWS (`just infra-test`,
+and the `infra` CI job):
+
+| What | Test | Pins |
+|------|------|------|
+| No `/api` request with the flag off | `frontend/src/__tests__/staticBuild.test.tsx` | the real route tree, MSW's request log, a stale token in storage |
+| …on every page, at the import | `frontend/src/__tests__/conventions.test.ts` | `VITE_BACKEND` read only in `features.ts`; every `src/api` importer on a named list with its gate; `useMe`, the redirects and the catalogue gated |
+| …in a real browser, on the built bundle | `frontend/e2e/specs/static-build.spec.ts` (`E2E_STATIC=1`) | the request log again, `/` → `/home`, a deep-link reload |
+| IAM documents | `infra/bootstrap/policies.test.ts` | exact `sub`, no `*:*`, Route 53 names/types, tag conditions, both stack configs agreeing |
+| IAM wiring | `infra/bootstrap/bootstrap.test.ts` (Pulumi mocks) | the OIDC provider looked up not created; each role gets its own document |
+| The site stack | `infra/site/site.test.ts` (Pulumi mocks) | public access blocked, one bucket-policy principal, `redirect-to-https`, no custom error responses, us-east-1 certificate, the zone never created, only `playground` records |
+| Deep links | `infra/site/spa-rewrite.test.ts` | the function's exact bytes; no route in `routeTree.gen.ts` has a dot |
+| Upload order | `infra/deploy-frontend.test.ts` (stub `aws`) | assets → wasm → index last; explicit wasm type; no delete; stale-marking once, never a live chunk; the two-path invalidation |
+| Smoke test | `infra/smoke-frontend.test.ts` (stub `curl`) | passes a healthy site; fails, naming it, on each broken property |
+| CD wiring | `infra/workflow.test.ts` (reads `ci.yml`) | the `off` artifact built once and never rebuilt; `deploy`'s needs, environment, OIDC, no-cancel concurrency, step order; `preview` has no environment and never applies; only those two jobs get a token |
+
+The one thing none of these reach is AWS itself: whether a policy is
+*sufficient*. That surfaces as an `AccessDenied` in `pulumi up` — loud, and
+named by the statement's `Sid` — and `pulumi preview` from the preview role
+on `develop` is where it shows first.

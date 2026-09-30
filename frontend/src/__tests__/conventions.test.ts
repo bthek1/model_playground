@@ -93,3 +93,102 @@ describe("task-page conventions (#58)", () => {
     expect(missing).toEqual([]);
   });
 });
+
+// ── The static build (#57) ───────────────────────────────────────────────────
+//
+// `VITE_BACKEND=off` ships to S3 + CloudFront, where a request to /api does not
+// fail: it is rewritten to index.html and answered 200. So an ungated /api
+// caller added later would not break the deploy — it would hand a JSON parser a
+// page of HTML, on the live site only. `staticBuild.test.tsx` and
+// `static-build.spec.ts` catch it on the pages they visit; this catches it at
+// the import, on every page, and names the file.
+
+const source = import.meta.glob<string>("../**/*.{ts,tsx}", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+/** App source only: no tests, no test harness, no generated route tree, no
+ *  declarations (`vite-env.d.ts` types the flag; it does not read it). */
+const app = Object.entries(source)
+  .map(([path, src]) => [path.replace(/^\.\.\//, ""), src] as const)
+  .filter(
+    ([path]) =>
+      !/\.(test|spec)\.tsx?$/.test(path) &&
+      !path.endsWith(".d.ts") &&
+      !path.startsWith("test/") &&
+      !path.startsWith("__tests__/") &&
+      path !== "routeTree.gen.ts",
+  );
+const srcOf = (path: string) => app.find(([p]) => p === path)?.[1] ?? "";
+
+/**
+ * Every module outside `src/api/` that imports from it, and why the static
+ * build never reaches its request. A new one fails the test below: gate it on
+ * `BACKEND_ENABLED` from `@/lib/features`, then add it here with the reason.
+ */
+const API_CALLERS: Record<string, string> = {
+  "hooks/useAuth.ts": "useMe is disabled; login/register run only on /login and /signup, which redirect",
+  "hooks/useModels.ts": "only ModelCatalogCard uses it, and it is not rendered",
+  "components/ui/BackendStatus.tsx": "only /login and /signup render it, and they redirect",
+  "hooks/useTaskPoller.ts": "only TaskTrigger uses it, and no route renders that",
+  "components/TaskTrigger.tsx": "no route renders it",
+};
+
+describe("static build conventions (#57)", () => {
+  it("finds the source it is meant to check", () => {
+    expect(app.length).toBeGreaterThan(200);
+    expect(srcOf("lib/features.ts")).toContain("BACKEND_ENABLED");
+  });
+
+  it("reads VITE_BACKEND in exactly one place", () => {
+    const readers = app.filter(([, src]) => src.includes("VITE_BACKEND")).map(([p]) => p);
+    expect(readers).toEqual(["lib/features.ts"]);
+  });
+
+  it("reaches /api only through the named, gated callers", () => {
+    const importsApi = /from\s+["'](?:@\/api\/|(?:\.\.\/)+api\/)/;
+    const callers = app
+      .filter(([p, src]) => !p.startsWith("api/") && importsApi.test(src))
+      .map(([p]) => p)
+      .sort();
+    expect(callers).toEqual(Object.keys(API_CALLERS).sort());
+  });
+
+  it("never calls /api around the client — no raw fetch or axios outside src/api", () => {
+    const raw = app
+      .filter(([p]) => !p.startsWith("api/"))
+      .filter(([, src]) => /fetch\(\s*[`"']\/api|from\s+["']axios["']/.test(src))
+      .map(([p]) => p);
+    expect(raw).toEqual([]);
+  });
+
+  it("gates useMe on the flag", () => {
+    expect(srcOf("hooks/useAuth.ts")).toMatch(/enabled:\s*BACKEND_ENABLED\s*&&/);
+  });
+
+  it.each(["routes/index.tsx", "routes/login.tsx", "routes/signup.tsx"])(
+    "%s redirects before it renders when the flag is off",
+    (path) => {
+      expect(srcOf(path)).toMatch(
+        /beforeLoad:[\s\S]*?if \(!BACKEND_ENABLED\) throw redirect\(\{ to: ['"]\/home['"]/,
+      );
+    },
+  );
+
+  it("renders the registry catalogue only behind the flag", () => {
+    const renderers = app.filter(([, src]) => src.includes("<ModelCatalogCard"));
+    expect(renderers.map(([p]) => p).sort()).toEqual(["routes/home.tsx", "routes/playground.tsx"]);
+    for (const [path, src] of renderers) {
+      const ungated = src.match(/<ModelCatalogCard/g)!.length;
+      const gated = src.match(/BACKEND_ENABLED && <ModelCatalogCard/g)?.length ?? 0;
+      expect(gated, path).toBe(ungated);
+    }
+  });
+
+  it("renders TaskTrigger nowhere", () => {
+    // `<TaskTrigger` as JSX — not `TaskTriggerResponse>` in a generic.
+    const jsx = /<TaskTrigger[\s/>]/;
+    expect(app.filter(([, src]) => jsx.test(src)).map(([p]) => p)).toEqual([]);
+  });
+});

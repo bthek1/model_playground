@@ -107,7 +107,7 @@ prod-backup:
 infra-install:
     cd infra && npm ci
 
-# Unit-test the infra: policies, the site stack under mocks, the SPA rewrite, the upload script
+# Unit-test the infra: IAM policies + wiring, the site stack (mocks), SPA rewrite, upload + smoke scripts (stubbed), ci.yml
 infra-test:
     cd infra && npx tsc --noEmit && npx vitest run
 

@@ -7,3 +7,4 @@ config:
   bootstrap:siteBucket: model-playground-site-762233760445
   bootstrap:domain: playground.benedictthekkel.com
   bootstrap:zoneId: Z08957092MQHNE94LIHJK
+encryptionsalt: v1:N9fw+8LWqLA=:v1:ZWdGq4ysQYFBVMpu:hOoD3ZQJJPR2TpXUWU7JexLf8S4yfg==

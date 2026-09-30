@@ -24,11 +24,12 @@ head_of() { curl -sS -o /dev/null -D - "$@" | tr -d '\r' | tr 'A-Z' 'a-z'; }
 header() { grep -m1 "^$1:" | cut -d' ' -f2-; }
 
 # A fresh distribution or an in-flight invalidation can take minutes to settle.
-for i in $(seq 1 30); do
+ATTEMPTS="${SMOKE_ATTEMPTS:-30}"
+for i in $(seq 1 "$ATTEMPTS"); do
   status="$(curl -sS -o /dev/null -w '%{http_code}' "$URL/" || true)"
   [[ "$status" == "200" ]] && break
-  echo "  / answered ${status:-nothing}; waiting ($i/30)"
-  sleep 10
+  echo "  / answered ${status:-nothing}; waiting ($i/$ATTEMPTS)"
+  sleep "${SMOKE_WAIT:-10}"
 done
 [[ "$status" == "200" ]] || fail "/ is $status, not 200"
 ok "/ is 200 over a certificate valid for $HOST"
