@@ -10,7 +10,7 @@
 // sentinel `.env`, with this repo's own `envDir`/`envPrefix`, and read the
 // bytes that come out.
 
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { build, type UserConfig } from "vite";
@@ -67,4 +67,26 @@ describe("the shared root .env (#61)", () => {
     expect(out).toContain(PUBLIC); // the probe is live, so an absence means something
     expect(out).not.toContain(SECRET);
   }, 60_000);
+
+  it("documents every VITE_* key the app reads in the root .env.example", () => {
+    const src = resolve(__dirname, "..");
+    const used = new Set<string>();
+    for (const file of readdirSync(src, { recursive: true, encoding: "utf8" })) {
+      if (!/\.(ts|tsx)$/.test(file)) continue;
+      const text = readFileSync(join(src, file), "utf8");
+      for (const m of text.matchAll(/import\.meta\.env\.(VITE_[A-Z0-9_]+)/g)) used.add(m[1]);
+    }
+    // Live probe: these two are read today, so an empty set means a broken scan.
+    expect(used).toContain("VITE_BACKEND");
+    expect(used).toContain("VITE_API_BASE_URL");
+    used.delete("VITE_PROBE"); // this file's own sentinel
+
+    const example = readFileSync(resolve(__dirname, "../../../.env.example"), "utf8");
+    const documented = new Set([...example.matchAll(/^(VITE_[A-Z0-9_]+)=/gm)].map((m) => m[1]));
+    expect([...used].filter((k) => !documented.has(k))).toEqual([]);
+  });
+
+  it("leaves no per-half .env.example behind", () => {
+    expect(existsSync(resolve(__dirname, "../../.env.example"))).toBe(false);
+  });
 });

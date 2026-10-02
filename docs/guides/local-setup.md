@@ -31,9 +31,23 @@ There is **one** `.env`, in the project root, read by both halves: Django
 (`core/settings/base.py` reads `../.env`, and `backend/.envrc` sources it for
 direnv), Vite (`envDir` points at the root) and every service in
 `docker-compose.yml`. Only `VITE_*` keys reach the browser bundle, so the
-backend secrets beside them are never shipped to the client — a test
-(`frontend/src/__tests__/envExposure.test.ts`) builds against a sentinel file to
-keep it that way.
+backend secrets beside them are never shipped to the client.
+
+Two tests keep the layout honest, because every way it drifts is silent:
+
+- `backend/tests/test_env_config.py` reads the files themselves — the settings
+  read `ENV_FILE` (the root `.env`) and nothing else; every variable a settings
+  module requires *without a default* is in `.env.example` (dev) or
+  `.env.prod.example` / the prod compose file (prod); neither example invites
+  AWS credentials; no config file names `backend/.env` or `frontend/.env`; and
+  every `docker-compose.prod.yml` command in the justfile and the docs' code
+  blocks carries `--env-file .env.prod`.
+- `frontend/src/__tests__/envExposure.test.ts` runs a real Vite build against a
+  sentinel `.env` and asserts a backend key never reaches the output, and that
+  every `import.meta.env.VITE_*` the app reads is documented in `.env.example`.
+
+`just env` prints the file with every value masked; it holds real secrets, so
+nothing in the toolchain `cat`s it.
 
 The default values in `.env.example` are pre-configured to work with Docker Compose (`db` hostname, etc.). No changes are needed for local development.
 

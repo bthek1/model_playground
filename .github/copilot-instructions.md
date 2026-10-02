@@ -1713,6 +1713,7 @@ Key commands:
 │   │   ├── pages/             # Health check and static page endpoints
 │   │   └── registry/          # Model catalog (ModelCard) + run metadata (InferenceRun)
 │   ├── conftest.py            # Root pytest fixtures
+│   ├── tests/                 # Cross-cutting tests (the env-file layout, #61)
 │   ├── manage.py
 │   ├── pyproject.toml         # Dependencies (uv), pytest, ruff config
 │   └── .envrc                 # direnv: venv + sources ../.env
@@ -1946,7 +1947,7 @@ Any known risks, open questions, or decisions deferred.
 
 ## General Rules
 - Never mix backend and frontend concerns — they communicate only via the API contract
-- Never commit `.env` files — use `.env.example` as the source of truth for required vars. Development is **one root `.env`** shared by both halves (Django reads `../.env`, Vite `envDir: ".."`, only `VITE_*` reach the bundle); production is `.env.prod` (`.env.prod.example`), always passed with `--env-file`
+- Never commit `.env` files — use `.env.example` as the source of truth for required vars. Development is **one root `.env`** shared by both halves (Django reads `../.env`, Vite `envDir: ".."`, only `VITE_*` reach the bundle); production is `.env.prod` (`.env.prod.example`), always passed with `--env-file` (the justfile's `prod_compose` variable). `backend/tests/test_env_config.py` fails if a required settings variable is missing from its example, a config file names `backend/.env`/`frontend/.env`, or a prod compose command drops `--env-file`; `envExposure.test.ts` fails if a backend key reaches the bundle or a `VITE_*` key the app reads is undocumented. Never `cat` the `.env` — `just env` masks values
 - All DB access goes through Django ORM — never raw SQL unless absolutely necessary, and always parameterised
 - Prefer explicit over implicit — readable code over clever code
 - Write for the next developer, not just for today

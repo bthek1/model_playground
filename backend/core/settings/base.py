@@ -9,7 +9,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # One .env for both halves, in the project root (#61). A no-op when absent, so
 # CI and containers that receive real environment variables are unaffected.
-environ.Env.read_env(BASE_DIR.parent / ".env")
+ENV_FILE = BASE_DIR.parent / ".env"
+environ.Env.read_env(ENV_FILE)
 
 SECRET_KEY = env("SECRET_KEY")
 

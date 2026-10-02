@@ -659,7 +659,6 @@ env:
 # Copy .env.example to .env (safe — skips if it already exists)
 env-init:
     @if [ -f .env ]; then echo ".env already exists"; else cp .env.example .env && echo "Created .env"; fi
-    @if [ -f backend/.env ] || [ -f frontend/.env ]; then echo "Note: backend/.env / frontend/.env are no longer read (#61) — merge their values into .env, then delete them yourself."; fi
 
 # Clean Python bytecode and cache files
 clean:

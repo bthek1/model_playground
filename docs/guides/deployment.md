@@ -91,7 +91,8 @@ It is passed **explicitly** — every `just *-prod` / `prod-*` recipe runs
 `docker compose --env-file .env.prod -f docker-compose.prod.yml …` — because the
 root `.env` is the *development* file (#61) and compose reads `.env` by default:
 a bare `docker compose -f docker-compose.prod.yml` would interpolate dev values,
-or stop on the first `${VAR:?}` the dev file lacks.
+or stop on the first `${VAR:?}` the dev file lacks. `backend/tests/test_env_config.py`
+fails on any prod compose command in the justfile or these docs that drops the flag.
 [`.env.prod.example`](../../.env.prod.example) is the source of truth for *which*
 variables are required. Every one is declared `${VAR:?}` in the compose file, so
 a missing value stops the stack rather than quietly substituting an empty

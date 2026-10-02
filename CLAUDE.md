@@ -159,7 +159,11 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   Development is **one root `.env`** shared by both halves (#61) — Django reads `../.env`,
   Vite has `envDir: ".."`, and only `VITE_*` keys reach the bundle (`envExposure.test.ts`).
   Production is `.env.prod` (`.env.prod.example`), always passed with `--env-file`, because
-  compose reads the root `.env` by default.
+  compose reads the root `.env` by default — the justfile routes every prod recipe through
+  one `prod_compose` variable. A new variable a settings module requires without a default
+  goes in the matching example, or `backend/tests/test_env_config.py` fails naming it; a new
+  `import.meta.env.VITE_*` goes in `.env.example`, or `envExposure.test.ts` does. Never
+  `cat` the `.env` — `just env` masks the values.
 - **Backend ↔ frontend communicate only via the API contract** — never mix their concerns.
 - **All work lands on `develop`; `main` is what has shipped.** `develop` is the integration
   branch — commit the issue's work straight onto it. **Do not open a branch per issue**: a branch
