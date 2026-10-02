@@ -1,13 +1,15 @@
 # Production stack: Caddy (TLS) -> nginx (SPA + /api forwarding) -> gunicorn.
 #
-#     docker compose -f docker-compose.prod.yml up -d --build     (just up-prod)
+#     docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#                                                                   (just up-prod)
 #
 # Differences from docker-compose.yml that matter: no bind mounts, no dev
 # servers, no hard-coded passwords, and only Caddy publishes a port — Postgres,
 # Redis, gunicorn and nginx are reachable only on the compose network.
 #
-# Every value below comes from a `.env` beside this file; see .env.example and
-# docs/guides/deployment.md. `${VAR:?}` makes compose refuse to start rather
+# Every value below comes from `.env.prod` beside this file, passed explicitly
+# with `--env-file` (the root `.env` is the development file and compose would
+# read it by default); see .env.prod.example and docs/guides/deployment.md. `${VAR:?}` makes compose refuse to start rather
 # than silently substituting an empty string.
 
 name: model-playground

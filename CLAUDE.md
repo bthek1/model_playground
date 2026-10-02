@@ -156,6 +156,10 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   and the merge is a separate release step that still prompts. The closed issue is the record.
   Reference the issue number in the commit message (`Closes #12`).
 - **Never commit `.env` files.** `.env.example` is the source of truth for required vars.
+  Development is **one root `.env`** shared by both halves (#61) — Django reads `../.env`,
+  Vite has `envDir: ".."`, and only `VITE_*` keys reach the bundle (`envExposure.test.ts`).
+  Production is `.env.prod` (`.env.prod.example`), always passed with `--env-file`, because
+  compose reads the root `.env` by default.
 - **Backend ↔ frontend communicate only via the API contract** — never mix their concerns.
 - **All work lands on `develop`; `main` is what has shipped.** `develop` is the integration
   branch — commit the issue's work straight onto it. **Do not open a branch per issue**: a branch
@@ -191,7 +195,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 
 - **Two compose files.** `docker-compose.yml` is development (bind mounts, dev
   servers, throwaway credentials — never deploy it); `docker-compose.prod.yml` is
-  production (built images, secrets from a root `.env`, only Caddy publishes a
+  production (built images, secrets from `.env.prod` via `--env-file`, only Caddy publishes a
   port). `frontend/Dockerfile.dev` is the dev server; `frontend/Dockerfile` builds
   and serves with nginx.
 - **The deployment is single-origin over HTTPS, and both halves are requirements.**

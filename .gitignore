@@ -151,6 +151,8 @@ activemq-data/
 
 # Environments
 .env
+.env.prod
+.env.local
 .envrc
 .venv
 env/
@@ -225,13 +227,10 @@ models/
 
 # Backend venv
 backend/.venv/
-backend/.env
 
 # Frontend
 frontend/node_modules/
 frontend/dist/
-frontend/.env
-frontend/.env.local
 frontend/vite.config.ts.timestamp-*.mjs
 
 # vite-plugin-basic-ssl's generated localhost cert. Self-signed and regenerated

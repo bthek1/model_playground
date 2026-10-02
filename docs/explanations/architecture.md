@@ -72,7 +72,7 @@ backend/
 │       └── urls.py        /api/registry/…
 ├── manage.py
 ├── pyproject.toml         Python dependencies (managed by uv)
-└── .env.example
+└── .envrc                 direnv: venv + sources the root ../.env
 ```
 
 ### Key design decisions
@@ -356,11 +356,20 @@ Component
 
 | Variable | Where | Purpose |
 |----------|-------|---------|
-| `SECRET_KEY` | `backend/.env` | Django secret key |
-| `DATABASE_URL` | `backend/.env` | PostgreSQL connection string |
-| `DJANGO_SETTINGS_MODULE` | `backend/.env` | Which settings file to load |
-| `CORS_ALLOWED_ORIGINS` | `backend/.env` | Frontend origin(s) allowed cross-origin |
-| `VITE_API_BASE_URL` | `frontend/.env` | Axios base URL. Empty by default: the app calls `/api` same-origin |
-| `VITE_API_PROXY_TARGET` | `frontend/.env` | Where the Vite dev server proxies `/api` (default `http://localhost:8006`) |
+| `SECRET_KEY` | `.env` | Django secret key |
+| `DATABASE_URL` | `.env` | PostgreSQL connection string |
+| `DJANGO_SETTINGS_MODULE` | `.env` | Which settings file to load |
+| `CORS_ALLOWED_ORIGINS` | `.env` | Frontend origin(s) allowed cross-origin |
+| `VITE_API_BASE_URL` | `.env` | Axios base URL. Empty by default: the app calls `/api` same-origin |
+| `VITE_API_PROXY_TARGET` | `.env` | Where the Vite dev server proxies `/api` (default `http://localhost:8006`) |
 
-All secrets and environment-specific config live in `.env` files that are **never committed**. Use `.env.example` as the template.
+Development config is **one `.env` in the project root**, shared by both halves
+(#61): Django reads `../.env` from `core/settings/base.py`, Vite reads it through
+`envDir`, and `docker-compose.yml` hands it to every service. The halves still
+share no code — a shared config file is not a shared module, and only `VITE_*`
+keys are ever inlined into the client bundle (`envExposure.test.ts` builds
+against a sentinel to prove it). Production reads a separate `.env.prod`, passed
+to `docker-compose.prod.yml` with `--env-file`.
+
+Neither file is **ever committed**. `.env.example` and `.env.prod.example` are
+the templates and the source of truth for which variables exist.

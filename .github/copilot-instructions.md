@@ -62,7 +62,7 @@ Token endpoints: `POST /api/token/` and `POST /api/token/refresh/`.
 # base.py pattern
 import environ
 env = environ.Env()
-environ.Env.read_env(BASE_DIR / ".env")
+environ.Env.read_env(BASE_DIR.parent / ".env")  # the one root .env (#61)
 
 DATABASES = {'default': env.db('DATABASE_URL')}
 AUTH_USER_MODEL = "accounts.CustomUser"
@@ -1715,7 +1715,7 @@ Key commands:
 │   ├── conftest.py            # Root pytest fixtures
 │   ├── manage.py
 │   ├── pyproject.toml         # Dependencies (uv), pytest, ruff config
-│   └── .env.example
+│   └── .envrc                 # direnv: venv + sources ../.env
 ├── frontend/
 │   ├── src/
 │   │   ├── api/               # Axios client, endpoint functions, queryKeys
@@ -1742,13 +1742,14 @@ Key commands:
 │   │   └── specs/             # *.spec.ts (webgpu/ is its own project)
 │   ├── vite.config.ts
 │   ├── playwright.config.ts
-│   ├── package.json
-│   └── .env.example
+│   └── package.json
 ├── docs/
 │   ├── standards/             # Coding standards, style guides, conventions, API contracts
 │   ├── guides/                # How-to guides, onboarding, local setup, deployment
 │   ├── roadmaps/              # Per-category roadmaps, once the category has shipped code
 │   └── explanations/          # Concept explanations, design rationale, background context
+├── .env.example               # Dev config, ONE file for both halves (copy to .env)
+├── .env.prod.example          # Production config (copy to .env.prod; --env-file)
 ├── justfile                   # Task runner (use `just --list`)
 ├── docker-compose.yml
 └── README.md
@@ -1763,7 +1764,7 @@ Two compose files, and they are not interchangeable:
 | File | What it is |
 |---|---|
 | `docker-compose.yml` | **Development.** Bind-mounts source, runs the Vite dev server and `runserver`, throwaway credentials. Frontend on `5180` (HTTPS, self-signed), backend on `8006`. Never deploy it. |
-| `docker-compose.prod.yml` | **Production.** Built images, no bind mounts, secrets from a root `.env`, and only Caddy publishes a port. |
+| `docker-compose.prod.yml` | **Production.** Built images, no bind mounts, secrets from `.env.prod` (passed with `--env-file`; the root `.env` is development), and only Caddy publishes a port. |
 
 Don't inline either file's contents into docs — read the file. An out-of-date
 copy in prose is worse than no copy.
@@ -1945,7 +1946,7 @@ Any known risks, open questions, or decisions deferred.
 
 ## General Rules
 - Never mix backend and frontend concerns — they communicate only via the API contract
-- Never commit `.env` files — use `.env.example` as the source of truth for required vars
+- Never commit `.env` files — use `.env.example` as the source of truth for required vars. Development is **one root `.env`** shared by both halves (Django reads `../.env`, Vite `envDir: ".."`, only `VITE_*` reach the bundle); production is `.env.prod` (`.env.prod.example`), always passed with `--env-file`
 - All DB access goes through Django ORM — never raw SQL unless absolutely necessary, and always parameterised
 - Prefer explicit over implicit — readable code over clever code
 - Write for the next developer, not just for today

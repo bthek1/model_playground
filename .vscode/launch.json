@@ -10,7 +10,7 @@
       "args": ["runserver", "0.0.0.0:8006"],
       "django": true,
       "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/backend/.env",
+      "envFile": "${workspaceFolder}/.env",
       "python": "${workspaceFolder}/backend/.venv/bin/python3",
       "justMyCode": true
     },
@@ -22,7 +22,7 @@
       "module": "pytest",
       "args": ["--tb=short", "-ra"],
       "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/backend/.env",
+      "envFile": "${workspaceFolder}/.env",
       "python": "${workspaceFolder}/backend/.venv/bin/python3",
       "justMyCode": false
     },
@@ -34,7 +34,7 @@
       "module": "pytest",
       "args": ["${file}", "--tb=short", "-ra"],
       "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/backend/.env",
+      "envFile": "${workspaceFolder}/.env",
       "python": "${workspaceFolder}/backend/.venv/bin/python3",
       "justMyCode": false
     },

@@ -7,7 +7,9 @@ env = environ.Env()
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-environ.Env.read_env(BASE_DIR / ".env")
+# One .env for both halves, in the project root (#61). A no-op when absent, so
+# CI and containers that receive real environment variables are unaffected.
+environ.Env.read_env(BASE_DIR.parent / ".env")
 
 SECRET_KEY = env("SECRET_KEY")
 

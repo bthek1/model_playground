@@ -49,30 +49,33 @@ logs-svc svc:
     docker compose logs -f {{ svc }}
 
 # ── Production ─────────────────────────────────────────────────────────────────
-# These drive docker-compose.prod.yml, which needs a `.env` beside it — copy
-# .env.example and fill it in. See docs/guides/deployment.md.
+# These drive docker-compose.prod.yml with `.env.prod` — copy .env.prod.example
+# and fill it in. Always through `prod_compose`: plain `docker compose` would read
+# the root `.env`, which is the *development* file (#61). See
+# docs/guides/deployment.md.
+prod_compose := "docker compose --env-file .env.prod -f docker-compose.prod.yml"
 
 # Build and start the production stack (Caddy + nginx + gunicorn + Celery)
 up-prod:
-    docker compose -f docker-compose.prod.yml up -d --build
+    {{ prod_compose }} up -d --build
 
 # Stop the production stack (volumes are kept)
 down-prod:
-    docker compose -f docker-compose.prod.yml down
+    {{ prod_compose }} down
 
 # Tail production logs
 logs-prod:
-    docker compose -f docker-compose.prod.yml logs -f
+    {{ prod_compose }} logs -f
 
 # Pull code, rebuild and restart — the routine deploy
 deploy:
     git pull --ff-only
-    docker compose -f docker-compose.prod.yml up -d --build
-    docker compose -f docker-compose.prod.yml ps
+    {{ prod_compose }} up -d --build
+    {{ prod_compose }} ps
 
 # Check the production config without starting anything
 prod-config:
-    docker compose -f docker-compose.prod.yml config
+    {{ prod_compose }} config
 
 # Generate a value for SECRET_KEY
 secret-key:
@@ -84,7 +87,7 @@ be-check-deploy:
 
 # Open a shell in the running production backend
 prod-shell:
-    docker compose -f docker-compose.prod.yml exec backend python manage.py shell
+    {{ prod_compose }} exec backend python manage.py shell
 
 # Back up the production database to ./backups/
 prod-backup:
@@ -92,7 +95,7 @@ prod-backup:
     # Single quotes on purpose: POSTGRES_USER/DB are expanded by the shell
     # *inside* the db container (the postgres image sets both). This justfile
     # sets `dotenv-load := false`, so on the host they would be empty.
-    docker compose -f docker-compose.prod.yml exec -T db \
+    {{ prod_compose }} exec -T db \
         sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
         | gzip > "backups/$(date +%Y%m%d-%H%M%S).sql.gz"
     @ls -lh backups | tail -1
@@ -649,15 +652,14 @@ db-reset: down-v up-d be-migrate
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
 
-# Print configured environment files
+# Print the root .env with every value masked (keys only — it holds real secrets)
 env:
-    @echo "=== backend/.env ===" && cat backend/.env 2>/dev/null || echo "(not found)"
-    @echo "=== frontend/.env ===" && cat frontend/.env 2>/dev/null || echo "(not found)"
+    @[ -f .env ] && sed -E 's/^([A-Za-z_][A-Za-z0-9_]*)=.+$/\1=****/' .env || echo "(.env not found — run just env-init)"
 
-# Copy .env.example files to .env (safe — skips if already exists)
+# Copy .env.example to .env (safe — skips if it already exists)
 env-init:
-    @[ -f backend/.env ] || cp backend/.env.example backend/.env && echo "Created backend/.env"
-    @[ -f frontend/.env ] || cp frontend/.env.example frontend/.env && echo "Created frontend/.env"
+    @if [ -f .env ]; then echo ".env already exists"; else cp .env.example .env && echo "Created .env"; fi
+    @if [ -f backend/.env ] || [ -f frontend/.env ]; then echo "Note: backend/.env / frontend/.env are no longer read (#61) — merge their values into .env, then delete them yourself."; fi
 
 # Clean Python bytecode and cache files
 clean:

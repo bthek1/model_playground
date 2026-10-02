@@ -8,8 +8,16 @@ import { resolve } from "path";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, __dirname, "");
+  // One .env for both halves, in the project root (#61). `envDir` makes
+  // `import.meta.env` resolve from there too; only `envPrefix` (VITE_*) keys
+  // reach the client bundle, so the backend secrets beside them never do
+  // (src/__tests__/envExposure.test.ts). Inside the dev container the root is
+  // not mounted, and compose's `env_file` populates process.env instead —
+  // which loadEnv falls back to.
+  const envDir = resolve(__dirname, "..");
+  const env = loadEnv(mode, envDir, "");
   return {
+    envDir,
     plugins: [
       react(),
       TanStackRouterVite({ routeFileIgnorePattern: ".(test|spec).(tsx?|js)" }),

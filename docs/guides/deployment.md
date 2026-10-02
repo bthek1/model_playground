@@ -77,17 +77,22 @@ than one that silently breaks every model load.
 ```bash
 git clone <repo-url> && cd model_playground
 
-cp .env.example .env
+cp .env.prod.example .env.prod
 just secret-key          # paste into SECRET_KEY
-$EDITOR .env             # DOMAIN, ACME_EMAIL, ALLOWED_HOSTS,
+$EDITOR .env.prod        # DOMAIN, ACME_EMAIL, ALLOWED_HOSTS,
                          # CSRF_TRUSTED_ORIGINS, POSTGRES_PASSWORD
 
 just prod-config         # renders the compose file; fails loudly on a missing var
 just up-prod             # build and start
 ```
 
-`.env` sits beside `docker-compose.prod.yml` and is gitignored.
-[`.env.example`](../../.env.example) is the source of truth for *which*
+`.env.prod` sits beside `docker-compose.prod.yml` and is gitignored.
+It is passed **explicitly** — every `just *-prod` / `prod-*` recipe runs
+`docker compose --env-file .env.prod -f docker-compose.prod.yml …` — because the
+root `.env` is the *development* file (#61) and compose reads `.env` by default:
+a bare `docker compose -f docker-compose.prod.yml` would interpolate dev values,
+or stop on the first `${VAR:?}` the dev file lacks.
+[`.env.prod.example`](../../.env.prod.example) is the source of truth for *which*
 variables are required. Every one is declared `${VAR:?}` in the compose file, so
 a missing value stops the stack rather than quietly substituting an empty
 string.
@@ -103,7 +108,7 @@ Three that are easy to get wrong:
 Then create the first user:
 
 ```bash
-docker compose -f docker-compose.prod.yml exec backend python manage.py createsuperuser
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec backend python manage.py createsuperuser
 ```
 
 ### Verifying it worked
@@ -168,7 +173,7 @@ Restore:
 
 ```bash
 gunzip -c backups/<file>.sql.gz \
-  | docker compose -f docker-compose.prod.yml exec -T db \
+  | docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T db \
       sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"'
 ```
 
@@ -265,7 +270,7 @@ The Celery worker exists for the registry's background tasks, not for models.
 | Redirect loop | `SECURE_SSL_REDIRECT` on while Caddy also redirects |
 | Deep link 404s, root works | SPA history fallback missing — nginx `try_files` |
 | Certificate never issued | DNS doesn't resolve to the host yet, or port 80 is blocked |
-| Compose refuses to start, names a variable | A `${VAR:?}` with no value in `.env` — the guard working |
+| Compose refuses to start, names a variable | A `${VAR:?}` with no value in `.env.prod` (or `--env-file .env.prod` left off) — the guard working |
 | Model downloads fail, app loads | A CSP or header change broke the CDN fetch or the cache bucket |
 
 ---

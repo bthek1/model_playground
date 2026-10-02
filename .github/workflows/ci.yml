@@ -85,7 +85,7 @@ jobs:
       #                `SETTINGS`, defaulting to `dev`. So without this, CI loads
       #                the dev settings no matter what pytest was told.
       #   SECRET_KEY   `base.py` reads it with no default. Locally it comes from
-      #                `backend/.env`, which is correctly never committed — so
+      #                the root `.env`, which is correctly never committed — so
       #                this step is the only place CI can supply one. The value
       #                is throwaway: `core.settings.test` uses sqlite and signs
       #                nothing that outlives the run.

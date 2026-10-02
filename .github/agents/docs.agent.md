@@ -133,8 +133,10 @@ Entries in `docs/standards/api-contracts.md` must document:
 - JWT token endpoints: `POST /api/token/` and `POST /api/token/refresh/`
 
 **Key env vars:**
-- `SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS` — see `backend/.env.example`
-- Frontend env vars prefixed with `VITE_` — see `frontend/.env.example`
+- One development `.env` in the project root, shared by both halves — see the root `.env.example`
+  (`SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, and the `VITE_*` keys)
+- Production reads `.env.prod` — see `.env.prod.example`
+- Only `VITE_*` keys reach the browser bundle
 
 ## Don'ts
 - Never commit `.env` files — `.env.example` is the source of truth for required vars
