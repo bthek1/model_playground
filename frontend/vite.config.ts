@@ -59,6 +59,10 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: "happy-dom",
       setupFiles: ["./src/test/setup.ts"],
+      // Analytics off in every unit test, whatever the root .env says (#60):
+      // the fetch/Storage spies assert silence, and a key here would make the
+      // facade schedule an SDK import mid-test. Its own tests mock the flag.
+      env: { VITE_POSTHOG_KEY: "" },
       globals: true,
       // Vitest's default `include` glob matches `**/*.spec.ts`, which would
       // sweep up the Playwright specs in `e2e/` and fail on importing

@@ -494,6 +494,19 @@ and the SPA's empty `VITE_API_BASE_URL` keeps working. Then build with
 rewritten to `index.html` and returns 200 — nothing calls it, which is what the
 static-build tests assert.
 
+### 10.8a Analytics: `/ingest/*` (#60)
+
+The distribution has a second origin, PostHog's ingestion host, behind an
+ordered `/ingest/*` behaviour that is matched before the default one —
+without it, `spa-rewrite` answers `/ingest/e/` with `index.html` and a 200 and
+every event vanishes. It caches nothing and carries its own function,
+`ingest-strip.js`, which removes the prefix. The analytics key is the
+**project** key (`phc_`, public), set as the repository variable
+`VITE_POSTHOG_KEY`; unset, the site ships with analytics off. The one-time
+project setup is `just posthog-setup`, run locally with the personal key — see
+[analytics.md §5](../explanations/analytics.md). An EU project also needs
+`pulumi config set site:posthogHost eu.i.posthog.com`.
+
 ### 10.9 How it is tested
 
 None of this can be exercised by deploying it — a wrong IAM condition, a
@@ -512,6 +525,7 @@ and the `infra` CI job):
 | Deep links | `infra/site/spa-rewrite.test.ts` | the function's exact bytes; no route in `routeTree.gen.ts` has a dot |
 | Upload order | `infra/deploy-frontend.test.ts` (stub `aws`) | assets → wasm → index last; explicit wasm type; no delete; stale-marking once, never a live chunk; the two-path invalidation |
 | Smoke test | `infra/smoke-frontend.test.ts` (stub `curl`) | passes a healthy site; fails, naming it, on each broken property |
+| Analytics through `/ingest/*` (#60) | `infra/site/site.test.ts`, `infra/site/ingest-strip.test.ts`, `infra/workflow.test.ts`, `infra/posthog-setup.test.ts` | the ordered behaviour precedes the default, targets PostHog, caches nothing, carries the strip function and never `spa-rewrite`; CI takes the `phc_` key from a variable on the shipped build only; the setup script never prints the personal key — see [analytics.md](../explanations/analytics.md) |
 | CD wiring | `infra/workflow.test.ts` (reads `ci.yml`) | the `off` artifact built once and never rebuilt; `deploy`'s needs, environment, OIDC, no-cancel concurrency, step order; `preview` has no environment and never applies; only those two jobs get a token |
 
 The one thing none of these reach is AWS itself: whether a policy is

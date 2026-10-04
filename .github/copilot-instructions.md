@@ -269,6 +269,20 @@ export const Route = createFileRoute('/users/$userId')({
   `createWebGPUWorker()` (a `BroadcastChannel` would include other tabs). `useModelWorker` reports
   inflight + download bytes to `telemetry/activity.ts`; the worker envelope gains no telemetry
   variant. Full detail: `docs/explanations/telemetry-panel.md`
+- **Product analytics** (`src/analytics/`, #60) records **what the app did, never what it was
+  given**. Call only the facade (`track`, `pageview`); properties pass a closed allowlist
+  (`events.ts`: identifier-shaped strings, errors as an `errorKind` category, never the message)
+  and `client.ts`'s `beforeSend` rebuilds every payload from a strict SDK list, with the URL
+  replaced by origin + route pattern. Load/run events live once in `useModelWorker`; a bespoke
+  trigger sends at most `feature_used` with a fixed enum — never a row count, column, file name,
+  prompt or metric of the user's data. Off unless the build has `VITE_POSTHOG_KEY` (CI's shipped
+  build only, a repository *variable*); off, nothing is imported. `posthog-js`
+  (`module.slim.no-external`) is imported only in `analytics/client.ts`, only dynamically —
+  `conventions.test.ts` and `check:bundle` enforce it, and `check:bundle` fails on any personal
+  `phx_` key in `dist/`. Events go same-origin to `/ingest/*` (CloudFront ordered behaviour, own
+  strip function, never `spa-rewrite`). The privacy guard is `e2e/specs/analytics.spec.ts`: a typed
+  sentence and a fitted CSV in no *decoded* payload; PostHog drops headless browsers as bots, so
+  the spec must look like a browser. Full detail: `docs/explanations/analytics.md`
 
 **Model pages (`src/model/`) — one pipeline, four slots:**
 - Every task page is SELECT → LOAD → RUN → OUTPUT, specified in
@@ -1684,7 +1698,8 @@ Key commands:
 | `just fe-e2e-graphcls` | @slow graph classification, pinned **above its majority baseline**, not above chance |
 | `just fe-e2e-models` | Check every model id (audio + vision) resolves on the HF Hub (seconds) |
 | `just fe-e2e-static` | Build with `VITE_BACKEND=off` and run the mocked suite against the built bundle — what CI deploys |
-| `just infra-test` | Unit-test `infra/`: IAM policies + wiring, the site stack under Pulumi mocks, the SPA rewrite, the upload and smoke scripts (stubbed `aws`/`curl`), and `ci.yml`'s CD invariants |
+| `just infra-test` | Unit-test `infra/`: IAM policies + wiring, the site stack under Pulumi mocks, the SPA rewrite and `/ingest` strip, the upload, smoke and `posthog-setup` scripts (stubbed), and `ci.yml`'s CD invariants |
+| `just posthog-setup` | Once, locally, with the **personal** `phx_` key: create/configure the PostHog project and print the public `phc_` key (#60) |
 | `just infra-bootstrap` | Apply the one-time CI identity (OIDC roles) — an admin, locally, never CI |
 | `just infra-preview` / `just infra-up` | `pulumi preview --refresh` / `pulumi up` on the static site stack |
 | `just deploy-frontend` | Build the static bundle, upload it in cache-safe order, smoke-test the live site |

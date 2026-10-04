@@ -106,11 +106,17 @@ prod-backup:
 # deploy-frontend on every push to main; these are for the first deploy and for
 # looking. See docs/guides/deployment.md §8.
 
+# Uses the PERSONAL key (POSTHOG_ALL_ACCESS in the root .env): run it yourself, locally,
+# never in CI. Idempotent. See docs/explanations/analytics.md.
+# One-time PostHog setup (#60): find/create the project, set privacy options, print the phc_ key
+posthog-setup:
+    node scripts/posthog-setup.mjs
+
 # Install the infra dependencies (Pulumi programs + their tests)
 infra-install:
     cd infra && npm ci
 
-# Unit-test the infra: IAM policies + wiring, the site stack (mocks), SPA rewrite, upload + smoke scripts (stubbed), ci.yml
+# Unit-test the infra: IAM policies + wiring, the site stack (mocks), SPA rewrite + /ingest strip, upload + smoke + posthog-setup scripts (stubbed), ci.yml
 infra-test:
     cd infra && npx tsc --noEmit && npx vitest run
 
@@ -237,9 +243,11 @@ fe-e2e-install:
 fe-e2e:
     cd frontend && npm run test:e2e
 
-# Build the static bundle (VITE_BACKEND=off) and run the mocked suite against it — what CI ships
+# Build the static bundle (VITE_BACKEND=off) and run the mocked suite against it — what CI ships.
+# Built with a throwaway analytics key so the analytics-on path is tested too (#60); the
+# fixture answers /ingest locally, so nothing reaches PostHog.
 fe-e2e-static:
-    cd frontend && VITE_BACKEND=off npm run build && E2E_STATIC=1 npx playwright test
+    cd frontend && VITE_BACKEND=off VITE_POSTHOG_KEY=phc_e2e_local_throwaway npm run build && npm run check:bundle && E2E_STATIC=1 E2E_ANALYTICS=1 npx playwright test
 
 # Run E2E tests against the real Django API (needs `just dev` + `just be-seed-e2e`)
 fe-e2e-full: be-seed-e2e

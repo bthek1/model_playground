@@ -192,3 +192,38 @@ describe("static build conventions (#57)", () => {
     expect(app.filter(([, src]) => jsx.test(src)).map(([p]) => p)).toEqual([]);
   });
 });
+
+// Analytics (#60). Each rule here fails silently if broken: a second reader of
+// the key can enable analytics where the flag says it is off; one static
+// import of the SDK folds ~50 KB gzip into the entry chunk and undoes the lazy
+// load; a page that calls the SDK directly skips the allowlist.
+describe("analytics conventions (#60)", () => {
+  it("reads VITE_POSTHOG_* only in src/lib/features.ts", () => {
+    const readers = app.filter(([, src]) => /import\.meta\.env\.VITE_POSTHOG_/.test(src));
+    expect(readers.map(([p]) => p)).toEqual(["lib/features.ts"]);
+  });
+
+  it("imports posthog-js only in src/analytics/client.ts", () => {
+    const importers = app.filter(([, src]) => /from\s+["']posthog-js|import\(\s*["']posthog-js/.test(src));
+    expect(importers.map(([p]) => p)).toEqual(["analytics/client.ts"]);
+  });
+
+  it("reaches the client only by dynamic import, from the facade", () => {
+    // `./client` means the analytics client only inside analytics/; every
+    // modality has a `client.ts` of its own.
+    const statically = (path: string, src: string) =>
+      /^import\s+(?!type\b)[^;]*from\s+["']@\/analytics\/client["']/m.test(src) ||
+      (path.startsWith("analytics/") &&
+        /^import\s+(?!type\b)[^;]*from\s+["']\.\/client["']/m.test(src));
+    expect(app.filter(([p, src]) => statically(p, src)).map(([p]) => p)).toEqual([]);
+    const dynamic = app.filter(([, src]) => /import\(\s*["'](\.\/client|@\/analytics\/client)["']\s*\)/.test(src));
+    expect(dynamic.map(([p]) => p)).toEqual(["analytics/index.ts"]);
+  });
+
+  it("sends events only through the facade's track/pageview", () => {
+    const direct = app
+      .filter(([p]) => !p.startsWith("analytics/"))
+      .filter(([, src]) => /\bposthog\.(capture|init|identify)\b/.test(src));
+    expect(direct.map(([p]) => p)).toEqual([]);
+  });
+});

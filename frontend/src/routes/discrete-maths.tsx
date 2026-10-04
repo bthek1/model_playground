@@ -42,6 +42,7 @@ import {
   type SmallGraph,
 } from "@/theory/graphs";
 import { adjacencyPower, row, support } from "@/theory/walks";
+import { track } from "@/analytics";
 
 export const Route = createFileRoute("/discrete-maths")({
   component: DiscreteMathsPage,
@@ -173,7 +174,10 @@ function DiscreteMathsPage() {
 
               <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t bg-background/95 pt-3">
                 <Button
-                  onClick={() => setK((prev) => Math.min((prev ?? 0) + 1, ecc))}
+                  onClick={() => {
+                    track("feature_used", { feature: "bfs_step", family: graph.id });
+                    setK((prev) => Math.min((prev ?? 0) + 1, ecc));
+                  }}
                   disabled={k != null && k >= ecc}
                 >
                   <StepForward className="size-4" /> Step

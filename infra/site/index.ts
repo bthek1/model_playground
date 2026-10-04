@@ -15,6 +15,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  ALL_VIEWER_EXCEPT_HOST_POLICY_ID,
+  CACHING_DISABLED_POLICY_ID,
   CACHING_OPTIMIZED_POLICY_ID,
   CERT_REGION,
   FUNCTION_PREFIX,
@@ -28,6 +30,11 @@ const domain = config.require("domain");
 const zoneName = config.require("zoneName");
 /** Named rather than generated, so the bootstrap stack can scope IAM to it. */
 const siteBucket = config.require("bucketName");
+/**
+ * PostHog's ingestion host, behind `/ingest/*` (#60). US cloud by default;
+ * an EU project sets `site:posthogHost` to `eu.i.posthog.com`.
+ */
+const posthogHost = config.get("posthogHost") ?? "us.i.posthog.com";
 /** Days a superseded hashed asset stays servable to tabs opened before a deploy. */
 const staleAssetDays = config.getNumber("staleAssetDays") ?? 30;
 
@@ -96,6 +103,14 @@ const spaRewrite = new aws.cloudfront.Function("spa-rewrite", {
   code: readFileSync(join(__dirname, "spa-rewrite.js"), "utf8"),
 });
 
+const ingestStrip = new aws.cloudfront.Function("ingest-strip", {
+  name: `${FUNCTION_PREFIX}ingest-strip`,
+  runtime: "cloudfront-js-2.0",
+  comment: "Same-origin analytics: /ingest/* → PostHog, prefix removed",
+  publish: true,
+  code: readFileSync(join(__dirname, "ingest-strip.js"), "utf8"),
+});
+
 // No Content-Security-Policy, on purpose: a wrong one silently breaks every
 // model load (weights come from the Hugging Face CDN). deployment.md §1.
 const headers = new aws.cloudfront.ResponseHeadersPolicy("site", {
@@ -150,6 +165,7 @@ const validation = new aws.acm.CertificateValidation("site", {
 // ── Distribution ────────────────────────────────────────────────────────────
 
 const originId = "s3-site";
+const ingestOriginId = "posthog-ingest";
 
 const distribution = new aws.cloudfront.Distribution("site", {
   enabled: true,
@@ -164,6 +180,38 @@ const distribution = new aws.cloudfront.Distribution("site", {
       originId,
       domainName: bucket.bucketRegionalDomainName,
       originAccessControlId: oac.id,
+    },
+    {
+      // Analytics, same-origin (#60). Ad-blockers leave a first-party path
+      // alone, the page keeps deployment.md §1's one-origin shape, and the E2E
+      // assertion "no request leaves the origin" stays true with analytics on.
+      // No `/static/*` twin: the SDK build the app ships (posthog-js's
+      // `module.slim.no-external`) has no script loader to fetch from it.
+      originId: ingestOriginId,
+      domainName: posthogHost,
+      customOriginConfig: {
+        originProtocolPolicy: "https-only",
+        httpPort: 80,
+        httpsPort: 443,
+        originSslProtocols: ["TLSv1.2"],
+      },
+    },
+  ],
+  // Ordered behaviours are matched before the default one — which is what
+  // keeps `spa-rewrite` from answering `/ingest/e/` with index.html.
+  orderedCacheBehaviors: [
+    {
+      pathPattern: "/ingest/*",
+      targetOriginId: ingestOriginId,
+      viewerProtocolPolicy: "https-only",
+      allowedMethods: ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"],
+      cachedMethods: ["GET", "HEAD"],
+      compress: false,
+      cachePolicyId: CACHING_DISABLED_POLICY_ID,
+      originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST_POLICY_ID,
+      functionAssociations: [
+        { eventType: "viewer-request", functionArn: ingestStrip.arn },
+      ],
     },
   ],
   defaultCacheBehavior: {

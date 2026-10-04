@@ -1,5 +1,6 @@
 import { test as base, expect, type Page } from "@playwright/test";
 
+import { interceptIngest, type Ingest } from "./ingest";
 import { installMockApi, seedTokens, type MockApiOptions } from "./mockApi";
 import { probeWebGPU, type WebGPUStatus } from "./webgpu";
 
@@ -10,7 +11,13 @@ interface Fixtures {
   signedIn: () => Promise<void>;
   /** Real WebGPU status of this browser — use to skip GPU-only assertions. */
   webgpuStatus: WebGPUStatus;
+  /** What the app sent to `/ingest` (analytics, #60), decoded. Always intercepted. */
+  ingest: Ingest;
 }
+
+// Installed on every page by the `page` fixture, before any navigation, so no
+// spec can forget it: `/ingest` is answered locally, always.
+const ingestOf = new WeakMap<Page, Ingest>();
 
 /**
  * The Vite dev server occasionally serves a page whose module graph never
@@ -52,6 +59,7 @@ async function ensureMounted(page: Page): Promise<void> {
  */
 export const test = base.extend<Fixtures>({
   page: async ({ page }, use) => {
+    ingestOf.set(page, await interceptIngest(page));
     const originalGoto = page.goto.bind(page);
     page.goto = async (url, options) => {
       const response = await originalGoto(url, options);
@@ -60,6 +68,10 @@ export const test = base.extend<Fixtures>({
       return response;
     };
     await use(page);
+  },
+
+  ingest: async ({ page }, use) => {
+    await use(ingestOf.get(page)!);
   },
 
   mockApi: async ({ page }, use) => {

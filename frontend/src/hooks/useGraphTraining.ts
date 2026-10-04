@@ -21,6 +21,7 @@ import {
   loadGraphInWorker,
   trainGraphInWorker,
 } from "@/webgpu/workerClient";
+import { track } from "@/analytics";
 
 /** Machine A of the page pattern: the dataset and the device, not a download. */
 export type GraphLoadStatus = "idle" | "loading" | "ready" | "error";
@@ -135,6 +136,7 @@ export function useGraphTraining(): GraphTrainingState {
         setTrainError("Load the graph first.");
         return;
       }
+      track("feature_used", { feature: "graph_train", family: request.arch });
 
       metricsRef.current = [];
       pendingPredictions.current = null;

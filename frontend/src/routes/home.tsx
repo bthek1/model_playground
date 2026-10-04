@@ -4,6 +4,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 
+import { AnalyticsNote } from "@/components/analytics/AnalyticsNote";
 import { BenchmarkCard } from "@/components/home/BenchmarkCard";
 import { GpuCapabilitiesCard } from "@/components/home/GpuCapabilitiesCard";
 import { ModelCatalogCard } from "@/components/home/ModelCatalogCard";
@@ -19,8 +20,10 @@ function HomePage() {
       <div>
         <h1 className="mb-1 text-2xl font-semibold">Model Playground</h1>
         <p className="text-sm text-muted-foreground">
-          Run ML models directly on your GPU via raw WebGPU. Nothing is sent to a
-          server{BACKEND_ENABLED && " — the backend only serves the model catalog"}.
+          Run ML models directly on your GPU via raw WebGPU. Nothing you give a
+          model is sent to a server
+          {BACKEND_ENABLED && " — the backend only serves the model catalog"}.{" "}
+          <AnalyticsNote />
         </p>
       </div>
 

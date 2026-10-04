@@ -51,7 +51,21 @@ const ENTRY_BUDGET_RAW_KB = 1900;
  * Markers that must not appear in the entry chunk. Each is a string the library
  * emits into its own bundled output, not something app code would write.
  */
-const MUST_STAY_SPLIT = [["echarts", /\becharts\b/]];
+const MUST_STAY_SPLIT = [
+  ["echarts", /\becharts\b/],
+  // The analytics SDK (#60) is ~49 KB gzip and behind `src/analytics/`'s
+  // dynamic import; `posthog-js` is the library's own `$lib` name.
+  ["posthog-js", /\bposthog-js\b/],
+];
+
+/**
+ * A PostHog **personal** API key (`phx_…`) can read and delete every project in
+ * the organisation. The browser only ever needs the public project key
+ * (`phc_…`). Vite keeps a non-`VITE_` variable out of the bundle by prefix
+ * alone, so this is the guard against the day someone renames one: any
+ * `phx_` token anywhere in `dist/` fails the build — in CI and in the image.
+ */
+const SECRET_PATTERNS = [["PostHog personal API key (phx_…)", /phx_[A-Za-z0-9]{16,}/]];
 
 /**
  * `onnxruntime-web` is deliberately NOT in the list above, because today it *is*
@@ -121,8 +135,26 @@ for (const [name, pattern] of MUST_STAY_SPLIT) {
   }
 }
 
+/** Every text file the deploy uploads — not just the entry chunk. */
+function* textFiles(dir) {
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) yield* textFiles(path);
+    else if (/\.(js|mjs|css|html|json|map|txt|webmanifest|svg)$/.test(name)) yield path;
+  }
+}
+const dist = join(root, "dist");
+for (const [label, pattern] of SECRET_PATTERNS) {
+  const hits = [...textFiles(dist)].filter((path) => pattern.test(readFileSync(path, "utf8")));
+  if (hits.length > 0) {
+    fail(`a ${label} is in the build: ${hits.map((h) => h.slice(dist.length + 1)).join(", ")}`);
+  } else {
+    pass(`no ${label} anywhere in dist/`);
+  }
+}
+
 if (failed) {
-  console.error("\nBundle budget exceeded. See scripts/check-bundle.mjs.");
+  console.error("\nBundle check failed. See scripts/check-bundle.mjs.");
   process.exit(1);
 }
 console.log("\nBundle budget OK.");

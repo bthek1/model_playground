@@ -24,6 +24,7 @@ import type {
   RlTrainRequest,
   RlTrainResult,
 } from "@/rl/types";
+import { track } from "@/analytics";
 
 /** One finished (or stopped) run, kept for the comparison. */
 export interface RlRunRecord {
@@ -162,6 +163,7 @@ export function useRlTraining(): RlTrainingState {
       void (async () => {
         for (const req of reqs) {
           if (stoppedRef.current) break;
+          track("feature_used", { feature: "rl_train", family: req.algorithm });
           await runOne(req, speed);
         }
         trainingRef.current = false;
