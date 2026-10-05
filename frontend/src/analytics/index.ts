@@ -10,10 +10,10 @@
 import { ANALYTICS_ENABLED, POSTHOG_HOST, POSTHOG_KEY } from "@/lib/features";
 
 import type { Client } from "./client";
-import { sanitize, type AnalyticsEvent, type Props } from "./events";
+import { sanitize, type AnalyticsEvent, type Props } from "./schema";
 
-export { classifyError } from "./events";
-export type { AnalyticsEvent, ErrorKind, Props } from "./events";
+export { classifyError } from "./schema";
+export type { AnalyticsEvent, ErrorKind, Props } from "./schema";
 
 /** Its own key: `persistence: "memory"` forgets an SDK-level opt-out on reload. */
 export const OPT_OUT_KEY = "mp.analytics.optOut";

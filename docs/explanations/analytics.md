@@ -18,11 +18,11 @@ bug in one is caught by the next:
 
 | Layer | Where | What it does |
 |---|---|---|
-| Closed allowlist | `src/analytics/events.ts` (`sanitize`) | Drops every property key not on `ALLOWED_PROPS`. A string value must look like an identifier (`[A-Za-z0-9_./:@-]`, no spaces) — a catalogue id, a route pattern, an enum — so a sentence cannot pass even under an allowed key. Errors become an `errorKind` category; the message is never sent. |
+| Closed allowlist | `src/analytics/schema.ts` (`sanitize`) | Drops every property key not on `ALLOWED_PROPS`. A string value must look like an identifier (`[A-Za-z0-9_./:@-]`, no spaces) — a catalogue id, a route pattern, an enum — so a sentence cannot pass even under an allowed key. Errors become an `errorKind` category; the message is never sent. |
 | The last gate | `src/analytics/client.ts` (`beforeSend`) | Rebuilds every event's properties from `SDK_PROPS` (a strict list — a property a future SDK adds is dropped until someone reads it) plus the app allowlist again. Replaces `$current_url` with origin + route **pattern**, so a query string or hash never leaves; drops `$referrer`, `$set`, `$set_once`. |
 | Off unless asked | `src/lib/features.ts` | `ANALYTICS_ENABLED` is true only in a build with `VITE_POSTHOG_KEY`, and only CI's shipped build has one. Disabled, the facade imports nothing and sends nothing. |
 
-The events (`src/analytics/events.ts`):
+The events (`src/analytics/schema.ts`):
 
 | Event | Sent from | Properties |
 |---|---|---|
@@ -132,7 +132,7 @@ mentions it.
 
 | What | Test |
 |---|---|
-| Allowlist, identifier rule, error categories | `src/analytics/events.test.ts` |
+| Allowlist, identifier rule, error categories | `src/analytics/schema.test.ts` |
 | Every init option; `beforeSend` strips URLs, referrers, `$set*`, unknown SDK props | `src/analytics/client.test.ts` |
 | Disabled imports nothing and touches no storage or network; queue and flush order; route stamped; opt-out never imports; opt-out survives a reload | `src/analytics/index.test.ts` |
 | Load and run funnel from `useModelWorker`; failure sends a category, never the message | `src/model/useModelWorker.analytics.test.ts` |

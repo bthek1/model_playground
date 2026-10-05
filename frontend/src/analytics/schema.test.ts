@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ALLOWED_PROPS, classifyError, sanitize } from "./events";
+import { ALLOWED_PROPS, classifyError, sanitize } from "./schema";
 
 describe("sanitize — the closed allowlist (#60)", () => {
   it("drops every key that is not on the list", () => {

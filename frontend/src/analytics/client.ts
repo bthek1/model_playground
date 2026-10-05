@@ -14,7 +14,7 @@ import type {
   PostHogConfig,
 } from "posthog-js/dist/module.slim.no-external";
 
-import { sanitize } from "./events";
+import { sanitize } from "./schema";
 
 /**
  * SDK-added properties that are allowed through `before_send`. Everything
@@ -88,12 +88,10 @@ export function initOptions(host: string): Partial<PostHogConfig> {
     autocapture: false,
     rageclick: false,
     capture_dead_clicks: false,
-    capture_exceptions: false,
     capture_heatmaps: false,
     capture_performance: false,
     capture_pageview: false, // the router sends route *patterns*
     capture_pageleave: false,
-    disable_session_recording: true,
     disable_surveys: true,
     disable_product_tours: true,
     disable_conversations: true,

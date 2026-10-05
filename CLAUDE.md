@@ -313,7 +313,7 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - **Visualizing models & their structure** follows [`docs/standards/model-visualization.md`](docs/standards/model-visualization.md) — a shared grammar of stage/arrow schematics, canvas weight/activation heatmaps (diverging red=+/blue=−, alpha=magnitude), param chips, theme-token colors, and lazy charts. The primitives live in `components/viz/` (`schematic.tsx`: Stage/Arrow/ParamChip · `heatmap.tsx`: HeatmapTile/DivergingLegend · `PanZoom.tsx`: a drag/wheel/fit surface for any child, with an optional `onScaleChange` for a canvas that must keep its strokes a constant size on screen); the Training route (`components/training/`) and Tensor route (`routes/tensor.tsx`) are the reference callers, and the three graph routes use `PanZoom`. Reuse those primitives; don't invent parallel ones.
 - **Analytics records what the app did, never what it was given (#60).** Everything goes
   through the facade in `src/analytics/` (`track`, `pageview`); properties pass a **closed
-  allowlist** (`events.ts` — identifier-shaped strings only, errors as an `errorKind` category,
+  allowlist** (`schema.ts` — never `events.ts`: EasyPrivacy blocks `/analytics/event` and the dev server stops booting; identifier-shaped strings only, errors as an `errorKind` category,
   never the message), and `client.ts`'s `beforeSend` rebuilds every payload from a strict SDK
   list and replaces the URL with origin + route **pattern**. Load/run events are emitted once,
   in `useModelWorker`; a new bespoke trigger sends at most `feature_used` with a fixed enum —
