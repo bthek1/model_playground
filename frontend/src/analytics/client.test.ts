@@ -24,28 +24,28 @@ describe("init options (#60) — each one a decision", () => {
     expect(options.person_profiles).toBe("never");
   });
 
-  it("captures nothing on its own — the app sends what it means to", () => {
+  it("keeps interaction capture opt-in while allowing error tracking", () => {
     expect(options).toMatchObject({
       autocapture: false,
       rageclick: false,
       capture_dead_clicks: false,
-      capture_exceptions: false,
       capture_heatmaps: false,
       capture_performance: false,
       capture_pageview: false,
       capture_pageleave: false,
     });
+    expect(options).not.toHaveProperty("capture_exceptions");
   });
 
-  it("records no sessions and loads no remote features or scripts", () => {
+  it("allows session recording while keeping remote features and scripts off", () => {
     expect(options).toMatchObject({
-      disable_session_recording: true,
       disable_surveys: true,
       disable_product_tours: true,
       disable_web_experiments: true,
       disable_external_dependency_loading: true,
       advanced_disable_flags: true,
     });
+    expect(options).not.toHaveProperty("disable_session_recording");
   });
 
   it("respects Do Not Track and masks as defence in depth", () => {
