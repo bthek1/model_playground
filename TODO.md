@@ -1,5 +1,6 @@
 # TODO
 
-- [ ] deploy to frontend
+
+- [ ] add legal required stuff
 
 - [ ] do SEO
