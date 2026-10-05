@@ -226,8 +226,10 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
 - **`npm run check:bundle`** budgets the entry chunk and keeps `echarts` behind its
   lazy wrapper; it runs inside the frontend image build, so a leak fails the image.
 - CI (`.github/workflows/ci.yml`) runs lint, tests, the build, the bundle budget,
-  the mocked Playwright suite and both image builds. It does **not** run the
-  `@slow` specs — those still need `just fe-e2e-slow` by hand.
+  the mocked Playwright suite **against the shipped static build** (`e2e-static`)
+  and both image builds. It does **not** run the `@slow` specs (`just fe-e2e-slow`)
+  or the mocked suite against the dev server (`just fe-e2e`) — dropped for time, so
+  the `@api` and `@devserver` specs now run by hand only.
   See [`docs/guides/deployment.md`](docs/guides/deployment.md).
 - **The static frontend is a second deployment** (#57, deployment.md §10):
   `VITE_BACKEND=off`, S3 + CloudFront at `https://playground.benedictthekkel.com`,
