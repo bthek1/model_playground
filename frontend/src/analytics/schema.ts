@@ -6,6 +6,10 @@
 // identifier (a catalogue id, a route pattern, an enum) rather than prose, and
 // an error is reduced to a category — its message can echo a prompt, a file
 // name or a path, so the message itself never leaves.
+//
+// Not `events.ts`: EasyPrivacy blocks any URL containing `/analytics/event`,
+// and the dev server serves this file at `/src/analytics/<name>.ts`, so an ad
+// blocker kills the import and the whole app fails to boot.
 
 export type AnalyticsEvent =
   | "$pageview"

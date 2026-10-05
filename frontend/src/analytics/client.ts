@@ -14,7 +14,7 @@ import type {
   PostHogConfig,
 } from "posthog-js/dist/module.slim.no-external";
 
-import { sanitize } from "./events";
+import { sanitize } from "./schema";
 
 /**
  * SDK-added properties that are allowed through `before_send`. Everything

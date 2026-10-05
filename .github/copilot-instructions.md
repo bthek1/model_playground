@@ -271,7 +271,7 @@ export const Route = createFileRoute('/users/$userId')({
   variant. Full detail: `docs/explanations/telemetry-panel.md`
 - **Product analytics** (`src/analytics/`, #60) records **what the app did, never what it was
   given**. Call only the facade (`track`, `pageview`); properties pass a closed allowlist
-  (`events.ts`: identifier-shaped strings, errors as an `errorKind` category, never the message)
+  (`schema.ts` — never `events.ts`, which EasyPrivacy blocks in dev: identifier-shaped strings, errors as an `errorKind` category, never the message)
   and `client.ts`'s `beforeSend` rebuilds every payload from a strict SDK list, with the URL
   replaced by origin + route pattern. Load/run events live once in `useModelWorker`; a bespoke
   trigger sends at most `feature_used` with a fixed enum — never a row count, column, file name,
