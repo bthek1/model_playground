@@ -48,8 +48,8 @@ describe("the shipped artifact", () => {
     expect(build?.env?.VITE_POSTHOG_HOST).toBe("/ingest");
     // The personal key is never in CI, under any name.
     expect(JSON.stringify(wf)).not.toMatch(/POSTHOG_ALL_ACCESS|phx_|secrets\.[A-Z_]*POSTHOG/);
-    // No other job builds with it: unit tests and the dev-server E2E stay silent.
-    for (const name of ["e2e", "e2e-static", "deploy"]) {
+    // No other job builds with it: unit tests stay silent.
+    for (const name of ["e2e-static", "deploy"]) {
       expect(JSON.stringify(job(name))).not.toMatch(/VITE_POSTHOG_KEY:/);
     }
   });
@@ -78,7 +78,7 @@ describe("the deploy job", () => {
   const j = () => job("deploy");
 
   it("waits for every test job, including the one that tested its bytes", () => {
-    expect(list(j().needs).sort()).toEqual(["e2e", "e2e-static", "frontend", "infra"]);
+    expect(list(j().needs).sort()).toEqual(["e2e-static", "frontend", "infra"]);
   });
 
   it("runs only on a push to main", () => {

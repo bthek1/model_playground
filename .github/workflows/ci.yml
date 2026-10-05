@@ -9,8 +9,12 @@
 # 80-220 MB a model — so they turn a two-minute job into a half-hour one and fail
 # on any network hiccup. They are the only tests that exercise a real ONNX
 # Runtime session, so they still have to be run by hand before shipping a model
-# change (`just fe-e2e-slow`). The `@backend` specs need Postgres and a seeded
-# user; they run in the backend job below, where both exist.
+# change (`just fe-e2e-slow`).
+#
+# Nor does the mocked suite against the *dev server* (`just fe-e2e`): it was the
+# slowest job by far (~10 min) and mostly repeated `e2e-static`. What only it
+# covered — the `@api` specs (sign-in, the registry UI the static build removes)
+# and the `@devserver` specs that `load("/src/...")` — now runs by hand only.
 #
 # Continuous deployment (#57): a push to `main` is a release, and the `deploy`
 # job puts the static frontend on S3 + CloudFront. It uploads the `dist`
@@ -138,12 +142,11 @@ jobs:
       #
       # Built as the *shipped* bundle, `VITE_BACKEND=off` (#57): this artifact
       # is what `e2e-static` tests and `deploy` uploads, so the deployed bytes
-      # are the tested bytes. The flag changes no types, and the backend-on app
-      # is still exercised by `e2e`, which runs the dev server.
+      # are the tested bytes. The flag changes no types.
       #
       # Analytics (#60): the PostHog *project* key is public and write-only, so
       # it is a repository variable, not a secret, and it is set on this build
-      # only — unit tests and the dev-server E2E stay analytics-free. Unset (a
+      # only — unit tests stay analytics-free. Unset (a
       # fork, or before `just posthog-setup` has run) it is an empty string and
       # the bundle ships with analytics off. The personal `phx_` key never
       # appears in CI at all; `check:bundle` fails if one reaches dist/.
@@ -162,39 +165,6 @@ jobs:
         with:
           name: dist
           path: frontend/dist
-          retention-days: 7
-
-  e2e:
-    name: E2E (Playwright, mocked API, dev server)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox
-
-      # No backend and no E2E_SLOW: the default run is fully mocked. The config
-      # starts the dev server itself via its `webServer` block.
-      - name: Run E2E
-        run: npx playwright test
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
-        with:
-          name: playwright-report
-          path: frontend/playwright-report
           retention-days: 7
 
   # The shipped bundle under the same mocked suite: `vite preview` serves the
@@ -314,7 +284,7 @@ jobs:
   # and the environment can require an approval.
   deploy:
     name: Deploy (S3 + CloudFront)
-    needs: [frontend, e2e, e2e-static, infra]
+    needs: [frontend, e2e-static, infra]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN != ''
     runs-on: ubuntu-latest
     environment:

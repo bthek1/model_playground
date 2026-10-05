@@ -280,8 +280,13 @@ The Celery worker exists for the registry's background tasks, not for models.
 
 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs lint, the
 Django test suite, `check --deploy`, the frontend unit tests, the production
-build, the bundle budget, the mocked Playwright suite, and a build of both
-production images.
+build, the bundle budget, the mocked Playwright suite against that build
+(`e2e-static`), and a build of both production images.
+
+It does **not** run the mocked suite against the dev server (`just fe-e2e`).
+That job took ~10 minutes and mostly repeated `e2e-static`; what only it
+covered — the `@api` specs (sign-in, the registry UI) and the `@devserver`
+specs — is now run by hand before a release that touches them.
 
 It does **not** run the `@slow` specs — they download real ONNX weights from
 Hugging Face. Those are the only tests that exercise a real ONNX Runtime
