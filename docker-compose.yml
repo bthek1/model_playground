@@ -34,7 +34,7 @@ services:
     depends_on:
       - db
     env_file:
-      - path: ./backend/.env
+      - path: ./.env
         required: false
     environment:
       DATABASE_URL: postgres://appuser:apppassword@db:5432/appdb
@@ -50,7 +50,7 @@ services:
       redis:
         condition: service_healthy
     env_file:
-      - path: ./backend/.env
+      - path: ./.env
         required: false
     environment:
       DATABASE_URL: postgres://appuser:apppassword@db:5432/appdb
@@ -66,7 +66,7 @@ services:
       - db
       - redis
     env_file:
-      - path: ./backend/.env
+      - path: ./.env
         required: false
     environment:
       DATABASE_URL: postgres://appuser:apppassword@db:5432/appdb
@@ -87,7 +87,7 @@ services:
     ports:
       - "5180:5180"
     env_file:
-      - path: ./frontend/.env
+      - path: ./.env
         required: false
     environment:
       # Same-origin: the dev server proxies /api to the backend container.

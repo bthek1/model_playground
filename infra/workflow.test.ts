@@ -42,6 +42,23 @@ describe("the shipped artifact", () => {
     expect(uses(job("frontend"))).toContain("actions/upload-artifact@v4");
   });
 
+  it("carries the analytics project key from a repository variable, never a secret (#60)", () => {
+    const build = job("frontend").steps.find((s) => s.run === "npm run build");
+    expect(build?.env?.VITE_POSTHOG_KEY).toBe("${{ vars.VITE_POSTHOG_KEY }}");
+    expect(build?.env?.VITE_POSTHOG_HOST).toBe("/ingest");
+    // The personal key is never in CI, under any name.
+    expect(JSON.stringify(wf)).not.toMatch(/POSTHOG_ALL_ACCESS|phx_|secrets\.[A-Z_]*POSTHOG/);
+    // No other job builds with it: unit tests and the dev-server E2E stay silent.
+    for (const name of ["e2e", "e2e-static", "deploy"]) {
+      expect(JSON.stringify(job(name))).not.toMatch(/VITE_POSTHOG_KEY:/);
+    }
+  });
+
+  it("runs the analytics privacy spec against the artifact whenever it has a key", () => {
+    const step = job("e2e-static").steps.find((s) => s.run?.includes("playwright test"));
+    expect(step?.env?.E2E_ANALYTICS).toBe("${{ vars.VITE_POSTHOG_KEY != '' && '1' || '' }}");
+  });
+
   it("is what e2e-static tests, served as a build (E2E_STATIC), not rebuilt", () => {
     const j = job("e2e-static");
     expect(list(j.needs)).toContain("frontend");

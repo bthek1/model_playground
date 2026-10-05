@@ -3,6 +3,7 @@ import {
   Outlet,
   useRouterState,
 } from "@tanstack/react-router";
+import { usePageviews } from "@/analytics/usePageviews";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
@@ -18,6 +19,7 @@ function RootComponent() {
   const isPublic = PUBLIC_PATHS.includes(pathname);
 
   useDocumentTitle();
+  usePageviews();
 
   if (isPublic) return <Outlet />;
   return <AppLayout />;

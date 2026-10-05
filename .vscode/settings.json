@@ -10,7 +10,7 @@
     "--no-header"
   ],
   "python.testing.cwd": "${workspaceFolder}/backend",
-  "python.envFile": "${workspaceFolder}/backend/.env",
+  "python.envFile": "${workspaceFolder}/.env",
 
   // ── Vitest ─────────────────────────────────────────────────────────────────
   "vitest.enable": true,

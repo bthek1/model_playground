@@ -85,7 +85,7 @@ jobs:
       #                `SETTINGS`, defaulting to `dev`. So without this, CI loads
       #                the dev settings no matter what pytest was told.
       #   SECRET_KEY   `base.py` reads it with no default. Locally it comes from
-      #                `backend/.env`, which is correctly never committed — so
+      #                the root `.env`, which is correctly never committed — so
       #                this step is the only place CI can supply one. The value
       #                is throwaway: `core.settings.test` uses sqlite and signs
       #                nothing that outlives the run.
@@ -140,9 +140,18 @@ jobs:
       # is what `e2e-static` tests and `deploy` uploads, so the deployed bytes
       # are the tested bytes. The flag changes no types, and the backend-on app
       # is still exercised by `e2e`, which runs the dev server.
+      #
+      # Analytics (#60): the PostHog *project* key is public and write-only, so
+      # it is a repository variable, not a secret, and it is set on this build
+      # only — unit tests and the dev-server E2E stay analytics-free. Unset (a
+      # fork, or before `just posthog-setup` has run) it is an empty string and
+      # the bundle ships with analytics off. The personal `phx_` key never
+      # appears in CI at all; `check:bundle` fails if one reaches dist/.
       - name: Build
         env:
           VITE_BACKEND: "off"
+          VITE_POSTHOG_KEY: ${{ vars.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: /ingest
         run: npm run build
 
       - name: Bundle budget
@@ -219,9 +228,13 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium firefox
 
+      # E2E_ANALYTICS runs analytics.spec.ts — the payload privacy assertion —
+      # whenever the artifact was built with a key. Every /ingest request is
+      # answered by the fixture, so the run never reaches PostHog.
       - name: Run E2E against dist
         env:
           E2E_STATIC: "1"
+          E2E_ANALYTICS: ${{ vars.VITE_POSTHOG_KEY != '' && '1' || '' }}
         run: npx playwright test
 
       - uses: actions/upload-artifact@v4

@@ -26,6 +26,10 @@ vi.mock("@/lib/features", () => ({
   get BACKEND_ENABLED() {
     return flags.backend;
   },
+  // Analytics stays off here: this file asserts what reaches the wire.
+  ANALYTICS_ENABLED: false,
+  POSTHOG_KEY: "",
+  POSTHOG_HOST: "/ingest",
 }));
 
 const apiCalls: string[] = [];

@@ -20,3 +20,12 @@ export const CACHING_OPTIMIZED_POLICY_ID = "658327ea-f89d-4fab-a63d-7e88639e58f6
 
 /** CloudFront reads viewer certificates only from here. */
 export const CERT_REGION = "us-east-1";
+
+/** AWS's managed `CachingDisabled` cache policy — for `/ingest/*` (#60): an
+ *  analytics POST must reach PostHog every time, never be answered from cache. */
+export const CACHING_DISABLED_POLICY_ID = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad";
+
+/** AWS's managed `AllViewerExceptHostHeader` origin request policy. Forwards the
+ *  query string, cookies and headers the SDK sends, but lets CloudFront set
+ *  `Host` to the origin's own name — PostHog's ingestion routes on it. */
+export const ALL_VIEWER_EXCEPT_HOST_POLICY_ID = "b689b0a8-53d0-40ab-baf2-68738e2966ac";

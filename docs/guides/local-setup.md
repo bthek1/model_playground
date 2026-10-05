@@ -21,14 +21,45 @@ git clone <repo-url>
 cd django_react_template
 ```
 
-### 2. Create environment files
+### 2. Create the environment file
 
 ```bash
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
+cp .env.example .env      # or: just env-init
 ```
 
+There is **one** `.env`, in the project root, read by both halves: Django
+(`core/settings/base.py` reads `../.env`, and `backend/.envrc` sources it for
+direnv), Vite (`envDir` points at the root) and every service in
+`docker-compose.yml`. Only `VITE_*` keys reach the browser bundle, so the
+backend secrets beside them are never shipped to the client.
+
+Two tests keep the layout honest, because every way it drifts is silent:
+
+- `backend/tests/test_env_config.py` reads the files themselves — the settings
+  read `ENV_FILE` (the root `.env`) and nothing else; every variable a settings
+  module requires *without a default* is in `.env.example` (dev) or
+  `.env.prod.example` / the prod compose file (prod); neither example invites
+  AWS credentials; no config file names `backend/.env` or `frontend/.env`; and
+  every `docker-compose.prod.yml` command in the justfile and the docs' code
+  blocks carries `--env-file .env.prod`.
+- `frontend/src/__tests__/envExposure.test.ts` runs a real Vite build against a
+  sentinel `.env` and asserts a backend key never reaches the output, and that
+  every `import.meta.env.VITE_*` the app reads is documented in `.env.example`.
+
+`just env` prints the file with every value masked; it holds real secrets, so
+nothing in the toolchain `cat`s it.
+
 The default values in `.env.example` are pre-configured to work with Docker Compose (`db` hostname, etc.). No changes are needed for local development.
+
+Production does not use this file — it reads `.env.prod`; see
+[deployment.md](deployment.md).
+
+> **Upgrading an older checkout?** Before #61 there were two files,
+> `backend/.env` and `frontend/.env`. Neither is read any more. Concatenate
+> their values into the root `.env` (`cat backend/.env frontend/.env >> .env`,
+> then remove duplicate keys), check the app still boots, and then delete the
+> two old files by hand — both hold real secrets, so the deletion is
+> deliberately not scripted.
 
 ### 3. Start all services
 
@@ -77,9 +108,9 @@ docker compose exec backend python manage.py createsuperuser
 ### 1. Set up environment
 
 ```bash
-cd backend
-cp .env.example .env
+cp .env.example .env      # in the project root, not in backend/
 # Edit .env: set DATABASE_URL to SQLite or a local Postgres instance
+cd backend
 ```
 
 ### 2. Install dependencies
@@ -104,8 +135,8 @@ Backend is available at `http://localhost:8000`.
 ### 1. Set up environment
 
 ```bash
+cp .env.example .env      # in the project root, not in frontend/
 cd frontend
-cp .env.example .env
 # VITE_API_BASE_URL stays empty — the app calls /api on its own origin and the
 # Vite dev server proxies it to VITE_API_PROXY_TARGET (default localhost:8006).
 ```

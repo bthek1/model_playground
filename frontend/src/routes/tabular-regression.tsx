@@ -47,6 +47,7 @@ import { useDataset } from "@/hooks/useDataset";
 import { useTabularFit } from "@/hooks/useTabularFit";
 import { familiesFor, familyInfo } from "@/tabular/families";
 import type { Family, FitResult, Hyperparams, PredictResult } from "@/tabular/types";
+import { AnalyticsNote } from "@/components/analytics/AnalyticsNote";
 
 export const Route = createFileRoute("/tabular-regression")({
   component: TabularRegressionPage,
@@ -151,7 +152,7 @@ function TabularRegressionPage() {
           Predict a number from a spreadsheet, in this tab, on your own data —
           ridge in closed form on your GPU, trees on your CPU, and a quantile
           model that returns an interval instead of a point.{" "}
-          <strong>Your file is never uploaded.</strong>
+          <strong>Your file is never uploaded.</strong> <AnalyticsNote />
         </>
       }
       labels={{ select: "Model", load: "Fit", run: "Data", output: "Result" }}

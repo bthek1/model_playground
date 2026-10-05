@@ -6,6 +6,7 @@
 // the E2E spec, which needs to prove that closing the panel really does stop
 // the sampling rather than merely hiding the numbers.
 
+import { AnalyticsToggle } from "@/components/analytics/AnalyticsToggle";
 import { useTelemetry } from "@/telemetry/useTelemetry";
 
 import { CpuCard } from "./CpuCard";
@@ -51,6 +52,7 @@ export function SystemPanel({ active }: { active: boolean }) {
         download={view.download}
         history={view.downloadHistory}
       />
+      <AnalyticsToggle />
     </div>
   );
 }

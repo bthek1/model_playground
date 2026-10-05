@@ -183,6 +183,59 @@ describe("the distribution", () => {
   });
 });
 
+describe("same-origin analytics: /ingest/* (#60)", () => {
+  const dist = () => one("aws:cloudfront/distribution:Distribution");
+  const ingest = () =>
+    (dist().orderedCacheBehaviors ?? []).find(
+      (b: { pathPattern: string }) => b.pathPattern === "/ingest/*",
+    );
+
+  it("is an ordered behaviour, so it is matched before the default", () => {
+    // Without it the default behaviour's spa-rewrite answers /ingest/e/ with
+    // index.html and a 200, and every event vanishes silently.
+    expect(dist().orderedCacheBehaviors.map((b: { pathPattern: string }) => b.pathPattern)).toEqual([
+      "/ingest/*",
+    ]);
+  });
+
+  it("goes to PostHog's ingestion host over HTTPS", () => {
+    const origin = dist().origins.find(
+      (o: { originId: string }) => o.originId === ingest().targetOriginId,
+    );
+    expect(origin.domainName).toBe("us.i.posthog.com");
+    expect(origin.customOriginConfig.originProtocolPolicy).toBe("https-only");
+    expect(origin.originAccessControlId).toBeUndefined();
+  });
+
+  it("caches nothing and forwards everything but Host", () => {
+    expect(ingest()).toMatchObject({
+      cachePolicyId: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+      originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac",
+      viewerProtocolPolicy: "https-only",
+    });
+    expect(ingest().allowedMethods).toEqual(
+      expect.arrayContaining(["POST", "OPTIONS", "GET"]),
+    );
+  });
+
+  it("carries only the prefix-strip function, never the SPA rewrite", () => {
+    expect(ingest().functionAssociations).toEqual([
+      {
+        eventType: "viewer-request",
+        functionArn:
+          "arn:aws:mock:::aws:cloudfront/function:Function/ingest-strip",
+      },
+    ]);
+    expect(
+      resources.find((r) => r.name === "ingest-strip")?.inputs.name,
+    ).toBe("model-playground-ingest-strip"); // inside the deploy role's function scope
+  });
+
+  it("has no /static/* twin — the shipped SDK build loads no scripts", () => {
+    expect(dist().origins).toHaveLength(2);
+  });
+});
+
 describe("certificate and DNS", () => {
   it("requests the certificate in us-east-1, tagged", () => {
     expect(one("aws:acm/certificate:Certificate")).toMatchObject({

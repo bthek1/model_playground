@@ -32,6 +32,7 @@ import type {
   FitSpec,
   PredictResult,
 } from "@/tabular/types";
+import { track } from "@/analytics";
 
 export interface UseTabularFitResult {
   status: ModelStatus;
@@ -95,6 +96,9 @@ export function useTabularFit(
   const fit = useCallback(
     async (spec: FitSpec): Promise<FitResult> => {
       if (statusRef.current === "idle") load();
+      // The family and objective only: no row count, column name or target —
+      // they describe the user's file, and the file never leaves (#60).
+      track("feature_used", { feature: `tabular_${spec.objective}`, family: spec.family });
       const result = (await post({ spec })) as FitResult;
       setFitResult(result);
       return result;

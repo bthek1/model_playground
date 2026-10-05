@@ -28,8 +28,7 @@ through Django. See [`docs/explanations/webgpu-inference.md`](docs/explanations/
 git clone <repo-url> && cd model_playground
 
 # 2. Create env files
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
+cp .env.example .env      # one file for both halves (just env-init)
 
 # 3. Start everything
 docker compose up
@@ -85,7 +84,7 @@ WebGPU entirely.
 ## Deployment
 
 ```bash
-cp .env.example .env     # DOMAIN, SECRET_KEY, ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS, …
+cp .env.prod.example .env.prod   # DOMAIN, SECRET_KEY, ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS, …
 just secret-key          # generates a SECRET_KEY
 just up-prod             # Caddy (TLS) -> nginx (SPA + /api) -> gunicorn
 just deploy              # pull, rebuild, restart

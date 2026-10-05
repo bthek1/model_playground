@@ -78,10 +78,12 @@ backend/
 # base.py pattern
 import environ
 env = environ.Env()
-environ.Env.read_env(BASE_DIR / ".env")
+ENV_FILE = BASE_DIR.parent / ".env"  # the ONE root .env, shared with the frontend (#61)
+environ.Env.read_env(ENV_FILE)
 DATABASES = {'default': env.db('DATABASE_URL')}
 AUTH_USER_MODEL = "accounts.CustomUser"
 ```
+- A new `env("X")` with no default must be added to the root `.env.example` (or `.env.prod.example` for prod-only) — `backend/tests/test_env_config.py` fails naming it otherwise.
 
 ## Testing
 - Run: `just be-test` or `cd backend && uv run pytest`

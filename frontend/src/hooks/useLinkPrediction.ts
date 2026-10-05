@@ -28,6 +28,7 @@ import {
   trainLinkInWorker,
   type LinkTrainingHandle,
 } from "@/webgpu/workerClient";
+import { track } from "@/analytics";
 
 export type LinkLoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -140,6 +141,7 @@ export function useLinkPrediction(): LinkPredictionState {
         setTrainError("Load the graph first.");
         return;
       }
+      track("feature_used", { feature: "link_predict", family: request.arch });
 
       metricsRef.current = [];
       setMetrics([]);

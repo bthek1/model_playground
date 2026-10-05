@@ -24,6 +24,7 @@ import {
   trainProteinsInWorker,
   type ProteinTrainingHandle,
 } from "@/webgpu/workerClient";
+import { track } from "@/analytics";
 
 export type ProteinLoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -152,6 +153,7 @@ export function useGraphClassifier(): GraphClassifierState {
         setTrainError("Load the dataset first.");
         return;
       }
+      track("feature_used", { feature: "graph_classify", family: request.arch });
 
       metricsRef.current = [];
       pendingPredicted.current = null;

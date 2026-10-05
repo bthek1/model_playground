@@ -13,7 +13,9 @@ import environ
 from .base import *
 
 env = environ.Env()
-environ.Env.read_env(BASE_DIR / ".env")
+# The root .env (see base.py). In production `.env.prod` arrives as real
+# environment variables, interpolated by compose, so this is a no-op there.
+environ.Env.read_env(ENV_FILE)
 
 DEBUG = False
 

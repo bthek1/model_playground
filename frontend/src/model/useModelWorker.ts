@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { classifyError, track } from "@/analytics";
 import { reportDownload, reportInflight } from "@/telemetry/activity";
 
 import {
@@ -92,6 +93,20 @@ export interface UseModelWorkerResult<TResult, TPartial = never> {
 interface Pending<TResult> {
   resolve: (r: TResult) => void;
   reject: (e: Error) => void;
+  /** When `run()` posted it — for `model_run_completed`'s `runMs`. */
+  startedAt: number;
+}
+
+/**
+ * The analytics identity of a load (#60): the catalogue id and, where the
+ * worker is generic, the task — both public strings from the catalogue, never
+ * anything the user supplied. Every task hook's `loadMessage` carries `model`.
+ */
+function modelProps(message: Record<string, unknown>) {
+  return {
+    modelId: typeof message.model === "string" ? message.model : undefined,
+    task: typeof message.task === "string" ? message.task : undefined,
+  };
 }
 
 export function useModelWorker<TResult, TPartial = never>({
@@ -146,13 +161,19 @@ export function useModelWorker<TResult, TPartial = never>({
           setProgress(data.progress);
           setProgressState((prev) => reduceProgress(prev, data.progress));
           break;
-        case "ready":
+        case "ready": {
+          const took =
+            startedAt.current == null ? null : Date.now() - startedAt.current;
           setStatus("ready");
           setBackend(data.backend);
-          setLoadedInMs(
-            startedAt.current == null ? null : Date.now() - startedAt.current,
-          );
+          setLoadedInMs(took);
+          track("model_load_ready", {
+            ...modelProps(message),
+            backend: data.backend,
+            loadedInMs: took,
+          });
           break;
+        }
         case "partial":
           // Progress inside a run. Machine A is untouched and the inflight count
           // does not move — a partial neither opens nor closes a request. Dropped
@@ -160,23 +181,40 @@ export function useModelWorker<TResult, TPartial = never>({
           // repaint OUTPUT after the finished answer is on screen.
           if (table.has(data.id)) setPartial(data.partial);
           break;
-        case "result":
+        case "result": {
+          const request = table.get(data.id);
           setResult(data.result);
           setPartial(null);
           setInflight((n) => Math.max(0, n - 1));
-          table.get(data.id)?.resolve(data.result);
+          if (request) {
+            track("model_run_completed", {
+              ...modelProps(message),
+              runMs: Date.now() - request.startedAt,
+            });
+          }
+          request?.resolve(data.result);
           table.delete(data.id);
           break;
+        }
         case "error":
           if (data.id != null) {
             // Machine B: one request failed; the model is still loaded.
             setPartial(null);
             setInflight((n) => Math.max(0, n - 1));
+            track("model_run_failed", {
+              ...modelProps(message),
+              errorKind: classifyError(data.error),
+            });
             table.get(data.id)?.reject(new Error(data.error));
             table.delete(data.id);
           } else {
             // Machine A: the model never became usable.
             setStatus("error");
+            // The category only — the message can echo a path or an input.
+            track("model_load_failed", {
+              ...modelProps(message),
+              errorKind: classifyError(data.error),
+            });
           }
           setError(data.error);
           break;
@@ -190,6 +228,11 @@ export function useModelWorker<TResult, TPartial = never>({
     setElapsedMs(0);
     startedAt.current = Date.now();
     setError(null);
+    track("model_load_started", {
+      ...modelProps(message),
+      retry: overrides !== undefined,
+      backend: typeof overrides?.backend === "string" ? overrides.backend : undefined,
+    });
     worker.postMessage({ type: "load", ...message, ...overrides });
   }, []);
 
@@ -243,6 +286,11 @@ export function useModelWorker<TResult, TPartial = never>({
    */
   const cancel = useCallback(() => {
     if (statusRef.current !== "loading") return;
+    track("model_load_cancelled", {
+      ...modelProps(optionsRef.current.loadMessage),
+      elapsedMs:
+        startedAt.current == null ? undefined : Date.now() - startedAt.current,
+    });
     workerRef.current?.terminate();
     workerRef.current = null;
     pending.current.forEach(({ reject }) => reject(new Error("Load cancelled")));
@@ -300,7 +348,7 @@ export function useModelWorker<TResult, TPartial = never>({
       setError(null);
       setPartial(null);
       return new Promise<TResult>((resolve, reject) => {
-        pending.current.set(id, { resolve, reject });
+        pending.current.set(id, { resolve, reject, startedAt: Date.now() });
         const message = { type: "run", id, ...payload };
         // Only pass a transfer list when there is one — some workers take none.
         if (transfer) worker.postMessage(message, transfer);

@@ -183,6 +183,7 @@ const form = useForm<LoginSchema>({ resolver: zodResolver(loginSchema) })
 
 **Env Vars:**
 - Prefix with `VITE_`. Access via `import.meta.env.VITE_*`
+- They live in the **root** `.env` (Vite's `envDir` is `..`), beside the backend's secrets — only `VITE_*` keys reach the bundle, so never widen `envPrefix`. Document a new key in the root `.env.example`; `src/__tests__/envExposure.test.ts` fails on an undocumented one, or on a backend key in the build.
 
 ## Testing — two tiers
 

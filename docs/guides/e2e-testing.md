@@ -68,7 +68,7 @@ and filtered out of the default run, so a missing file never breaks `just fe-e2e
 ### Running against the shipped static build
 
 ```bash
-just fe-e2e-static    # VITE_BACKEND=off build, then E2E_STATIC=1 against it
+just fe-e2e-static    # VITE_BACKEND=off build (+ a throwaway analytics key), then E2E_STATIC=1 E2E_ANALYTICS=1
 ```
 
 The static deploy (#57, [deployment.md §10](./deployment.md)) ships a
@@ -94,6 +94,22 @@ Two tags follow from it:
   page makes a request to `/api`, even with a stale token in storage. On
   CloudFront a stray `/api` call is answered 200 with `index.html`, so "nothing
   broke" is not evidence; the request log is.
+- **`analytics.spec.ts`** runs only under `E2E_STATIC` *and* `E2E_ANALYTICS`
+  (#60) — a build with a PostHog key. `just fe-e2e-static` builds with a
+  throwaway `phc_` key; CI sets `E2E_ANALYTICS` when the repository variable
+  exists. Its core assertion is that a typed sentence and a fitted CSV appear in
+  **no decoded payload**. See [analytics.md §6](../explanations/analytics.md).
+
+**`/ingest` is always intercepted.** The base fixture installs
+`e2e/fixtures/ingest.ts` on every page before any navigation: each `/ingest/**`
+request is answered 200 locally and its body decoded into the `ingest` fixture.
+So no spec reaches PostHog, even against the shipped bundle with CI's real key.
+Two traps it handles, both of which make a privacy assertion pass on nothing:
+the SDK **gzips without a `compression` parameter** (the decoder sniffs the
+magic number), and PostHog **drops headless browsers as bots** — `HeadlessChrome`
+in the user agent or brand, or `navigator.webdriver` — so a spec that wants
+events must look like a browser (`analytics.spec.ts` shows how) and should
+assert the payload is non-empty before asserting what is absent from it.
 
 ### Running the slow model specs
 

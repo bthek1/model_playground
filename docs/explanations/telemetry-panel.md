@@ -161,6 +161,12 @@ exists to prevent.
 
 ## 7. Out of scope, on purpose
 
+- **Product analytics is not telemetry.** The panel measures this machine and
+  sends nothing anywhere. The one network-facing thing it hosts is the
+  *Anonymous usage analytics* opt-out switch (#60), rendered only in a build
+  with a PostHog key — see [analytics.md](./analytics.md). Nothing the panel
+  samples is ever an analytics property.
+
 - **`measureUserAgentSpecificMemory()`** is the accurate cross-realm memory
   answer and would replace the page-only heap figure. It requires **cross-origin
   isolation** (COOP/COEP), which changes how the Hugging Face CDN fetches and how

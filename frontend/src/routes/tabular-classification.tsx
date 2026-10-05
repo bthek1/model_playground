@@ -42,6 +42,7 @@ import { useTabularFit } from "@/hooks/useTabularFit";
 import { familiesFor, familyInfo } from "@/tabular/families";
 import { metricsAtThreshold } from "@/tabular/metrics";
 import type { Family, FitResult, Hyperparams, PredictResult } from "@/tabular/types";
+import { AnalyticsNote } from "@/components/analytics/AnalyticsNote";
 
 export const Route = createFileRoute("/tabular-classification")({
   component: TabularClassificationPage,
@@ -168,7 +169,7 @@ function TabularClassificationPage() {
           logistic regression, a random forest, gradient boosting and a small
           neural network, all trained in this tab. The linear models run as WGSL
           on your GPU; the trees deliberately do not. <strong>Your file is
-          never uploaded.</strong>
+          never uploaded.</strong> <AnalyticsNote />
         </>
       }
       labels={{ select: "Model", load: "Fit", run: "Data", output: "Result" }}

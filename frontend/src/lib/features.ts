@@ -18,3 +18,21 @@
  * Anything other than `off` (including unset) keeps today's behaviour.
  */
 export const BACKEND_ENABLED: boolean = import.meta.env.VITE_BACKEND !== "off";
+
+/**
+ * PostHog's **project** key (`phc_…`) — public by design and write-only (#60).
+ * Set only on CI's shipped build, as a repository *variable*; unset in dev,
+ * Vitest and the dev-server E2E run, which is what keeps every "no outbound
+ * request" assertion meaning what it says. Never the personal `phx_` key:
+ * `scripts/check-bundle.mjs` fails the build if one reaches `dist/`.
+ */
+export const POSTHOG_KEY: string = import.meta.env.VITE_POSTHOG_KEY ?? "";
+
+/** Where events go. `/ingest` is the same-origin CloudFront behaviour. */
+export const POSTHOG_HOST: string = import.meta.env.VITE_POSTHOG_HOST || "/ingest";
+
+/**
+ * Anonymous product analytics (#60). Off unless the build carries a key; when
+ * off, `src/analytics/` imports nothing and sends nothing.
+ */
+export const ANALYTICS_ENABLED: boolean = POSTHOG_KEY !== "";
