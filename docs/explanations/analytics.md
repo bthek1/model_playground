@@ -109,6 +109,14 @@ policies need no permission — so it lands with an ordinary `pulumi up`.
    exception and console capture and performance capture off server-side, and
    prints the `phc_` key. Idempotent — a second run says "no changes". It never
    prints the personal key or a response body.
+
+   If PostHog refuses to **create** the project (HTTP 403), the organisation is
+   usually on a one-project plan (the free plan is, and every organisation
+   starts with one), or the key lacks a write scope. The script then lists the
+   existing projects; adopt one with `just posthog-setup --project <id|name>`
+   (or `POSTHOG_PROJECT`). Its privacy settings are changed to the ones above,
+   which affects anything else already sending to that project — so it is an
+   explicit flag, never a fallback.
 2. Set `VITE_POSTHOG_KEY` as a repository **variable** (not a secret: it ships in
    the bundle). For an EU project, also
    `pulumi config set site:posthogHost eu.i.posthog.com` — the script says so.

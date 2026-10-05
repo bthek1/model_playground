@@ -23,6 +23,8 @@ function fakePostHog({
   region = "https://us.posthog.com",
   existing = true,
   settings = {} as Record<string, unknown>,
+  createStatus = 201,
+  patchStatus = 200,
 } = {}) {
   const calls: Call[] = [];
   let project = existing ? { id: 7, name: "model-playground" } : null;
@@ -39,11 +41,15 @@ function fakePostHog({
     if (path === "/api/organizations/@current/projects/" && method === "GET")
       return json(200, { results: project ? [project, { id: 1, name: "other" }] : [{ id: 1, name: "other" }] });
     if (path === "/api/organizations/@current/projects/" && method === "POST") {
+      if (createStatus >= 400) return json(createStatus, { detail: "nope" });
       project = { id: 9, name: body.name };
       return json(201, project);
     }
+    const id = /^\/api\/projects\/(\d+)\/$/.exec(path)?.[1];
+    if (id === "1" && !project) project = { id: 1, name: "other" }; // adopting "Default project"
     if (path === `/api/projects/${project?.id}/` && method === "GET") return json(200, state);
     if (path === `/api/projects/${project?.id}/` && method === "PATCH") {
+      if (patchStatus >= 400) return json(patchStatus, {});
       state = { ...state, ...body };
       return json(200, state);
     }
@@ -52,12 +58,13 @@ function fakePostHog({
   return { fetch, calls, state: () => state };
 }
 
-async function runWith(fake: ReturnType<typeof fakePostHog>, key = PERSONAL) {
+async function runWith(fake: ReturnType<typeof fakePostHog>, key = PERSONAL, project?: string) {
   const lines: string[] = [];
   const result = await setup.run({
     env: { POSTHOG_ALL_ACCESS: key },
     fetch: fake.fetch,
     log: (m: string) => lines.push(m),
+    project,
   });
   return { result, out: lines.join("\n") };
 }
@@ -118,6 +125,45 @@ describe("posthog-setup (#60)", () => {
 
   it("refuses a project key handed to it by mistake", async () => {
     await expect(runWith(fakePostHog(), PROJECT_KEY)).rejects.toThrow(/project\* key/);
+  });
+
+  it("a refused create (one-project plan, or no write scope) lists the projects and says how to adopt one", async () => {
+    const fake = fakePostHog({ existing: false, createStatus: 403 });
+    const err = await runWith(fake).catch((e: Error) => e);
+    expect(String(err)).toMatch(/HTTP 403/);
+    expect(String(err)).toMatch(/single project/);
+    expect(String(err)).toMatch(/1 {2}other/);
+    expect(String(err)).toMatch(/just posthog-setup --project <id>/);
+    expect(fake.calls.some((c) => c.method === "PATCH")).toBe(false); // nothing changed
+  });
+
+  it("--project adopts an existing project by id or name, without creating one", async () => {
+    for (const pick of ["1", "other"]) {
+      const fake = fakePostHog({ existing: false });
+      const { result, out } = await runWith(fake, PERSONAL, pick);
+      expect(result.projectId).toBe(1);
+      expect(fake.calls.some((c) => c.method === "POST")).toBe(false);
+      expect(fake.state()).toMatchObject(setup.WANTED);
+      expect(out).toContain(`VITE_POSTHOG_KEY=${PROJECT_KEY}`);
+    }
+  });
+
+  it("--project with no match fails, listing what exists", async () => {
+    const err = await runWith(fakePostHog(), PERSONAL, "nope").catch((e: Error) => e);
+    expect(String(err)).toMatch(/No project matches "nope"/);
+    expect(String(err)).toMatch(/7 {2}model-playground/);
+  });
+
+  it("a refused settings change names the missing scope", async () => {
+    const fake = fakePostHog({ patchStatus: 403 });
+    await expect(runWith(fake)).rejects.toThrow(/project:write/);
+  });
+
+  it("parses --project, or POSTHOG_PROJECT from the environment", () => {
+    expect(setup.parseArgs(["--project", "42"])).toEqual({ project: "42" });
+    expect(setup.parseArgs([], { POSTHOG_PROJECT: "Default project" })).toEqual({ project: "Default project" });
+    expect(setup.parseArgs([])).toEqual({ project: undefined });
+    expect(() => setup.parseArgs(["--project"])).toThrow(/needs a project/);
   });
 
   it("reads one key from a dotenv file", () => {

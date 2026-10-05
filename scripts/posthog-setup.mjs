@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // One-time PostHog project setup for the playground's analytics (#60).
 //
-//     just posthog-setup            (or: node scripts/posthog-setup.mjs)
+//     just posthog-setup                       (or: node scripts/posthog-setup.mjs)
+//     just posthog-setup --project <id|name>   use an existing project instead
 //
 // Uses the **personal** API key (`phx_…`, `POSTHOG_ALL_ACCESS` in the root
 // .env or the environment) to find or create the `model-playground` project,
@@ -62,7 +63,25 @@ export function diffSettings(current) {
   return patch;
 }
 
-export async function run({ env, fetch, log }) {
+/** `--project <id|name>` (or `POSTHOG_PROJECT`): adopt an existing project. */
+export function parseArgs(argv, env = {}) {
+  const i = argv.indexOf("--project");
+  const project = i >= 0 ? argv[i + 1] : env.POSTHOG_PROJECT;
+  if (i >= 0 && !project) throw new Error("--project needs a project id or name.");
+  return { project: project || undefined };
+}
+
+class HttpError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const describe = (list) =>
+  list.length ? list.map((p) => `  ${p.id}  ${p.name}`).join("\n") : "  (none)";
+
+export async function run({ env, fetch, log, project: wanted }) {
   const key = env.POSTHOG_ALL_ACCESS;
   if (!key) throw new Error("POSTHOG_ALL_ACCESS is not set (root .env or environment).");
   if (key.startsWith("phc_")) {
@@ -76,7 +95,7 @@ export async function run({ env, fetch, log }) {
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...init.headers },
     });
     // Status only — a body could echo the request, and so the key.
-    if (!res.ok) throw new Error(`${init.method ?? "GET"} ${path} → HTTP ${res.status}`);
+    if (!res.ok) throw new HttpError(`${init.method ?? "GET"} ${path} → HTTP ${res.status}`, res.status);
     return res.json();
   };
 
@@ -94,15 +113,38 @@ export async function run({ env, fetch, log }) {
   if (!region) throw new Error("Neither PostHog US nor EU accepted the key as a personal API key.");
   log(`Personal API key accepted by PostHog ${region.name} (${region.api}).`);
 
-  const projects = await call(region.api, "/api/organizations/@current/projects/");
-  let project = (projects.results ?? projects).find((p) => p.name === PROJECT_NAME);
+  const listed = await call(region.api, "/api/organizations/@current/projects/");
+  const projects = (listed.results ?? listed).map((p) => ({ id: p.id, name: p.name }));
+  const target = wanted ?? PROJECT_NAME;
+  let project = projects.find((p) => String(p.id) === String(target) || p.name === target);
+
   if (project) {
-    log(`Found project "${PROJECT_NAME}" (id ${project.id}).`);
+    log(`Using project "${project.name}" (id ${project.id}).`);
+  } else if (wanted) {
+    throw new Error(`No project matches "${wanted}". Projects in this organisation:\n${describe(projects)}`);
   } else {
-    project = await call(region.api, "/api/organizations/@current/projects/", {
-      method: "POST",
-      body: JSON.stringify({ name: PROJECT_NAME }),
-    });
+    try {
+      project = await call(region.api, "/api/organizations/@current/projects/", {
+        method: "POST",
+        body: JSON.stringify({ name: PROJECT_NAME }),
+      });
+    } catch (e) {
+      if (!(e instanceof HttpError) || e.status !== 403) throw e;
+      // Two causes, and the API does not say which: the plan allows one
+      // project (the free plan does, and every org starts with one), or the
+      // key lacks a write scope on the organisation.
+      throw new Error(
+        [
+          `PostHog refused to create "${PROJECT_NAME}" (HTTP 403). Usually one of:`,
+          "  * the plan allows a single project (the free plan does), and the organisation already has one;",
+          "  * the key lacks a write scope on the organisation.",
+          "Projects in this organisation:",
+          describe(projects),
+          "To use an existing one — its privacy settings will be changed to the ones this app needs:",
+          "  just posthog-setup --project <id>",
+        ].join("\n"),
+      );
+    }
     log(`Created project "${PROJECT_NAME}" (id ${project.id}).`);
   }
 
@@ -111,7 +153,17 @@ export async function run({ env, fetch, log }) {
   if (Object.keys(patch).length === 0) {
     log("Privacy settings already as wanted — no changes.");
   } else {
-    await call(region.api, `/api/projects/${project.id}/`, { method: "PATCH", body: JSON.stringify(patch) });
+    try {
+      await call(region.api, `/api/projects/${project.id}/`, { method: "PATCH", body: JSON.stringify(patch) });
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 403) {
+        throw new Error(
+          `PostHog refused to change project ${project.id}'s settings (HTTP 403): the key needs the project:write scope. ` +
+            `Wanted: ${Object.keys(patch).join(", ")}.`,
+        );
+      }
+      throw e;
+    }
     log(`Updated: ${Object.keys(patch).join(", ")}.`);
   }
 
@@ -142,8 +194,10 @@ if (isMain) {
       // No root .env — the error below says what is missing.
     }
   }
-  run({ env, fetch: globalThis.fetch, log: (m) => console.log(m) }).catch((e) => {
-    console.error(`posthog-setup: ${e.message}`);
-    process.exit(1);
-  });
+  Promise.resolve()
+    .then(() => run({ env, fetch: globalThis.fetch, log: (m) => console.log(m), ...parseArgs(process.argv.slice(2), env) }))
+    .catch((e) => {
+      console.error(`posthog-setup: ${e.message}`);
+      process.exit(1);
+    });
 }

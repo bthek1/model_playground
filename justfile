@@ -108,9 +108,9 @@ prod-backup:
 
 # Uses the PERSONAL key (POSTHOG_ALL_ACCESS in the root .env): run it yourself, locally,
 # never in CI. Idempotent. See docs/explanations/analytics.md.
-# One-time PostHog setup (#60): find/create the project, set privacy options, print the phc_ key
-posthog-setup:
-    node scripts/posthog-setup.mjs
+# One-time PostHog setup (#60): find/create the project (or --project <id>), set privacy options, print the phc_ key
+posthog-setup *args:
+    node scripts/posthog-setup.mjs {{ args }}
 
 # Install the infra dependencies (Pulumi programs + their tests)
 infra-install:
