@@ -283,6 +283,17 @@ export const Route = createFileRoute('/users/$userId')({
   strip function, never `spa-rewrite`). The privacy guard is `e2e/specs/analytics.spec.ts`: a typed
   sentence and a fitted CSV in no *decoded* payload; PostHog drops headless browsers as bots, so
   the spec must look like a browser. Full detail: `docs/explanations/analytics.md`
+- **Legal pages** (#62): `/privacy`, `/terms`, `/licences`, `/accessibility` are lazy routes
+  linked by `LegalFooter` in `AppLayout`. Every list on them is rendered from data the code uses
+  (`src/legal/recipients.ts`, `storage.ts`, `catalogues.ts`, `datasets.ts`) and gated on the same
+  build flags as the behaviour, and a test fails when the code moves without the list: an
+  undisclosed storage key, a catalogue missing from `MODEL_CATALOGUES`, a generative route whose
+  `OutputPanel` lacks `generated=`. Model licences live in `src/model/licences.ts`, keyed by
+  **Hub repo** (a mirror's licence is its upstream's — `from`, with `hub` the card's
+  `license:` verbatim, checked by `just fe-e2e-models`); `ModelPicker` renders them, so routes
+  wire nothing. The build writes `dist/THIRD-PARTY-NOTICES.txt`
+  (`scripts/third-party-notices.mjs`, in both `plugins` and `worker.plugins`) and fails on a
+  licence off its allowlist. Full detail: `docs/explanations/legal.md`
 
 **Model pages (`src/model/`) — one pipeline, four slots:**
 - Every task page is SELECT → LOAD → RUN → OUTPUT, specified in

@@ -227,3 +227,95 @@ describe("analytics conventions (#60)", () => {
     expect(direct.map(([p]) => p)).toEqual([]);
   });
 });
+
+// ── Legal (#62) ─────────────────────────────────────────────────────────────
+//
+// Each claim the legal pages make is only as true as the list it is rendered
+// from. These read the source for the three ways a list falls behind the code:
+// a catalogue `/licences` cannot see, a storage key the privacy notice does not
+// name, and a generative page whose output is not labelled machine-made.
+
+import { MODEL_CATALOGUES } from "@/legal/catalogues";
+import { STORED_ITEMS } from "@/legal/storage";
+
+/** Resolve a `CONST_NAME` to the string literal it is assigned in `src`. */
+function resolveName(src: string, token: string): string | null {
+  if (/^["'`]/.test(token)) return token.slice(1, -1);
+  const m = new RegExp(`\\b${token}\\s*=\\s*["'\`]([^"'\`]+)["'\`]`).exec(src);
+  return m ? m[1] : null;
+}
+
+/** Every key the source writes to device storage, with the file that does it. */
+function storageKeys(): { key: string; file: string }[] {
+  const found: { key: string; file: string }[] = [];
+  const patterns = [
+    /localStorage\.setItem\(\s*(["'`][^"'`]+["'`]|[A-Z_][A-Z0-9_]*)/g,
+    /indexedDB\.open\(\s*(["'`][^"'`]+["'`]|[A-Z_][A-Z0-9_]*)/g,
+    /caches\.open\(\s*(["'`][^"'`]+["'`]|[A-Z_][A-Z0-9_]*)/g,
+  ];
+  for (const [file, src] of app) {
+    for (const re of patterns) {
+      for (const m of src.matchAll(re)) {
+        const key = resolveName(src, m[1]);
+        found.push({ key: key ?? `<unresolved ${m[1]}>`, file });
+      }
+    }
+    // A persisted Zustand store writes under its `name`.
+    if (/\bpersist\(/.test(src)) {
+      for (const m of src.matchAll(/\bname:\s*["'`]([^"'`]+)["'`]/g)) found.push({ key: m[1], file });
+    }
+  }
+  return found;
+}
+
+describe("legal conventions (#62)", () => {
+  it("names every device-storage key in the privacy notice's table", () => {
+    const keys = storageKeys();
+    // Guards the scan: a refactor that hid every key would pass vacuously.
+    expect(keys.map((k) => k.key)).toEqual(expect.arrayContaining(["theme", "model-prefs", "transformers-cache"]));
+    const disclosed = new Set(STORED_ITEMS.map((s) => s.key));
+    const undisclosed = keys.filter((k) => !disclosed.has(k.key)).map((k) => `${k.file}: ${k.key}`);
+    expect(undisclosed).toEqual([]);
+  });
+
+  it("lists every model catalogue on /licences", () => {
+    // A catalogue is an exported array of entries; one off MODEL_CATALOGUES is
+    // a set of models with no attribution and no licence coverage test.
+    const listed = new Set(MODEL_CATALOGUES.map((c) => c.name));
+    const declared = app.flatMap(([file, src]) =>
+      [...src.matchAll(/^export const ([A-Z0-9_]+(?:_MODELS|_PAIRS|_ENTRIES)):\s*[A-Za-z]+\[\]\s*=/gm)].map(
+        (m) => ({ file, name: m[1] }),
+      ),
+    );
+    expect(declared.length).toBeGreaterThan(25);
+    // GROUNDING_ENTRIES is a filter of ROBOTICS_ENTRIES, which is listed.
+    const unlisted = declared
+      .filter((d) => !listed.has(d.name) && d.name !== "GROUNDING_ENTRIES")
+      .map((d) => `${d.file}: ${d.name}`);
+    expect(unlisted).toEqual([]);
+  });
+
+  it("labels the output of every generative page as machine-made", () => {
+    const GENERATIVE = [
+      "text-generation",
+      "summarization",
+      "translation",
+      "image-text-to-text",
+      "visual-question-answering",
+      "video-text-to-text",
+      "text-to-speech",
+    ];
+    // Within the OutputPanel's opening props — bounded by distance, since a
+    // prop's own JSX (a title with an icon) puts `>` inside the tag.
+    const labelled = (src: string) => {
+      const at = src.indexOf("<OutputPanel");
+      return at >= 0 && /\bgenerated=/.test(src.slice(at, at + 800));
+    };
+    const unlabelled = GENERATIVE.filter((r) => !labelled(srcOf(`routes/${r}.tsx`)));
+    expect(unlabelled).toEqual([]);
+  });
+
+  it("renders the legal footer from the app shell", () => {
+    expect(srcOf("components/layout/AppLayout.tsx")).toContain("<LegalFooter");
+  });
+});

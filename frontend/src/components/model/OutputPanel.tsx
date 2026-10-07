@@ -36,6 +36,12 @@ function useRunElapsed(running: boolean): number | null {
   return elapsed >= 2000 ? Math.round(elapsed / 1000) : null;
 }
 
+/** The machine-made statement, per kind of output — tests pin these strings. */
+export const GENERATED_NOTE = {
+  text: "Machine-generated: it can be fluent and wrong. Not advice.",
+  speech: "Synthetic speech: do not present it as a real person's voice.",
+} as const;
+
 export function OutputPanel({
   title,
   description,
@@ -46,9 +52,16 @@ export function OutputPanel({
   error,
   empty,
   children,
+  generated,
 }: {
   title: ReactNode;
   description?: ReactNode;
+  /**
+   * The page *generates* content (text or speech) rather than labelling an
+   * input, so OUTPUT says it is machine-made (#62, the terms' AI-output
+   * statement). In the description, so it is read before the first result.
+   */
+  generated?: "text" | "speech";
   /** Small right-aligned facts about the result — duration, sample rate, shape. */
   meta?: ReactNode;
   /** Result-scoped buttons: Play, Download, Copy. Hidden until there is a result. */
@@ -79,7 +92,16 @@ export function OutputPanel({
             </span>
           )}
         </CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
+        {(description || generated) && (
+          <CardDescription>
+            {description}
+            {generated && (
+              <span data-testid="generated-note" className="mt-1 block text-xs">
+                {GENERATED_NOTE[generated]}
+              </span>
+            )}
+          </CardDescription>
+        )}
       </CardHeader>
 
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">

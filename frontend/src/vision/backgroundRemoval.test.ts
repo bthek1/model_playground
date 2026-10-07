@@ -5,6 +5,9 @@ import {
   MATTE_MODELS,
   MAX_INFERENCE_SIDE,
 } from "./backgroundRemoval";
+import { licenceFor } from "@/model/licences";
+
+const licence = (id: string) => licenceFor(id)!;
 
 describe("MATTE_MODELS", () => {
   it("defaults to a model that permits commercial use", () => {
@@ -14,25 +17,25 @@ describe("MATTE_MODELS", () => {
     // legally use is a trap, and it is a one-line edit away at any time.
     const fallback = MATTE_MODELS.find((m) => m.id === DEFAULT_MATTE_MODEL)!;
     expect(fallback).toBeDefined();
-    expect(fallback.licence.commercial).toBe(true);
+    expect(licence(fallback.id).terms).toBe("permissive");
     // `useModelSelection` falls back to `MATTE_MODELS[0]` for an unknown stored
     // id, so the *first* entry has to clear the same bar as the named default.
-    expect(MATTE_MODELS[0].licence.commercial).toBe(true);
+    expect(licence(MATTE_MODELS[0].id).terms).toBe("permissive");
   });
 
   it("gives the non-commercial entry a note and a link to its terms", () => {
     // A restriction the UI cannot explain is a restriction the user cannot act
     // on. `LicenceNote` renders `note` and `url`; neither may be empty.
-    for (const model of MATTE_MODELS.filter((m) => !m.licence.commercial)) {
-      expect(model.licence.note, model.id).toBeTruthy();
-      expect(model.licence.url, model.id).toMatch(/^https:\/\//);
+    for (const model of MATTE_MODELS.filter((m) => licence(m.id).terms !== "permissive")) {
+      expect(licence(model.id).note, model.id).toBeTruthy();
+      expect(licence(model.id).url, model.id).toMatch(/^https:\/\//);
     }
   });
 
   it("names every licence, permissive or not", () => {
     for (const model of MATTE_MODELS) {
-      expect(model.licence.name, model.id).toBeTruthy();
-      expect(model.licence.url, model.id).toMatch(/^https:\/\//);
+      expect(licence(model.id).name, model.id).toBeTruthy();
+      expect(licence(model.id).url, model.id).toMatch(/^https:\/\//);
     }
   });
 

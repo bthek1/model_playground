@@ -2,6 +2,7 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { HeroBanner } from "@/components/home/HeroBanner";
+import { LegalFooter } from "@/components/layout/LegalFooter";
 import { useMe } from "@/hooks/useAuth";
 import { BACKEND_ENABLED } from "@/lib/features";
 
@@ -31,6 +32,7 @@ function LandingPage() {
         <ThemeToggle />
       </div>
       <HeroBanner />
+      <LegalFooter className="absolute inset-x-0 bottom-0" />
     </div>
   );
 }

@@ -573,4 +573,31 @@ test.describe("@slow model catalogue", () => {
       [],
     );
   });
+
+  test("every licence the catalogues quote is what the model card says (#62)", async ({
+    request,
+  }) => {
+    // `model/licences.ts` records, per downloaded repo, the `license:` field of
+    // the card it cites (`from ?? repo`). A publisher can relicense, and a
+    // mirror can start declaring a licence of its own; either way the picker
+    // and /licences would keep stating the old terms with nothing failing.
+    // `hub: null` is checked too: it asserts the card is still silent, which is
+    // what makes the entry's `via` sentence (or its "unstated") the right one.
+    const { MODEL_LICENCES } = await import("../../src/model/licences");
+
+    const drift: string[] = [];
+    for (const [repo, licence] of Object.entries(MODEL_LICENCES)) {
+      const cited = licence.from ?? repo;
+      const res = await request.get(`https://huggingface.co/api/models/${cited}`);
+      if (!res.ok()) {
+        drift.push(`${repo} → ${cited}: ${res.status()}`);
+        continue;
+      }
+      const card = ((await res.json()) as { cardData?: { license?: string } }).cardData;
+      const actual = card?.license ?? null;
+      if (actual !== licence.hub) drift.push(`${repo} → ${cited}: card says ${actual}, catalogue says ${licence.hub}`);
+    }
+    expect(drift, "licences that no longer match their model card").toEqual([]);
+  });
 });
+

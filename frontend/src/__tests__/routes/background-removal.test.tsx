@@ -118,8 +118,10 @@ describe("BackgroundRemovalPage", () => {
   it("warns when the selected model is non-commercial", () => {
     // RMBG-1.4 is the better matte and is CC non-commercial. Shipping it as a
     // silent option is the trap this line exists to close.
-    mockState = { ...baseState, meta: MATTE_MODELS[1] };
+    // Choosing it is SELECT, so the warning is the picker's (#62) and arrives
+    // with the click — before LOAD, which is the point.
     renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /RMBG-1\.4/ }));
     const note = screen.getByTestId("model-licence");
     expect(note).toHaveTextContent(/non-commercial/i);
     expect(note).toHaveTextContent(/bria/i);

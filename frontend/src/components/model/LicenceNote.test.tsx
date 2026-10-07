@@ -1,19 +1,21 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { ModelLicence } from "@/vision/backgroundRemoval";
+import type { ModelLicence } from "@/model/licences";
 import { LicenceNote } from "./LicenceNote";
 
 const PERMISSIVE: ModelLicence = {
   name: "Apache-2.0",
-  commercial: true,
+  terms: "permissive",
   url: "https://huggingface.co/Xenova/modnet",
+  hub: "apache-2.0",
 };
 
 const RESTRICTED: ModelLicence = {
   name: "bria-rmbg-1.4",
-  commercial: false,
+  terms: "non-commercial",
   url: "https://bria.ai/bria-huggingface-model-license-agreement/",
+  hub: "other",
   note: "Released under a Creative Commons licence for non-commercial use. Commercial use needs a separate paid agreement with BRIA.",
 };
 
@@ -41,11 +43,23 @@ describe("LicenceNote", () => {
     ).toHaveAttribute("href", RESTRICTED.url);
   });
 
-  it("falls back to a plain statement when an entry has no note", () => {
-    render(<LicenceNote licence={{ ...RESTRICTED, note: undefined }} />);
-    expect(screen.getByTestId("model-licence")).toHaveTextContent(
-      /not licensed for commercial use/i,
-    );
+  it.each([
+    ["non-commercial", /not licensed for commercial use/i],
+    ["custom", /publisher's own terms/i],
+    ["unstated", /states no licence/i],
+  ] as const)("falls back to a plain statement for %s terms with no note", (terms, text) => {
+    render(<LicenceNote licence={{ ...RESTRICTED, terms, note: undefined }} />);
+    expect(screen.getByTestId("model-licence")).toHaveTextContent(text);
+  });
+
+  it("names the terms in words, not only in colour", () => {
+    render(<LicenceNote licence={{ ...RESTRICTED, terms: "unstated" }} />);
+    expect(screen.getByTestId("model-licence")).toHaveTextContent(/No licence stated/);
+  });
+
+  it("names the half of a pair it describes", () => {
+    render(<LicenceNote licence={PERMISSIVE} subject="Detector" />);
+    expect(screen.getByTestId("model-licence")).toHaveTextContent(/^Detector: Licence/);
   });
 
   it("marks the restricted case as a warning, not as body text", () => {

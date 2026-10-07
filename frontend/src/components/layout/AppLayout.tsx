@@ -1,4 +1,5 @@
 import { Outlet } from "@tanstack/react-router";
+import { LegalFooter } from "./LegalFooter";
 import { Navbar } from "./Navbar";
 import { RightPanel } from "./RightPanel";
 import { Sidebar } from "./Sidebar";
@@ -18,6 +19,7 @@ export function AppLayout() {
           </main>
           <RightPanel />
         </div>
+        <LegalFooter />
       </div>
     </div>
   );

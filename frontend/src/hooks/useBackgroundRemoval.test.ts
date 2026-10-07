@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { licenceFor } from "@/model/licences";
 
 /** One RGBA pixel, half-covered — a soft matte, which is the whole point. */
 const RESULT = {
@@ -54,13 +55,7 @@ describe("useBackgroundRemoval", () => {
     // nobody downstream may legally use is a trap, so MODNet is first.
     const { result } = renderHook(() => useBackgroundRemoval());
     expect(result.current.meta.id).toBe("Xenova/modnet");
-    expect(result.current.meta.licence.commercial).toBe(true);
-  });
-
-  it("exposes the selected entry's licence, so the route can state it", () => {
-    const { result } = renderHook(() => useBackgroundRemoval("briaai/RMBG-1.4"));
-    expect(result.current.meta.licence.commercial).toBe(false);
-    expect(result.current.meta.licence.name).toBe("bria-rmbg-1.4");
+    expect(licenceFor(result.current.meta.id)?.terms).toBe("permissive");
   });
 
   it("falls back to the first catalogue entry for an unknown id", () => {

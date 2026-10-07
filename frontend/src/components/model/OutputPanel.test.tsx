@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { OutputPanel } from "./OutputPanel";
+import { GENERATED_NOTE, OutputPanel } from "./OutputPanel";
 
 const base = { title: "Speech", empty: "Press Speak to hear it." } as const;
 
@@ -88,4 +88,18 @@ describe("OutputPanel — a long run", () => {
 
     expect(screen.getByTestId("output-running")).not.toHaveTextContent(/\ds/);
   });
+
+  it("says generated output is machine-made, before any result (#62)", () => {
+    // In the description rather than beside the result: a caveat that arrives
+    // only once you already believe the answer comes too late.
+    render(<OutputPanel title="Answer" running={false} empty="Nothing yet." generated="text" />);
+    expect(screen.getByTestId("generated-note")).toHaveTextContent(GENERATED_NOTE.text);
+    expect(screen.getByText("Nothing yet.")).toBeInTheDocument();
+  });
+
+  it("says nothing about generation on a page that labels an input", () => {
+    render(<OutputPanel title="Labels" running={false} empty="Nothing yet." />);
+    expect(screen.queryByTestId("generated-note")).toBeNull();
+  });
 });
+

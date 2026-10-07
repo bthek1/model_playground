@@ -5,6 +5,8 @@ import { TanStackRouterVite } from "@tanstack/router-vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import { resolve } from "path";
+// @ts-expect-error -- a plain .mjs build script, typed by its JSDoc
+import { thirdPartyNotices } from "./scripts/third-party-notices.mjs";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -26,7 +28,15 @@ export default defineConfig(({ mode }) => {
       // is only exposed in a secure context — HTTPS or localhost — so a LAN IP
       // like https://192.168.2.106:5180 needs TLS for the GPU API to appear.
       basicSsl(),
+      // dist/THIRD-PARTY-NOTICES.txt (#62) — the notices the bundled packages'
+      // licences require, and a build failure on a licence off the allowlist.
+      thirdPartyNotices(),
     ],
+    // Workers are separate builds, and they hold most of the third-party code
+    // (Transformers.js, ONNX Runtime). They record; the main build writes.
+    worker: {
+      plugins: () => [thirdPartyNotices({ emit: false })],
+    },
     // Pre-bundle the ONNX Runtime entry the enhancement worker imports. Left to
     // discovery, Vite first meets it inside a Web Worker mid-session, re-optimises,
     // and triggers a full page reload — which resets a route that had just started

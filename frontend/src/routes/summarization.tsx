@@ -349,6 +349,7 @@ function SummarizationPage() {
       output={
         <OutputPanel
           title="Summary"
+          generated="text"
           description={`Beside the first ${LEAD_N} sentences of the same article, which is what a summarizer has to beat.`}
           meta={
             ran ? (

@@ -28,7 +28,6 @@ import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { DownloadImageButton } from "@/components/vision/DownloadImageButton";
 import { ImageSourcePanel } from "@/components/vision/ImageSourcePanel";
-import { LicenceNote } from "@/components/vision/LicenceNote";
 import { OverlayCanvas } from "@/components/vision/OverlayCanvas";
 import { Button } from "@/components/ui/button";
 import { useBackgroundRemoval } from "@/hooks/useBackgroundRemoval";
@@ -84,7 +83,6 @@ function BackgroundRemovalPage() {
     running,
     result,
     run,
-    meta,
   } = task;
 
   const [live, setLive] = useState(false);
@@ -141,12 +139,9 @@ useImagePick();
       }
       labels={{ output: "Cut-out" }}
       select={
-        <div className="space-y-2">
-          <ModelPicker {...slots.picker} />
-          {/* Beside the choice, not in a footnote: the licence is a property of
-              the model, and this is the moment the user is picking one. */}
-          <LicenceNote licence={meta.licence} />
-        </div>
+        // The picker states the licence itself now (#62) — beside the choice,
+        // not in a footnote, on every page rather than only this one.
+        <ModelPicker {...slots.picker} />
       }
       load={
         <ModelStatus {...slots.status} />

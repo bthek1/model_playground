@@ -429,6 +429,27 @@ at import — the sidebar lists only tasks that have a page.
   the precision per backend with `dtypes: { wasm: "fp32" }`, and then owes
   measured `bytes`, because the params estimate is now off by 4x.
 
+### Licence: the one fact that can invalidate a finished entry
+
+Every repo a catalogue entry downloads needs a row in `MODEL_LICENCES`
+(`src/model/licences.ts`, #62), keyed by the **repo**, not the entry — a pair
+like `/pose` or `/text-ranking` downloads two repos and states both. Three
+things to get right:
+
+- **A mirror's licence is its upstream's.** `Xenova/clip-vit-base-patch32`
+  declares nothing; `openai/clip-vit-base-patch32` is what `from` names. `hub`
+  is that card's `license:` field verbatim (or `null`), and
+  `just fe-e2e-models` reads it back off the Hub and fails on drift.
+- **When the card is silent but the authors' code repository licenses the
+  weights** (CLIP, SAM 2, ViTPose, FinBERT), record it with `hub: null`, point
+  `url` at that LICENSE and say so in `via`. When nobody states anything, the
+  terms are `unstated`, and the picker says that rather than guessing.
+- **Restricted terms need a `note`**: one sentence the user can act on.
+  `ModelPicker` renders the licence line and the row badge from the registry,
+  so a route never wires it. A new catalogue array also goes on
+  `MODEL_CATALOGUES` (`src/legal/catalogues.ts`), or `/licences` cannot see it —
+  `conventions.test.ts` names the array if you forget.
+
 ### Verify
 
 Neither WebGPU nor the Web Audio API exists in the test env, so unit tests mock

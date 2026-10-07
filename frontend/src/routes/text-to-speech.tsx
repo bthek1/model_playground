@@ -163,6 +163,7 @@ function TextToSpeechPage() {
               <AudioLines className="size-4" /> Speech
             </>
           }
+          generated="speech"
           description="Generated audio — replay it or download the WAV."
           meta={
             result
