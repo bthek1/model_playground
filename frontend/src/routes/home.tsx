@@ -8,11 +8,15 @@ import { AnalyticsNote } from "@/components/analytics/AnalyticsNote";
 import { BenchmarkCard } from "@/components/home/BenchmarkCard";
 import { GpuCapabilitiesCard } from "@/components/home/GpuCapabilitiesCard";
 import { ModelCatalogCard } from "@/components/home/ModelCatalogCard";
+import { TaskIndex } from "@/components/home/TaskIndex";
+import { taskCategories } from "@/components/layout/taskTaxonomy";
 import { BACKEND_ENABLED } from "@/lib/features";
 
 export const Route = createFileRoute("/home")({
   component: HomePage,
 });
+
+const TASK_COUNT = taskCategories.reduce((n, c) => n + c.tasks.length, 0);
 
 function HomePage() {
   return (
@@ -20,8 +24,11 @@ function HomePage() {
       <div>
         <h1 className="mb-1 text-2xl font-semibold">Model Playground</h1>
         <p className="text-sm text-muted-foreground">
-          Run ML models directly on your GPU via raw WebGPU. Nothing you give a
-          model is sent to a server
+          Run machine-learning models in your browser, on your own GPU —
+          speech recognition, object detection, translation, text generation
+          and {TASK_COUNT - 4} more tasks across audio, vision, language,
+          graphs, tabular data and reinforcement learning. The weights come to
+          you; nothing you give a model is sent to a server
           {BACKEND_ENABLED && " — the backend only serves the model catalog"}{" "}
           (<Link to="/privacy" className="underline underline-offset-2">privacy</Link>).{" "}
           <AnalyticsNote />
@@ -35,6 +42,8 @@ function HomePage() {
 
       {/* The registry is the only thing here that needs /api (#57). */}
       {BACKEND_ENABLED && <ModelCatalogCard />}
+
+      <TaskIndex />
     </div>
   );
 }

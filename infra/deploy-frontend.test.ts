@@ -33,9 +33,11 @@ beforeAll(() => {
   mkdirSync(join(dist, "assets"), { recursive: true });
   writeFileSync(join(bin, "aws"), STUB);
   chmodSync(join(bin, "aws"), 0o755);
-  for (const f of ["index.html", "site.webmanifest", "favicon.ico"]) {
+  for (const f of ["index.html", "site.webmanifest", "favicon.ico", "robots.txt", "sitemap.xml"]) {
     writeFileSync(join(dist, f), "x");
   }
+  mkdirSync(join(dist, "asr"));
+  writeFileSync(join(dist, "asr", "index.html"), "x");
   for (const f of ["index-new.js", "ort-new.wasm"]) {
     writeFileSync(join(dist, "assets", f), "x");
   }
@@ -83,6 +85,33 @@ describe("deploy-frontend.sh", () => {
     expect(manifest).toBeLessThan(index);
     const uploads = calls.filter((c) => c.startsWith("s3 cp"));
     expect(uploads.at(-1)).toContain("index.html s3://");
+  });
+
+  // #63, #64: the per-route pages and the crawler files.
+  it("uploads each route's own page as no-cache HTML, after the assets and before index.html", () => {
+    const routes = indexOf((c) => c.includes('--include */index.html'));
+    const call = calls[routes];
+    expect(call).toContain("--exclude assets/*");
+    expect(call).toContain("text/html; charset=utf-8");
+    expect(call).toContain("no-cache, must-revalidate");
+    expect(routes).toBeGreaterThan(indexOf((c) => c.includes("--exclude *.wasm")));
+    expect(routes).toBeLessThan(indexOf((c) => c.includes("index.html s3://site-bucket/index.html")));
+  });
+
+  it("keeps route pages and crawler files out of the day-cached public upload", () => {
+    const day = calls[indexOf((c) => c.includes("max-age=86400"))];
+    expect(day).toContain("--exclude */index.html");
+    expect(day).toContain("--exclude robots.txt");
+    expect(day).toContain("--exclude sitemap.xml");
+  });
+
+  it.each([
+    ["robots.txt", "text/plain; charset=utf-8"],
+    ["sitemap.xml", "application/xml; charset=utf-8"],
+  ])("uploads %s with its type stated and no-cache", (name, type) => {
+    const call = calls[indexOf((c) => c.includes(`${name} s3://site-bucket/${name}`))];
+    expect(call).toContain(`--content-type ${type}`);
+    expect(call).toContain("no-cache, must-revalidate");
   });
 
   it("states application/wasm rather than trusting a MIME guess", () => {

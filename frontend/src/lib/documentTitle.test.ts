@@ -9,17 +9,23 @@ describe("titleForPath", () => {
   });
 
   it("suffixes static routes", () => {
-    expect(titleForPath("/home")).toBe("Home · Model Playground");
+    expect(titleForPath("/privacy")).toBe("Privacy · Model Playground");
     expect(titleForPath("/login")).toBe("Sign in · Model Playground");
     expect(titleForPath("/signup")).toBe("Create account · Model Playground");
   });
 
-  it("names a real task route from the taxonomy", () => {
+  it("says what the home page is, not just its name", () => {
+    expect(titleForPath("/home")).toBe(
+      "Model Playground: ML models in your browser, on your GPU",
+    );
+  });
+
+  it("names a real task route from the taxonomy, task first", () => {
     expect(titleForPath("/asr")).toBe(
-      "Automatic Speech Recognition · Model Playground",
+      "Automatic Speech Recognition in your browser · Model Playground",
     );
     expect(titleForPath("/object-detection")).toBe(
-      "Object Detection · Model Playground",
+      "Object Detection in your browser · Model Playground",
     );
   });
 
@@ -27,12 +33,13 @@ describe("titleForPath", () => {
     // `image-to-image` -> /super-resolution: the title follows the taxonomy
     // label, not the URL.
     expect(titleForPath("/super-resolution")).toBe(
-      "Image to Image · Model Playground",
+      "Image to Image in your browser · Model Playground",
     );
   });
 
-  it("tolerates a trailing slash", () => {
-    expect(titleForPath("/home/")).toBe("Home · Model Playground");
+  it("tolerates a trailing slash and upper case", () => {
+    expect(titleForPath("/privacy/")).toBe("Privacy · Model Playground");
+    expect(titleForPath("/Login")).toBe("Sign in · Model Playground");
   });
 
   it("falls back to the product name rather than inventing a label", () => {

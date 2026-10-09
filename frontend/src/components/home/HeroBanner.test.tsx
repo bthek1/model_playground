@@ -32,6 +32,15 @@ describe("HeroBanner", () => {
     ).toBeInTheDocument();
   });
 
+  // It said "A modern full-stack web application built with Django and
+  // React" — the template's sentence, describing nothing a visitor searches
+  // for (#65).
+  it("says what the site does, not how it was built", () => {
+    render(<HeroBanner />);
+    expect(screen.getByText(/models in your browser/i)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/django|full-stack/i);
+  });
+
   it("links to the sign in and sign up pages", () => {
     render(<HeroBanner />);
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(

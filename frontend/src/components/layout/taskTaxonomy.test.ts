@@ -31,6 +31,17 @@ describe("taskCategories", () => {
     expect(asr.slug).toBe("automatic-speech-recognition");
   });
 
+  // The description is the page's meta description and its line on the home
+  // page's task index (#64, #65), so a task without one fails here by name.
+  it("gives every task a unique description a search result can show", () => {
+    const all = taskCategories.flatMap((c) => c.tasks);
+    for (const t of all) {
+      expect(t.description.length, t.label).toBeGreaterThanOrEqual(70);
+      expect(t.description.length, t.label).toBeLessThanOrEqual(160);
+    }
+    expect(new Set(all.map((t) => t.description)).size).toBe(all.length);
+  });
+
   it("gives every task a globally unique slug", () => {
     const slugs = taskCategories.flatMap((c) => c.tasks.map((t) => t.slug));
     expect(new Set(slugs).size).toBe(slugs.length);

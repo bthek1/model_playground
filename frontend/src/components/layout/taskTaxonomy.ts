@@ -27,6 +27,12 @@ export interface TaskItem {
   slug: string;
   /** The implemented route this task links to. */
   to: string;
+  /**
+   * One sentence, 70–160 characters: what the page does and what runs it.
+   * It is the page's meta description and its line in the home page's task
+   * index (#64, #65), so write it for someone choosing a page, not for us.
+   */
+  description: string;
 }
 
 export interface TaskCategory {
@@ -195,18 +201,21 @@ const REAL_ROUTES: Record<string, string> = {
   "robotics": "/robotics",
 };
 
-function task(label: string): TaskItem {
+function task([label, description]: TaskEntry): TaskItem {
   const slug = slugify(label);
   const to = REAL_ROUTES[slug];
   // A row without a page is a promise the sidebar cannot keep: it used to fall
   // through to a "/tasks/$slug — on the roadmap" placeholder, for tasks the
   // roadmaps had measured and ruled out. Fail at import rather than list one.
   if (!to) throw new Error(`Task "${label}" has no route in REAL_ROUTES`);
-  return { label, slug, to };
+  return { label, slug, to, description };
 }
 
-function tasks(labels: string[]): TaskItem[] {
-  return labels.map(task);
+/** A sidebar row as written below: its label and its one-line description. */
+type TaskEntry = readonly [label: string, description: string];
+
+function tasks(entries: TaskEntry[]): TaskItem[] {
+  return entries.map(task);
 }
 
 export const taskCategories: TaskCategory[] = [
@@ -214,63 +223,167 @@ export const taskCategories: TaskCategory[] = [
     label: "Audio",
     icon: AudioLines,
     tasks: tasks([
-      "Text to Speech",
-      "Automatic Speech Recognition",
-      "Audio to Audio",
-      "Audio Classification",
-      "Voice Activity Detection",
-    ]),
+      [
+
+        "Text to Speech",
+
+        "Turn text into speech in your browser with Kokoro, MMS and SpeechT5 — synthesised on your own GPU or CPU, with nothing sent to a server.",
+
+      ],
+      [
+        "Automatic Speech Recognition",
+        "Transcribe speech to text in your browser with Whisper and Moonshine — live from the microphone or from a file, privately, on your own device.",
+      ],
+      [
+        "Audio to Audio",
+        "Remove background noise from speech in your browser with DeepFilterNet3 — full-band 48 kHz enhancement that never uploads your recording.",
+      ],
+      [
+        "Audio Classification",
+        "Tag sounds in your browser with AST, wav2vec2 and CLAP — fixed labels or your own text prompts, scored on your device with nothing uploaded.",
+      ],
+      [
+        "Voice Activity Detection",
+        "Find where speech starts and stops in a recording with Silero VAD, running in your browser on the CPU at around 100x real time.",
+      ],]),
   },
   {
     label: "Computer Vision",
     icon: Eye,
     tasks: tasks([
-      "Depth Estimation",
-      "Image Classification",
-      "Object Detection",
-      "Image Segmentation",
-      "Image to Image",
-      "Video Classification",
-      "Zero Shot Image Classification",
-      "Mask Generation",
-      "Zero Shot Object Detection",
-      "Image to 3D",
-      "Image Feature Extraction",
-      "Keypoint Detection",
+      [
+
+        "Depth Estimation",
+
+        "Estimate depth from a single photo in your browser with Depth Anything — a relative depth map computed on your own GPU, never uploaded.",
+
+      ],
+      [
+        "Image Classification",
+        "Classify photos in your browser with ViT, ResNet and MobileNet — from a file or your webcam, with ranked labels computed on your device.",
+      ],
+      [
+        "Object Detection",
+        "Detect and box objects in photos or a live webcam feed in your browser with D-FINE, RT-DETR, YOLOS and DETR running on your own GPU.",
+      ],
+      [
+        "Image Segmentation",
+        "Segment images into labelled regions in your browser with SegFormer and DETR panoptic — masks computed on your device, with an overlay.",
+      ],
+      [
+        "Image to Image",
+        "Upscale images with Swin2SR super-resolution in your browser, tiled so large pictures fit, and compared against a bicubic baseline.",
+      ],
+      [
+        "Video Classification",
+        "Classify video clips in your browser by sampling frames through an image model — a frame-level baseline running on your own device.",
+      ],
+      [
+        "Zero Shot Image Classification",
+        "Classify images against labels you type with CLIP and SigLIP in your browser — no training, and the label embeddings are cached.",
+      ],
+      [
+        "Mask Generation",
+        "Click on an image to segment any object with Segment Anything (SAM) in your browser — encode once, then decode a mask per click.",
+      ],
+      [
+        "Zero Shot Object Detection",
+        "Detect objects by name with OWL-ViT and OWLv2 in your browser — type what to look for and get boxes without training a detector.",
+      ],
+      [
+        "Image to 3D",
+        "Turn a single photo into an interactive 3D point cloud in your browser — Depth Anything depth, unprojected and rendered with WebGPU.",
+      ],
+      [
+        "Image Feature Extraction",
+        "Extract image embeddings with CLIP, DINOv2 and DINOv3 in your browser and compare pictures by cosine similarity, on your own device.",
+      ],
+      [
+        "Keypoint Detection",
+        "Estimate human pose in your browser — detect each person, then place body keypoints and a skeleton, from a photo or your webcam.",
+      ],
       // **A deliberate departure from the Hub's task list.** Every other row in
       // this category mirrors a Hugging Face pipeline tag; the Hub has no
       // `background-removal` task — Transformers.js added the pipeline itself,
       // as a subclass of image segmentation. It is listed anyway because the
       // page stands alone as useful and an unlisted route is one nobody finds.
       // See #24 for the call.
-      "Background Removal",
-    ]),
+      [
+        "Background Removal",
+        "Remove the background from a photo in your browser with MODNet or RMBG — a soft alpha matte and a transparent PNG, never uploaded.",
+      ],]),
   },
   {
     label: "Multimodal",
     icon: Layers,
     tasks: tasks([
-      "Image Text to Text",
-      "Visual Question Answering",
-      "Video Text to Text",
-    ]),
+      [
+
+        "Image Text to Text",
+
+        "Ask questions about an image with SmolVLM, a vision-language model running in your browser on WebGPU, with the answer streamed as it is written.",
+
+      ],
+      [
+        "Visual Question Answering",
+        "Visual question answering in your browser — ask a short question about a picture and get a one-word answer from a small VLM on WebGPU.",
+      ],
+      [
+        "Video Text to Text",
+        "Ask a vision-language model about a video in your browser — SmolVLM2 reads frames sampled from the clip on WebGPU and answers in text.",
+      ],]),
   },
   {
     label: "Natural Language Processing",
     icon: Type,
     tasks: tasks([
-      "Text Classification",
-      "Token Classification",
-      "Question Answering",
-      "Zero Shot Classification",
-      "Translation",
-      "Summarization",
-      "Feature Extraction",
-      "Text Generation",
-      "Fill Mask",
-      "Sentence Similarity",
-      "Text Ranking",
-    ]),
+      [
+
+        "Text Classification",
+
+        "Classify text in your browser — sentiment and financial-tone models side by side, with the full score list, running on your own device.",
+
+      ],
+      [
+        "Token Classification",
+        "Find names, places and organisations with named-entity recognition in your browser, and redact them without uploading the document.",
+      ],
+      [
+        "Question Answering",
+        "Extractive question answering in your browser — paste a passage, ask a question, and see the exact answer span highlighted in the text.",
+      ],
+      [
+        "Zero Shot Classification",
+        "Classify text against labels you type with an NLI model in your browser — no training, an editable hypothesis template, one pass per label.",
+      ],
+      [
+        "Translation",
+        "Translate text with Marian models in your browser — one language pair per model, private machine translation on your own device.",
+      ],
+      [
+        "Summarization",
+        "Summarize articles in your browser with T5 and DistilBART, measured against a lead-3 baseline, with a sentence-level faithfulness check.",
+      ],
+      [
+        "Feature Extraction",
+        "Turn sentences into embeddings in your browser with MiniLM, BGE and Nomic models — inspect the vectors and try Matryoshka truncation.",
+      ],
+      [
+        "Text Generation",
+        "Generate text with small language models such as SmolLM2 and GPT-2 in your browser — compare greedy decoding with sampling, streamed live.",
+      ],
+      [
+        "Fill Mask",
+        "Predict a masked word with BERT, RoBERTa and ModernBERT in your browser — and probe what each model's training corpus taught it.",
+      ],
+      [
+        "Sentence Similarity",
+        "Compare sentences by meaning in your browser — embedding models score paraphrases against unrelated text with cosine similarity.",
+      ],
+      [
+        "Text Ranking",
+        "Rank documents for a query in your browser with BM25, dense embeddings, hybrid fusion and a cross-encoder reranker, side by side.",
+      ],]),
   },
   {
     label: "Other",
@@ -280,39 +393,78 @@ export const taskCategories: TaskCategory[] = [
     // Background Removal row: a shipped route that answers its own question
     // deserves its own entry rather than being buried inside a neighbour's.
     tasks: tasks([
-      "Graph Machine Learning",
-      "Link Prediction",
-      "Graph Classification",
-    ]),
+      [
+
+        "Graph Machine Learning",
+
+        "Train a graph neural network (GCN, GraphSAGE, GIN, GAT) on the Cora citation graph in your browser with WebGPU, and watch oversmoothing.",
+
+      ],
+      [
+        "Link Prediction",
+        "Predict missing citations in the Cora graph with a GNN trained in your browser on WebGPU, scored by AUC on held-out edges.",
+      ],
+      [
+        "Graph Classification",
+        "Classify protein graphs from the PROTEINS dataset with a graph neural network trained in your browser, beside a majority baseline.",
+      ],]),
   },
   {
     label: "Reinforcement Learning",
     icon: Gamepad2,
-    tasks: tasks(["Reinforcement Learning", "Robotics"]),
+    tasks: tasks([
+      ["Reinforcement Learning", "Watch Q-learning, REINFORCE and Actor-Critic learn FrozenLake and CartPole in your browser, checked against exact value iteration."],
+      ["Robotics", "Robot perception in your browser — find objects by name with OWLv2 and order them by depth — plus a behaviour-cloning experiment."],
+    ]),
   },
   {
     label: "Tabular",
     icon: Table,
     tasks: tasks([
-      "Tabular Classification",
-      "Tabular Regression",
-      "Time Series Forecasting",
-    ]),
+      [
+
+        "Tabular Classification",
+
+        "Fit classifiers to your own CSV in your browser — logistic regression, random forest, gradient boosting and an MLP, with nothing uploaded.",
+
+      ],
+      [
+        "Tabular Regression",
+        "Fit regression models to your own CSV in your browser — ridge, trees, boosting and quantile bands, with residual plots and nothing uploaded.",
+      ],
+      [
+        "Time Series Forecasting",
+        "Forecast a time series in your browser with naive, seasonal and drift baselines, scored by a rolling-origin backtest and MASE.",
+      ],]),
   },
   {
     label: "Theory",
     icon: Sigma,
     tasks: tasks([
-      "Linear Model Training",
-      "Discrete Maths",
-      "Tensor Arithmetic",
+      [
+
+        "Linear Model Training",
+
+        "Train a softmax classifier on MNIST in your browser with hand-written WebGPU kernels, and watch its weights turn into digit templates.",
+
+      ],
+      [
+        "Discrete Maths",
+        "Step a breadth-first search and count walks with powers of the adjacency matrix — why a k-layer graph network reads only k hops.",
+      ],
+      [
+        "Tensor Arithmetic",
+        "Run matrix and tensor operations on your GPU with raw WebGPU compute shaders in a Web Worker — edit the operands and compute.",
+      ],
       // Taking §3.8's task row away from `/playground` would have left it
       // reachable only by typing the URL, which is not what "stays reachable on
       // its own terms" means. Theory is this repo's own non-Hub category and is
       // where the hand-written WGSL surfaces already live, so the demo gets a
       // row of its own here instead of borrowing an NLP task's.
-      "GPU Playground",
-    ]),
+      [
+        "GPU Playground",
+        "Pick a model and run it on custom WebGPU kernels in your browser — the raw-WGSL inference workspace behind the task pages.",
+      ],]),
   },
 ];
 

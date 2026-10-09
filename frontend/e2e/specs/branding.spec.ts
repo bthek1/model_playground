@@ -19,15 +19,21 @@ test.describe("branding", () => {
 
   test("the title follows the route", async ({ page, signedIn }) => {
     await signedIn();
+    // Task first, so open tabs stay distinguishable; the same string the
+    // build writes into the route's own index.html (#64).
     await page.goto("/home");
-    await expect(page).toHaveTitle("Home · Model Playground");
+    await expect(page).toHaveTitle(
+      "Model Playground: ML models in your browser, on your GPU",
+    );
 
     await page.goto("/object-detection");
-    await expect(page).toHaveTitle("Object Detection · Model Playground");
+    await expect(page).toHaveTitle(
+      "Object Detection in your browser · Model Playground",
+    );
 
     await page.goto("/asr");
     await expect(page).toHaveTitle(
-      "Automatic Speech Recognition · Model Playground",
+      "Automatic Speech Recognition in your browser · Model Playground",
     );
   });
 
@@ -79,13 +85,19 @@ test.describe("branding", () => {
       "content",
       /browser/i,
     );
+    // The card's title follows the page's (#64): on the static build `/` is
+    // `/home`, on the dev server it is the landing page.
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
       "content",
-      "Model Playground",
+      await page.title(),
     );
+    // Absolute, as the OG spec requires — against the public origin, so ask
+    // this server for the same path rather than the live site.
     const ogImage = await page
       .locator('meta[property="og:image"]')
       .getAttribute("content");
-    expect((await page.request.get(ogImage!)).status()).toBe(200);
+    expect(ogImage).toMatch(/^https:\/\/[^/]+\/og-image\.png$/);
+    const local = new URL(ogImage!).pathname;
+    expect((await page.request.get(local)).status()).toBe(200);
   });
 });
