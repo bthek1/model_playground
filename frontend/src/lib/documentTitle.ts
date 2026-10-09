@@ -20,6 +20,10 @@ const STATIC_TITLES: Record<string, string> = {
   "/home": "Home",
   "/login": "Sign in",
   "/signup": "Create account",
+  "/privacy": "Privacy",
+  "/terms": "Terms of use",
+  "/licences": "Licences",
+  "/accessibility": "Accessibility",
 };
 
 function suffix(name: string): string {

@@ -323,6 +323,7 @@ function VisualQuestionAnsweringPage() {
       output={
         <OutputPanel
           title="Answer"
+          generated="text"
           description="What the model wrote, from the picture and the prompt above."
           meta={
             result ? (

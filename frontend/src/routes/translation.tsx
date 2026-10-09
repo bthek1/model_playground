@@ -217,6 +217,7 @@ function TranslationPage() {
       output={
         <OutputPanel
           title="Translation"
+          generated="text"
           description={`Produced by this checkpoint alone — one direction, no language argument anywhere in the call.`}
           meta={ran ? <span>{ran.direction}</span> : undefined}
           running={running}

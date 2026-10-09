@@ -421,6 +421,7 @@ function TextGenerationPage() {
       output={
         <OutputPanel
           title="Continuation"
+          generated="text"
           description="Streamed as it is produced — the first token arrives in about a second, and waiting for the whole answer at the same throughput feels like a hang."
           meta={
             ran ? (

@@ -46,7 +46,21 @@ does not become a page. Three questions, in order:
    diffusion, video generation and 7B multimodal LLMs do not, and no amount of
    care makes them.
 
-If the answer to any of these is no, the task still gets a row in its
+A fourth question decides *how* a checkpoint ships rather than *whether* the
+task does (#62):
+
+4. **May the public be offered it, and on what terms?** Read the model card's
+   licence — and, for a `Xenova/*` or `onnx-community/*` mirror, the
+   **upstream's**, because converting weights does not change their terms and
+   most mirrors declare nothing. Add the repo to `MODEL_LICENCES` in
+   `src/model/licences.ts` (`licences.test.ts` fails, naming the repo, until
+   you do). A permissive licence is one line. A non-commercial, custom or
+   unstated one is still shippable beside a permissive default — the picker
+   badges the row and `/licences` lists it — but it must never be the default,
+   which is the `/background-removal` precedent (#24). A card that states
+   nothing at all is "all rights reserved"; prefer another checkpoint.
+
+If the answer to any of the first three is no, the task still gets a row in its
 category guide's feasibility table saying so and why, and it stays out of the
 sidebar — there is no placeholder page to park it on (#59). **A documented
 "server-side, and here is the reason" is a finished piece of work.** It stops the next person spending three
@@ -952,6 +966,8 @@ structurally: the run controls simply do not work until the load machine says
 [ ] Four facts extracted: task string, checkpoint, input contract, output shape
 [ ] Output shape *observed* from one real run, not read off the pipeline's types
 [ ] Browser id verified against the Hub; catalogue imported by `just fe-e2e-models`
+[ ] Licence read off the card (the upstream's, for a mirror) and added to
+    MODEL_LICENCES; a new catalogue array added to MODEL_CATALOGUES (legal/catalogues.ts)
 [ ] dtype chosen per backend, download size (not param count) quoted
 [ ] Is it a plain pipeline() call? If not, engine + worker + client (adding-a-model §10)
 [ ] Worker chosen by modality; no new worker without a reason

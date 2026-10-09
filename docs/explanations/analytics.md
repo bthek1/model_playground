@@ -36,6 +36,12 @@ The events (`src/analytics/schema.ts`):
 forecast is a derivation recomputed as you edit — and an event per keystroke
 would be noise.
 
+The public description of all this is `/privacy` (#62). Its PostHog row and its
+analytics section render only in a build with a key, and are written from this
+table. Change an event or a property and the notice's wording in
+`src/legal/recipients.ts` may need to change too. See
+[legal.md](legal.md).
+
 ## 2. Phase 0's decisions
 
 - **The SDK build is `posthog-js/dist/module.slim.no-external`** — 49 KB gzip as

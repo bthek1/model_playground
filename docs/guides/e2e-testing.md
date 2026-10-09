@@ -334,7 +334,7 @@ comes back as a tiger. A count of rows would have passed while the model called
 it a snake.
 
 `model-ids.spec.ts` is the cheap half of the group and covers every modality. It
-imports the catalogue modules directly and checks three things:
+imports the catalogue modules directly and checks four things:
 
 1. **Every id resolves** on the Hub API. A pose entry is a *pair*, so its own id is a
    composite that resolves to nothing — the two halves are what get asked about.
@@ -347,6 +347,11 @@ imports the catalogue modules directly and checks three things:
    those URLs are the only reason a route works before the user has a file of their own,
    and the unit suite mocks `fromUrl` away entirely. A 404 there is a page whose sample
    buttons all fail, with green tests.
+4. **Every licence still matches its model card** (#62). `MODEL_LICENCES` records the
+   card's `license:` field for each downloaded repo (the upstream's, for a mirror), and
+   the spec re-reads it. A relicensed model, or a mirror that starts declaring a licence
+   of its own, would otherwise keep showing the old terms in the picker and on
+   `/licences`, with nothing failing.
 
 Add a new catalogue module — and any new sample list — to its import list in the same
 commit as the page.
@@ -448,7 +453,9 @@ frontend/
       audio-models.spec.ts # @slow: real weights, real ONNX sessions
       vision.spec.ts       # /image-classification, weights blocked — default run
       vision-models.spec.ts# @slow: real loads across all thirteen vision routes
-      model-ids.spec.ts    # @slow, seconds: every catalogue id + vision/VLM/text dtypes
+      model-ids.spec.ts    # @slow, seconds: every catalogue id + vision/VLM/text dtypes + licences
+      legal.spec.ts        # /privacy, /terms, /licences, /accessibility: deep links, the footer,
+                           #   no off-origin request; the notices file on the static build only
       multimodal.spec.ts   # all three VLM routes, weights blocked — default run
       text.spec.ts         # all five NLP routes, weights blocked — default run
       text-models.spec.ts  # @slow: real encoder loads for all five NLP routes

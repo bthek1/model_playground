@@ -1,6 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+// The privacy link is a router `Link`, and this test renders without a router.
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
+}));
+
 vi.mock("@/hooks/useWebGPU", () => ({
   useWebGPU: () => ({ capabilities: null, loading: false }),
 }));
@@ -39,5 +45,10 @@ describe("HomePage", () => {
     expect(screen.getByText("GPU Capabilities")).toBeInTheDocument();
     expect(screen.getByText("Compute Benchmark")).toBeInTheDocument();
     expect(screen.getByText("Model Catalog")).toBeInTheDocument();
+  });
+
+  it("links its privacy claim to the privacy notice (#62)", () => {
+    renderPage();
+    expect(screen.getByRole("link", { name: "privacy" })).toHaveAttribute("href", "/privacy");
   });
 });

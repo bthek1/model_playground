@@ -512,6 +512,17 @@ project setup is `just posthog-setup`, run locally with the personal key — see
 [analytics.md §5](../explanations/analytics.md). An EU project also needs
 `pulumi config set site:posthogHost eu.i.posthog.com`.
 
+### 10.8b Legal pages and notices (#62)
+
+Before the first deploy that carries them, make sure **`CONTACT_EMAIL`**
+(`frontend/src/legal/site.ts`) is a working inbox: every legal page publishes
+it. The build writes `dist/THIRD-PARTY-NOTICES.txt` beside `index.html`, and
+`check:bundle` fails if it is missing. The upload script's root-files pass
+ships it with the other root files, and `spa-rewrite` leaves it alone because
+it has an extension. Adding a host the browser fetches from (a CDN, a dataset
+mirror) means adding a row to `src/legal/recipients.ts`. See
+[legal.md](../explanations/legal.md).
+
 ### 10.9 How it is tested
 
 None of this can be exercised by deploying it — a wrong IAM condition, a

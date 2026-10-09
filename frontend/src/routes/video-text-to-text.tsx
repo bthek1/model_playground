@@ -408,6 +408,7 @@ function VideoTextToTextPage() {
       output={
         <OutputPanel
           title="Answer"
+          generated="text"
           description="What the model wrote, from the sampled frames and your question."
           meta={
             result ? (

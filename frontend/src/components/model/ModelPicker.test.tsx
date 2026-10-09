@@ -278,4 +278,55 @@ describe("ModelPicker", () => {
       expect(onChange).not.toHaveBeenCalled();
     });
   });
+
+  describe("licence (#62)", () => {
+    const REAL: PickableModel[] = [
+      { id: "Xenova/modnet", label: "MODNet", hint: "Permissive.", params: 6.5 },
+      { id: "briaai/RMBG-1.4", label: "RMBG", hint: "Non-commercial.", params: 44 },
+    ];
+
+    it("states the selected model's licence under its size, from the registry", () => {
+      render(<ModelPicker models={REAL} value="Xenova/modnet" onChange={() => {}} />);
+      const note = screen.getByTestId("model-licence");
+      expect(note).toHaveTextContent(/Apache-2\.0/);
+      expect(note).toHaveAttribute("data-terms", "permissive");
+    });
+
+    it("badges a restricted row before it is chosen", () => {
+      // The warning has to be visible while the user is still choosing, not
+      // only once they have.
+      render(<ModelPicker models={REAL} value="Xenova/modnet" onChange={() => {}} />);
+      expect(screen.getByTestId("model-licence-badge-briaai/RMBG-1.4")).toHaveTextContent(
+        "Non-commercial",
+      );
+      expect(screen.queryByTestId("model-licence-badge-Xenova/modnet")).toBeNull();
+    });
+
+    it("states both halves of a pair, naming each", () => {
+      const pair = {
+        id: "pair",
+        label: "Pair",
+        hint: "Two downloads.",
+        params: 50,
+        detector: { id: "Xenova/modnet" },
+        pose: { id: "briaai/RMBG-1.4" },
+      };
+      render(<ModelPicker models={[pair]} value="pair" onChange={() => {}} />);
+      const notes = screen.getAllByTestId("model-licence");
+      expect(notes).toHaveLength(2);
+      expect(notes[0]).toHaveTextContent(/^RMBG-1\.4: /);
+      expect(notes[1]).toHaveTextContent(/^modnet: /);
+    });
+
+    it("says nothing for an entry that downloads nothing", () => {
+      render(
+        <ModelPicker
+          models={[{ id: "energy", label: "Energy", hint: "No model.", params: 0 }]}
+          value="energy"
+          onChange={() => {}}
+        />,
+      );
+      expect(screen.queryByTestId("model-licence")).toBeNull();
+    });
+  });
 });

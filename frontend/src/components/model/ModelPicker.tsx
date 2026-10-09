@@ -12,13 +12,20 @@
 // size — a wrapped row of bare buttons is unreadable at rail width, and it hid
 // the per-model size behind a `title` tooltip. `row` is the old chip row, for a
 // route that has horizontal room to spare.
+//
+// It also states the **licence** (#62), read from `model/licences.ts` by the
+// repos the entry downloads — so no route wires it, and a pair (pose, ranking,
+// grounding) states both halves. A restricted row carries its terms as a badge
+// before it is chosen; the selected model gets the full line under its size.
 
 import { AlertTriangle, HardDrive, Trash2 } from "lucide-react";
 
 import type { Backend } from "@/model/backend";
 import type { CatalogueEntry } from "@/model/catalogue";
+import { entryLicences, isRestricted, TERMS_LABEL } from "@/model/licences";
 import { sizeEstimate } from "@/model/size";
 import { Button } from "@/components/ui/button";
+import { LicenceNote } from "./LicenceNote";
 import { cn } from "@/lib/utils";
 
 /**
@@ -65,6 +72,7 @@ export function ModelPicker<T extends PickableModel>({
   const selected = models.find((m) => m.id === value);
   const size = selected ? sizeEstimate(selected.params, selected.bytes) : null;
   const selectedCached = selected ? (cached?.has(selected.id) ?? false) : false;
+  const selectedLicences = selected ? entryLicences(selected) : [];
 
   return (
     <div className="space-y-2">
@@ -115,6 +123,7 @@ export function ModelPicker<T extends PickableModel>({
                     <HardDrive className="size-3" /> Cached
                   </span>
                 )}
+                <RestrictedBadge model={m} />
               </span>
               <span
                 className={cn(
@@ -161,6 +170,13 @@ export function ModelPicker<T extends PickableModel>({
               <Trash2 className="size-3" /> Clear cached weights
             </button>
           )}
+          {selectedLicences.map(({ repo, licence }) => (
+            <LicenceNote
+              key={repo}
+              licence={licence}
+              subject={selectedLicences.length > 1 ? repo.split("/")[1] : undefined}
+            />
+          ))}
           {size.large && !selectedCached && (
             <p
               data-testid="model-size-warning"
@@ -176,5 +192,19 @@ export function ModelPicker<T extends PickableModel>({
         </div>
       )}
     </div>
+  );
+}
+
+/** The strictest licence on a row, named before the row is chosen. */
+function RestrictedBadge({ model }: { model: CatalogueEntry }) {
+  const worst = entryLicences(model)[0]?.licence;
+  if (!worst || !isRestricted(worst)) return null;
+  return (
+    <span
+      data-testid={`model-licence-badge-${model.id}`}
+      className="ml-auto inline-flex shrink-0 items-center rounded-sm border border-current/25 px-1 text-[0.65rem] font-normal opacity-80"
+    >
+      {TERMS_LABEL[worst.terms]}
+    </span>
   );
 }

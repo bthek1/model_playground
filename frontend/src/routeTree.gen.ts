@@ -8,6 +8,8 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
+import { createFileRoute } from '@tanstack/react-router'
+
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ZeroShotObjectDetectionRouteImport } from './routes/zero-shot-object-detection'
 import { Route as ZeroShotImageClassificationRouteImport } from './routes/zero-shot-image-classification'
@@ -58,6 +60,31 @@ import { Route as AudioClassificationRouteImport } from './routes/audio-classifi
 import { Route as AsrRouteImport } from './routes/asr'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TermsLazyRouteImport = createFileRoute('/terms')()
+const PrivacyLazyRouteImport = createFileRoute('/privacy')()
+const LicencesLazyRouteImport = createFileRoute('/licences')()
+const AccessibilityLazyRouteImport = createFileRoute('/accessibility')()
+
+const TermsLazyRoute = TermsLazyRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() => import('./routes/terms.lazy').then((d) => d.Route))
+const PrivacyLazyRoute = PrivacyLazyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() => import('./routes/privacy.lazy').then((d) => d.Route))
+const LicencesLazyRoute = LicencesLazyRouteImport.update({
+  id: '/licences',
+  path: '/licences',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() => import('./routes/licences.lazy').then((d) => d.Route))
+const AccessibilityLazyRoute = AccessibilityLazyRouteImport.update({
+  id: '/accessibility',
+  path: '/accessibility',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() => import('./routes/accessibility.lazy').then((d) => d.Route))
 const ZeroShotObjectDetectionRoute = ZeroShotObjectDetectionRouteImport.update({
   id: '/zero-shot-object-detection',
   path: '/zero-shot-object-detection',
@@ -349,6 +376,10 @@ export interface FileRoutesByFullPath {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
+  '/accessibility': typeof AccessibilityLazyRoute
+  '/licences': typeof LicencesLazyRoute
+  '/privacy': typeof PrivacyLazyRoute
+  '/terms': typeof TermsLazyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -399,6 +430,10 @@ export interface FileRoutesByTo {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
+  '/accessibility': typeof AccessibilityLazyRoute
+  '/licences': typeof LicencesLazyRoute
+  '/privacy': typeof PrivacyLazyRoute
+  '/terms': typeof TermsLazyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -450,6 +485,10 @@ export interface FileRoutesById {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
+  '/accessibility': typeof AccessibilityLazyRoute
+  '/licences': typeof LicencesLazyRoute
+  '/privacy': typeof PrivacyLazyRoute
+  '/terms': typeof TermsLazyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -502,6 +541,10 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
+    | '/accessibility'
+    | '/licences'
+    | '/privacy'
+    | '/terms'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -552,6 +595,10 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
+    | '/accessibility'
+    | '/licences'
+    | '/privacy'
+    | '/terms'
   id:
     | '__root__'
     | '/'
@@ -602,6 +649,10 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
+    | '/accessibility'
+    | '/licences'
+    | '/privacy'
+    | '/terms'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -653,10 +704,42 @@ export interface RootRouteChildren {
   ZeroShotClassificationRoute: typeof ZeroShotClassificationRoute
   ZeroShotImageClassificationRoute: typeof ZeroShotImageClassificationRoute
   ZeroShotObjectDetectionRoute: typeof ZeroShotObjectDetectionRoute
+  AccessibilityLazyRoute: typeof AccessibilityLazyRoute
+  LicencesLazyRoute: typeof LicencesLazyRoute
+  PrivacyLazyRoute: typeof PrivacyLazyRoute
+  TermsLazyRoute: typeof TermsLazyRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsLazyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyLazyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/licences': {
+      id: '/licences'
+      path: '/licences'
+      fullPath: '/licences'
+      preLoaderRoute: typeof LicencesLazyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accessibility': {
+      id: '/accessibility'
+      path: '/accessibility'
+      fullPath: '/accessibility'
+      preLoaderRoute: typeof AccessibilityLazyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/zero-shot-object-detection': {
       id: '/zero-shot-object-detection'
       path: '/zero-shot-object-detection'
@@ -1045,6 +1128,10 @@ const rootRouteChildren: RootRouteChildren = {
   ZeroShotClassificationRoute: ZeroShotClassificationRoute,
   ZeroShotImageClassificationRoute: ZeroShotImageClassificationRoute,
   ZeroShotObjectDetectionRoute: ZeroShotObjectDetectionRoute,
+  AccessibilityLazyRoute: AccessibilityLazyRoute,
+  LicencesLazyRoute: LicencesLazyRoute,
+  PrivacyLazyRoute: PrivacyLazyRoute,
+  TermsLazyRoute: TermsLazyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

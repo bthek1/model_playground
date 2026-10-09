@@ -266,6 +266,7 @@ function ImageTextToTextPage() {
       output={
         <OutputPanel
           title="Answer"
+          generated="text"
           description="What the model wrote, from the picture and your question."
           meta={
             result ? (

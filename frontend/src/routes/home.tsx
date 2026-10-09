@@ -2,7 +2,7 @@
 // surfaces the WebGPU capability details up front — everything here runs in the
 // browser; the backend only serves the model catalog.
 
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { AnalyticsNote } from "@/components/analytics/AnalyticsNote";
 import { BenchmarkCard } from "@/components/home/BenchmarkCard";
@@ -22,7 +22,8 @@ function HomePage() {
         <p className="text-sm text-muted-foreground">
           Run ML models directly on your GPU via raw WebGPU. Nothing you give a
           model is sent to a server
-          {BACKEND_ENABLED && " — the backend only serves the model catalog"}.{" "}
+          {BACKEND_ENABLED && " — the backend only serves the model catalog"}{" "}
+          (<Link to="/privacy" className="underline underline-offset-2">privacy</Link>).{" "}
           <AnalyticsNote />
         </p>
       </div>

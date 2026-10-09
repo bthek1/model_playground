@@ -45,6 +45,7 @@ domain focus — see [`docs/explanations/webgpu-inference.md`](docs/explanations
 | **Visualizing a model & its structure (UI standard)** | [`docs/standards/model-visualization.md`](docs/standards/model-visualization.md) |
 | **The system panel (GPU/memory/CPU/storage readouts)** | [`docs/explanations/telemetry-panel.md`](docs/explanations/telemetry-panel.md) |
 | **Product analytics (PostHog, anonymous, off by default)** | [`docs/explanations/analytics.md`](docs/explanations/analytics.md) |
+| **Legal: privacy notice, terms, model licences, third-party notices** | [`docs/explanations/legal.md`](docs/explanations/legal.md) |
 | **Driving a model page (SELECT→LOAD→RUN→OUTPUT)** | [`docs/standards/model-page-pattern.md`](docs/standards/model-page-pattern.md) |
 | Auth flow (JWT) | [`docs/explanations/auth-flow.md`](docs/explanations/auth-flow.md) |
 | API endpoints & request/response shapes | [`docs/standards/api-contracts.md`](docs/standards/api-contracts.md) |
@@ -328,6 +329,24 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   sentence and a fitted CSV must appear in no **decoded** payload — and PostHog drops headless
   browsers as bots, so a spec must look like a browser and assert the payload is non-empty. See
   [`docs/explanations/analytics.md`](docs/explanations/analytics.md).
+- **A legal claim on screen is asserted by a test (#62).** `/privacy`, `/terms`, `/licences`
+  and `/accessibility` are lazy routes (`*.lazy.tsx`, kept out of the entry chunk) linked by
+  `LegalFooter` in `AppLayout`, and every list on them is rendered from data the code uses:
+  `legal/recipients.ts` (each host the browser contacts — a new CDN, mirror or font is a new
+  row, and nothing detects it for you), `legal/storage.ts` (`conventions.test.ts` scans for
+  every storage key and names an undisclosed one), `legal/catalogues.ts` (every model
+  catalogue; an exported `*_MODELS` array missing from it fails by name). Pages gate on the
+  same flags as the behaviour: no PostHog sentence without `ANALYTICS_ENABLED`, no accounts
+  without `BACKEND_ENABLED`. **Licences are keyed by Hub repo** in `model/licences.ts`, not
+  per entry — `entryRepos()` resolves pairs — and a mirror's licence is its **upstream's**
+  (`from`), with `hub` the card's `license:` verbatim, re-checked by `just fe-e2e-models`.
+  `ModelPicker` renders the line and a row badge for anything not permissive, so routes wire
+  nothing; restricted terms need a `note`. Generative pages pass `generated=` to
+  `OutputPanel`. The build writes `dist/THIRD-PARTY-NOTICES.txt` via
+  `scripts/third-party-notices.mjs`, registered in **both** `plugins` and `worker.plugins`
+  (workers hold Transformers.js and ORT), and fails on a licence off its allowlist.
+  `CONTACT_EMAIL` must be a live inbox before a deploy. See
+  [`docs/explanations/legal.md`](docs/explanations/legal.md).
 - **The system panel reports load and capacity, never utilisation — and samples nothing while it is shut.** `src/telemetry/` (samplers + the 1 Hz loop), `components/telemetry/` (the cards) and `components/layout/RightPanel.tsx` (docked `aside` at `lg`, a Sheet below it, `Alt+Shift+M`). A browser exposes **no** host CPU percent, **no** GPU utilisation and **no** VRAM, so every metric is a `Metric<T>` — `{ status: "ok", value }` or `{ status: "unavailable", reason }`, never a zero standing in for "unknown" (`telemetry/types.ts`), and each card carries one line saying what its number *is*. The observer-effect rules are the acceptance criteria: one interval, only while open **and** the tab visible; samples in fixed-capacity ring buffers behind refs (never Zustand, never TanStack Query); the cache walk every 10th tick; a slow tick **skipped, not queued**; closing clears the history rather than drawing a chart across the gap. Sparklines are inline SVG per the viz standard §5 — no `echarts` in this panel. GPU bytes are a **ledger, not a probe** (`webgpu/allocations.ts`): free buffers with `releaseBuffer()` instead of `.destroy()`, and because every kernel runs in a worker realm the worker publishes its ledger to the page over a `MessagePort` handed out by `createWebGPUWorker()` — a `BroadcastChannel` is origin-wide and would fold a second tab's allocations into this page's total. `useModelWorker` reports its inflight count and download bytes to `telemetry/activity.ts` (nothing outside the hook can observe either); the `ModelRequest`/`ModelResponse` envelope does **not** grow a telemetry variant. See [`docs/explanations/telemetry-panel.md`](docs/explanations/telemetry-panel.md).
 - Tests: Vitest + Testing Library + MSW (`src/test/server.ts`, `handlers.ts`). `src/test/setup.ts` also polyfills `localStorage` because Node ≥25 ships a stub that shadows the DOM env's.
 - **End-to-end tests are Playwright** (`e2e/`), covering what happy-dom can't: routing/app shell, real-browser auth, and WebGPU. Default run is fully mocked (no backend); `@backend`-tagged specs need `just be-seed-e2e`, and

@@ -18,7 +18,7 @@
  */
 
 import { gzipSync } from "node:zlib";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -151,6 +151,22 @@ for (const [label, pattern] of SECRET_PATTERNS) {
   } else {
     pass(`no ${label} anywhere in dist/`);
   }
+}
+
+// The bundled packages' licences require their notices to ship with them
+// (#62). `scripts/third-party-notices.mjs` writes the file during the build;
+// this proves it did, and that the **worker** builds — where Transformers.js
+// and ONNX Runtime live — were counted, not only the main one.
+const notices = join(dist, "THIRD-PARTY-NOTICES.txt");
+if (!existsSync(notices)) {
+  fail("dist/THIRD-PARTY-NOTICES.txt is missing — the notices plugin did not run");
+} else {
+  const text = readFileSync(notices, "utf8");
+  const missing = ["react", "onnxruntime-web", "@huggingface/transformers"].filter(
+    (name) => !text.includes(`\n${name}@`),
+  );
+  if (missing.length) fail(`THIRD-PARTY-NOTICES.txt omits ${missing.join(", ")}`);
+  else pass("THIRD-PARTY-NOTICES.txt covers the main and worker bundles");
 }
 
 if (failed) {

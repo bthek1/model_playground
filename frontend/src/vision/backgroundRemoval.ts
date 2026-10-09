@@ -22,7 +22,7 @@
 // reading anything, which is the only place a licence constraint can actually
 // bite. Nothing here redistributes weights either way — the browser fetches them
 // from the Hub — but a default nobody downstream may legally use is still a
-// trap, and `licence.commercial` is what puts it on screen.
+// trap, and its row in `model/licences.ts` is what puts it on screen (#62).
 //
 // ---
 //
@@ -47,21 +47,8 @@
 
 import type { VisionModel } from "./types";
 
-/** What a model's licence permits, in the terms a user has to act on. */
-export interface ModelLicence {
-  /** Short name, as the Hub states it. */
-  name: string;
-  /** True when the licence permits commercial use without a separate agreement. */
-  commercial: boolean;
-  /** The licence text or the page that gates it. */
-  url: string;
-  /** One sentence, shown when `commercial` is false. */
-  note?: string;
-}
-
 export interface MatteModel extends VisionModel {
   task: "background-removal";
-  licence: ModelLicence;
 }
 
 export const MATTE_MODELS: MatteModel[] = [
@@ -72,11 +59,6 @@ export const MATTE_MODELS: MatteModel[] = [
     params: 6.5,
     task: "background-removal",
     bytes: { webgpu: 12_984_781, wasm: 6_632_188 },
-    licence: {
-      name: "Apache-2.0",
-      commercial: true,
-      url: "https://huggingface.co/Xenova/modnet",
-    },
   },
   {
     id: "briaai/RMBG-1.4",
@@ -85,12 +67,6 @@ export const MATTE_MODELS: MatteModel[] = [
     params: 44.1,
     task: "background-removal",
     bytes: { webgpu: 88_217_533, wasm: 44_403_226 },
-    licence: {
-      name: "bria-rmbg-1.4",
-      commercial: false,
-      url: "https://bria.ai/bria-huggingface-model-license-agreement/",
-      note: "Released under a Creative Commons licence for non-commercial use. Commercial use needs a separate paid agreement with BRIA.",
-    },
   },
 ];
 
