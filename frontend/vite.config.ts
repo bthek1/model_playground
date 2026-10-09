@@ -7,6 +7,7 @@ import basicSsl from "@vitejs/plugin-basic-ssl";
 import { resolve } from "path";
 // @ts-expect-error -- a plain .mjs build script, typed by its JSDoc
 import { thirdPartyNotices } from "./scripts/third-party-notices.mjs";
+import { seoPages } from "./scripts/seoPages";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -31,6 +32,10 @@ export default defineConfig(({ mode }) => {
       // dist/THIRD-PARTY-NOTICES.txt (#62) — the notices the bundled packages'
       // licences require, and a build failure on a licence off the allowlist.
       thirdPartyNotices(),
+      // One HTML file per indexable route, plus sitemap.xml and robots.txt
+      // (#63, #64). `SITE_URL` overrides the canonical origin for a build
+      // served somewhere other than the static deployment.
+      seoPages({ origin: env.SITE_URL || undefined }),
     ],
     // Workers are separate builds, and they hold most of the third-party code
     // (Transformers.js, ONNX Runtime). They record; the main build writes.

@@ -771,8 +771,13 @@ none.
 and are mapped to real routes through `REAL_ROUTES`. The sidebar lists only
 tasks with a page: `task()` throws on a label with no `REAL_ROUTES` entry, so a
 row cannot be added ahead of its route. Adding a page means adding the task
-label to its category **and** one `REAL_ROUTES` entry keyed by the slugified
-label.
+label to its category, **with a one-line description** (70–160 characters:
+what the page does and what runs it), **and** one `REAL_ROUTES` entry keyed by
+the slugified label. The description is the page's meta description, its line
+on the home page's task index and its search-result snippet (#64, #65), so
+write it for someone choosing a page. The route then needs adding to `ROUTES`
+in `infra/site/spa-rewrite.js` — `src/seo/edgeRoutes.test.ts` fails, naming it,
+until it is — or the static deploy serves it the generic shell.
 
 **The backend registry**, optionally. One `ModelCard` per checkpoint the page
 offers — but note that `task` is a **fixed choice set**
@@ -976,7 +981,8 @@ structurally: the run controls simply do not work until the load machine says
 [ ] Hook wraps useModelWorker, returns the §3 contract verbatim, adds no alias
 [ ] Selection persisted through useModelSelection with the route's own routeKey
 [ ] Route renders all four slots; autoLoad from the session; DOM order 1-4
-[ ] Task row + REAL_ROUTES entry added; taxonomy test asserts the route
+[ ] Task row (label + description) + REAL_ROUTES entry added; taxonomy test
+    asserts the route; the route added to spa-rewrite.js's ROUTES
 [ ] Added to model-page.spec.ts's route table, and to model-ids.spec.ts's imports
 [ ] ModelCard rows created if used; task is a ModelTask choice, not a pipeline
 [ ] Vitest contract asserted, including which controls re-derive and which re-run

@@ -15,13 +15,19 @@
 #   2. .wasm with an explicit application/wasm — ONNX Runtime's streaming
 #      compilation refuses anything else, and the CLI's MIME guess is not a
 #      contract;
-#   3. index.html and the manifest LAST (no-cache) — the switch-over;
+#   3. the per-route pages (`<route>/index.html`, #64), robots.txt and
+#      sitemap.xml (#63), then index.html and the manifest LAST (no-cache) —
+#      the switch-over. A route page names the same hashed chunks index.html
+#      does, so it goes after them too;
 #   4. never `--delete`. An asset this build no longer references is re-written
 #      in place tagged `stale=true`, once, and the bucket's lifecycle rule
 #      expires it N days later (infra/site: staleAssetDays). Re-writing resets
 #      its age, so the clock starts when it went stale, not when it was built;
 #   5. invalidate only /index.html and the manifest: hashed names never change
-#      meaning, so they never need invalidating.
+#      meaning, so they never need invalidating. The route pages, robots.txt
+#      and sitemap.xml are no-cache, which the edge revalidates on every
+#      request, so they need no invalidation either — and one path per route
+#      would spend CloudFront's free invalidation allowance in a few deploys.
 set -euo pipefail
 
 DIST="${1:-frontend/dist}"
@@ -56,10 +62,23 @@ aws s3 cp "$DIST/assets" "s3://$BUCKET/assets" --recursive --only-show-errors \
 
 # Un-hashed files from public/ (icons, og-image): stable names, so a day.
 aws s3 cp "$DIST" "s3://$BUCKET" --recursive --only-show-errors \
-  --exclude "assets/*" --exclude "index.html" --exclude "site.webmanifest" \
+  --exclude "assets/*" --exclude "index.html" --exclude "*/index.html" \
+  --exclude "site.webmanifest" --exclude "robots.txt" --exclude "sitemap.xml" \
   --cache-control "$DAY"
 
-# 3. The switch-over.
+# 3. The switch-over. Each indexable route's own page first (the CloudFront
+#    function serves /asr from asr/index.html), then the crawler files.
+aws s3 cp "$DIST" "s3://$BUCKET" --recursive --only-show-errors \
+  --exclude "*" --include "*/index.html" --exclude "assets/*" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "$REVALIDATE"
+for f in robots.txt:text/plain sitemap.xml:application/xml; do
+  name="${f%%:*}"
+  [[ -f "$DIST/$name" ]] || continue
+  aws s3 cp "$DIST/$name" "s3://$BUCKET/$name" --only-show-errors \
+    --content-type "${f#*:}; charset=utf-8" \
+    --cache-control "$REVALIDATE"
+done
 if [[ -f "$DIST/site.webmanifest" ]]; then
   aws s3 cp "$DIST/site.webmanifest" "s3://$BUCKET/site.webmanifest" --only-show-errors \
     --content-type "application/manifest+json" \

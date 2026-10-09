@@ -11,10 +11,12 @@
  * `src/`; change one and change the other.
  */
 
+import { APP_NAME } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
-/** The product name. Import it rather than retyping the string. */
-export const APP_NAME = "Model Playground";
+// The name lives in `lib/site.ts` so the build (`src/seo/`) can read it too;
+// re-exported here because every component caller already imports it from here.
+export { APP_NAME };
 
 export function LogoMark({ className }: { className?: string }) {
   return (

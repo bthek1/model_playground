@@ -94,6 +94,14 @@ Two tags follow from it:
   page makes a request to `/api`, even with a stale token in storage. On
   CloudFront a stray `/api` call is answered 200 with `index.html`, so "nothing
   broke" is not evidence; the request log is.
+- **`seo.spec.ts`** runs *only* under `E2E_STATIC` (#63–#65): the per-route
+  HTML files, `sitemap.xml` and `robots.txt` are build output. It fetches every
+  sitemap URL with `request.get` — no JavaScript, as a crawler sees it — and
+  asserts each has its own title, canonical and `<h1>`; then that the head
+  follows a client-side navigation, and that an unknown path gets the
+  not-found page with `noindex`. `vite preview` serves a route its own file the
+  way the CloudFront function does (`scripts/seoPages.ts`), or this would test
+  the generic shell; the edge's 301s are pinned in `infra/` instead.
 - **`analytics.spec.ts`** runs only under `E2E_STATIC` *and* `E2E_ANALYTICS`
   (#60) — a build with a PostHog key. `just fe-e2e-static` builds with a
   throwaway `phc_` key; CI sets `E2E_ANALYTICS` when the repository variable

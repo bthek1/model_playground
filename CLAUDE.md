@@ -264,7 +264,19 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
     then add it with its reason. None of this can be tested by deploying, so
     the CD half of `ci.yml` is itself under test (`infra/workflow.test.ts`) and
     the two scripts run against stub `aws`/`curl` — see deployment.md §10.9.
-
+- **Every indexable page has its own HTML file, and the edge serves it (#63–#65).**
+  `src/seo/` (pure, relative imports — `vite.config.ts` runs it in Node) builds
+  `SITE_PAGES` from the taxonomy, and `scripts/seoPages.ts` writes
+  `dist/<route>/index.html` (own title, description, canonical, absolute
+  `og:image`, JSON-LD, a static `<h1>` + links in `#root` that `createRoot`
+  replaces), `sitemap.xml` and `robots.txt`. `spa-rewrite.js` carries a **copy**
+  of the route list (`ROUTES`) — `src/seo/edgeRoutes.test.ts` fails by name when
+  they differ — and 301s `/` → `/home`, trailing slashes and upper case. A new
+  task needs a `description` in the taxonomy and a `ROUTES` line. In the app,
+  `useDocumentHead` keeps the head in step on client navigation, and the root
+  `notFoundComponent` adds `noindex` (an unknown path is still a 200 at the
+  edge). `vite preview` mirrors the edge's route→file mapping so the static E2E
+  pass tests what ships. See deployment.md §10.8c.
 ### Backend essentials
 
 - Class-based views; serializers in `serializers.py`, business logic in `services.py` (never in views).

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { useUIStore } from "@/store/ui";
 import { useMe, useLogout } from "@/hooks/useAuth";
+import { Breadcrumbs } from "./Breadcrumbs";
 import { PANEL_SHORTCUT } from "./RightPanel";
 import { Logo } from "./Logo";
 import { SidebarNav } from "./Sidebar";
@@ -68,6 +69,8 @@ export function Navbar() {
       </Button>
 
       <Logo className="hidden md:flex" markClassName="h-7 w-7" textClassName="text-sm" />
+
+      <Breadcrumbs className="hidden min-w-0 md:block md:border-l md:pl-3" />
 
       <div className="flex-1" />
 

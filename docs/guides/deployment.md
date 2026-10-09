@@ -415,10 +415,12 @@ longer cancels in-progress runs on `main`: a release queues behind the one
 uploading, rather than killing it halfway.
 
 The smoke test (`scripts/smoke-frontend.sh`) checks, against the live site:
-`/` is 200 and `no-cache`; a real `/assets/*.js` is `immutable`; a real
-`.wasm` is `application/wasm`; `/asr` returns the app shell; `http://`
-redirects to `https://`; every request verifies the certificate (no `-k`);
-and the bucket's own URL answers 403. It retries `/` for up to five minutes
+`/home` is 200 and `no-cache`; `/` and `/ASR/` are 301s to `/home` and
+`/asr`; a real `/assets/*.js` is `immutable`; a real `.wasm` is
+`application/wasm`; `/asr` is its **own** page (its canonical names it, so
+the generic shell fails); `robots.txt` names the sitemap and `sitemap.xml`
+lists `/asr`; `http://` redirects to `https://`; every request verifies the
+certificate (no `-k`); and the bucket's own URL answers 403. It retries `/home` for up to five minutes
 (`SMOKE_ATTEMPTS` × `SMOKE_WAIT` seconds, 30 × 10 by default) while a new
 distribution or an invalidation settles.
 
@@ -461,8 +463,11 @@ references them, the next time it lazy-loads a route. The upload script:
 2. uploads `*.wasm` with an **explicit** `application/wasm` — ONNX Runtime's
    streaming compilation refuses anything else, and the CLI's MIME guess is
    not a contract;
-3. uploads `site.webmanifest` and then `index.html` **last**,
-   `no-cache, must-revalidate` — the switch-over;
+3. uploads each indexable route's own `<route>/index.html`, then `robots.txt`
+   and `sitemap.xml` (§10.8c), then `site.webmanifest` and `index.html`
+   **last** — all `no-cache, must-revalidate`, all with their content type
+   stated. That is the switch-over; a route page names the same hashed chunks
+   `index.html` does, so it goes after them too;
 4. **never deletes.** An asset the new build no longer references is
    re-written in place tagged `stale=true`, once; the bucket's lifecycle rule
    expires tagged objects 30 days later (`site:staleAssetDays`). Re-writing
@@ -471,14 +476,20 @@ references them, the next time it lazy-loads a route. The upload script:
    restart its clock. A chunk a later build brings back is re-uploaded
    untagged, which takes it out of the rule;
 5. invalidates only `/index.html` and `/site.webmanifest`. A hashed name never
-   changes meaning, so it never needs invalidating.
+   changes meaning, so it never needs invalidating; the route pages, robots
+   and sitemap are `no-cache`, which the edge revalidates per request, and one
+   invalidation path per route would spend the free allowance in a few deploys.
 
 SPA deep links (`/asr`) are a CloudFront Function (`infra/site/spa-rewrite.js`)
-that serves `/index.html` for any path whose last segment has no dot — **not**
-a distribution-wide custom error response, which would also turn a future
-`/api` origin's 404s into the app shell. A route containing a dot would bypass
-it; none does, and `spa-rewrite.test.ts` checks that against the generated
-route tree. There is **no CSP**, for §1's reason.
+that treats any path whose last segment has no dot as a route — **not** a
+distribution-wide custom error response, which would also turn a future
+`/api` origin's 404s into the app shell. A route listed in its `ROUTES` is
+served its own `/<route>/index.html`; anything else (sign-in, a mistyped URL)
+gets the root `/index.html`. `/`, a trailing slash and an upper-case letter
+are **301s** to the canonical form, query string kept (§10.8c). A route
+containing a dot would bypass all of it; none does, and `spa-rewrite.test.ts`
+checks that against the generated route tree. There is **no CSP**, for §1's
+reason.
 
 ### 10.7 Cost
 
@@ -523,6 +534,45 @@ it has an extension. Adding a host the browser fetches from (a CDN, a dataset
 mirror) means adding a row to `src/legal/recipients.ts`. See
 [legal.md](../explanations/legal.md).
 
+### 10.8c Search engines: per-route pages, sitemap, redirects (#63–#65)
+
+A single-page app serves every URL the same shell: one `<title>`, one
+description, an empty `<div id="root">`. Google fills it in after rendering
+the JavaScript, late; link-preview bots and most other crawlers never do. So
+the build writes what they need (`frontend/scripts/seoPages.ts`, from the
+pure `frontend/src/seo/`):
+
+- **`dist/<route>/index.html`** for every page in `SITE_PAGES` — home, every
+  taxonomy task, the four legal pages — with its own title, description,
+  canonical, `og:url`, absolute `og:image`, JSON-LD (`WebApplication` on home,
+  a `BreadcrumbList` elsewhere) and a static `<h1>`, description and links
+  inside `#root`, which `createRoot` replaces when the app mounts. Sign-in and
+  sign-up are not in it: an account form is not a search result.
+- **`dist/sitemap.xml`** (no `lastmod` — it would be the build date on every
+  page, and Google ignores an inaccurate one) and **`dist/robots.txt`** (allow
+  all but `/ingest/`, and name the sitemap).
+
+`SITE_PAGES` is built from the sidebar taxonomy, whose entries now carry a
+one-line `description`. The function's `ROUTES` is a **copy**, because the
+edge has no module system; `frontend/src/seo/edgeRoutes.test.ts` fails,
+naming the difference, when they disagree. A page missing from `ROUTES` is
+served the generic shell; a route listed with no file answers 403.
+
+Canonicals are written against `SITE_URL` in `frontend/src/lib/site.ts`; a
+build for another host sets `SITE_URL` in its environment. An unknown path
+still answers 200 with the shell — the edge cannot know the router's routes —
+so the app's not-found page adds `noindex` while it is mounted.
+
+**Deploy order, the first time.** `pulumi up` updates the function before the
+upload writes the route files, so for the minute between them a route listed
+in `ROUTES` with no file yet answers 403. It happens once, when this lands, and
+again only for the newest route when one is added.
+
+**Search Console** (manual, once): verify the domain property with a DNS TXT
+record in the hosted zone, submit `https://<domain>/sitemap.xml`, and do the
+same in Bing Webmaster Tools. Nothing in the browser contacts either, so
+`legal/recipients.ts` does not change.
+
 ### 10.9 How it is tested
 
 None of this can be exercised by deploying it — a wrong IAM condition, a
@@ -538,8 +588,9 @@ and the `infra` CI job):
 | IAM documents | `infra/bootstrap/policies.test.ts` | exact `sub`, no `*:*`, Route 53 names/types, tag conditions, both stack configs agreeing |
 | IAM wiring | `infra/bootstrap/bootstrap.test.ts` (Pulumi mocks) | the OIDC provider looked up not created; each role gets its own document |
 | The site stack | `infra/site/site.test.ts` (Pulumi mocks) | public access blocked, one bucket-policy principal, `redirect-to-https`, no custom error responses, us-east-1 certificate, the zone never created, only `playground` records |
-| Deep links | `infra/site/spa-rewrite.test.ts` | the function's exact bytes; no route in `routeTree.gen.ts` has a dot |
-| Upload order | `infra/deploy-frontend.test.ts` (stub `aws`) | assets → wasm → index last; explicit wasm type; no delete; stale-marking once, never a live chunk; the two-path invalidation |
+| Deep links and redirects | `infra/site/spa-rewrite.test.ts` | the function's exact bytes; a listed route gets its own file, anything else the shell; `/`, a trailing slash and upper case 301 with the query string kept; no route in `routeTree.gen.ts` has a dot |
+| SEO output (#63–#65) | `frontend/src/seo/*.test.ts`, `frontend/e2e/specs/seo.spec.ts` (`E2E_STATIC=1`) | the function's `ROUTES` equals `SITE_PAGES`; every page's head, canonical, JSON-LD and `<h1>`; every sitemap URL fetched with no JS; the head following a client-side navigation; the not-found page's `noindex` |
+| Upload order | `infra/deploy-frontend.test.ts` (stub `aws`) | assets → wasm → route pages → robots/sitemap → index last; explicit wasm, HTML, text and XML types; no delete; stale-marking once, never a live chunk; the two-path invalidation |
 | Smoke test | `infra/smoke-frontend.test.ts` (stub `curl`) | passes a healthy site; fails, naming it, on each broken property |
 | Analytics through `/ingest/*` (#60) | `infra/site/site.test.ts`, `infra/site/ingest-strip.test.ts`, `infra/workflow.test.ts`, `infra/posthog-setup.test.ts` | the ordered behaviour precedes the default, targets PostHog, caches nothing, carries the strip function and never `spa-rewrite`; CI takes the `phc_` key from a variable on the shipped build only; the setup script never prints the personal key — see [analytics.md](../explanations/analytics.md) |
 | CD wiring | `infra/workflow.test.ts` (reads `ci.yml`) | the `off` artifact built once and never rebuilt; `deploy`'s needs, environment, OIDC, no-cancel concurrency, step order; `preview` has no environment and never applies; only those two jobs get a token |
