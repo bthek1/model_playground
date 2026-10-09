@@ -148,13 +148,22 @@ describe("ImageClassificationPage", () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() => expect(fromFile).toHaveBeenCalledWith(file));
-    expect(URL.createObjectURL).toHaveBeenCalledWith(file);
+    // The preview URL is made once the decode resolves, not when it starts.
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledWith(file));
     // Opening a file dialog is not asking for an inference.
     expect(mockRun).not.toHaveBeenCalled();
 
     // A second pick frees the first preview: an object URL that outlives its
     // <img> pins the decoded bitmap for the tab's lifetime.
-    fireEvent.click(screen.getByRole("button", { name: /^cats$/i }));
+    //
+    // Wait for the first decode to *finish*, not just start: `fromFile` is
+    // called at the start of the pick, and the samples stay disabled (`busy`)
+    // until it settles. Clicking one before that is a click on a disabled
+    // button — nothing is picked and nothing revoked. It passed locally and
+    // failed in CI, where the runner was slow enough to lose the race.
+    const cats = screen.getByRole("button", { name: /^cats$/i });
+    await waitFor(() => expect(cats).toBeEnabled());
+    fireEvent.click(cats);
     await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:preview"));
   });
 
