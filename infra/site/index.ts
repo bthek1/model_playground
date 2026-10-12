@@ -98,9 +98,19 @@ const oac = new aws.cloudfront.OriginAccessControl("site", {
 const spaRewrite = new aws.cloudfront.Function("spa-rewrite", {
   name: `${FUNCTION_PREFIX}spa-rewrite`,
   runtime: "cloudfront-js-2.0",
-  comment: "SPA deep links: extensionless paths → /index.html",
+  comment: "SPA routes → their own index.html; / and non-canonical → 301",
   publish: true,
   code: readFileSync(join(__dirname, "spa-rewrite.js"), "utf8"),
+});
+
+// A real 404 for a path with no page (#63): spa-rewrite sends it /404.html,
+// which the deploy uploads with `status=404` metadata; this applies it.
+const objectStatus = new aws.cloudfront.Function("object-status", {
+  name: `${FUNCTION_PREFIX}object-status`,
+  runtime: "cloudfront-js-2.0",
+  comment: "Status from object metadata: x-amz-meta-status: 404 → 404",
+  publish: true,
+  code: readFileSync(join(__dirname, "object-status.js"), "utf8"),
 });
 
 const ingestStrip = new aws.cloudfront.Function("ingest-strip", {
@@ -226,6 +236,7 @@ const distribution = new aws.cloudfront.Distribution("site", {
     responseHeadersPolicyId: headers.id,
     functionAssociations: [
       { eventType: "viewer-request", functionArn: spaRewrite.arn },
+      { eventType: "viewer-response", functionArn: objectStatus.arn },
     ],
   },
   // Deliberately no `customErrorResponses`: the SPA fallback is the function

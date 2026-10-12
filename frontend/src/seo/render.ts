@@ -169,6 +169,28 @@ export function renderPageHtml(template: string, page: SitePage, origin: string)
 }
 
 /**
+ * `/404.html`: the shell the edge serves, with a 404 status, for a path that
+ * has no page (#63). The app still mounts and renders its not-found page; this
+ * is what a crawler reads first. `noindex` as well as the status, so a
+ * misconfigured edge that sent it as a 200 still keeps it out of the index.
+ */
+export function renderNotFoundHtml(template: string, origin: string): string {
+  if (!/<title>[^<]*<\/title>/.test(template) || !template.includes('<div id="root"></div>')) {
+    throw new Error("seo: index.html has no <title> or no empty #root to fill");
+  }
+  let html = template.replace(
+    /<title>[^<]*<\/title>/,
+    () => `<title>${escapeHtml(suffix404)}</title>`,
+  );
+  html = setMeta(html, "name", "robots", "noindex");
+  html = absolutiseImages(html, origin);
+  const body = `<main class="mx-auto max-w-3xl space-y-4 p-8"><h1 class="text-2xl font-semibold">Page not found</h1><p class="text-muted-foreground">There is no page at this address.</p><p>${link("/home", "Browse every task")}</p></main>`;
+  return html.replace('<div id="root"></div>', () => `<div id="root">${body}</div>`);
+}
+
+const suffix404 = `Page not found · ${APP_NAME}`;
+
+/**
  * The sitemap. No `<lastmod>`: every page would carry the build date whether
  * or not it changed, and Google ignores a lastmod that is not accurate.
  */

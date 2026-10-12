@@ -1872,12 +1872,24 @@ CloudFront at https://playground.benedictthekkel.com, infrastructure in Pulumi
   `og:image`, JSON-LD, a static `<h1>` + links in `#root` that `createRoot`
   replaces), `sitemap.xml` and `robots.txt`. `spa-rewrite.js` carries a **copy**
   of the route list (`ROUTES`) — `src/seo/edgeRoutes.test.ts` fails by name when
-  they differ — and 301s `/` → `/home`, trailing slashes and upper case. A new
-  task needs a `description` in the taxonomy and a `ROUTES` line. In the app,
-  `useDocumentHead` keeps the head in step on client navigation, and the root
-  `notFoundComponent` adds `noindex` (an unknown path is still a 200 at the
-  edge). `vite preview` mirrors the edge's route→file mapping so the static E2E
-  pass tests what ships. See deployment.md §10.8c.
+  they differ — and 301s `/` → `/home`, trailing slashes and upper case, with
+  an **absolute** `Location` (Search Console called a relative one a "Redirect
+  error"). A new task needs a `description` in the taxonomy and a `ROUTES`
+  line; a new non-indexable route needs an `APP_ROUTES` line and an
+  `APP_ONLY_PATHS` entry, or it **404s** at the edge — any other path gets
+  `/404.html`, uploaded with `status=404` metadata that the viewer-response
+  function `object-status.js` turns into a real 404 (keyed on the object, not
+  the URI). In the app, `useDocumentHead` keeps the head in step on client
+  navigation and drops a served `noindex` on an indexable page. `vite preview`
+  mirrors the edge (route→file, 404s) so the static E2E pass tests what ships.
+  The Search Console TXT record at the zone apex is **hand-made, not Pulumi** —
+  deleting it un-verifies the property. See deployment.md §10.8c.
+- **A smoke/deploy script never pipes a body into `grep -q` (or `grep -m1`
+  without `|| true`).** Under `set -euo pipefail` the first is a race — grep
+  exits at the match, the writer takes SIGPIPE, and a body that *matched*
+  fails the check (it failed CI once) — and the second turns a missing header
+  into a silent exit instead of a named failure. Capture the body, then match
+  with `[[ == ]]`; `infra/smoke-frontend.test.ts` pins both.
 
 Full procedure, backups and troubleshooting: `docs/guides/deployment.md` (§10 for
 the static deploy).

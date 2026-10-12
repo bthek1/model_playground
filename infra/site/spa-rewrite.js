@@ -5,19 +5,27 @@
 // a dot (`/assets/x.js`, `/favicon.ico`, a `.wasm`, `/robots.txt`) is fetched
 // as itself, and a missing one fails rather than returning the app shell.
 //
-// A route is served one of two files (#64). An indexable page has its own
+// A route is served one of three files. An indexable page has its own
 // `/<route>/index.html`, written by the build with that page's title,
-// description, canonical and a static summary (frontend/scripts/seoPages.ts);
-// anything else — sign-in, a mistyped URL — gets the root `/index.html` shell,
-// and the app's not-found page says `noindex`. ROUTES below is the list of
-// pages that have a file. It must equal the frontend's SITE_PAGES, and
+// description, canonical and a static summary (frontend/scripts/seoPages.ts,
+// #64). A route the app has but search engines should not (APP_ROUTES:
+// sign-in, sign-up) gets the root `/index.html` shell. Anything else gets
+// `/404.html` — the same shell, so the app still renders its not-found page —
+// which the deploy uploads with `x-amz-meta-status: 404`, and the
+// viewer-response function (object-status.js) turns that into a real 404
+// status (#63). A 200 for a URL with no page is a "soft 404" to a crawler.
+//
+// ROUTES must equal the frontend's SITE_PAGES, and
 // frontend/src/seo/edgeRoutes.test.ts fails, naming the difference, when it
-// does not: a route missing here is served the generic shell, and a route
-// listed here with no file answers 403.
+// does not: a page missing here would answer 404, and a route listed here with
+// no file answers 403. spa-rewrite.test.ts checks that every route in the
+// router is in ROUTES or APP_ROUTES, so a new route cannot 404 unnoticed.
 //
 // One URL per page (#63): `/` redirects to `/home`, and a trailing slash or an
 // upper-case letter redirects to the lower-case, slash-free form, all with a
-// 301 and the query string kept. Every route is lower-case kebab.
+// 301, an absolute Location and the query string kept. Every route is
+// lower-case kebab. The Location is absolute because Search Console reported a
+// relative one (`/home`) as a "Redirect error", though it is valid HTTP.
 //
 // This is deliberately not a distribution-wide custom error response: that
 // would turn *every* 403/404 into index.html, including a future `/api`
@@ -26,6 +34,11 @@
 //
 // Plain ES5 with no exports — the runtime has no module system. The test
 // evaluates this file's exact text.
+var APP_ROUTES = {
+  "/login": true,
+  "/signup": true
+};
+
 var ROUTES = {
   "/home": true,
   "/text-to-speech": true,
@@ -78,7 +91,10 @@ var ROUTES = {
   "/accessibility": true
 };
 
-function redirect(location, querystring) {
+function redirect(request, path) {
+  var querystring = request.querystring;
+  var host = request.headers && request.headers.host && request.headers.host.value;
+  var location = host ? "https://" + host + path : path;
   var pairs = [];
   for (var key in querystring) {
     var entry = querystring[key];
@@ -108,11 +124,17 @@ function handler(event) {
   }
   var path = uri.toLowerCase().replace(/\/+$/, "");
   if (path === "") {
-    return redirect("/home", request.querystring);
+    return redirect(request, "/home");
   }
   if (path !== uri) {
-    return redirect(path, request.querystring);
+    return redirect(request, path);
   }
-  request.uri = ROUTES[path] === true ? path + "/index.html" : "/index.html";
+  if (ROUTES[path] === true) {
+    request.uri = path + "/index.html";
+  } else if (APP_ROUTES[path] === true) {
+    request.uri = "/index.html";
+  } else {
+    request.uri = "/404.html";
+  }
   return request;
 }

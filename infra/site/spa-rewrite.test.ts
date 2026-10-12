@@ -7,14 +7,19 @@ import { describe, expect, it } from "vitest";
 // there rather than bytes the function needs.
 const source = readFileSync(join(__dirname, "spa-rewrite.js"), "utf8");
 type Querystring = Record<string, { value: string; multiValue?: { value: string }[] }>;
-type Request = { uri: string; querystring?: Querystring };
+type Request = {
+  uri: string;
+  querystring?: Querystring;
+  headers?: Record<string, { value: string }>;
+};
 type Redirect = { statusCode: number; headers: { location: { value: string } } };
 const handler = new Function(`${source}\nreturn handler;`)() as (event: {
   request: Request;
 }) => Request | Redirect;
 
+const HOST = "playground.example.com";
 const run = (uri: string, querystring: Querystring = {}) =>
-  handler({ request: { uri, querystring } });
+  handler({ request: { uri, querystring, headers: { host: { value: HOST } } } });
 const rewrite = (uri: string) => (run(uri) as Request).uri;
 const location = (uri: string, querystring?: Querystring) => {
   const out = run(uri, querystring) as Redirect;
@@ -29,19 +34,33 @@ describe("spa-rewrite (CloudFront viewer-request)", () => {
     (uri) => expect(rewrite(uri)).toBe(`${uri}/index.html`),
   );
 
-  // Anything else is the app's to answer — sign-in, or its not-found page.
-  it.each(["/login", "/signup", "/tasks/text-to-image", "/nope"])(
-    "serves the app shell for the unlisted path %s",
-    (uri) => expect(rewrite(uri)).toBe("/index.html"),
+  // A route the app has but search engines should not.
+  it.each(["/login", "/signup"])("serves the app shell for the app-only route %s", (uri) =>
+    expect(rewrite(uri)).toBe("/index.html"),
+  );
+
+  // Anything else is a not-found page with a real 404 status (#63):
+  // /404.html carries `status=404` metadata that object-status.js applies.
+  it.each(["/tasks/text-to-image", "/nope", "/home/extra"])(
+    "serves /404.html for the path with no page %s",
+    (uri) => expect(rewrite(uri)).toBe("/404.html"),
   );
 
   it("does not mistake an Object.prototype key for a route", () => {
-    expect(rewrite("/constructor")).toBe("/index.html");
+    expect(rewrite("/constructor")).toBe("/404.html");
+    expect(rewrite("/tostring")).toBe("/404.html");
   });
 
   // One URL per page (#63).
   it("redirects / to /home", () => {
-    expect(location("/")).toBe("/home");
+    expect(location("/")).toBe(`https://${HOST}/home`);
+  });
+
+  // Search Console called the relative `Location: /home` a "Redirect error".
+  it("sends an absolute Location, falling back to a relative one with no Host", () => {
+    expect(location("/ASR")).toBe(`https://${HOST}/asr`);
+    const out = handler({ request: { uri: "/ASR", querystring: {} } }) as Redirect;
+    expect(out.headers.location.value).toBe("/asr");
   });
 
   it.each([
@@ -51,16 +70,16 @@ describe("spa-rewrite (CloudFront viewer-request)", () => {
     ["/home//", "/home"],
     ["/Nope", "/nope"],
   ])("redirects %s to its canonical form %s", (from, to) => {
-    expect(location(from)).toBe(to);
+    expect(location(from)).toBe(`https://${HOST}${to}`);
   });
 
   it("keeps the query string on a redirect", () => {
     expect(location("/ASR", { utm_source: { value: "x" }, flag: { value: "" } })).toBe(
-      "/asr?utm_source=x&flag",
+      `https://${HOST}/asr?utm_source=x&flag`,
     );
     expect(
       location("/", { t: { value: "a", multiValue: [{ value: "a" }, { value: "b" }] } }),
-    ).toBe("/home?t=a&t=b");
+    ).toBe(`https://${HOST}/home?t=a&t=b`);
   });
 
   it.each([
@@ -73,6 +92,7 @@ describe("spa-rewrite (CloudFront viewer-request)", () => {
     "/robots.txt",
     "/sitemap.xml",
     "/asr/index.html",
+    "/404.html",
   ])("fetches the file %s as itself", (uri) => expect(rewrite(uri)).toBe(uri));
 
   it("leaves the query string alone", () => {
@@ -92,9 +112,18 @@ describe("spa-rewrite (CloudFront viewer-request)", () => {
     const paths = [...tree.matchAll(/\bpath: '([^']*)'/g)].map((m) => m[1]);
     expect(paths.length).toBeGreaterThan(20);
     expect(paths.filter((p) => p.includes("."))).toEqual([]);
-    for (const p of paths.filter((p) => p !== "/")) {
-      expect(rewrite(p)).toMatch(/^(\/[a-z0-9-]+)?\/index\.html$/);
-    }
+  });
+
+  // A route the router has but the function does not know would answer 404:
+  // each one is either an indexable page (its own file) or an app route.
+  it("knows every route in the router, so none answers 404", () => {
+    const tree = readFileSync(
+      join(__dirname, "../../frontend/src/routeTree.gen.ts"),
+      "utf8",
+    );
+    const paths = [...new Set([...tree.matchAll(/\bpath: '([^']*)'/g)].map((m) => m[1]))];
+    const unknown = paths.filter((p) => p !== "/" && rewrite(p) === "/404.html");
+    expect(unknown, "add each to ROUTES (indexable) or APP_ROUTES").toEqual([]);
   });
 
   it("stays well inside CloudFront's 10 KB function limit", () => {

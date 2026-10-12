@@ -62,6 +62,11 @@ export function syncHead(pathname: string, doc: Document = document): void {
     return;
   }
 
+  // An indexable page is never `noindex`. `/404.html` serves one in its head
+  // (#63), and a visitor who lands there and clicks through to a page keeps
+  // that document; the not-found page's own tag goes with its unmount.
+  doc.head.querySelectorAll('meta[name="robots"]').forEach((el) => el.remove());
+
   const url = canonicalUrl(page.path, origin);
   if (canonical) {
     canonical.href = url;

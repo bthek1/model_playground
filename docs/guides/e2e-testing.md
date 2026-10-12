@@ -98,10 +98,13 @@ Two tags follow from it:
   HTML files, `sitemap.xml` and `robots.txt` are build output. It fetches every
   sitemap URL with `request.get` — no JavaScript, as a crawler sees it — and
   asserts each has its own title, canonical and `<h1>`; then that the head
-  follows a client-side navigation, and that an unknown path gets the
-  not-found page with `noindex`. `vite preview` serves a route its own file the
-  way the CloudFront function does (`scripts/seoPages.ts`), or this would test
-  the generic shell; the edge's 301s are pinned in `infra/` instead.
+  follows a client-side navigation, and that an unknown path is a real **404**
+  that still renders the not-found page (and drops its `noindex` once you
+  click through). `vite preview` serves a route its own file the
+  way the CloudFront function does (`scripts/seoPages.ts`), and answers an
+  unknown path with `404.html` and a 404 as the viewer-response function does,
+  or this would test the generic shell; the edge's 301s are pinned in
+  `infra/` instead.
 - **`analytics.spec.ts`** runs only under `E2E_STATIC` *and* `E2E_ANALYTICS`
   (#60) — a build with a PostHog key. `just fe-e2e-static` builds with a
   throwaway `phc_` key; CI sets `E2E_ANALYTICS` when the repository variable

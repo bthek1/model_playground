@@ -21,7 +21,10 @@ ok() { echo "✓ $*"; }
 # Headers only, lower-cased names; no -k anywhere, so every https request here
 # also verifies the certificate chain and that it names $HOST.
 head_of() { curl -sS -o /dev/null -D - "$@" | tr -d '\r' | tr 'A-Z' 'a-z'; }
-header() { grep -m1 "^$1:" | cut -d' ' -f2-; }
+# Prints nothing when the header is absent rather than failing: `grep -m1`
+# exits 1 on no match, and under `set -e -o pipefail` that would end the
+# script before the check after it could say which property was broken.
+header() { { grep -m1 "^$1:" || true; } | cut -d' ' -f2-; }
 
 # A fresh distribution or an in-flight invalidation can take minutes to settle.
 # /home rather than /: the root is a redirect to it (#63).
@@ -65,6 +68,16 @@ ok "/asr (a deep link) returns the app shell"
 [[ "$deep" == *"<link rel=\"canonical\" href=\"$URL/asr\""* ]] ||
   fail "/asr has no canonical naming $URL/asr — the generic shell, not its own page"
 ok "/asr is its own page, with its canonical"
+
+# A path with no page is a real 404 (#63) — set by object-status.js from the
+# object's metadata — and still the app shell, so the not-found page renders.
+missing_code="$(curl -sS -o /dev/null -w '%{http_code}' "$URL/no-such-page-smoke")"
+[[ "$missing_code" == "404" ]] ||
+  fail "/no-such-page-smoke is $missing_code, want 404 — a soft 404 gets indexed"
+missing="$(curl -sS "$URL/no-such-page-smoke")"
+[[ "$missing" == *'<div id="root">'* ]] ||
+  fail "/no-such-page-smoke is not the app shell, so the not-found page cannot render"
+ok "a path with no page is a 404 that still renders the app"
 
 for f in robots.txt sitemap.xml; do
   status="$(curl -sS -o /dev/null -w '%{http_code}' "$URL/$f")"

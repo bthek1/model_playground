@@ -76,17 +76,35 @@ test.describe("SEO (static build)", () => {
     await expect(page).toHaveURL(/\/home#computer-vision$/);
   });
 
-  // The edge answers an unknown path with the shell and a 200 — it cannot know
-  // the router's routes — so the page has to say noindex itself (#63).
-  test("an unknown path is a not-found page that asks not to be indexed", async ({ page }) => {
-    await page.goto("/no-such-page");
+  // A path with no page is a real 404 (#63): the edge serves /404.html and
+  // object-status.js applies its `status=404` metadata; preview does the same.
+  // The body is still the app, so the not-found page renders — and says
+  // noindex too, in case the status is ever lost.
+  test("an unknown path is a 404 not-found page that asks not to be indexed", async ({
+    page,
+    request,
+  }) => {
+    const raw = await request.get("/no-such-page");
+    expect(raw.status()).toBe(404);
+    expect(await raw.text()).toContain('<meta name="robots" content="noindex" />');
+
+    const response = await page.goto("/no-such-page");
+    expect(response?.status()).toBe(404);
     await expect(page.getByTestId("not-found")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
-    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
+    await expect(page.locator('meta[name="robots"][content="noindex"]').first()).toBeAttached();
     await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
 
     await page.getByRole("link", { name: "Browse every task" }).click();
     await expect(page).toHaveURL(/\/home$/);
+    // Neither the served tag nor the not-found page's own survives the click.
     await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+  });
+
+  // The routes the app has but search engines should not still get a 200.
+  test("sign-in and sign-up are not 404s", async ({ request }) => {
+    for (const path of ["/login", "/signup"]) {
+      expect((await request.get(path)).status(), path).toBe(200);
+    }
   });
 });

@@ -116,6 +116,14 @@ export const SITE_PAGES: readonly SitePage[] = [
   ...STATIC_PAGES,
 ];
 
+/**
+ * Routes the app has that are not indexable: they get the plain shell at the
+ * edge, with a 200. Every other path with no page gets `/404.html` and a real
+ * 404 (#63). `infra/site/spa-rewrite.js` carries a copy as `APP_ROUTES`, which
+ * `edgeRoutes.test.ts` keeps equal to this.
+ */
+export const APP_ONLY_PATHS: readonly string[] = ["/login", "/signup"];
+
 const BY_PATH = new Map(SITE_PAGES.map((p) => [p.path, p]));
 
 /** Lower-case and drop a trailing slash: `/ASR/` → `/asr`, `/` stays `/`. */
