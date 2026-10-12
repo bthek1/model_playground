@@ -415,7 +415,7 @@ longer cancels in-progress runs on `main`: a release queues behind the one
 uploading, rather than killing it halfway.
 
 The smoke test (`scripts/smoke-frontend.sh`) checks, against the live site:
-`/home` is 200 and `no-cache`; `/` and `/ASR/` are 301s to `/home` and
+`/home` is 200, `max-age=0` for browsers and an `s-maxage` for the edge (it also logs `x-cache` on a repeat request); `/` and `/ASR/` are 301s to `/home` and
 `/asr`; an unknown path is a **404** whose body is still the app shell; a real `/assets/*.js` is `immutable`; a real `.wasm` is
 `application/wasm`; `/asr` is its **own** page (its canonical names it, so
 the generic shell fails); `robots.txt` names the sitemap and `sitemap.xml`
@@ -466,8 +466,8 @@ references them, the next time it lazy-loads a route. The upload script:
 3. uploads each indexable route's own `<route>/index.html`, then `404.html`
    with `--metadata status=404`, `robots.txt` and `sitemap.xml` (§10.8c),
    then `site.webmanifest` and `index.html`
-   **last** — all `no-cache, must-revalidate`, all with their content type
-   stated. That is the switch-over; a route page names the same hashed chunks
+   **last** — all `public, max-age=0, s-maxage=300, must-revalidate`, all
+   with their content type stated (see *HTML at the edge* below). That is the switch-over; a route page names the same hashed chunks
    `index.html` does, so it goes after them too;
 4. **never deletes.** An asset the new build no longer references is
    re-written in place tagged `stale=true`, once; the bucket's lifecycle rule
@@ -477,9 +477,22 @@ references them, the next time it lazy-loads a route. The upload script:
    restart its clock. A chunk a later build brings back is re-uploaded
    untagged, which takes it out of the rule;
 5. invalidates only `/index.html` and `/site.webmanifest`. A hashed name never
-   changes meaning, so it never needs invalidating; the route pages, robots
-   and sitemap are `no-cache`, which the edge revalidates per request, and one
-   invalidation path per route would spend the free allowance in a few deploys.
+   changes meaning, so it never needs invalidating; the route pages,
+   `404.html`, robots and sitemap leave the edge within `s-maxage` (5 min) on
+   their own, and one invalidation path per route would spend the free
+   allowance in a few deploys. A route page a few minutes old is harmless,
+   because step 4 never deletes the chunks it names.
+
+**HTML at the edge (#68).** HTML is cached by CloudFront and not by the
+browser: `max-age=0, must-revalidate` makes a returning tab ask every time, so
+it sees a deploy at once, and `s-maxage=300` lets the POP answer. It used to be
+plain `no-cache`, which CloudFront honours by revalidating with the origin on
+**every** request (`x-cache: RefreshHit`). The bucket is in `ap-southeast-2`,
+so each HTML hit from Europe or the US paid a round trip to Sydney — an SEO
+checker in Germany timed `/home` at 1.11 s against a 0.4 s target. Hashed
+assets never had the problem (`immutable`, `Hit`). The deploy test fails on an
+HTML upload with a browser lifetime or without an edge one, and so does the
+smoke test against the live `/home`.
 
 SPA deep links (`/asr`) are a CloudFront Function (`infra/site/spa-rewrite.js`)
 that treats any path whose last segment has no dot as a route — **not** a

@@ -24,7 +24,7 @@ export interface SitePage {
   title: string;
   /** The page's `<h1>`: the taxonomy label, or the static page's name. */
   heading: string;
-  /** The meta description, 70–160 characters. */
+  /** The meta description, 70–150 characters (about 920 px, #68). */
   description: string;
   /** The owning taxonomy category, for a task page. */
   category?: string;

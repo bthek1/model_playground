@@ -1857,6 +1857,12 @@ CloudFront at https://playground.benedictthekkel.com, infrastructure in Pulumi
   once and a lifecycle rule expires them 30 days later, so an open tab keeps its
   chunks. SPA deep links are a CloudFront Function, not a custom error response
   (that would mask a future `/api` origin's 404s). No CSP.
+- **HTML is cached at the edge, never in the browser** (#68): every un-hashed
+  switch-over file is `public, max-age=0, s-maxage=300, must-revalidate`. Plain
+  `no-cache` makes CloudFront revalidate each HTML hit against the bucket in
+  `ap-southeast-2` (a ~1.1 s response from Europe); a browser `max-age` strands
+  a returning tab on the previous deploy. `infra/deploy-frontend.test.ts` and the
+  smoke test fail on either half. See deployment.md §10.
 - **The workflow does not cancel in-progress runs on `main`**, and `deploy` has
   its own non-cancelling concurrency group: cancelling mid-upload half-deploys.
 - **A new `/api` caller fails `conventions.test.ts` by name.** Every module outside

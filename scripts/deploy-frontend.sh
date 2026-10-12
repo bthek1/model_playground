@@ -16,7 +16,7 @@
 #      compilation refuses anything else, and the CLI's MIME guess is not a
 #      contract;
 #   3. the per-route pages (`<route>/index.html`, #64), 404.html (with its
-#      `status=404` metadata), robots.txt and sitemap.xml (#63), then index.html and the manifest LAST (no-cache) —
+#      `status=404` metadata), robots.txt and sitemap.xml (#63), then index.html and the manifest LAST —
 #      the switch-over. A route page names the same hashed chunks index.html
 #      does, so it goes after them too;
 #   4. never `--delete`. An asset this build no longer references is re-written
@@ -24,10 +24,20 @@
 #      expires it N days later (infra/site: staleAssetDays). Re-writing resets
 #      its age, so the clock starts when it went stale, not when it was built;
 #   5. invalidate only /index.html and the manifest: hashed names never change
-#      meaning, so they never need invalidating. The route pages, robots.txt
-#      and sitemap.xml are no-cache, which the edge revalidates on every
-#      request, so they need no invalidation either — and one path per route
-#      would spend CloudFront's free invalidation allowance in a few deploys.
+#      meaning, so they never need invalidating. The route pages, 404.html,
+#      robots.txt and sitemap.xml are not invalidated either: the edge keeps
+#      them for at most EDGE_SECONDS, so a deploy reaches every POP within that
+#      window — and one path per route would spend CloudFront's free
+#      invalidation allowance in a few deploys. A route page up to five minutes
+#      old is harmless, because step 4 never deletes the chunks it names.
+#
+# HTML is cached at the EDGE but not in the BROWSER (#68). `max-age=0,
+# must-revalidate` makes a browser ask every time, so a returning tab sees a
+# deploy at once; `s-maxage` lets CloudFront answer that question from the POP.
+# It used to be plain `no-cache`, which CloudFront honours by revalidating with
+# the origin on every request — and the bucket is in ap-southeast-2, so every
+# HTML hit from Europe or the US paid a round trip to Sydney (a ~1.1 s response
+# time on a crawler's report, served as `x-cache: RefreshHit`).
 set -euo pipefail
 
 DIST="${1:-frontend/dist}"
@@ -44,7 +54,8 @@ BUCKET="${BUCKET:-$(output bucketName)}"
 DISTRIBUTION_ID="${DISTRIBUTION_ID:-$(output distributionId)}"
 
 IMMUTABLE="public, max-age=31536000, immutable"
-REVALIDATE="no-cache, must-revalidate"
+EDGE_SECONDS=300
+REVALIDATE="public, max-age=0, s-maxage=$EDGE_SECONDS, must-revalidate"
 DAY="public, max-age=86400"
 
 echo "→ s3://$BUCKET (distribution $DISTRIBUTION_ID)"

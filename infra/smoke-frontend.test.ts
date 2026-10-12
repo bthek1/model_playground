@@ -47,7 +47,7 @@ case "$url" in
   */) printf '%s' "\${STUB_ROOT:-301 https://${HOST}/home}" ;;
   */home)
     if [[ $headers == 1 ]]; then
-      printf 'HTTP/2 200\\r\\nCache-Control: %s\\r\\n\\r\\n' "\${STUB_INDEX_CACHE:-no-cache, must-revalidate}"
+      printf 'HTTP/2 200\\r\\nCache-Control: %s\\r\\n\\r\\n' "\${STUB_INDEX_CACHE:-public, max-age=0, s-maxage=300, must-revalidate}"
     else
       printf '%s' "\${STUB_ROOT_CODE:-200}"
     fi ;;
@@ -92,7 +92,7 @@ describe("smoke-frontend.sh", () => {
   it("passes a healthy site, checking every property the plan names", () => {
     const { code, out } = smoke();
     expect(out).toContain("✓ /home is 200");
-    expect(out).toContain("✓ /home is no-cache");
+    expect(out).toContain("✓ /home revalidates in the browser and is cached at the edge");
     expect(out).toContain("✓ / redirects to /home");
     expect(out).toContain("✓ /ASR/ redirects to /asr");
     expect(out).toContain("✓ /asr is its own page, with its canonical");
@@ -116,7 +116,11 @@ describe("smoke-frontend.sh", () => {
     ["the sitemap is missing", { STUB_SITEMAP_CODE: "403" }, "/sitemap.xml is 403"],
     ["robots.txt names no sitemap", { STUB_ROBOTS_SITEMAP: "" }, "does not name"],
     ["the sitemap misses a route", { STUB_SITEMAP_LOC: "" }, "does not list"],
-    ["index.html is cacheable", { STUB_INDEX_CACHE: "public, max-age=3600" }, "want no-cache"],
+    ["index.html is cacheable", { STUB_INDEX_CACHE: "public, max-age=3600" }, "want max-age=0"],
+    // #68: plain no-cache made every HTML hit a RefreshHit against the origin.
+    ["HTML is not cached at the edge", { STUB_INDEX_CACHE: "no-cache, must-revalidate" }, "an s-maxage for the edge"],
+    ["the edge lifetime is zero", { STUB_INDEX_CACHE: "public, max-age=0, s-maxage=0" }, "an s-maxage for the edge"],
+    ["a browser lifetime beside the edge one", { STUB_INDEX_CACHE: "public, max-age=60, s-maxage=300" }, "want max-age=0"],
     ["assets are not immutable", { STUB_JS_CACHE: "max-age=60" }, "want immutable"],
     // A missing header used to end the script silently: `header` ends in
     // `grep -m1`, which exits 1 on no match, and `set -e` took the script down

@@ -38,9 +38,16 @@ done
 [[ "$status" == "200" ]] || fail "/home is $status, not 200"
 ok "/home is 200 over a certificate valid for $HOST"
 
+# HTML is cached at the edge, never in the browser (#68): a browser lifetime
+# strands a returning tab on the previous deploy, and no edge lifetime sends
+# every hit to the Sydney origin.
 cache="$(head_of "$URL/home" | header cache-control)"
-[[ "$cache" == *no-cache* ]] || fail "/home cache-control is '$cache', want no-cache"
-ok "/home is no-cache"
+[[ "$cache" =~ (^|[ ,])max-age=0(,|$) && "$cache" =~ s-maxage=[1-9] ]] ||
+  fail "/home cache-control is '$cache', want max-age=0 for browsers and an s-maxage for the edge"
+ok "/home revalidates in the browser and is cached at the edge"
+# Reported, not asserted: a POP has several caches, so a second request can
+# still miss. After a deploy this should read `hit` rather than `refreshhit`.
+echo "  /home x-cache on a repeat request: $(head_of "$URL/home" | header x-cache)"
 
 # One URL per page (#63): the edge redirects rather than serving duplicates.
 code="$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "$URL/")"

@@ -11,6 +11,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(__dirname, "../scripts/deploy-frontend.sh");
 
+// Every un-hashed switch-over file: the browser revalidates, the edge keeps it
+// five minutes (#68). Plain `no-cache` sent every HTML hit to the Sydney origin.
+const HTML_CACHE = "public, max-age=0, s-maxage=300, must-revalidate";
+
 const STUB = `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$STUB_LOG"
 case "$1 $2" in
@@ -88,12 +92,12 @@ describe("deploy-frontend.sh", () => {
   });
 
   // #63, #64: the per-route pages and the crawler files.
-  it("uploads each route's own page as no-cache HTML, after the assets and before index.html", () => {
+  it("uploads each route's own page as edge-cached HTML, after the assets and before index.html", () => {
     const routes = indexOf((c) => c.includes('--include */index.html'));
     const call = calls[routes];
     expect(call).toContain("--exclude assets/*");
     expect(call).toContain("text/html; charset=utf-8");
-    expect(call).toContain("no-cache, must-revalidate");
+    expect(call).toContain(HTML_CACHE);
     expect(routes).toBeGreaterThan(indexOf((c) => c.includes("--exclude *.wasm")));
     expect(routes).toBeLessThan(indexOf((c) => c.includes("index.html s3://site-bucket/index.html")));
   });
@@ -107,21 +111,21 @@ describe("deploy-frontend.sh", () => {
   });
 
   // object-status.js turns this metadata into the status line (#63).
-  it("uploads 404.html as no-cache HTML carrying status=404, before index.html", () => {
+  it("uploads 404.html as edge-cached HTML carrying status=404, before index.html", () => {
     const i = indexOf((c) => c.includes("404.html s3://site-bucket/404.html"));
     expect(calls[i]).toContain("--metadata status=404");
     expect(calls[i]).toContain("text/html; charset=utf-8");
-    expect(calls[i]).toContain("no-cache, must-revalidate");
+    expect(calls[i]).toContain(HTML_CACHE);
     expect(i).toBeLessThan(indexOf((c) => c.includes("index.html s3://site-bucket/index.html")));
   });
 
   it.each([
     ["robots.txt", "text/plain; charset=utf-8"],
     ["sitemap.xml", "application/xml; charset=utf-8"],
-  ])("uploads %s with its type stated and no-cache", (name, type) => {
+  ])("uploads %s with its type stated and edge-cached", (name, type) => {
     const call = calls[indexOf((c) => c.includes(`${name} s3://site-bucket/${name}`))];
     expect(call).toContain(`--content-type ${type}`);
-    expect(call).toContain("no-cache, must-revalidate");
+    expect(call).toContain(HTML_CACHE);
   });
 
   it("states application/wasm rather than trusting a MIME guess", () => {
@@ -130,13 +134,28 @@ describe("deploy-frontend.sh", () => {
     expect(wasm).toContain("immutable");
   });
 
-  it("caches hashed assets forever and index.html not at all", () => {
+  it("caches hashed assets forever and index.html at the edge only", () => {
     expect(calls[indexOf((c) => c.includes("--exclude *.wasm"))]).toContain(
       "public, max-age=31536000, immutable",
     );
     const index = calls[indexOf((c) => c.includes("index.html s3://site-bucket/index.html"))];
-    expect(index).toContain("no-cache, must-revalidate");
+    expect(index).toContain(HTML_CACHE);
     expect(index).toContain("text/html");
+  });
+
+  // #68: a browser must still ask on every navigation (max-age=0), and the
+  // edge must be allowed to answer (s-maxage > 0). Either half alone is a bug:
+  // no s-maxage sends every hit to the origin, a browser max-age strands a
+  // returning tab on the previous deploy.
+  it("never sends HTML with a browser lifetime, nor without an edge one", () => {
+    const html = calls.filter(
+      (c) => c.startsWith("s3 cp") && /\.html|\.txt|\.xml|webmanifest/.test(c) && !c.includes("max-age=86400"),
+    );
+    expect(html.length).toBeGreaterThanOrEqual(6);
+    for (const c of html) {
+      expect(c).toMatch(/--cache-control public, max-age=0, s-maxage=[1-9]\d*, must-revalidate/);
+      expect(c).not.toContain("no-cache");
+    }
   });
 
   it("never deletes anything", () => {

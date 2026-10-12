@@ -250,6 +250,11 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
     (superseded assets are tagged `stale` *once*; a lifecycle rule expires them
     30 days on, so open tabs keep their chunks). Deep links are a CloudFront
     Function, never a custom error response.
+  - **HTML is cached at the edge, never in the browser** (#68):
+    `max-age=0, s-maxage=300, must-revalidate`. Plain `no-cache` makes
+    CloudFront revalidate every HTML hit against the **Sydney** bucket (~1.1 s
+    from Europe); a browser `max-age` strands a returning tab on the previous
+    deploy. The deploy and smoke tests fail on either half.
   - **Trust is the exact OIDC `sub`** — deploy on the `production` environment,
     read-only preview on `refs/heads/develop` (so `preview` must not declare an
     environment). Route 53 writes are limited to the `playground` names in a zone
