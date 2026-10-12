@@ -141,7 +141,17 @@ describe("the distribution", () => {
         functionArn:
           "arn:aws:mock:::aws:cloudfront/function:Function/spa-rewrite",
       },
+      // A real 404 for a path with no page (#63) — set from the object's
+      // metadata, so still no distribution-wide error response.
+      {
+        eventType: "viewer-response",
+        functionArn:
+          "arn:aws:mock:::aws:cloudfront/function:Function/object-status",
+      },
     ]);
+    expect(
+      resources.find((r) => r.name === "object-status")?.inputs.name,
+    ).toBe("model-playground-object-status"); // inside the deploy role's function scope
   });
 
   it("serves the domain over SNI with the validated certificate", () => {

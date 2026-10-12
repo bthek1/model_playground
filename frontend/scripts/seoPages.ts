@@ -4,6 +4,7 @@
  *   dist/<route>/index.html   one per indexable page, from `src/seo/`
  *   dist/sitemap.xml          every indexable page
  *   dist/robots.txt           allow all but /ingest/, and name the sitemap
+ *   dist/404.html             the shell for a path with no page, `noindex`
  *
  * and an absolute `og:image` in the root `index.html` (the OG spec needs one).
  * The CloudFront function (`infra/site/spa-rewrite.js`) serves a route's own
@@ -20,15 +21,17 @@ import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 
 import { SITE_URL } from "../src/lib/site";
-import { SITE_PAGES } from "../src/seo/pages";
+import { APP_ONLY_PATHS, SITE_PAGES } from "../src/seo/pages";
 import {
   absolutiseImages,
+  renderNotFoundHtml,
   renderPageHtml,
   renderRobots,
   renderSitemap,
 } from "../src/seo/render";
 
 const ROUTES = new Set(SITE_PAGES.map((p) => p.path));
+const APP_ONLY = new Set(APP_ONLY_PATHS);
 
 export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugin {
   let outDir = "dist";
@@ -41,9 +44,26 @@ export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugi
       // What `infra/site/spa-rewrite.js` does at the edge: an indexable route
       // is served its own file. Added directly, so it runs before preview's
       // static handler and SPA fallback.
-      server.middlewares.use((req, _res, next) => {
+      // A path with no page gets /404.html with a 404, as `object-status.js`
+      // makes it at the edge; `/` is left to the app (the edge 301s it), and
+      // `/ingest/*` is its own CloudFront behaviour that never reaches here.
+      server.middlewares.use((req, res, next) => {
         const url = new URL(req.url ?? "/", "http://preview");
-        if (ROUTES.has(url.pathname)) req.url = `${url.pathname}/index.html${url.search}`;
+        const path = url.pathname;
+        const isFile = path.slice(path.lastIndexOf("/") + 1).includes(".");
+        if (ROUTES.has(path)) {
+          req.url = `${path}/index.html${url.search}`;
+        } else if (
+          !isFile &&
+          path !== "/" &&
+          !APP_ONLY.has(path) &&
+          !path.startsWith("/ingest/")
+        ) {
+          res.statusCode = 404;
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          res.end(readFileSync(join(outDir, "404.html")));
+          return;
+        }
         next();
       });
     },
@@ -59,6 +79,7 @@ export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugi
       }
       writeFileSync(join(outDir, "sitemap.xml"), renderSitemap(SITE_PAGES, origin));
       writeFileSync(join(outDir, "robots.txt"), renderRobots(origin));
+      writeFileSync(join(outDir, "404.html"), renderNotFoundHtml(template, origin));
     },
   };
 }

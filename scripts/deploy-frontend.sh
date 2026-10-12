@@ -15,8 +15,8 @@
 #   2. .wasm with an explicit application/wasm — ONNX Runtime's streaming
 #      compilation refuses anything else, and the CLI's MIME guess is not a
 #      contract;
-#   3. the per-route pages (`<route>/index.html`, #64), robots.txt and
-#      sitemap.xml (#63), then index.html and the manifest LAST (no-cache) —
+#   3. the per-route pages (`<route>/index.html`, #64), 404.html (with its
+#      `status=404` metadata), robots.txt and sitemap.xml (#63), then index.html and the manifest LAST (no-cache) —
 #      the switch-over. A route page names the same hashed chunks index.html
 #      does, so it goes after them too;
 #   4. never `--delete`. An asset this build no longer references is re-written
@@ -64,6 +64,7 @@ aws s3 cp "$DIST/assets" "s3://$BUCKET/assets" --recursive --only-show-errors \
 aws s3 cp "$DIST" "s3://$BUCKET" --recursive --only-show-errors \
   --exclude "assets/*" --exclude "index.html" --exclude "*/index.html" \
   --exclude "site.webmanifest" --exclude "robots.txt" --exclude "sitemap.xml" \
+  --exclude "404.html" \
   --cache-control "$DAY"
 
 # 3. The switch-over. Each indexable route's own page first (the CloudFront
@@ -72,6 +73,15 @@ aws s3 cp "$DIST" "s3://$BUCKET" --recursive --only-show-errors \
   --exclude "*" --include "*/index.html" --exclude "assets/*" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "$REVALIDATE"
+# The not-found shell (#63): `status=404` metadata comes back as
+# `x-amz-meta-status`, which the viewer-response function makes the status.
+# Without it every unknown path would be a 200 — a soft 404.
+if [[ -f "$DIST/404.html" ]]; then
+  aws s3 cp "$DIST/404.html" "s3://$BUCKET/404.html" --only-show-errors \
+    --content-type "text/html; charset=utf-8" \
+    --metadata "status=404" \
+    --cache-control "$REVALIDATE"
+fi
 for f in robots.txt:text/plain sitemap.xml:application/xml; do
   name="${f%%:*}"
   [[ -f "$DIST/$name" ]] || continue

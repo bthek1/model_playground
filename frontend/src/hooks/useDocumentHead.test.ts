@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { SITE_DESCRIPTION } from "@/lib/site";
 import { pageForPath } from "@/seo/pages";
-import { renderPageHtml, structuredData } from "@/seo/render";
+import { renderNotFoundHtml, renderPageHtml, structuredData } from "@/seo/render";
 import { syncHead } from "./useDocumentHead";
 
 const TEMPLATE = readFileSync(join(__dirname, "../../index.html"), "utf8");
@@ -62,6 +62,17 @@ describe("syncHead", () => {
     expect(canonical(doc)).toBeUndefined();
     expect(meta(doc, 'property="og:url"')).toBeUndefined();
     expect(doc.getElementById("structured-data")).toBeNull();
+  });
+
+  // /404.html is served with a noindex in its head (#63); clicking through to
+  // a real page must not carry it along.
+  it("drops a served noindex when navigating from the not-found shell to a page", () => {
+    const missing = new DOMParser().parseFromString(renderNotFoundHtml(TEMPLATE, ORIGIN), "text/html");
+    syncHead("/no-such-page", missing);
+    expect(missing.head.querySelector('meta[name="robots"]')).not.toBeNull();
+    syncHead("/home", missing);
+    expect(missing.head.querySelector('meta[name="robots"]')).toBeNull();
+    expect(canonical(missing)).toBe(`${ORIGIN}/home`);
   });
 
   it("adds what the shell lacks when navigating from it to a page", () => {

@@ -33,7 +33,7 @@ beforeAll(() => {
   mkdirSync(join(dist, "assets"), { recursive: true });
   writeFileSync(join(bin, "aws"), STUB);
   chmodSync(join(bin, "aws"), 0o755);
-  for (const f of ["index.html", "site.webmanifest", "favicon.ico", "robots.txt", "sitemap.xml"]) {
+  for (const f of ["index.html", "site.webmanifest", "favicon.ico", "robots.txt", "sitemap.xml", "404.html"]) {
     writeFileSync(join(dist, f), "x");
   }
   mkdirSync(join(dist, "asr"));
@@ -103,6 +103,16 @@ describe("deploy-frontend.sh", () => {
     expect(day).toContain("--exclude */index.html");
     expect(day).toContain("--exclude robots.txt");
     expect(day).toContain("--exclude sitemap.xml");
+    expect(day).toContain("--exclude 404.html");
+  });
+
+  // object-status.js turns this metadata into the status line (#63).
+  it("uploads 404.html as no-cache HTML carrying status=404, before index.html", () => {
+    const i = indexOf((c) => c.includes("404.html s3://site-bucket/404.html"));
+    expect(calls[i]).toContain("--metadata status=404");
+    expect(calls[i]).toContain("text/html; charset=utf-8");
+    expect(calls[i]).toContain("no-cache, must-revalidate");
+    expect(i).toBeLessThan(indexOf((c) => c.includes("index.html s3://site-bucket/index.html")));
   });
 
   it.each([

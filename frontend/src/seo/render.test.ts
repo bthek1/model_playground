@@ -6,6 +6,7 @@ import { SITE_DESCRIPTION } from "@/lib/site";
 import { pageForPath, SITE_PAGES } from "./pages";
 import {
   absolutiseImages,
+  renderNotFoundHtml,
   renderPageHtml,
   renderRobots,
   renderSitemap,
@@ -84,6 +85,25 @@ describe("renderPageHtml", () => {
     expect(() =>
       renderPageHtml("<html><head></head><body></body></html>", pageForPath("/asr")!, ORIGIN),
     ).toThrow(/no <title>/);
+  });
+});
+
+describe("renderNotFoundHtml", () => {
+  // The edge serves this, with a 404, for a path with no page (#63).
+  it("is the shell with a not-found title, noindex and no canonical", () => {
+    const doc = parse(renderNotFoundHtml(TEMPLATE, ORIGIN));
+    expect(doc.title).toBe("Page not found · Model Playground");
+    expect(meta(doc, 'name="robots"')).toBe("noindex");
+    expect(doc.querySelector('link[rel="canonical"]')).toBeNull();
+    expect(doc.getElementById("structured-data")).toBeNull();
+    expect(doc.querySelector("#root h1")?.textContent).toBe("Page not found");
+    expect(doc.querySelector('#root a[href="/home"]')).not.toBeNull();
+    expect(meta(doc, 'property="og:image"')).toBe(`${ORIGIN}/og-image.png`);
+  });
+
+  it("keeps the app's script, so the not-found page still mounts", () => {
+    const withScript = TEMPLATE.replace("</head>", '<script type="module" src="/x.js"></script></head>');
+    expect(renderNotFoundHtml(withScript, ORIGIN)).toContain('<script type="module" src="/x.js">');
   });
 });
 

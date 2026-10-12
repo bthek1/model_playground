@@ -416,7 +416,7 @@ uploading, rather than killing it halfway.
 
 The smoke test (`scripts/smoke-frontend.sh`) checks, against the live site:
 `/home` is 200 and `no-cache`; `/` and `/ASR/` are 301s to `/home` and
-`/asr`; a real `/assets/*.js` is `immutable`; a real `.wasm` is
+`/asr`; an unknown path is a **404** whose body is still the app shell; a real `/assets/*.js` is `immutable`; a real `.wasm` is
 `application/wasm`; `/asr` is its **own** page (its canonical names it, so
 the generic shell fails); `robots.txt` names the sitemap and `sitemap.xml`
 lists `/asr`; `http://` redirects to `https://`; every request verifies the
@@ -463,8 +463,9 @@ references them, the next time it lazy-loads a route. The upload script:
 2. uploads `*.wasm` with an **explicit** `application/wasm` — ONNX Runtime's
    streaming compilation refuses anything else, and the CLI's MIME guess is
    not a contract;
-3. uploads each indexable route's own `<route>/index.html`, then `robots.txt`
-   and `sitemap.xml` (§10.8c), then `site.webmanifest` and `index.html`
+3. uploads each indexable route's own `<route>/index.html`, then `404.html`
+   with `--metadata status=404`, `robots.txt` and `sitemap.xml` (§10.8c),
+   then `site.webmanifest` and `index.html`
    **last** — all `no-cache, must-revalidate`, all with their content type
    stated. That is the switch-over; a route page names the same hashed chunks
    `index.html` does, so it goes after them too;
@@ -484,9 +485,11 @@ SPA deep links (`/asr`) are a CloudFront Function (`infra/site/spa-rewrite.js`)
 that treats any path whose last segment has no dot as a route — **not** a
 distribution-wide custom error response, which would also turn a future
 `/api` origin's 404s into the app shell. A route listed in its `ROUTES` is
-served its own `/<route>/index.html`; anything else (sign-in, a mistyped URL)
-gets the root `/index.html`. `/`, a trailing slash and an upper-case letter
-are **301s** to the canonical form, query string kept (§10.8c). A route
+served its own `/<route>/index.html`; one in `APP_ROUTES` (sign-in, sign-up)
+gets the root `/index.html`; anything else gets `/404.html` with a real **404**
+status. `/`, a trailing slash and an upper-case letter are **301s** to the
+canonical form, with an absolute `Location` and the query string kept
+(§10.8c). A route
 containing a dot would bypass all of it; none does, and `spa-rewrite.test.ts`
 checks that against the generated route tree. There is **no CSP**, for §1's
 reason.
@@ -559,19 +562,42 @@ naming the difference, when they disagree. A page missing from `ROUTES` is
 served the generic shell; a route listed with no file answers 403.
 
 Canonicals are written against `SITE_URL` in `frontend/src/lib/site.ts`; a
-build for another host sets `SITE_URL` in its environment. An unknown path
-still answers 200 with the shell — the edge cannot know the router's routes —
-so the app's not-found page adds `noindex` while it is mounted.
+build for another host sets `SITE_URL` in its environment.
 
-**Deploy order, the first time.** `pulumi up` updates the function before the
-upload writes the route files, so for the minute between them a route listed
-in `ROUTES` with no file yet answers 403. It happens once, when this lands, and
-again only for the newest route when one is added.
+**A path with no page is a real 404, without a custom error response.** S3
+answers 200 for any object it has, so the status comes from the object
+itself: the build writes `dist/404.html` (the shell, titled "Page not found",
+with `noindex`), the upload gives it `--metadata status=404`, S3 returns that
+as `x-amz-meta-status`, and a **viewer-response** function
+(`infra/site/object-status.js`) makes it the status line and drops the header.
+It is keyed on the object rather than the URL because whether a
+viewer-response function sees the rewritten URI is not something to depend
+on. The body is still the app, so visitors get the not-found page. A route
+the app has but search engines should not (`APP_ROUTES`: `/login`, `/signup`)
+keeps the plain shell and a 200; `spa-rewrite.test.ts` fails if any route in
+`routeTree.gen.ts` is in neither list, and `src/seo/edgeRoutes.test.ts` keeps
+`APP_ROUTES` equal to the frontend's `APP_ONLY_PATHS`.
 
-**Search Console** (manual, once): verify the domain property with a DNS TXT
-record in the hosted zone, submit `https://<domain>/sitemap.xml`, and do the
-same in Bing Webmaster Tools. Nothing in the browser contacts either, so
-`legal/recipients.ts` does not change.
+**Redirects carry an absolute `Location`** (`https://<host>/home`), built from
+the request's `Host`. A relative one is valid HTTP, but Search Console's URL
+Inspection reported `/` → `/home` as a "Redirect error" while it was relative.
+
+**Deploy order, the first time.** `pulumi up` updates the functions before the
+upload writes the files they point at, so for the minute between them a route
+listed in `ROUTES` with no file yet — or an unknown path, before `404.html`
+exists — answers 403. It happens once when each lands, and again only for the
+newest route when one is added.
+
+**Search Console.** The **Domain** property `benedictthekkel.com` is verified
+with a TXT record (`google-site-verification=…`) at the zone apex, added by
+hand on 2026-10-12. It is **not** a Pulumi resource — the site stack only
+manages the `playground` names — so nothing will recreate it if it is
+deleted, and deleting it un-verifies the property. Google re-checks it
+periodically. The sitemap was submitted the same day and processed with all
+49 pages. A new property shows "Couldn't fetch" with no *Last read* date until
+Google first fetches it; that is a queued fetch, not an error. Bing Webmaster
+Tools can import the property from Search Console. Nothing in the browser
+contacts either, so `legal/recipients.ts` does not change.
 
 ### 10.9 How it is tested
 
@@ -588,10 +614,11 @@ and the `infra` CI job):
 | IAM documents | `infra/bootstrap/policies.test.ts` | exact `sub`, no `*:*`, Route 53 names/types, tag conditions, both stack configs agreeing |
 | IAM wiring | `infra/bootstrap/bootstrap.test.ts` (Pulumi mocks) | the OIDC provider looked up not created; each role gets its own document |
 | The site stack | `infra/site/site.test.ts` (Pulumi mocks) | public access blocked, one bucket-policy principal, `redirect-to-https`, no custom error responses, us-east-1 certificate, the zone never created, only `playground` records |
-| Deep links and redirects | `infra/site/spa-rewrite.test.ts` | the function's exact bytes; a listed route gets its own file, anything else the shell; `/`, a trailing slash and upper case 301 with the query string kept; no route in `routeTree.gen.ts` has a dot |
-| SEO output (#63–#65) | `frontend/src/seo/*.test.ts`, `frontend/e2e/specs/seo.spec.ts` (`E2E_STATIC=1`) | the function's `ROUTES` equals `SITE_PAGES`; every page's head, canonical, JSON-LD and `<h1>`; every sitemap URL fetched with no JS; the head following a client-side navigation; the not-found page's `noindex` |
-| Upload order | `infra/deploy-frontend.test.ts` (stub `aws`) | assets → wasm → route pages → robots/sitemap → index last; explicit wasm, HTML, text and XML types; no delete; stale-marking once, never a live chunk; the two-path invalidation |
-| Smoke test | `infra/smoke-frontend.test.ts` (stub `curl`) | passes a healthy site; fails, naming it, on each broken property |
+| Deep links and redirects | `infra/site/spa-rewrite.test.ts` | the function's exact bytes; a listed route gets its own file, an app route the shell, anything else `/404.html`; every route in `routeTree.gen.ts` is in one of the two lists; `/`, a trailing slash and upper case 301 with an absolute `Location` and the query string kept; no route has a dot |
+| Real 404s | `infra/site/object-status.test.ts`, `infra/site/site.test.ts` | `x-amz-meta-status: 404` becomes the status and the header is dropped; only a 4xx is honoured; keyed on the object, never the URI; associated as viewer-response, inside the deploy role's function prefix |
+| SEO output (#63–#65) | `frontend/src/seo/*.test.ts`, `frontend/e2e/specs/seo.spec.ts` (`E2E_STATIC=1`) | the function's `ROUTES` equals `SITE_PAGES`; every page's head, canonical, JSON-LD and `<h1>`; every sitemap URL fetched with no JS; the head following a client-side navigation; an unknown path a 404 that still renders the not-found page, and its `noindex` gone after clicking through |
+| Upload order | `infra/deploy-frontend.test.ts` (stub `aws`) | assets → wasm → route pages → `404.html` (with `status=404`) → robots/sitemap → index last; explicit wasm, HTML, text and XML types; no delete; stale-marking once, never a live chunk; the two-path invalidation |
+| Smoke test | `infra/smoke-frontend.test.ts` (stub `curl`) | passes a healthy site; fails, naming it, on each broken property — including a missing header, which once ended the script silently; reads a sitemap bigger than a pipe buffer, and greps no pipe with an early-exiting `grep`, which once failed CI on a body that matched |
 | Analytics through `/ingest/*` (#60) | `infra/site/site.test.ts`, `infra/site/ingest-strip.test.ts`, `infra/workflow.test.ts`, `infra/posthog-setup.test.ts` | the ordered behaviour precedes the default, targets PostHog, caches nothing, carries the strip function and never `spa-rewrite`; CI takes the `phc_` key from a variable on the shipped build only; the setup script never prints the personal key — see [analytics.md](../explanations/analytics.md) |
 | CD wiring | `infra/workflow.test.ts` (reads `ci.yml`) | the `off` artifact built once and never rebuilt; `deploy`'s needs, environment, OIDC, no-cancel concurrency, step order; `preview` has no environment and never applies; only those two jobs get a token |
 
