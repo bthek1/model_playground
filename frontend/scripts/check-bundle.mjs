@@ -51,9 +51,52 @@ const assets = join(root, "dist", "assets");
  * description per task (it is each route's meta description and its line on
  * the home page's task index), the head sync and the not-found page. When #66
  * lands, take this back below 575.
+ * Measured 2026-10-12: 524 KB raw / 171 KB gzip, after #66 turned on the
+ * router's `autoCodeSplitting` — from 1,897 / 577 the commit before. Every
+ * route component is now its own chunk, and Transformers.js and ONNX Runtime
+ * left with the vision routes (below). The number is now the entry **and the
+ * chunks it imports statically** (`jsx-runtime`, `utils`, …): Rolldown hoists
+ * shared code out of `index-*.js` once routes split, so measuring that one
+ * file would undercount what every page waits for. Raw 1900 → 560, gzip
+ * 580 → 185.
  */
-const ENTRY_BUDGET_GZIP_KB = 580;
-const ENTRY_BUDGET_RAW_KB = 1900;
+const ENTRY_BUDGET_GZIP_KB = 185;
+const ENTRY_BUDGET_RAW_KB = 560;
+
+/**
+ * Per route (#66): the chunks a page loads on top of the entry's — its own
+ * split chunk and everything that imports statically, read off the
+ * `modulepreload` list `scripts/seoPages.ts` writes into `dist/<route>/index.html`,
+ * which is exactly what that page asks for.
+ *
+ * Two tiers, because the routes are. The 17 vision and multimodal routes carry
+ * the Transformers.js runtime (~150 KB gzip) for `RawImage` — the chain
+ * described below — and measured 163–210 KB gzip on 2026-10-12. Every
+ * other route measured 2–32 KB. A single ceiling sized for the first tier
+ * would let a text route pull the runtime in unnoticed, which is the
+ * regression worth catching, so a route without it has its own.
+ */
+const ROUTE_WITH_RUNTIME_BUDGET_GZIP_KB = 225;
+const ROUTE_BUDGET_GZIP_KB = 40;
+
+/**
+ * The Transformers.js runtime (and ONNX Runtime with it) stays out of the
+ * entry, but it is not lazily loaded everywhere — it rides the vision routes'
+ * own chunks.
+ *
+ * The chain: every vision route uses `hooks/useImagePick.ts`, which imports
+ * `vision/image.ts`, which takes `RawImage` from the `@huggingface/transformers`
+ * package root — and that pulls the library, and ORT with it, into the route's
+ * static graph. Until #66 that graph was the entry's, so every page paid for
+ * it; now only the 17 routes that use it do (the per-route budget's first
+ * tier). The 21 MB `.wasm` files are still fetched on demand either way.
+ *
+ * Getting `RawImage` without the rest of the library is an app-architecture
+ * change that touches the documented toPayload/fromPayload contract, so it is
+ * tracked separately. `ort-wasm` is the runtime's own file-name stem, emitted
+ * into its bundled loader; app code never writes it.
+ */
+const RUNTIME_MARKER = /\bort-wasm/;
 
 /**
  * Markers that must not appear in the entry chunk. Each is a string the library
@@ -64,6 +107,7 @@ const MUST_STAY_SPLIT = [
   // The analytics SDK (#60) is ~49 KB gzip and behind `src/analytics/`'s
   // dynamic import; `posthog-js` is the library's own `$lib` name.
   ["posthog-js", /\bposthog-js\b/],
+  ["@huggingface/transformers / onnxruntime-web", RUNTIME_MARKER],
 ];
 
 /**
@@ -74,22 +118,6 @@ const MUST_STAY_SPLIT = [
  * `phx_` token anywhere in `dist/` fails the build — in CI and in the image.
  */
 const SECRET_PATTERNS = [["PostHog personal API key (phx_…)", /phx_[A-Za-z0-9]{16,}/]];
-
-/**
- * `onnxruntime-web` is deliberately NOT in the list above, because today it *is*
- * in the entry chunk and asserting otherwise would just be a failing test.
- *
- * The chain: every vision route uses `hooks/useImagePick.ts`, which imports
- * `vision/image.ts`, which takes `RawImage` from the `@huggingface/transformers`
- * package root — and that pulls the library, and ORT with it, into the eagerly
- * imported route graph. The 21 MB `.wasm` files are still fetched on demand, so
- * the cost is JS weight on first paint, not a multi-megabyte download.
- *
- * Getting `RawImage` without the rest of the library is an app-architecture
- * change that touches the documented toPayload/fromPayload contract, so it is
- * tracked separately rather than done inside a deployment change. Until then the
- * size budget below is what keeps it from growing.
- */
 
 let failed = false;
 function fail(message) {
@@ -115,12 +143,37 @@ if (!entryName) {
   process.exit(1);
 }
 
-const entryPath = join(assets, entryName);
-const source = readFileSync(entryPath);
-const rawKb = statSync(entryPath).size / 1024;
-const gzipKb = gzipSync(source).length / 1024;
+/** `file` and every chunk it imports statically, as asset file names. */
+function staticClosure(file, into = new Set()) {
+  if (into.has(file)) return into;
+  into.add(file);
+  const text = readFileSync(join(assets, file), "utf8");
+  // Rolldown's static imports of a sibling chunk: `from"./x-hash.js"` or a
+  // bare `import"./x-hash.js"`. A dynamic `import("./…")` is deliberately not
+  // matched — that is the split this budget exists to protect.
+  for (const m of text.matchAll(/(?:\bfrom|\bimport)\s*["']\.\/([\w.-]+\.js)["']/g)) {
+    staticClosure(m[1], into);
+  }
+  return into;
+}
 
-console.log(`Entry chunk: ${entryName}`);
+function measure(files) {
+  let raw = 0;
+  let gzip = 0;
+  let text = "";
+  for (const file of files) {
+    const bytes = readFileSync(join(assets, file));
+    raw += bytes.length;
+    gzip += gzipSync(bytes).length;
+    text += bytes.toString("utf8");
+  }
+  return { rawKb: raw / 1024, gzipKb: gzip / 1024, text };
+}
+
+const entryFiles = staticClosure(entryName);
+const { rawKb, gzipKb, text } = measure(entryFiles);
+
+console.log(`Entry chunk: ${entryName} + ${entryFiles.size - 1} chunks it imports statically`);
 
 if (rawKb > ENTRY_BUDGET_RAW_KB) {
   fail(`raw ${rawKb.toFixed(0)} KB exceeds budget ${ENTRY_BUDGET_RAW_KB} KB`);
@@ -134,13 +187,51 @@ if (gzipKb > ENTRY_BUDGET_GZIP_KB) {
   pass(`gzip ${gzipKb.toFixed(0)} KB (budget ${ENTRY_BUDGET_GZIP_KB} KB)`);
 }
 
-const text = source.toString("utf8");
 for (const [name, pattern] of MUST_STAY_SPLIT) {
   if (pattern.test(text)) {
     fail(`${name} is in the entry chunk — it must stay lazily loaded`);
   } else {
     pass(`${name} stays out of the entry chunk`);
   }
+}
+
+// Per route (#66), read off each page's own HTML.
+const preloads = (html) =>
+  [...html.matchAll(/<link rel="modulepreload"[^>]*href="\/assets\/([^"]+)"/g)].map((m) => m[1]);
+const routePages = readdirSync(join(root, "dist"), { withFileTypes: true })
+  .filter((d) => d.isDirectory() && d.name !== "assets")
+  .map((d) => join(root, "dist", d.name, "index.html"))
+  .filter((f) => existsSync(f));
+if (routePages.length === 0) {
+  fail("no dist/<route>/index.html — the seo-pages plugin did not run");
+}
+let largest = { route: "", gzipKb: 0 };
+let routesFailed = 0;
+for (const page of routePages) {
+  const route = `/${page.split("/").at(-2)}`;
+  const own = preloads(readFileSync(page, "utf8")).filter((f) => !entryFiles.has(f));
+  if (own.length === 0) {
+    routesFailed += 1;
+    fail(`${route} preloads no chunk of its own — is its route still code-split?`);
+    continue;
+  }
+  const size = measure(own);
+  const withRuntime = RUNTIME_MARKER.test(size.text);
+  const budget = withRuntime ? ROUTE_WITH_RUNTIME_BUDGET_GZIP_KB : ROUTE_BUDGET_GZIP_KB;
+  if (size.gzipKb > budget) {
+    routesFailed += 1;
+    fail(
+      `${route} loads ${size.gzipKb.toFixed(0)} KB gzip on top of the entry, over its ` +
+        `${budget} KB budget${withRuntime ? " (a route carrying Transformers.js)" : ""}`,
+    );
+  }
+  if (size.gzipKb > largest.gzipKb) largest = { route, gzipKb: size.gzipKb };
+}
+if (routePages.length > 0 && routesFailed === 0) {
+  pass(
+    `${routePages.length} routes within their budgets (largest ${largest.route}, ` +
+      `${largest.gzipKb.toFixed(0)} KB gzip)`,
+  );
 }
 
 /** Every text file the deploy uploads — not just the entry chunk. */

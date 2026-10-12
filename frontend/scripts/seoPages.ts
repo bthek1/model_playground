@@ -7,6 +7,10 @@
  *   dist/404.html             the shell for a path with no page, `noindex`
  *   dist/seo-manifest.json    page → digest of what a crawler reads (#69)
  *
+ * Each page's HTML also preloads its own route chunk (#66, `src/seo/preload.ts`):
+ * routes are code-split, and without the hint the browser finds the chunk
+ * only after the entry has run.
+ *
  * and an absolute `og:image` in the root `index.html` (the OG spec needs one).
  * The CloudFront function (`infra/site/spa-rewrite.js`) serves a route's own
  * file when it has one and the root shell otherwise; a test in `src/seo/` keeps
@@ -24,6 +28,7 @@ import type { Plugin } from "vite";
 
 import { SITE_URL } from "../src/lib/site";
 import { APP_ONLY_PATHS, SITE_PAGES } from "../src/seo/pages";
+import { addModulePreloads, type BundleLike, routePreloads } from "../src/seo/preload";
 import {
   absolutiseImages,
   renderNotFoundHtml,
@@ -38,10 +43,12 @@ const APP_ONLY = new Set(APP_ONLY_PATHS);
 
 export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugin {
   let outDir = "dist";
+  let base = "/";
   return {
     name: "seo-pages",
     configResolved(config) {
       outDir = resolve(config.root, config.build.outDir);
+      base = config.base;
     },
     configurePreviewServer(server) {
       // What `infra/site/spa-rewrite.js` does at the edge: an indexable route
@@ -73,12 +80,14 @@ export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugi
     transformIndexHtml(html) {
       return absolutiseImages(html, origin);
     },
-    writeBundle() {
+    writeBundle(_options, bundle) {
       const template = readFileSync(join(outDir, "index.html"), "utf8");
       for (const page of SITE_PAGES) {
         const dir = join(outDir, page.path);
         mkdirSync(dir, { recursive: true });
-        writeFileSync(join(dir, "index.html"), renderPageHtml(template, page, origin));
+        const html = renderPageHtml(template, page, origin);
+        const preloads = routePreloads(bundle as unknown as BundleLike, page.path);
+        writeFileSync(join(dir, "index.html"), addModulePreloads(html, preloads, base));
       }
       writeFileSync(join(outDir, "sitemap.xml"), renderSitemap(SITE_PAGES, origin));
       writeFileSync(join(outDir, "robots.txt"), renderRobots(origin));

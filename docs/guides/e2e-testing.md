@@ -94,6 +94,12 @@ Two tags follow from it:
   page makes a request to `/api`, even with a stale token in storage. On
   CloudFront a stray `/api` call is answered 200 with `index.html`, so "nothing
   broke" is not evidence; the request log is.
+- **`code-splitting.spec.ts`** runs *only* under `E2E_STATIC` (#66): routes are
+  split, so a deep load needs the page's own chunk as well as the entry. It
+  deep-loads every sitemap URL in a browser and asserts each fetched the chunks
+  its HTML preloads (200) and rendered something into the shell's `<main>` — a
+  missing chunk leaves the shell standing with an empty content area and no
+  error, which is the failure it exists to name.
 - **`seo.spec.ts`** runs *only* under `E2E_STATIC` (#63–#65): the per-route
   HTML files, `sitemap.xml` and `robots.txt` are build output. It fetches every
   sitemap URL with `request.get` — no JavaScript, as a crawler sees it — and
