@@ -239,14 +239,26 @@ export const Route = createFileRoute('/users/$userId')({
 - **A dynamic `import()` of a module something else imports statically does nothing.**
   Rolldown says so — `[INEFFECTIVE_DYNAMIC_IMPORT] ... is dynamically imported by X but
   also statically imported by Y, dynamic import will not move module into another chunk` —
-  and it is a **build warning, not an error**, so it survives a green `npm run build`
-  indefinitely. `useRanking` awaited `import("@/model/similarity")` while four other
+  and Rolldown reports it as a **warning, not an error** — so since #66 `vite.config.ts`
+  turns it into a build failure. `useRanking` awaited `import("@/model/similarity")` while four other
   modules imported it statically: the module stayed in the entry chunk and the await
   bought nothing but a microtask on the dense-search path. Code-splitting works only if
   **every** importer is lazy, which is why `EChart.tsx` is a wrapper rather than a
   convention — one static import of `echarts` anywhere undoes it, and
   `npm run check:bundle` is what fails then. Grep for a module's other importers before
   reaching for `await import`
+- **Routes are code-split automatically (#66).** `autoCodeSplitting` in the router's Vite
+  plugin puts each route component in its own chunk. Measured: the entry plus the chunks it
+  imports statically went **1,897 → 524 KB raw, 577 → 171 KB gzip**; Lighthouse mobile on
+  `/home`, `/asr`, `/text-classification` went 77–87 → 97, LCP 4.05 → ~2.1 s. The rules:
+  the router plugin comes **before `react()`**; splitting is **off under Vitest** (route
+  tests read `Route.options.component` synchronously); **nothing outside `src/routes/`
+  imports a route module** (`src/seo/preload.test.ts`); an **`INEFFECTIVE_DYNAMIC_IMPORT`
+  warning fails the build** (`build.rolldownOptions.onwarn`). Each page's HTML preloads its
+  own route chunk (`src/seo/preload.ts`, which throws for a page that did not split), and
+  `e2e/specs/code-splitting.spec.ts` deep-loads every sitemap URL. `check:bundle` budgets
+  the entry's **static closure** (560 KB raw / 185 KB gzip) and every route on top of it:
+  225 KB gzip for the 17 vision/multimodal routes that carry Transformers.js, 40 for the rest.
 - **Visualizing a model or its internal structure** follows the UI standard in
   `docs/standards/model-visualization.md` — a shared grammar of left-to-right stage/arrow
   schematics (`Stage`/`Arrow`/`ParamChip` in `components/viz/schematic.tsx`), canvas
@@ -1899,7 +1911,7 @@ CloudFront at https://playground.benedictthekkel.com, infrastructure in Pulumi
   `text-base` paragraph, the route splits it into two smaller `text-sm` ones.
   Lighthouse mobile went 79 → 99–100 on `/home`. Task pages still lose that
   comparison (their headers are richer JSX than the taxonomy description), so
-  their LCP stays JS-bound until #66 shrinks the entry chunk. Layout shift has
+  their LCP is JS-bound — #66's route splitting took it 4.05 → ~2.1 s. Layout shift has
   three rules: `'Geist Fallback'` in `index.css` is Arial/Liberation Sans
   reshaped to Geist (`size-adjust` **measured** from rendered widths, with a
   separate bold face — a `local()` face is never synthesised bold); a loading

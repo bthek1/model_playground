@@ -22,8 +22,20 @@ export default defineConfig(({ mode }) => {
   return {
     envDir,
     plugins: [
+      // Each route's component is split into its own chunk (#66), so a visitor
+      // landing on /asr no longer parses /rl, /graph and the tabular pages.
+      // The router plugin must run before React's JSX transform, or it refuses
+      // to build. A route module that anything else imports statically will
+      // not split — `check:bundle` fails on the INEFFECTIVE_DYNAMIC_IMPORT
+      // warning that says so. Off under Vitest: route tests read
+      // `Route.options.component` synchronously (src/test/taskPage.tsx), and
+      // a split route hands back a lazy wrapper that suspends instead. The
+      // split build is what `e2e-static` mounts, deep link by deep link.
+      TanStackRouterVite({
+        routeFileIgnorePattern: ".(test|spec).(tsx?|js)",
+        autoCodeSplitting: !process.env.VITEST,
+      }),
       react(),
-      TanStackRouterVite({ routeFileIgnorePattern: ".(test|spec).(tsx?|js)" }),
       tailwindcss(),
       // Serve the dev server over HTTPS (self-signed cert). WebGPU (navigator.gpu)
       // is only exposed in a secure context — HTTPS or localhost — so a LAN IP
@@ -37,6 +49,21 @@ export default defineConfig(({ mode }) => {
       // served somewhere other than the static deployment.
       seoPages({ origin: env.SITE_URL || undefined }),
     ],
+    build: {
+      rolldownOptions: {
+        // A dynamic `import()` of a module something else imports statically
+        // splits nothing, and Rolldown only warns (#66, CLAUDE.md frontend
+        // essentials) — a warning survives a green build indefinitely. With
+        // every route code-split, one of these quietly folds a route back
+        // into a shared chunk, so it fails the build instead.
+        onwarn(warning, defaultHandler) {
+          if (warning.code === "INEFFECTIVE_DYNAMIC_IMPORT") {
+            throw new Error(warning.message);
+          }
+          defaultHandler(warning);
+        },
+      },
+    },
     // Workers are separate builds, and they hold most of the third-party code
     // (Transformers.js, ONNX Runtime). They record; the main build writes.
     worker: {
