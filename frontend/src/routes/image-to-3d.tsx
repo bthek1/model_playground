@@ -184,7 +184,7 @@ useImagePick();
           {!gpu.loading && gpu.capabilities?.status !== "ready" && (
             <p
               data-testid="webgpu-unavailable"
-              className="text-xs text-amber-600 dark:text-amber-500"
+              className="text-xs text-amber-700 dark:text-amber-500"
             >
               No WebGPU device here, so the interactive 3-D view is unavailable.
               Depth estimation still runs, and the depth map is shown instead.
@@ -308,7 +308,7 @@ function CloudControls({
           onChange={(e) => onFocalRatio(Number(e.target.value))}
           className="w-full"
         />
-        <p className="text-xs text-amber-600 dark:text-amber-500">
+        <p className="text-xs text-amber-700 dark:text-amber-500">
           {metric ? (
             <>
               This model predicts metres and its own focal length. The slider

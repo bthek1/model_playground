@@ -61,7 +61,7 @@ function Terms({ terms }: { terms: ModelLicence["terms"] }) {
     <span
       className={cn(
         "whitespace-nowrap",
-        terms !== "permissive" && "font-medium text-amber-600 dark:text-amber-500",
+        terms !== "permissive" && "font-medium text-amber-700 dark:text-amber-500",
       )}
     >
       {TERMS_LABEL[terms]}

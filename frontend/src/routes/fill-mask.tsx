@@ -260,7 +260,7 @@ function FillMaskPage() {
                 // beside it is a dead end, and a silent no-op is worse.
                 <p
                   data-testid="mask-note"
-                  className="basis-full text-xs text-amber-600 dark:text-amber-500"
+                  className="basis-full text-xs text-amber-700 dark:text-amber-500"
                 >
                   {blocked}
                 </p>
@@ -368,7 +368,7 @@ function FillMaskPage() {
                     // showing a token that was not used.
                     <p
                       data-testid="mask-drift"
-                      className="text-xs text-amber-600 dark:text-amber-500"
+                      className="text-xs text-amber-700 dark:text-amber-500"
                     >
                       This checkpoint's tokenizer uses{" "}
                       <code className="font-mono">{ran.resolved}</code>, not the{" "}

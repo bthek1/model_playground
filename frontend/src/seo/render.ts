@@ -18,6 +18,8 @@ import { taskCategories } from "../components/layout/taskTaxonomy";
 import {
   canonicalUrl,
   categoryAnchor,
+  HOME_LEAD,
+  HOME_PRIVACY,
   SITE_PAGES,
   siblingsOf,
   type SitePage,
@@ -126,7 +128,13 @@ export function staticBody(page: SitePage): string {
     );
   }
   parts.push(`<h1 class="text-2xl font-semibold">${escapeHtml(page.heading)}</h1>`);
-  parts.push(`<p class="text-muted-foreground">${escapeHtml(page.description)}</p>`);
+  // Home's paragraph is the app's intro, not the meta description: it is the
+  // page's LCP element, and it must stay larger than anything React paints (#67).
+  parts.push(
+    page.kind === "home"
+      ? `<p class="text-muted-foreground">${escapeHtml(`${HOME_LEAD} ${HOME_PRIVACY}`)} (${link("/privacy", "privacy")}).</p>`
+      : `<p class="text-muted-foreground">${escapeHtml(page.description)}</p>`,
+  );
   parts.push(
     `<noscript><p>${escapeHtml(APP_NAME)} runs its models in your browser, so it needs JavaScript (and, for most models, WebGPU).</p></noscript>`,
   );
@@ -189,6 +197,32 @@ export function renderNotFoundHtml(template: string, origin: string): string {
 }
 
 const suffix404 = `Page not found · ${APP_NAME}`;
+
+/**
+ * Everything a crawler reads on a page, as one string: title, description,
+ * canonical, JSON-LD and the static body. Not the built HTML, which names
+ * hashed `/assets/…` chunks that change on most deploys while nothing a search
+ * engine sees has. The build hashes this into `seo-manifest.json`, and the
+ * IndexNow step (#69) submits only pages whose digest moved.
+ */
+export function crawlableContent(page: SitePage, origin: string): string {
+  return JSON.stringify([
+    page.title,
+    page.description,
+    canonicalUrl(page.path, origin),
+    structuredData(page, origin),
+    staticBody(page),
+  ]);
+}
+
+/** Page path → digest of its crawlable content. The hash is injected: this module also runs in the browser. */
+export function seoManifest(
+  pages: readonly SitePage[],
+  origin: string,
+  hash: (text: string) => string,
+): Record<string, string> {
+  return Object.fromEntries(pages.map((p) => [p.path, hash(crawlableContent(p, origin))]));
+}
 
 /**
  * The sitemap. No `<lastmod>`: every page would carry the build date whether

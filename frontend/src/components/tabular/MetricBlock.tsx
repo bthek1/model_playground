@@ -25,10 +25,10 @@ export function MetricBlock({ metrics }: { metrics: ClassificationMetrics }) {
   const Icon = lift > 0.01 ? TrendingUp : lift < -0.01 ? TrendingDown : Minus;
   const tone =
     lift > 0.01
-      ? "text-emerald-600 dark:text-emerald-500"
+      ? "text-emerald-700 dark:text-emerald-500"
       : lift < -0.01
         ? "text-red-600 dark:text-red-500"
-        : "text-amber-600 dark:text-amber-500";
+        : "text-amber-700 dark:text-amber-500";
 
   return (
     <div className="space-y-2" data-testid="metric-block">

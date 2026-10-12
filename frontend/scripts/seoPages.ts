@@ -5,6 +5,7 @@
  *   dist/sitemap.xml          every indexable page
  *   dist/robots.txt           allow all but /ingest/, and name the sitemap
  *   dist/404.html             the shell for a path with no page, `noindex`
+ *   dist/seo-manifest.json    page → digest of what a crawler reads (#69)
  *
  * and an absolute `og:image` in the root `index.html` (the OG spec needs one).
  * The CloudFront function (`infra/site/spa-rewrite.js`) serves a route's own
@@ -16,6 +17,7 @@
  * route, as before.
  */
 
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
@@ -28,6 +30,7 @@ import {
   renderPageHtml,
   renderRobots,
   renderSitemap,
+  seoManifest,
 } from "../src/seo/render";
 
 const ROUTES = new Set(SITE_PAGES.map((p) => p.path));
@@ -80,6 +83,11 @@ export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugi
       writeFileSync(join(outDir, "sitemap.xml"), renderSitemap(SITE_PAGES, origin));
       writeFileSync(join(outDir, "robots.txt"), renderRobots(origin));
       writeFileSync(join(outDir, "404.html"), renderNotFoundHtml(template, origin));
+      const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
+      writeFileSync(
+        join(outDir, "seo-manifest.json"),
+        `${JSON.stringify(seoManifest(SITE_PAGES, origin, sha256), null, 2)}\n`,
+      );
     },
   };
 }

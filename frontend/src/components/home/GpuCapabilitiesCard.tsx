@@ -40,16 +40,45 @@ const STATUS_INFO: Record<
   },
 };
 
+function BrowserRow() {
+  const browser = detectBrowser();
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
+      <dt className="text-muted-foreground">Browser</dt>
+      <dd>
+        {browser.name}
+        {browser.version ? ` ${browser.version}` : ""}
+      </dd>
+    </dl>
+  );
+}
+
+// While detection runs, the card already has the shape of its answer — the
+// browser row and a status box with a title and a two-line hint — so the
+// answer replaces text in place instead of growing the card and shifting
+// everything below it (#67: 0.04 of the home page's CLS).
+function CheckingPanel() {
+  return (
+    <div className="space-y-4 text-sm" data-testid="gpu-checking">
+      <BrowserRow />
+      <div className="flex items-start gap-2 rounded-md border p-3">
+        <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+        <div>
+          <p className="font-medium">Checking GPU access…</p>
+          <p className="text-muted-foreground">
+            Asking the browser for a GPU adapter, then for a device — the same
+            check every model page makes before it loads anything.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CapabilityPanel() {
   const { capabilities, loading } = useWebGPU();
 
-  if (loading) {
-    return (
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Checking GPU access…
-      </p>
-    );
-  }
+  if (loading) return <CheckingPanel />;
 
   const status = capabilities?.status ?? "unsupported";
   const info = STATUS_INFO[status];
@@ -80,13 +109,7 @@ function CapabilityPanel() {
 
   return (
     <div className="space-y-4 text-sm">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
-        <dt className="text-muted-foreground">Browser</dt>
-        <dd>
-          {browser.name}
-          {browser.version ? ` ${browser.version}` : ""}
-        </dd>
-      </dl>
+      <BrowserRow />
 
       <div
         className={`flex items-start gap-2 rounded-md border p-3 ${
@@ -96,7 +119,7 @@ function CapabilityPanel() {
         }`}
       >
         {info.ok ? (
-          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-700 dark:text-emerald-400" />
         ) : (
           <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
         )}
@@ -112,8 +135,19 @@ function CapabilityPanel() {
         </div>
       </div>
 
+      {/* Closed by default: opening this table after detection resolves
+          pushed the rest of the home page down by ~300 px on every machine
+          with a GPU — a layout shift no lab run sees, because a headless
+          browser has no adapter (#67). */}
       {capabilities?.status === "ready" && (
-        <CapabilityDetails capabilities={capabilities} />
+        <details data-testid="gpu-details">
+          <summary className="cursor-pointer font-medium select-none">
+            Adapter, limits and features
+          </summary>
+          <div className="mt-3">
+            <CapabilityDetails capabilities={capabilities} />
+          </div>
+        </details>
       )}
     </div>
   );
@@ -158,7 +192,7 @@ function CapabilityDetails({
           <dt className="text-muted-foreground">Type</dt>
           <dd>
             {isFallbackAdapter ? (
-              <span className="text-amber-600 dark:text-amber-400">
+              <span className="text-amber-700 dark:text-amber-400">
                 Software (fallback)
               </span>
             ) : (

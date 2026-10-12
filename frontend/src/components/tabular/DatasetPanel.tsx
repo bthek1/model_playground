@@ -142,14 +142,14 @@ export function DatasetPanel({
             {dataset.columns.length} columns
           </p>
           {dataset.sampled && (
-            <p className="text-xs text-amber-600 dark:text-amber-500">
+            <p className="text-xs text-amber-700 dark:text-amber-500">
               The file has {dataset.sourceRowCount.toLocaleString()} rows;{" "}
               {dataset.rowCount.toLocaleString()} were sampled evenly across it.
               Every number on this page describes that sample.
             </p>
           )}
           {issues.length > 0 && (
-            <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+            <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-500">
               <FileWarning className="mt-0.5 size-3.5 shrink-0" />
               <span>
                 {issues.length} row{issues.length === 1 ? "" : "s"} skipped for

@@ -953,7 +953,7 @@ function AlgorithmPicker({
               <span
                 className={cn(
                   "text-xs leading-snug font-normal",
-                  selected ? "text-primary-foreground/75" : "text-muted-foreground",
+                  selected ? "text-primary-foreground/85" : "text-muted-foreground",
                 )}
                 data-testid={reason ? `pairing-reason-${a.id}` : undefined}
               >

@@ -330,7 +330,7 @@ function GroundingPage({
               />
               {pair.queries === "label" && wordy.length > 0 && (
                 <p
-                  className="text-xs text-amber-600 dark:text-amber-500"
+                  className="text-xs text-amber-700 dark:text-amber-500"
                   data-testid="phrase-warning"
                 >
                   {wordy.map((q) => `“${q}”`).join(", ")}{" "}
@@ -535,7 +535,7 @@ function GroundingView({
           <span>{metric ? "far" : "near"}</span>
         </div>
         {!metric && (
-          <p className="text-xs text-amber-600 dark:text-amber-500">
+          <p className="text-xs text-amber-700 dark:text-amber-500">
             Relative inverse depth on this frame's own scale —{" "}
             <span className="font-medium">not metres</span>. The page ranks the
             matches rather than quoting a distance it does not have.

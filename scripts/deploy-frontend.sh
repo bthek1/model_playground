@@ -23,6 +23,10 @@
 #      in place tagged `stale=true`, once, and the bucket's lifecycle rule
 #      expires it N days later (infra/site: staleAssetDays). Re-writing resets
 #      its age, so the clock starts when it went stale, not when it was built;
+#   seo-manifest.json is never uploaded here: scripts/indexnow-submit.sh
+#   writes it, and only after IndexNow accepted the diff against the live one
+#   (#69) — uploading it here first would make every diff empty.
+#
 #   5. invalidate only /index.html and the manifest: hashed names never change
 #      meaning, so they never need invalidating. The route pages, 404.html,
 #      robots.txt and sitemap.xml are not invalidated either: the edge keeps
@@ -75,7 +79,7 @@ aws s3 cp "$DIST/assets" "s3://$BUCKET/assets" --recursive --only-show-errors \
 aws s3 cp "$DIST" "s3://$BUCKET" --recursive --only-show-errors \
   --exclude "assets/*" --exclude "index.html" --exclude "*/index.html" \
   --exclude "site.webmanifest" --exclude "robots.txt" --exclude "sitemap.xml" \
-  --exclude "404.html" \
+  --exclude "404.html" --exclude "seo-manifest.json" \
   --cache-control "$DAY"
 
 # 3. The switch-over. Each indexable route's own page first (the CloudFront

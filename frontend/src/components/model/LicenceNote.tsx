@@ -55,7 +55,7 @@ export function LicenceNote({
     <p
       data-testid="model-licence"
       data-terms={licence.terms}
-      className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500"
+      className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-500"
     >
       <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
       <span>

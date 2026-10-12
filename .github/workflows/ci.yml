@@ -336,6 +336,12 @@ jobs:
       - name: Smoke test the live site
         run: scripts/smoke-frontend.sh https://playground.benedictthekkel.com frontend/dist
 
+      # Tell IndexNow engines (Bing and others, not Google) which pages changed
+      # (#69). Last, once the site is proven live; it never fails the job —
+      # a problem is a warning annotation, and the next deploy retries.
+      - name: Notify IndexNow of changed pages
+        run: scripts/indexnow-submit.sh https://playground.benedictthekkel.com frontend/dist
+
   images:
     name: Production images build
     runs-on: ubuntu-latest

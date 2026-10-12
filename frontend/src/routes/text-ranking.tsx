@@ -475,8 +475,8 @@ function Column({
                 <span
                   className={
                     moved > 0
-                      ? "shrink-0 tabular-nums text-emerald-600 dark:text-emerald-500"
-                      : "shrink-0 tabular-nums text-amber-600 dark:text-amber-500"
+                      ? "shrink-0 tabular-nums text-emerald-700 dark:text-emerald-500"
+                      : "shrink-0 tabular-nums text-amber-700 dark:text-amber-500"
                   }
                   title={`Moved ${Math.abs(moved)} place${Math.abs(moved) === 1 ? "" : "s"} ${moved > 0 ? "up" : "down"}`}
                 >

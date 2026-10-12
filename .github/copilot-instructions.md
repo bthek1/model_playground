@@ -1890,12 +1890,43 @@ CloudFront at https://playground.benedictthekkel.com, infrastructure in Pulumi
   mirrors the edge (route→file, 404s) so the static E2E pass tests what ships.
   The Search Console TXT record at the zone apex is **hand-made, not Pulumi** —
   deleting it un-verifies the property. See deployment.md §10.8c.
+- **The static HTML is the first paint, so it decides LCP and CLS (#67).**
+  LCP is the largest text block painted, and `createRoot` replaces `#root`'s
+  static summary once the entry chunk has run — 1.8 s later on a throttled
+  phone. If the app then paints anything *larger*, that becomes LCP and LCP
+  waits for the JS. So `/home`'s intro is shared copy (`HOME_LEAD` /
+  `HOME_PRIVACY` in `src/seo/pages.ts`): the static page paints it as one
+  `text-base` paragraph, the route splits it into two smaller `text-sm` ones.
+  Lighthouse mobile went 79 → 99–100 on `/home`. Task pages still lose that
+  comparison (their headers are richer JSX than the taxonomy description), so
+  their LCP stays JS-bound until #66 shrinks the entry chunk. Layout shift has
+  three rules: `'Geist Fallback'` in `index.css` is Arial/Liberation Sans
+  reshaped to Geist (`size-adjust` **measured** from rendered widths, with a
+  separate bold face — a `local()` face is never synthesised bold); a loading
+  state has the **shape of its answer**; and anything tall that appears after
+  load sits behind a closed `<details>` (the GPU card's limits table pushed
+  `/home` down ~300 px on every machine *with* a GPU — invisible to a headless
+  audit, which has none). `e2e/specs/web-vitals.spec.ts` asserts both against
+  the built bundle by **geometry**, not paint timing, which headless Chromium
+  does not report reliably. Contrast is computed from the shipped tokens and
+  Tailwind's palette in `themeContrast.test.ts`, which also refuses the bare
+  `text-amber-600` / `text-emerald-600` / `text-primary-foreground/<80` that
+  measured under 4.5:1.
 - **A smoke/deploy script never pipes a body into `grep -q` (or `grep -m1`
   without `|| true`).** Under `set -euo pipefail` the first is a race — grep
   exits at the match, the writer takes SIGPIPE, and a body that *matched*
   fails the check (it failed CI once) — and the second turns a missing header
   into a silent exit instead of a named failure. Capture the body, then match
   with `[[ == ]]`; `infra/smoke-frontend.test.ts` pins both.
+- **IndexNow runs last in the deploy job and never fails it (#69).**
+  `scripts/indexnow-submit.sh` diffs the live `seo-manifest.json` (a digest
+  per page of what a crawler reads, written by the build, deliberately not the
+  built HTML, whose chunk hashes change on most deploys) against the new one,
+  POSTs only changed, new and removed pages, and uploads the new manifest
+  **only on 200/202** — so `deploy-frontend.sh` must never upload it, or every
+  diff would be empty. The key file `frontend/public/<32 hex>.txt` is public
+  by design. Every problem is a warning annotation with exit 0; a network
+  failure fetching the old manifest skips rather than resubmitting all pages.
 
 Full procedure, backups and troubleshooting: `docs/guides/deployment.md` (§10 for
 the static deploy).

@@ -133,7 +133,7 @@ export function ModelStatus({
         data-testid="model-ready"
         className="inline-flex flex-wrap items-center gap-x-1.5 rounded-md border border-emerald-600/30 bg-emerald-600/10 px-2.5 py-1 text-xs text-muted-foreground"
       >
-        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-500" />
+        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-700 dark:text-emerald-500" />
         Model ready · running on{" "}
         <span className="font-medium uppercase">{backend}</span>
         {loadedInMs != null && loadedInMs >= 1000 && (

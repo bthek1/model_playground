@@ -5,6 +5,41 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * A local font reshaped to Geist's metrics, used until the web font arrives
+ * (#67). Without it the swap re-wraps every line and shifted the home page's
+ * cards by 0.06 CLS on a throttled phone. Liberation Sans is metric-compatible
+ * with Arial, so one set of overrides covers Windows, macOS and Linux.
+ *
+ * Measured, not tuned: `size-adjust` is the ratio of rendered widths in
+ * Chromium over the home page's own copy (7333 characters, 16px), Geist 400
+ * against Arial 400 and Geist 600 against Arial Bold. A local face is never
+ * synthesised bold, so the bold half needs its own face or every semibold
+ * heading falls back at regular width. Ascent and descent are Geist's hhea
+ * values (1.005 em, 0.295 em) divided by each face's size-adjust.
+ */
+@font-face {
+    font-family: 'Geist Fallback';
+    font-weight: 100 549;
+    src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'),
+        local('Helvetica');
+    size-adjust: 102.76%;
+    ascent-override: 97.8%;
+    descent-override: 28.71%;
+    line-gap-override: 0%;
+}
+
+@font-face {
+    font-family: 'Geist Fallback';
+    font-weight: 550 900;
+    src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'),
+        local('LiberationSans-Bold'), local('Helvetica Bold');
+    size-adjust: 101.08%;
+    ascent-override: 99.43%;
+    descent-override: 29.18%;
+    line-gap-override: 0%;
+}
+
 :root {
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -17,7 +52,9 @@
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
     --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
+    /* 0.52, not shadcn's 0.556 (#67): 4.5:1 on white, on --muted and on every
+       /10 status tint (destructive/10 was 3.98). `themeContrast.test.ts`. */
+    --muted-foreground: oklch(0.52 0 0);
     --accent: oklch(0.938 0.05 264.376);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
@@ -94,7 +131,7 @@
 }
 
 @theme inline {
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Geist Variable', 'Geist Fallback', sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

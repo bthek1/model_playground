@@ -55,7 +55,7 @@ export function ScoreList({
       {!quiet && margin != null && margin < NEAR_TIE && (
         <p
           data-testid="score-near-tie"
-          className="text-xs text-amber-600 dark:text-amber-500"
+          className="text-xs text-amber-700 dark:text-amber-500"
         >
           The top two are within {margin.toFixed(2)} of each other — this model
           is not confident, whatever the first row says.

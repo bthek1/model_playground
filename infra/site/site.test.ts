@@ -188,6 +188,17 @@ describe("the distribution", () => {
     expect(policy.securityHeadersConfig.strictTransportSecurity).toBeDefined();
   });
 
+  it("sends HSTS for a year, subdomains included, never preloaded from a subdomain", () => {
+    const policy = one(
+      "aws:cloudfront/responseHeadersPolicy:ResponseHeadersPolicy",
+    );
+    expect(policy.securityHeadersConfig.strictTransportSecurity).toMatchObject({
+      accessControlMaxAgeSec: 31536000,
+      includeSubdomains: true,
+      preload: false,
+    });
+  });
+
   it("carries the project tag the deploy role's conditions key on", () => {
     expect(dist().tags).toEqual({ [PROJECT_TAG.key]: PROJECT_TAG.value });
   });

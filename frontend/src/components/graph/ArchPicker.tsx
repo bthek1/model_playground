@@ -40,7 +40,7 @@ export function ArchPicker({
               <span
                 className={cn(
                   "font-mono text-[0.65rem] font-normal",
-                  selected ? "text-primary-foreground/70" : "text-muted-foreground",
+                  selected ? "text-primary-foreground/85" : "text-muted-foreground",
                 )}
               >
                 {meta.aggregation}
@@ -50,7 +50,7 @@ export function ArchPicker({
               <span
                 className={cn(
                   "w-full text-xs leading-snug font-normal",
-                  selected ? "text-primary-foreground/75" : "text-muted-foreground",
+                  selected ? "text-primary-foreground/85" : "text-muted-foreground",
                 )}
               >
                 {meta.note}

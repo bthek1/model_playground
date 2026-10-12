@@ -62,7 +62,7 @@ export function SpanOverlay({
         // range no model proposed.
         <p
           data-testid="span-dropped"
-          className="text-xs text-amber-600 dark:text-amber-500"
+          className="text-xs text-amber-700 dark:text-amber-500"
         >
           {result.dropped.length} span
           {result.dropped.length === 1 ? "" : "s"} could not be drawn — they

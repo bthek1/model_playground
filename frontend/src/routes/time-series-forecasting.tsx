@@ -278,7 +278,7 @@ function TimeSeriesForecastingPage() {
                       </div>
                     </div>
                     {derived.backtestError ? (
-                      <p className="text-xs text-amber-600 dark:text-amber-500">
+                      <p className="text-xs text-amber-700 dark:text-amber-500">
                         {derived.backtestError}
                       </p>
                     ) : derived.backtested ? (

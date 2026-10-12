@@ -505,7 +505,13 @@ canonical form, with an absolute `Location` and the query string kept
 (§10.8c). A route
 containing a dot would bypass all of it; none does, and `spa-rewrite.test.ts`
 checks that against the generated route tree. There is **no CSP**, for §1's
-reason.
+reason. HSTS is a year with `includeSubDomains` — it covers only names under
+`playground.`, of which there are none — and **no `preload`**: the preload
+list accepts registrable domains only, so it would have to be sent from the
+apex, which this stack does not own (#67). Source maps are **not published**:
+the repository is public, Best Practices already scores 100 without them, and
+a `.map` beside every chunk would double what `deploy-frontend.sh` uploads and
+tags `stale`.
 
 ### 10.7 Cost
 
@@ -609,8 +615,27 @@ deleted, and deleting it un-verifies the property. Google re-checks it
 periodically. The sitemap was submitted the same day and processed with all
 49 pages. A new property shows "Couldn't fetch" with no *Last read* date until
 Google first fetches it; that is a queued fetch, not an error. Bing Webmaster
-Tools can import the property from Search Console. Nothing in the browser
-contacts either, so `legal/recipients.ts` does not change.
+Tools was set up the same day by importing the property from Search
+Console. Nothing in the browser contacts either, so `legal/recipients.ts`
+does not change.
+
+**IndexNow (#69).** After the smoke test, `scripts/indexnow-submit.sh` tells
+the IndexNow engines (Bing, Yandex, Seznam, Naver and others; **not Google**)
+which pages changed. The key is public by design: `frontend/public/<32
+hex>.txt` holds its own name, and an engine fetches it to confirm the
+submitter controls the host. The build writes `dist/seo-manifest.json`, a
+digest per page of what a crawler reads (title, description, canonical,
+JSON-LD, static body), deliberately not the built HTML, whose hashed chunk
+names change on most deploys. The script diffs the **live** manifest against
+the new one and POSTs only new, changed and removed pages to
+`api.indexnow.org` (all 49 the first time). **Only on 200/202** does it upload
+the new manifest, so a failed submission is retried by the next deploy. That
+is also why `deploy-frontend.sh` never uploads the manifest itself. It
+**never fails the job**: the site is already live, and a problem shows as an
+`::warning` annotation naming the status. A network failure fetching the old
+manifest skips the run rather than resubmitting everything. CI sends only the
+site's own public URLs, so the privacy notice does not change. Check what was
+received in Bing Webmaster Tools → IndexNow.
 
 ### 10.9 How it is tested
 
@@ -631,6 +656,7 @@ and the `infra` CI job):
 | Real 404s | `infra/site/object-status.test.ts`, `infra/site/site.test.ts` | `x-amz-meta-status: 404` becomes the status and the header is dropped; only a 4xx is honoured; keyed on the object, never the URI; associated as viewer-response, inside the deploy role's function prefix |
 | SEO output (#63–#65) | `frontend/src/seo/*.test.ts`, `frontend/e2e/specs/seo.spec.ts` (`E2E_STATIC=1`) | the function's `ROUTES` equals `SITE_PAGES`; every page's head, canonical, JSON-LD and `<h1>`; every sitemap URL fetched with no JS; the head following a client-side navigation; an unknown path a 404 that still renders the not-found page, and its `noindex` gone after clicking through |
 | Upload order | `infra/deploy-frontend.test.ts` (stub `aws`) | assets → wasm → route pages → `404.html` (with `status=404`) → robots/sitemap → index last; explicit wasm, HTML, text and XML types; no delete; stale-marking once, never a live chunk; the two-path invalidation |
+| IndexNow (#69) | `infra/indexnow-submit.test.ts` (stub `curl`/`aws`), `frontend/src/seo/indexnow.test.ts`, `infra/workflow.test.ts` | first run submits every page; an unchanged manifest submits nothing; changed, new and removed pages alone; never off-host; the manifest advances only on 200/202; every failure warns and exits 0; a manifest-fetch timeout skips rather than resubmitting; one key file, holding its own name; digests ignore `/assets/…`; the step runs last, after the smoke test |
 | Smoke test | `infra/smoke-frontend.test.ts` (stub `curl`) | passes a healthy site; fails, naming it, on each broken property — including a missing header, which once ended the script silently; reads a sitemap bigger than a pipe buffer, and greps no pipe with an early-exiting `grep`, which once failed CI on a body that matched |
 | Analytics through `/ingest/*` (#60) | `infra/site/site.test.ts`, `infra/site/ingest-strip.test.ts`, `infra/workflow.test.ts`, `infra/posthog-setup.test.ts` | the ordered behaviour precedes the default, targets PostHog, caches nothing, carries the strip function and never `spa-rewrite`; CI takes the `phc_` key from a variable on the shipped build only; the setup script never prints the personal key — see [analytics.md](../explanations/analytics.md) |
 | CD wiring | `infra/workflow.test.ts` (reads `ci.yml`) | the `off` artifact built once and never rebuilt; `deploy`'s needs, environment, OIDC, no-cancel concurrency, step order; `preview` has no environment and never applies; only those two jobs get a token |

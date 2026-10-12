@@ -459,7 +459,7 @@ function ClipView({
           E2E spec asserts this copy for that reason. */}
       <p
         data-testid="baseline-note"
-        className="text-xs text-amber-600 dark:text-amber-500"
+        className="text-xs text-amber-700 dark:text-amber-500"
       >
         This is a <span className="font-medium">frame-level baseline</span>, not
         video classification. CLIP scores each frame on its own and never sees

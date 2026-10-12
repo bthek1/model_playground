@@ -37,7 +37,7 @@ beforeAll(() => {
   mkdirSync(join(dist, "assets"), { recursive: true });
   writeFileSync(join(bin, "aws"), STUB);
   chmodSync(join(bin, "aws"), 0o755);
-  for (const f of ["index.html", "site.webmanifest", "favicon.ico", "robots.txt", "sitemap.xml", "404.html"]) {
+  for (const f of ["index.html", "site.webmanifest", "favicon.ico", "robots.txt", "sitemap.xml", "404.html", "seo-manifest.json"]) {
     writeFileSync(join(dist, f), "x");
   }
   mkdirSync(join(dist, "asr"));
@@ -108,6 +108,14 @@ describe("deploy-frontend.sh", () => {
     expect(day).toContain("--exclude robots.txt");
     expect(day).toContain("--exclude sitemap.xml");
     expect(day).toContain("--exclude 404.html");
+  });
+
+  // indexnow-submit.sh diffs the live manifest against the new one (#69);
+  // uploading it here would make every diff empty.
+  it("never uploads seo-manifest.json — the IndexNow step owns it", () => {
+    const uploads = calls.filter((c) => c.startsWith("s3 cp"));
+    expect(uploads.filter((c) => c.includes("seo-manifest.json s3://"))).toEqual([]);
+    expect(calls[indexOf((c) => c.includes("max-age=86400"))]).toContain("--exclude seo-manifest.json");
   });
 
   // object-status.js turns this metadata into the status line (#63).

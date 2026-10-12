@@ -93,7 +93,7 @@ export function FitStatus({
           data-testid="model-ready"
           className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
         >
-          <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-500" />
+          <CheckCircle2 className="size-3.5 text-emerald-700 dark:text-emerald-500" />
           Fitted in {(result.fitMs / 1000).toFixed(1)}s on{" "}
           {result.trainRows.toLocaleString()} rows ·
           <span className="inline-flex items-center gap-1 font-medium">

@@ -225,7 +225,7 @@ function ZeroShotClassificationPage() {
                 data-testid="pass-count"
                 className={
                   cost.many
-                    ? "text-xs font-medium text-amber-600 dark:text-amber-500"
+                    ? "text-xs font-medium text-amber-700 dark:text-amber-500"
                     : "text-xs text-muted-foreground"
                 }
               >

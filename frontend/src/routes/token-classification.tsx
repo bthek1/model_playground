@@ -250,7 +250,7 @@ function TokenClassificationPage() {
                 // highlights is indistinguishable from a model that found less.
                 <p
                   data-testid="unplaced-note"
-                  className="text-xs text-amber-600 dark:text-amber-500"
+                  className="text-xs text-amber-700 dark:text-amber-500"
                 >
                   {unplaced.length} entit
                   {unplaced.length === 1 ? "y" : "ies"} could not be located in

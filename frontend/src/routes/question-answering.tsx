@@ -312,7 +312,7 @@ function QuestionAnsweringPage() {
                       {ran.answer.decoded}
                     </span>
                   </p>
-                  <p className="text-xs text-amber-600 dark:text-amber-500">
+                  <p className="text-xs text-amber-700 dark:text-amber-500">
                     The answer could not be located in your passage — this
                     checkpoint's tokenizer does not line up with these
                     characters, so it is quoted rather than highlighted.
@@ -323,7 +323,7 @@ function QuestionAnsweringPage() {
               {ran.answer.truncated && (
                 <p
                   data-testid="answer-truncated"
-                  className="text-xs text-amber-600 dark:text-amber-500"
+                  className="text-xs text-amber-700 dark:text-amber-500"
                 >
                   The passage is longer than the model's 512-token window, and
                   the tail was never read. The answer comes only from the part
