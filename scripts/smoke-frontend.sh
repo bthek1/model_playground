@@ -70,9 +70,14 @@ for f in robots.txt sitemap.xml; do
   status="$(curl -sS -o /dev/null -w '%{http_code}' "$URL/$f")"
   [[ "$status" == "200" ]] || fail "/$f is $status, not 200"
 done
-curl -sS "$URL/robots.txt" | grep -q "^Sitemap: $URL/sitemap.xml" ||
+# Read each body whole, then match. `curl | grep -q` under pipefail is a race:
+# grep exits on the first match, curl takes SIGPIPE writing the rest, and the
+# pipeline fails on a body that did contain the line.
+robots="$(curl -sS "$URL/robots.txt")"
+[[ "$robots" == *"Sitemap: $URL/sitemap.xml"* ]] ||
   fail "/robots.txt does not name $URL/sitemap.xml"
-curl -sS "$URL/sitemap.xml" | grep -q "<loc>$URL/asr</loc>" ||
+sitemap="$(curl -sS "$URL/sitemap.xml")"
+[[ "$sitemap" == *"<loc>$URL/asr</loc>"* ]] ||
   fail "/sitemap.xml does not list $URL/asr"
 ok "/robots.txt and /sitemap.xml are served, and name each other's URLs"
 
