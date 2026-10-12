@@ -15,7 +15,12 @@ test.describe("WebGPU capability reporting", () => {
     await page.goto("/home");
 
     await expect(page.getByText("GPU accessible")).toBeVisible();
-    // The details block only renders on "ready".
+    // The details block only renders on "ready", closed so its ~300 px do
+    // not shift the page after detection resolves (#67).
+    const details = page.getByText("Adapter, limits and features");
+    await expect(details).toBeVisible();
+    await expect(page.getByText("Adapter", { exact: true })).toBeHidden();
+    await details.click();
     await expect(page.getByText("Adapter", { exact: true })).toBeVisible();
     await expect(page.getByText("Limits", { exact: true })).toBeVisible();
   });

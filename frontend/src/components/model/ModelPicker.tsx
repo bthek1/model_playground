@@ -129,7 +129,7 @@ export function ModelPicker<T extends PickableModel>({
                 className={cn(
                   "w-full text-xs leading-snug font-normal",
                   isSelected
-                    ? "text-primary-foreground/75"
+                    ? "text-primary-foreground/85"
                     : "text-muted-foreground",
                 )}
               >
@@ -138,7 +138,7 @@ export function ModelPicker<T extends PickableModel>({
               {unsupported && (
                 <span
                   data-testid={`model-unsupported-${m.id}`}
-                  className="w-full text-xs leading-snug font-normal text-amber-600 dark:text-amber-500"
+                  className="w-full text-xs leading-snug font-normal text-amber-700 dark:text-amber-500"
                 >
                   Needs {m.backends?.join(" or ")} — this machine resolved to{" "}
                   {backend}.
@@ -180,7 +180,7 @@ export function ModelPicker<T extends PickableModel>({
           {size.large && !selectedCached && (
             <p
               data-testid="model-size-warning"
-              className="flex items-start gap-1.5 text-amber-600 dark:text-amber-500"
+              className="flex items-start gap-1.5 text-amber-700 dark:text-amber-500"
             >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
               <span>

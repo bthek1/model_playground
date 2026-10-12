@@ -322,7 +322,7 @@ function DepthView({
           <span>{metric ? "far" : "near"}</span>
         </div>
         {!metric && (
-          <p className="text-xs text-amber-600 dark:text-amber-500">
+          <p className="text-xs text-amber-700 dark:text-amber-500">
             These are <span className="font-medium">relative</span> depths on an
             arbitrary scale, not metres — and the scale is re-fitted to each
             image, so two frames cannot be compared without aligning them first.

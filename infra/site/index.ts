@@ -127,9 +127,14 @@ const headers = new aws.cloudfront.ResponseHeadersPolicy("site", {
   name: `${FUNCTION_PREFIX}headers`,
   comment: "Security headers for the static frontend; no CSP",
   securityHeadersConfig: {
+    // includeSubDomains covers only names under `playground.` — there are
+    // none, so it costs nothing and is what Lighthouse asks for (#67). No
+    // `preload`: the preload list takes registrable domains only, so it
+    // would have to be sent from the apex, which this stack does not own.
     strictTransportSecurity: {
       accessControlMaxAgeSec: 31536000,
-      includeSubdomains: false,
+      includeSubdomains: true,
+      preload: false,
       override: true,
     },
     contentTypeOptions: { override: true },

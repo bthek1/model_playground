@@ -226,7 +226,7 @@ function TextGenerationPage() {
             // that plainly has a GPU, so the missing feature is named.
             <p
               data-testid="shader-f16-note"
-              className="text-xs leading-snug text-amber-600 dark:text-amber-500"
+              className="text-xs leading-snug text-amber-700 dark:text-amber-500"
             >
               {f16Gated.map((m) => m.label).join(" and ")}{" "}
               {f16Gated.length === 1 ? "is" : "are"} disabled above: they load

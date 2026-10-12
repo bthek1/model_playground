@@ -128,7 +128,7 @@ export function SeriesPanel({
           {series.gaps.length > 0 && (
             <p
               data-testid="series-gaps"
-              className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500"
+              className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-500"
             >
               <FileWarning className="mt-0.5 size-3.5 shrink-0" />
               <span>
@@ -144,7 +144,7 @@ export function SeriesPanel({
           {series.irregular && (
             <p
               data-testid="series-irregular"
-              className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500"
+              className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-500"
             >
               <FileWarning className="mt-0.5 size-3.5 shrink-0" />
               <span>

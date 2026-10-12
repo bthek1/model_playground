@@ -24,7 +24,7 @@ export interface SitePage {
   title: string;
   /** The page's `<h1>`: the taxonomy label, or the static page's name. */
   heading: string;
-  /** The meta description, 70–160 characters. */
+  /** The meta description, 70–150 characters (about 920 px, #68). */
   description: string;
   /** The owning taxonomy category, for a task page. */
   category?: string;
@@ -85,6 +85,21 @@ const STATIC_PAGES: SitePage[] = [
       "How Model Playground aims to meet WCAG 2.2 AA, what is known not to yet, and how to report an accessibility problem.",
   },
 ];
+
+const TASK_COUNT = taskCategories.reduce((n, c) => n + c.tasks.length, 0);
+
+/**
+ * The home page's introduction, shared by the app and the static HTML (#67).
+ * The two must agree for a reason beyond consistency: this paragraph is the
+ * page's largest contentful paint. The static copy paints at first paint, and
+ * `routes/home.tsx` splits the same words into two smaller paragraphs, so
+ * nothing React paints later is larger and LCP is not pushed back to when the
+ * entry chunk has run (1.8 s later on a throttled phone).
+ */
+export const HOME_LEAD = `Run machine-learning models in your browser, on your own GPU — speech recognition, object detection, translation, text generation and ${TASK_COUNT - 4} more tasks across audio, vision, language, graphs, tabular data and reinforcement learning.`;
+
+/** The intro's second half; the app and the static page each append a privacy link. */
+export const HOME_PRIVACY = "The weights come to you; nothing you give a model is sent to a server";
 
 const HOME: SitePage = {
   path: "/home",

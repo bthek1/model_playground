@@ -190,7 +190,7 @@ function VisualQuestionAnsweringPage() {
           {f16Missing && (
             <p
               data-testid="f16-note"
-              className="text-xs leading-snug text-amber-600 dark:text-amber-500"
+              className="text-xs leading-snug text-amber-700 dark:text-amber-500"
             >
               This browser has a GPU, but its adapter does not support
               half-precision (<code>shader-f16</code>) in shaders. These models are

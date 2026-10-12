@@ -43,7 +43,7 @@ export function RegressionMetricBlock({
   const Icon = better > 0 ? TrendingUp : better < 0 ? TrendingDown : Minus;
   const tone =
     better > 0
-      ? "text-emerald-600 dark:text-emerald-500"
+      ? "text-emerald-700 dark:text-emerald-500"
       : "text-red-600 dark:text-red-500";
 
   return (

@@ -61,7 +61,7 @@ export function MetricTable({
                 <td className="py-1 pr-2">
                   {r.label}
                   {best?.id === r.id && (
-                    <span className="ml-1 text-emerald-600 dark:text-emerald-500">
+                    <span className="ml-1 text-emerald-700 dark:text-emerald-500">
                       best
                     </span>
                   )}

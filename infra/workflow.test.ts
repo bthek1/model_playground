@@ -118,6 +118,20 @@ describe("the deploy job", () => {
     expect(upload).toBeGreaterThan(up);
     expect(smoke).toBeGreaterThan(upload);
   });
+
+  // IndexNow (#69) needs the key file and the new pages live, so it follows
+  // the smoke test; and it is the only writer of seo-manifest.json.
+  it("notifies IndexNow last, after the smoke test, without continue-on-error", () => {
+    const script = runs(j());
+    const smoke = script.indexOf("scripts/smoke-frontend.sh");
+    const notify = script.indexOf("scripts/indexnow-submit.sh");
+    expect(notify).toBeGreaterThan(smoke);
+    const step = j().steps.find((s) => s.run?.includes("indexnow-submit.sh"));
+    expect(step).toBe(j().steps.at(-1));
+    // The script exits 0 on every IndexNow problem by design; masking a crash
+    // with continue-on-error would hide a broken script instead.
+    expect((step as Record<string, unknown>)["continue-on-error"]).toBeUndefined();
+  });
 });
 
 describe("the preview job", () => {

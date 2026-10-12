@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { SITE_DESCRIPTION } from "@/lib/site";
-import { pageForPath, SITE_PAGES } from "./pages";
+import { HOME_LEAD, HOME_PRIVACY, pageForPath, SITE_PAGES } from "./pages";
 import {
   absolutiseImages,
   renderNotFoundHtml,
@@ -65,6 +65,15 @@ describe("renderPageHtml", () => {
     expect(doc.getElementById("computer-vision")?.querySelector("h2")?.textContent).toBe(
       "Computer Vision",
     );
+  });
+
+  // Home's paragraph is its LCP element (#67): the app's intro, whole, at
+  // first paint — so React's two smaller paragraphs never replace it as LCP.
+  it("paints home's intro as one paragraph holding both of the app's", () => {
+    const doc = parse(renderPageHtml(TEMPLATE, pageForPath("/home")!, ORIGIN));
+    const p = doc.querySelector("#root main > p");
+    expect(p?.textContent).toBe(`${HOME_LEAD} ${HOME_PRIVACY} (privacy).`);
+    expect(p?.querySelector("a")?.getAttribute("href")).toBe("/privacy");
   });
 
   it("links a task to home, its category and its siblings", () => {

@@ -26,6 +26,7 @@ vi.mock("@/hooks/useModels", () => ({
 
 const { Route } = await import("@/routes/home");
 const { taskCategories } = await import("@/components/layout/taskTaxonomy");
+const { HOME_LEAD, HOME_PRIVACY } = await import("@/seo/pages");
 const HomePage = Route?.options?.component as React.ComponentType | undefined;
 
 function renderPage() {
@@ -60,6 +61,18 @@ describe("HomePage", () => {
   it("says what the site runs, in words a visitor would search for", () => {
     renderPage();
     expect(screen.getByText(/machine-learning models in your browser/i)).toBeInTheDocument();
+  });
+
+  // The static HTML paints these words as one paragraph at first paint; React
+  // must not paint a larger one later, or LCP moves to when the entry chunk
+  // has run (#67). Two paragraphs, each a part of the static one.
+  it("splits the intro into two paragraphs, each smaller than the static one", () => {
+    renderPage();
+    const lead = screen.getByText(HOME_LEAD);
+    expect(lead.tagName).toBe("P");
+    expect(lead.textContent).toBe(HOME_LEAD);
+    const privacy = screen.getByText((_, el) => el?.tagName === "P" && el.textContent!.startsWith(HOME_PRIVACY));
+    expect(privacy).not.toBe(lead);
   });
 
   it("links its privacy claim to the privacy notice (#62)", () => {

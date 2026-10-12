@@ -40,14 +40,16 @@ describe("SITE_PAGES", () => {
     }
   });
 
-  // Google shows roughly 50–60 characters of a title and 155–160 of a
-  // description; past that it truncates, and a page that says nothing in the
-  // part shown might as well say nothing.
+  // Google shows roughly 50–60 characters of a title and cuts a description
+  // at about 920 px on desktop — around 150 characters of ordinary text, less
+  // with wide glyphs like em dashes. Past that it truncates, and a page that
+  // says nothing in the part shown might as well say nothing. (#68: the old
+  // 154-character home description measured 1062 px.)
   it("keeps titles and descriptions to what a result shows", () => {
     for (const p of SITE_PAGES) {
       expect(p.title.length, p.title).toBeLessThanOrEqual(70);
       expect(p.description.length, p.path).toBeGreaterThanOrEqual(70);
-      expect(p.description.length, p.path).toBeLessThanOrEqual(160);
+      expect(p.description.length, p.path).toBeLessThanOrEqual(150);
     }
   });
 

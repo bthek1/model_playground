@@ -56,14 +56,14 @@ export function DeviceStatus({
       data-testid="device-ready"
       className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
     >
-      <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-500" />
+      <CheckCircle2 className="size-3.5 text-emerald-700 dark:text-emerald-500" />
       GPU ready · kernels compile on first use ·
       <span className="inline-flex items-center gap-1 font-medium">
         <Cpu className="size-3.5" />
         {name}
       </span>
       {capabilities?.isFallbackAdapter && (
-        <span className="text-amber-600 dark:text-amber-500">
+        <span className="text-amber-700 dark:text-amber-500">
           (software fallback — expect slow compute)
         </span>
       )}

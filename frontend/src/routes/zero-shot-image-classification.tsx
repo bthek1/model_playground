@@ -321,7 +321,7 @@ function ScoreTable({
             {i > 0 && " · "}
             <code>{r.template}</code>: image {Math.round(r.imageMs)} ms, labels{" "}
             {r.textCached ? (
-              <span className="text-emerald-600 dark:text-emerald-500">
+              <span className="text-emerald-700 dark:text-emerald-500">
                 reused
               </span>
             ) : (
@@ -346,7 +346,7 @@ function ScoreTable({
         </p>
       )}
 
-      <p className="text-xs text-amber-600 dark:text-amber-500">
+      <p className="text-xs text-amber-700 dark:text-amber-500">
         These scores are <span className="font-medium">relative to the labels
         you gave</span>. The model picks the best match from your list; it has no
         way to say “none of these”.

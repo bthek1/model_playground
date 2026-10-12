@@ -57,7 +57,7 @@ export function ColumnPicker({
           ))}
         </select>
         {eligible.length === 0 && (
-          <p className="text-xs text-amber-600 dark:text-amber-500">
+          <p className="text-xs text-amber-700 dark:text-amber-500">
             {objective === "classification"
               ? "No text column in this file to classify. A classification target needs a small set of distinct values."
               : "No numeric column in this file to predict."}

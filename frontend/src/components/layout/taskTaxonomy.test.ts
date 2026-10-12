@@ -37,7 +37,7 @@ describe("taskCategories", () => {
     const all = taskCategories.flatMap((c) => c.tasks);
     for (const t of all) {
       expect(t.description.length, t.label).toBeGreaterThanOrEqual(70);
-      expect(t.description.length, t.label).toBeLessThanOrEqual(160);
+      expect(t.description.length, t.label).toBeLessThanOrEqual(150); // seo/pages.test.ts says why
     }
     expect(new Set(all.map((t) => t.description)).size).toBe(all.length);
   });

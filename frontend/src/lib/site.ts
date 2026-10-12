@@ -25,4 +25,4 @@ export const SITE_URL = "https://playground.benedictthekkel.com";
  * sign-in, a 404 — falls back to.
  */
 export const SITE_DESCRIPTION =
-  "Run machine-learning models — speech, vision, graphs and custom WebGPU kernels — in your browser, on your own GPU. Nothing you feed it leaves the machine.";
+  "Run machine-learning models for speech, vision and graphs in your browser, on your own GPU. Nothing you feed it leaves the machine.";
