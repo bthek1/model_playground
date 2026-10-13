@@ -3,7 +3,14 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { SITE_PAGES } from "./pages";
-import { addModulePreloads, type BundleLike, routeChunk, routePreloads } from "./preload";
+import {
+  addModulePreloads,
+  type BundleLike,
+  modulePreloads,
+  routeChunk,
+  routeFileStem,
+  routePreloads,
+} from "./preload";
 
 const R = "/repo/frontend/src/routes";
 
@@ -42,6 +49,13 @@ const BUNDLE: BundleLike = {
     imports: [],
   },
   "assets/index-g.css": { type: "asset", fileName: "assets/index-g.css" },
+  // A note's body (#72): a chunk of its own, loaded by the article route.
+  "assets/webgpu-shader-f16-h.js": {
+    type: "chunk",
+    fileName: "assets/webgpu-shader-f16-h.js",
+    facadeModuleId: "/repo/frontend/src/notes/bodies/webgpu-shader-f16.ts",
+    imports: ["assets/jsx-runtime-b.js"],
+  },
 };
 
 describe("routeChunk", () => {
@@ -56,6 +70,18 @@ describe("routeChunk", () => {
   it("matches the whole file name, not a prefix of it", () => {
     expect(routeChunk(BUNDLE, "asr-extra")?.fileName).toBe("assets/asr-extra-f.js");
     expect(routeChunk(BUNDLE, "as")).toBeUndefined();
+  });
+});
+
+describe("modulePreloads", () => {
+  it("finds a module's own chunk by path, minus what the entry loads", () => {
+    expect(modulePreloads(BUNDLE, "/src/notes/bodies/webgpu-shader-f16.ts")).toEqual([
+      "assets/webgpu-shader-f16-h.js",
+    ]);
+  });
+
+  it("throws for a module that is not split out, rather than preloading nothing", () => {
+    expect(() => modulePreloads(BUNDLE, "/src/notes/bodies/missing.ts")).toThrow(/no chunk/);
   });
 });
 
@@ -89,8 +115,14 @@ describe("every indexable page", () => {
   // is named differently would fail the build, so catch it here first.
   const files = new Set(readdirSync(join(__dirname, "../routes")));
   it.each(SITE_PAGES.map((p) => p.path))("%s has a route file of the same name", (path) => {
-    const stem = path.slice(1);
+    const stem = routeFileStem(path);
     expect(files.has(`${stem}.tsx`) || files.has(`${stem}.lazy.tsx`)).toBe(true);
+  });
+
+  // #72: every note shares one route file, and its body is a chunk of its own.
+  it("maps every note to the shared article route", () => {
+    expect(routeFileStem("/notes/webgpu-shader-f16")).toBe("notes_.$slug");
+    expect(routeFileStem("/notes")).toBe("notes");
   });
 
   it("is a route module nothing outside src/routes imports", () => {

@@ -20,6 +20,7 @@ describe("SITE_PAGES", () => {
       tasks.map((t) => t.to),
     );
     expect(SITE_PAGES.filter((p) => p.kind === "static").map((p) => p.path)).toEqual([
+      "/notes",
       "/about",
       "/privacy",
       "/terms",

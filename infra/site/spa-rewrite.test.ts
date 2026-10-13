@@ -17,6 +17,8 @@ const handler = new Function(`${source}\nreturn handler;`)() as (event: {
   request: Request;
 }) => Request | Redirect;
 
+const routes = new Function(`${source}\nreturn ROUTES;`)() as Record<string, boolean>;
+
 const HOST = "playground.example.com";
 const run = (uri: string, querystring: Querystring = {}) =>
   handler({ request: { uri, querystring, headers: { host: { value: HOST } } } });
@@ -122,7 +124,14 @@ describe("spa-rewrite (CloudFront viewer-request)", () => {
       "utf8",
     );
     const paths = [...new Set([...tree.matchAll(/\bpath: '([^']*)'/g)].map((m) => m[1]))];
-    const unknown = paths.filter((p) => p !== "/" && rewrite(p) === "/404.html");
+    // A route with a parameter (`/notes/$slug`, #72) is served one file per
+    // value, so at least one listed route must match its shape.
+    const known = (p: string) => {
+      if (!p.includes("$")) return rewrite(p) !== "/404.html";
+      const shape = new RegExp(`^${p.replace(/\$[^/]+/g, "[^/]+")}$`);
+      return Object.keys(routes).some((r) => shape.test(r));
+    };
+    const unknown = paths.filter((p) => p !== "/" && !known(p));
     expect(unknown, "add each to ROUTES (indexable) or APP_ROUTES").toEqual([]);
   });
 

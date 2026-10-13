@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import { AUTHOR_URL, OPERATOR, SOURCE_URL } from "@/legal/site";
 import { SITE_DESCRIPTION } from "@/lib/site";
+import { NOTE_BODIES } from "@/notes/bodies";
+import { NOTES } from "@/notes/meta";
+import { PAGE_COPY } from "./copy";
 import { HOME_LEAD, HOME_PRIVACY, pageForPath, SITE_PAGES } from "./pages";
 import {
   absolutiseImages,
@@ -214,6 +217,63 @@ describe("structuredData", () => {
 
   it("cannot close its own <script> tag", () => {
     expect(scriptJson({ x: "</script><script>alert(1)" })).not.toContain("</script>");
+  });
+});
+
+// #72: a note's whole article is in its HTML, so no crawler needs JavaScript
+// to read it, and it is described as an article by a named author.
+describe("notes", () => {
+  const slug = "webgpu-shader-f16";
+  const page = pageForPath(`/notes/${slug}`)!;
+
+  it("writes the whole article into the page, markup rendered", () => {
+    const doc = parse(renderPageHtml(TEMPLATE, page, ORIGIN, undefined, NOTE_BODIES[slug]));
+    const article = doc.querySelector("#root article")!;
+    expect(article.textContent).toContain("Program Gather requires f16 but the device does not support it");
+    expect(article.querySelector("pre code")?.textContent).toContain('features.has("shader-f16")');
+    expect(article.querySelector('a[href="/image-text-to-text"]')).not.toBeNull();
+    expect(article.innerHTML).not.toContain("`");
+    expect(doc.querySelector("#root h1")?.textContent).toBe(page.heading);
+  });
+
+  it("puts Notes between home and the article in the breadcrumb", () => {
+    const doc = parse(renderPageHtml(TEMPLATE, page, ORIGIN, undefined, NOTE_BODIES[slug]));
+    const trail = [...doc.querySelectorAll('nav[aria-label="Breadcrumb"] a')].map((a) => a.getAttribute("href"));
+    expect(trail).toEqual(["/home", "/notes"]);
+    const data = structuredData(page, ORIGIN) as { "@graph": { breadcrumb: { itemListElement: { item: string }[] } }[] };
+    expect(data["@graph"][0].breadcrumb.itemListElement.map((c) => c.item)).toEqual([
+      `${ORIGIN}/home`,
+      `${ORIGIN}/notes`,
+      `${ORIGIN}/notes/${slug}`,
+    ]);
+  });
+
+  it("describes a note as a TechArticle with its dates and author", () => {
+    const data = structuredData(page, ORIGIN) as { "@graph": Record<string, unknown>[] };
+    expect(data["@graph"][0]).toMatchObject({
+      "@type": "TechArticle",
+      headline: page.heading,
+      datePublished: page.published,
+      dateModified: page.modified,
+      author: { "@type": "Person", name: OPERATOR },
+    });
+  });
+
+  it("lists every note, with its description, on the index and on home", () => {
+    for (const path of ["/notes", "/home"]) {
+      const doc = parse(renderPageHtml(TEMPLATE, pageForPath(path)!, ORIGIN));
+      for (const n of NOTES) {
+        expect(doc.querySelector(`#root a[href="/notes/${n.slug}"]`), `${path} → ${n.slug}`).not.toBeNull();
+      }
+      expect(doc.getElementById("root")!.textContent).toContain(NOTES[0].description);
+    }
+  });
+
+  it("links a task page back to the notes that cite it, and only those", () => {
+    const html = (path: string) =>
+      parse(renderPageHtml(TEMPLATE, pageForPath(path)!, ORIGIN, PAGE_COPY[path]));
+    expect(html("/translation").querySelector('#root a[href="/notes/ort-web-missing-required-scale"]')).not.toBeNull();
+    expect(html("/vad").querySelector('#root a[href^="/notes/"]')).toBeNull();
   });
 });
 

@@ -103,3 +103,29 @@ for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     });
   });
 }
+
+// #72: a note's static HTML is the whole article, so its LCP is a paragraph
+// of it — which must stay the largest thing on the page once the app mounts
+// its own copy, or LCP waits for the entry chunk and the body chunk.
+const NOTE = "/notes/webgpu-shader-f16";
+for (const [name, viewport] of Object.entries(VIEWPORTS)) {
+  test.describe(`${NOTE} on a ${name}`, () => {
+    test.use({ viewport });
+
+    test("the static article paints larger than the app's copy of it", async ({ browser, page }) => {
+      const noJs = await browser.newContext({ viewport, javaScriptEnabled: false, ignoreHTTPSErrors: true });
+      const staticPage = await noJs.newPage();
+      await staticPage.goto(NOTE);
+      const before = await largestTextBlock(staticPage);
+      await noJs.close();
+
+      await page.goto(NOTE);
+      await expect(page.getByTestId("note-body")).toBeVisible();
+      const after = await largestTextBlock(page);
+
+      // Some paragraph of the article, whichever is longest at this width.
+      expect(before.text.length).toBeGreaterThan(20);
+      expect(before.area, `the app paints "${after.text}" larger`).toBeGreaterThanOrEqual(after.area);
+    });
+  });
+}

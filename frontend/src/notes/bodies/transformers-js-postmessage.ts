@@ -40,6 +40,10 @@ self.postMessage(flat, [flat.data.buffer]);`,
     kind: "p",
     text: "Transferring a buffer is free, but it detaches the buffer on the sending side. If the page is still showing the image it just sent, the preview goes blank. If the same recording is sent twice, the second send has nothing to send. Copy by default, and transfer only data you will not touch again, such as a webcam frame already drawn.",
   },
+  {
+    kind: "p",
+    text: "Audio has the same trap in a quieter form. Transferring a clip's `Float32Array` to the worker is the fast path, and it leaves the page holding an array of length zero. Nothing fails on the first run. The second run, after the user changes a setting and presses the button again, sends an empty clip. The fix is to decode once, keep that array on the page, and hand each run its own copy with `samples.slice()`. A copy of a few seconds of 16 kHz audio is a few hundred kilobytes, far cheaper than decoding the file again.",
+  },
   { kind: "h2", text: "Why your tests did not catch it" },
   {
     kind: "p",

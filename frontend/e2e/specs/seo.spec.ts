@@ -117,6 +117,35 @@ test.describe("SEO (static build)", () => {
     await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
   });
 
+  // #72: a note is readable with no JavaScript at all, the app mounts the same
+  // article over it, and the task pages it cites link back to it.
+  test("a note's whole article is in its HTML, and survives the app mounting", async ({
+    page,
+    request,
+  }) => {
+    const html = await (await request.get("/notes/ort-web-missing-required-scale")).text();
+    expect(html).toContain("Missing required scale");
+    expect(html).toContain("decoder_model_merged: &quot;fp32&quot;");
+    expect(html).toContain('"@type":"TechArticle"');
+
+    await page.goto("/notes/ort-web-missing-required-scale");
+    await expect(page.getByTestId("note-body")).toContainText("Missing required scale");
+    await expect(page.getByTestId("note-body").locator("pre code")).toContainText("decoder_model_merged");
+    const tryIt = page.locator("section", { has: page.getByRole("heading", { name: "Try it" }) });
+    await tryIt.getByRole("link", { name: "Translation" }).click();
+    await expect(page).toHaveURL(/\/translation$/);
+    const related = page.getByTestId("related-notes");
+    await expect(related.getByRole("link", { name: /Missing required scale/ })).toBeAttached();
+  });
+
+  test("the notes index lists every note and the home page links it", async ({ page }) => {
+    await page.goto("/notes");
+    await expect(page.getByTestId("notes-index").getByRole("link").first()).toBeVisible();
+    expect(await page.getByTestId("notes-index").getByRole("link").count()).toBeGreaterThanOrEqual(5);
+    await page.goto("/home");
+    await expect(page.locator("#notes").getByRole("link", { name: "Notes" })).toBeAttached();
+  });
+
   // The routes the app has but search engines should not still get a 200.
   test("sign-in and sign-up are not 404s", async ({ request }) => {
     for (const path of ["/login", "/signup"]) {
