@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { AUTHOR_URL, OPERATOR, SOURCE_URL } from "@/legal/site";
 import { SITE_DESCRIPTION } from "@/lib/site";
 import { HOME_LEAD, HOME_PRIVACY, pageForPath, SITE_PAGES } from "./pages";
 import {
@@ -156,6 +157,27 @@ describe("structuredData", () => {
     expect(data["@type"]).toBe("WebApplication");
     expect(data.url).toBe(`${ORIGIN}/home`);
     expect(data.offers).toEqual({ "@type": "Offer", price: "0", priceCurrency: "USD" });
+  });
+
+  // #72: the site names a person, with a profile to match them by, and links
+  // its source.
+  it("names the author and the source code on home", () => {
+    const data = structuredData(pageForPath("/home")!, ORIGIN) as Record<string, unknown>;
+    expect(data.author).toEqual({
+      "@type": "Person",
+      "@id": `${ORIGIN}/about#author`,
+      name: OPERATOR,
+      url: AUTHOR_URL,
+      sameAs: [AUTHOR_URL],
+    });
+    expect(data.subjectOf).toMatchObject({ "@type": "SoftwareSourceCode", codeRepository: SOURCE_URL });
+  });
+
+  it("describes /about as an AboutPage whose subject is the same author", () => {
+    const home = structuredData(pageForPath("/home")!, ORIGIN) as { author: unknown };
+    const data = structuredData(pageForPath("/about")!, ORIGIN) as { "@graph": Record<string, unknown>[] };
+    expect(data["@graph"][0]).toMatchObject({ "@type": "AboutPage", url: `${ORIGIN}/about` });
+    expect(data["@graph"][0].mainEntity).toEqual(home.author);
   });
 
   it("gives a static page a breadcrumb only", () => {

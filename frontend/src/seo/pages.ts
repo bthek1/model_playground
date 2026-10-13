@@ -59,6 +59,14 @@ export function categoryAnchor(label: string): string {
 
 const STATIC_PAGES: SitePage[] = [
   {
+    path: "/about",
+    kind: "static",
+    title: suffixTitle("About"),
+    heading: "About",
+    description:
+      "Who builds Model Playground, how its models are chosen and measured, how each page is checked for correctness, and where the source code is.",
+  },
+  {
     path: "/privacy",
     kind: "static",
     title: suffixTitle("Privacy"),

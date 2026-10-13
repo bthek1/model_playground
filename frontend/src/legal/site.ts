@@ -1,6 +1,7 @@
 // Who runs the site and how to reach them — the facts every legal page states
 // (#62). Written once so a change of address or a revision date cannot leave
-// one page disagreeing with another.
+// one page disagreeing with another. No imports: the SEO build (`src/seo/`,
+// run by Node) reads the author facts from here too.
 
 /** The person responsible for the site: the "controller", in GDPR's terms. */
 export const OPERATOR = "Benedict Thekkel";
@@ -28,3 +29,9 @@ export const LAST_UPDATED = "2026-10-07";
 
 /** The source repository, for the code's own licence. */
 export const SOURCE_URL = "https://github.com/bthek1/model_playground";
+
+/**
+ * The operator's public profile: what the site's structured data names as its
+ * author (`sameAs`), so a search engine can tie the site to a person (#72).
+ */
+export const AUTHOR_URL = "https://github.com/bthek1";

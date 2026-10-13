@@ -85,6 +85,7 @@ var ROUTES = {
   "/discrete-maths": true,
   "/tensor": true,
   "/playground": true,
+  "/about": true,
   "/privacy": true,
   "/terms": true,
   "/licences": true,

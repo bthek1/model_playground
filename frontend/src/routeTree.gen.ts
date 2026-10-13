@@ -64,6 +64,7 @@ const TermsLazyRouteImport = createFileRoute('/terms')()
 const PrivacyLazyRouteImport = createFileRoute('/privacy')()
 const LicencesLazyRouteImport = createFileRoute('/licences')()
 const AccessibilityLazyRouteImport = createFileRoute('/accessibility')()
+const AboutLazyRouteImport = createFileRoute('/about')()
 
 const TermsLazyRoute = TermsLazyRouteImport.update({
   id: '/terms',
@@ -85,6 +86,11 @@ const AccessibilityLazyRoute = AccessibilityLazyRouteImport.update({
   path: '/accessibility',
   getParentRoute: () => rootRouteImport,
 } as any).lazy(() => import('./routes/accessibility.lazy').then((d) => d.Route))
+const AboutLazyRoute = AboutLazyRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() => import('./routes/about.lazy').then((d) => d.Route))
 const ZeroShotObjectDetectionRoute = ZeroShotObjectDetectionRouteImport.update({
   id: '/zero-shot-object-detection',
   path: '/zero-shot-object-detection',
@@ -376,6 +382,7 @@ export interface FileRoutesByFullPath {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
+  '/about': typeof AboutLazyRoute
   '/accessibility': typeof AccessibilityLazyRoute
   '/licences': typeof LicencesLazyRoute
   '/privacy': typeof PrivacyLazyRoute
@@ -430,6 +437,7 @@ export interface FileRoutesByTo {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
+  '/about': typeof AboutLazyRoute
   '/accessibility': typeof AccessibilityLazyRoute
   '/licences': typeof LicencesLazyRoute
   '/privacy': typeof PrivacyLazyRoute
@@ -485,6 +493,7 @@ export interface FileRoutesById {
   '/zero-shot-classification': typeof ZeroShotClassificationRoute
   '/zero-shot-image-classification': typeof ZeroShotImageClassificationRoute
   '/zero-shot-object-detection': typeof ZeroShotObjectDetectionRoute
+  '/about': typeof AboutLazyRoute
   '/accessibility': typeof AccessibilityLazyRoute
   '/licences': typeof LicencesLazyRoute
   '/privacy': typeof PrivacyLazyRoute
@@ -541,6 +550,7 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
+    | '/about'
     | '/accessibility'
     | '/licences'
     | '/privacy'
@@ -595,6 +605,7 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
+    | '/about'
     | '/accessibility'
     | '/licences'
     | '/privacy'
@@ -649,6 +660,7 @@ export interface FileRouteTypes {
     | '/zero-shot-classification'
     | '/zero-shot-image-classification'
     | '/zero-shot-object-detection'
+    | '/about'
     | '/accessibility'
     | '/licences'
     | '/privacy'
@@ -704,6 +716,7 @@ export interface RootRouteChildren {
   ZeroShotClassificationRoute: typeof ZeroShotClassificationRoute
   ZeroShotImageClassificationRoute: typeof ZeroShotImageClassificationRoute
   ZeroShotObjectDetectionRoute: typeof ZeroShotObjectDetectionRoute
+  AboutLazyRoute: typeof AboutLazyRoute
   AccessibilityLazyRoute: typeof AccessibilityLazyRoute
   LicencesLazyRoute: typeof LicencesLazyRoute
   PrivacyLazyRoute: typeof PrivacyLazyRoute
@@ -738,6 +751,13 @@ declare module '@tanstack/react-router' {
       path: '/accessibility'
       fullPath: '/accessibility'
       preLoaderRoute: typeof AccessibilityLazyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutLazyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/zero-shot-object-detection': {
@@ -1128,6 +1148,7 @@ const rootRouteChildren: RootRouteChildren = {
   ZeroShotClassificationRoute: ZeroShotClassificationRoute,
   ZeroShotImageClassificationRoute: ZeroShotImageClassificationRoute,
   ZeroShotObjectDetectionRoute: ZeroShotObjectDetectionRoute,
+  AboutLazyRoute: AboutLazyRoute,
   AccessibilityLazyRoute: AccessibilityLazyRoute,
   LicencesLazyRoute: LicencesLazyRoute,
   PrivacyLazyRoute: PrivacyLazyRoute,

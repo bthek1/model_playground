@@ -16,6 +16,7 @@
  * page's copy in the entry chunk (#71).
  */
 
+import { AUTHOR_URL, OPERATOR, SOURCE_URL } from "../legal/site";
 import { APP_NAME } from "../lib/site";
 import { taskCategories } from "../components/layout/taskTaxonomy";
 import {
@@ -59,10 +60,29 @@ export function absolutiseImages(html: string, origin: string): string {
   return setMeta(setMeta(html, "property", "og:image", image), "name", "twitter:image", image);
 }
 
+/** The about page, which the author's `@id` points into. */
+export const ABOUT_PATH = "/about";
+
+/**
+ * The person behind the site (#72): named, with a profile a search engine can
+ * match to them. Who made a page is one of the things Google's quality raters
+ * are told to look for, and nothing on the site said.
+ */
+export function author(origin: string): object {
+  return {
+    "@type": "Person",
+    "@id": `${canonicalUrl(ABOUT_PATH, origin)}#author`,
+    name: OPERATOR,
+    url: AUTHOR_URL,
+    sameAs: [AUTHOR_URL],
+  };
+}
+
 /**
  * Schema.org data for the page: the app itself on home; elsewhere a breadcrumb,
  * and on a task page the page itself as a `WebPage` that is part of the app
- * (#71), so its title and description are claims about *this* URL.
+ * (#71), so its title and description are claims about *this* URL. Home and
+ * the about page name the author (#72).
  */
 export function structuredData(page: SitePage, origin: string): object {
   const home = canonicalUrl("/home", origin);
@@ -79,6 +99,12 @@ export function structuredData(page: SitePage, origin: string): object {
         "Requires JavaScript. WebGPU recommended; most models fall back to WebAssembly.",
       isAccessibleForFree: true,
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      author: author(origin),
+      subjectOf: {
+        "@type": "SoftwareSourceCode",
+        codeRepository: SOURCE_URL,
+        programmingLanguage: "TypeScript",
+      },
     };
   }
   const crumbs: { name: string; item?: string }[] = [{ name: APP_NAME, item: home }];
@@ -96,6 +122,23 @@ export function structuredData(page: SitePage, origin: string): object {
       item: c.item,
     })),
   };
+  if (page.path === ABOUT_PATH) {
+    return {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "AboutPage",
+          "@id": url,
+          url,
+          name: page.title,
+          description: page.description,
+          isPartOf: { "@type": "WebApplication", name: APP_NAME, url: home },
+          mainEntity: author(origin),
+          breadcrumb,
+        },
+      ],
+    };
+  }
   if (page.kind !== "task") return { "@context": "https://schema.org", ...breadcrumb };
   return {
     "@context": "https://schema.org",

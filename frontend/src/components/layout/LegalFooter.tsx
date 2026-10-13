@@ -1,13 +1,15 @@
-// The legal links, on every page (#62). One slim row under the workbench rather
+// The legal links, on every page (#62), plus who runs the site and its source
+// (#72). One slim row under the workbench rather
 // than a footer below scrolled content: task pages clamp to the viewport, so a
 // footer after `main` would never be reached on them.
 
 import { Link } from "@tanstack/react-router";
 
-import { CONTACT_EMAIL } from "@/legal/site";
+import { CONTACT_EMAIL, SOURCE_URL } from "@/legal/site";
 import { cn } from "@/lib/utils";
 
 const LEGAL_LINKS = [
+  { to: "/about", label: "About" },
   { to: "/privacy", label: "Privacy" },
   { to: "/terms", label: "Terms" },
   { to: "/licences", label: "Licences" },
@@ -39,6 +41,14 @@ export function LegalFooter({ className }: { className?: string }) {
           className="hover:text-foreground hover:underline underline-offset-2"
         >
           Contact
+        </a>
+        <a
+          href={SOURCE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-foreground hover:underline underline-offset-2"
+        >
+          Source
         </a>
       </nav>
       <span className="ml-auto hidden sm:inline">

@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { taskCategories } from "@/components/layout/taskTaxonomy";
 import { DATASETS } from "@/legal/datasets";
 import { RECIPIENTS } from "@/legal/recipients";
-import { CONTACT_EMAIL, LAST_UPDATED } from "@/legal/site";
+import { AUTHOR_URL, CONTACT_EMAIL, LAST_UPDATED, OPERATOR, SOURCE_URL } from "@/legal/site";
 import { STORED_ITEMS } from "@/legal/storage";
 import { titleForPath } from "@/lib/documentTitle";
 import { MODEL_LICENCES } from "@/model/licences";
@@ -155,6 +155,31 @@ describe("/accessibility", () => {
   });
 });
 
+// #72: who runs the site, said on a page of its own and linked from every page.
+describe("/about", () => {
+  it("names the operator and links their profile, the source and the contact", async () => {
+    await renderAt("/about");
+    expect(screen.getByRole("heading", { level: 1, name: "About" })).toBeInTheDocument();
+    expect(screen.getAllByText(new RegExp(OPERATOR)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "GitHub" })).toHaveAttribute("href", AUTHOR_URL);
+    expect(screen.getByRole("link", { name: "github.com/bthek1/model_playground" })).toHaveAttribute(
+      "href",
+      SOURCE_URL,
+    );
+    expect(screen.getAllByRole("link", { name: CONTACT_EMAIL }).length).toBeGreaterThan(0);
+  });
+
+  it("states the feasibility bar the models are chosen by", async () => {
+    await renderAt("/about");
+    expect(screen.getByRole("heading", { name: "How models are chosen" })).toBeInTheDocument();
+    expect(screen.getByText(/under about 500 MB/)).toBeInTheDocument();
+  });
+
+  it("has a tab title of its own", () => {
+    expect(titleForPath("/about")).toBe("About · Model Playground");
+  });
+});
+
 describe("the legal footer", () => {
   it("is on a task page, linking all four pages and the contact", async () => {
     await renderAt("/discrete-maths");
@@ -169,6 +194,8 @@ describe("the legal footer", () => {
       "href",
       `mailto:${CONTACT_EMAIL}`,
     );
+    expect(within(footer).getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
+    expect(within(footer).getByRole("link", { name: "Source" })).toHaveAttribute("href", SOURCE_URL);
   });
 });
 
