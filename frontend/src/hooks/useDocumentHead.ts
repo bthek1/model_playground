@@ -4,7 +4,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { titleForPath } from "@/lib/documentTitle";
 import { SITE_DESCRIPTION, SITE_URL } from "@/lib/site";
 import { canonicalUrl, pageForPath } from "@/seo/pages";
-import { scriptJson, structuredData } from "@/seo/render";
+import { OG_IMAGE_PATH, ogImagePath, scriptJson, structuredData } from "@/seo/render";
 
 /**
  * The origin the build wrote its canonicals against. The build makes `og:image`
@@ -51,6 +51,11 @@ export function syncHead(pathname: string, doc: Document = document): void {
   setMeta(doc, "property", "og:description", description);
   setMeta(doc, "name", "twitter:title", title);
   setMeta(doc, "name", "twitter:description", description);
+  // Each page's own card (#72), the site's for anything else. The origin was
+  // read off this tag above, so rewriting it keeps the same origin.
+  const image = canonicalUrl(page ? ogImagePath(page.path) : OG_IMAGE_PATH, origin);
+  setMeta(doc, "property", "og:image", image);
+  setMeta(doc, "name", "twitter:image", image);
 
   const canonical = doc.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
   const ogUrl = doc.head.querySelector('meta[property="og:url"]');

@@ -33,7 +33,18 @@ import { parseInline } from "../notes/inline";
 import { NOTES, NOTES_PATH, notePath, notesFor } from "../notes/meta";
 import type { NoteBlock } from "../notes/types";
 
-const OG_IMAGE_PATH = "/og-image.png";
+/** The site-wide share card: for a path with no page of its own (sign-in, a 404). */
+export const OG_IMAGE_PATH = "/og-image.png";
+
+/**
+ * A page's own share card (#72): `/depth` → `/og/depth.jpg`, `/notes/x` →
+ * `/og/notes-x.jpg`. One per `SITE_PAGES` entry, rendered by
+ * `scripts/generate-og-cards.mjs` and committed under `public/og/`; a test
+ * fails, naming the page, when one is missing.
+ */
+export function ogImagePath(path: string): string {
+  return `/og/${path.replace(/^\//, "").replace(/\//g, "-")}.jpg`;
+}
 
 export function escapeHtml(text: string): string {
   return text
@@ -58,8 +69,8 @@ function setMeta(html: string, attr: string, key: string, value: string): string
 }
 
 /** Point `og:image` and `twitter:image` at an absolute URL: the OG spec needs one. */
-export function absolutiseImages(html: string, origin: string): string {
-  const image = canonicalUrl(OG_IMAGE_PATH, origin);
+export function absolutiseImages(html: string, origin: string, imagePath = OG_IMAGE_PATH): string {
+  const image = canonicalUrl(imagePath, origin);
   return setMeta(setMeta(html, "property", "og:image", image), "name", "twitter:image", image);
 }
 
@@ -351,7 +362,7 @@ export function renderPageHtml(
   html = setMeta(html, "property", "og:url", url);
   html = setMeta(html, "name", "twitter:title", page.title);
   html = setMeta(html, "name", "twitter:description", page.description);
-  html = absolutiseImages(html, origin);
+  html = absolutiseImages(html, origin, ogImagePath(page.path));
   const head = [
     `<link rel="canonical" href="${escapeHtml(url)}" />`,
     `<script type="application/ld+json" id="structured-data">${scriptJson(structuredData(page, origin))}</script>`,

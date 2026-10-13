@@ -37,6 +37,8 @@ describe("syncHead", () => {
     expect(meta(doc, 'name="description"')).toBe(depth.description);
     expect(meta(doc, 'property="og:title"')).toBe(depth.title);
     expect(meta(doc, 'property="og:url"')).toBe(`${ORIGIN}/depth`);
+    expect(meta(doc, 'property="og:image"')).toBe(`${ORIGIN}/og/depth.jpg`);
+    expect(meta(doc, 'name="twitter:image"')).toBe(`${ORIGIN}/og/depth.jpg`);
     expect(canonical(doc)).toBe(`${ORIGIN}/depth`);
     expect(JSON.parse(doc.getElementById("structured-data")!.textContent!)).toEqual(
       structuredData(depth, ORIGIN),

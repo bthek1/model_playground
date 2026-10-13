@@ -96,7 +96,9 @@ test.describe("branding", () => {
     const ogImage = await page
       .locator('meta[property="og:image"]')
       .getAttribute("content");
-    expect(ogImage).toMatch(/^https:\/\/[^/]+\/og-image\.png$/);
+    // The page's own card (#72) on the static build's `/home`, the site's
+    // card on the dev server's landing page, which is not an indexable page.
+    expect(ogImage).toMatch(/^https:\/\/[^/]+\/(og-image\.png|og\/[a-z0-9-]+\.jpg)$/);
     const local = new URL(ogImage!).pathname;
     expect((await page.request.get(local)).status()).toBe(200);
   });

@@ -219,6 +219,10 @@ fe-check-bundle:
 fe-icons:
     cd frontend && npm run icons
 
+# Render each page's share card (public/og/) and the site card — after adding a page (#72)
+fe-og:
+    cd frontend && npm run og
+
 # Preview the production build
 fe-preview:
     cd frontend && npm run preview
