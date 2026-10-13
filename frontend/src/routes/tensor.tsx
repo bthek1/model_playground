@@ -23,6 +23,7 @@ import {
 } from "@/components/viz/heatmap";
 import { useTensorOp } from "@/hooks/useTensorOp";
 import { useWebGPU } from "@/hooks/useWebGPU";
+import { copy } from "@/seo/copy/tensor";
 import { formatMatrix, parseMatrix } from "@/lib/matrix";
 import { isBinaryOp, tensorOpSymbol } from "@/webgpu/tensorops";
 import type { TensorOp, TensorOpJob, TensorOpResult } from "@/webgpu/types";
@@ -116,7 +117,8 @@ function TensorArithmeticPage() {
     <ModelPage
       icon={Sigma}
       title="Tensor Arithmetic"
-      description="Basic matrix and tensor operations, computed on your GPU via raw WebGPU in a Web Worker. Pick an operation, edit the operands — rows on separate lines, values separated by spaces or commas — then Compute."
+      copy={copy}
+      description="Pick an operation, edit the operands — rows on separate lines, values separated by spaces or commas — then Compute."
       labels={{ select: "Operation", load: "Device", run: "Operands" }}
       select={
         <div className="space-y-2">

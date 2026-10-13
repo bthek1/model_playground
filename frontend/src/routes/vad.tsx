@@ -44,6 +44,7 @@ import { useAudioPick } from "@/hooks/useAudioPick";
 import { useVad } from "@/hooks/useVad";
 import { useModelSelection } from "@/model/useModelSelection";
 import { useTaskSlots } from "@/model/useTaskSlots";
+import { copy } from "@/seo/copy/vad";
 
 export const Route = createFileRoute("/vad")({
   component: VadPage,
@@ -119,9 +120,10 @@ function VadPage() {
     <ModelPage
       icon={Activity}
       title="Voice Activity Detection"
+      copy={copy}
       description={
         <>
-          Find the speech in a recording. Silero VAD scores every 32&nbsp;ms of
+          Silero VAD scores every 32&nbsp;ms of
           audio in a Web Worker on your CPU — nothing is uploaded — and you set
           the threshold that turns those scores into segments.
         </>

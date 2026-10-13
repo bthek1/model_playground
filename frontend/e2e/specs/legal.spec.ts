@@ -10,6 +10,7 @@ import { expect, test } from "../fixtures/base";
 // would be the one page where that is unforgivable.
 
 const PAGES = [
+  { path: "/about", heading: "About" },
   { path: "/privacy", heading: "Privacy" },
   { path: "/terms", heading: "Terms of use" },
   { path: "/licences", heading: "Licences" },

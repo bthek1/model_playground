@@ -20,20 +20,22 @@ describe("titleForPath", () => {
     );
   });
 
-  it("names a real task route from the taxonomy, task first", () => {
+  // #71: a task's tab title is its search title — the words people search
+  // with, which is why /asr is "Speech to Text" rather than the Hub's name.
+  it("names a real task route by its search title", () => {
     expect(titleForPath("/asr")).toBe(
-      "Automatic Speech Recognition in your browser · Model Playground",
+      "Speech to Text with Whisper, in your browser · Model Playground",
     );
     expect(titleForPath("/object-detection")).toBe(
-      "Object Detection in your browser · Model Playground",
+      "Object Detection in your browser, on your GPU · Model Playground",
     );
   });
 
-  it("names a route whose slug differs from its path", () => {
-    // `image-to-image` -> /super-resolution: the title follows the taxonomy
-    // label, not the URL.
+  it("names a route by what it does, not by its Hub slug", () => {
+    // `image-to-image` -> /super-resolution: nobody searches "Image to Image"
+    // for an upscaler.
     expect(titleForPath("/super-resolution")).toBe(
-      "Image to Image in your browser · Model Playground",
+      "AI Image Upscaler (Swin2SR) in your browser · Model Playground",
     );
   });
 

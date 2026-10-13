@@ -22,7 +22,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const svg = readFileSync(resolve(root, "public/favicon.svg"), "utf8");
 
 const BRAND = "#184be2";
-const INK = "#0a0a0a";
 
 /** Screenshot one HTML body at an exact pixel size. */
 async function render(browser, { width, height, body, background = "#ffffff" }) {
@@ -99,31 +98,8 @@ write(
   }),
 );
 
-// Social card.
-write(
-  "og-image.png",
-  await render(browser, {
-    width: 1200,
-    height: 630,
-    background: INK,
-    body: `
-      <div style="width:1200px;height:630px;box-sizing:border-box;padding:96px;color:#fff;
-                  display:flex;flex-direction:column;justify-content:center;gap:28px;
-                  background:radial-gradient(120% 120% at 100% 0%, #1e3a8a 0%, ${INK} 55%)">
-        <div style="display:flex;align-items:center;gap:28px">
-          <div style="width:104px;height:104px">${svg}</div>
-          <div style="font-size:64px;font-weight:650;letter-spacing:-0.02em">Model Playground</div>
-        </div>
-        <div style="font-size:34px;line-height:1.35;color:#c9d4ee;max-width:880px">
-          Run speech, vision, graph and custom&nbsp;WebGPU models directly in your browser —
-          on your own GPU.
-        </div>
-        <div style="font-size:25px;color:#7f92bb">
-          Nothing you feed it leaves the machine.
-        </div>
-      </div>`,
-  }),
-);
+// The social card (`og-image.png`) and each page's own card are rendered by
+// `generate-og-cards.mjs` (#72), from the same strings as the page heads.
 
 // Legacy tab icon.
 const ico32 = await render(browser, {

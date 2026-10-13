@@ -18,6 +18,9 @@ import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import type { PageCopy } from "@/seo/copy/types";
+
+import { AboutPage } from "./AboutPage";
 
 /** One numbered band. Exported for the rare route that composes its own shell. */
 export function ModelSlot({
@@ -68,8 +71,15 @@ export function ModelSlot({
 export interface ModelPageProps {
   icon: LucideIcon;
   title: string;
-  /** One or two sentences: what this task does and where it runs. */
-  description: ReactNode;
+  /**
+   * The page's own words (#71): its tagline opens the header and its paragraphs
+   * render as an "About" section below the workbench. Required on every task
+   * route (`conventions.test.ts`); optional here only so the shell can be
+   * tested on its own.
+   */
+  copy?: PageCopy;
+  /** What follows the tagline in the header: where it runs, what to try. */
+  description?: ReactNode;
   /** 1 — the model catalogue. Usually `<ModelPicker>`. */
   select: ReactNode;
   /** 2 — weight download / warm-up. Usually `<ModelStatus>`. */
@@ -111,6 +121,7 @@ const FILL =
 export function ModelPage({
   icon: Icon,
   title,
+  copy,
   description,
   select,
   load,
@@ -120,62 +131,69 @@ export function ModelPage({
   aside,
 }: ModelPageProps) {
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 md:h-full md:min-h-0">
-      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
-        <div className="min-w-0">
-          <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold">
-            <Icon className="size-6" /> {title}
-          </h1>
-          <p className="text-sm text-muted-foreground">{description}</p>
-        </div>
-        {aside && <div className="shrink-0">{aside}</div>}
-      </header>
+    <>
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 md:h-full md:min-h-0">
+        <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+          <div className="min-w-0">
+            <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold">
+              <Icon className="size-6" /> {title}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {copy?.tagline}
+              {copy && description ? " " : null}
+              {description}
+            </p>
+          </div>
+          {aside && <div className="shrink-0">{aside}</div>}
+        </header>
 
-      <div className={GRID}>
-        {/* SETUP — slots 1 and 2, one surface. A rail at xl, a strip at md. */}
-        <div
-          className={cn(
-            "flex min-w-0 flex-col gap-5 rounded-lg border bg-muted/30 p-4",
-            "md:[grid-area:setup] md:flex-row md:gap-8",
-            "xl:max-h-full xl:flex-col xl:gap-5 xl:self-start xl:overflow-y-auto",
-          )}
-        >
-          <ModelSlot
-            step={1}
-            label={labels?.select ?? "Model"}
-            dense
-            className="min-w-0 md:flex-1 xl:flex-none"
+        <div className={GRID}>
+          {/* SETUP — slots 1 and 2, one surface. A rail at xl, a strip at md. */}
+          <div
+            className={cn(
+              "flex min-w-0 flex-col gap-5 rounded-lg border bg-muted/30 p-4",
+              "md:[grid-area:setup] md:flex-row md:gap-8",
+              "xl:max-h-full xl:flex-col xl:gap-5 xl:self-start xl:overflow-y-auto",
+            )}
           >
-            {select}
-          </ModelSlot>
+            <ModelSlot
+              step={1}
+              label={labels?.select ?? "Model"}
+              dense
+              className="min-w-0 md:flex-1 xl:flex-none"
+            >
+              {select}
+            </ModelSlot>
 
-          <ModelSlot
-            step={2}
-            label={labels?.load ?? "Load"}
-            dense
-            className="min-w-0 md:w-80 md:shrink-0 xl:w-auto"
-          >
-            {load}
-          </ModelSlot>
-        </div>
+            <ModelSlot
+              step={2}
+              label={labels?.load ?? "Load"}
+              dense
+              className="min-w-0 md:w-80 md:shrink-0 xl:w-auto"
+            >
+              {load}
+            </ModelSlot>
+          </div>
 
-        {/* WORKBENCH — the iteration loop, input beside output. */}
-        <div className={cn(COLUMN, "md:[grid-area:work-a]")}>
-          <ModelSlot step={3} label={labels?.run ?? "Input"} className={FILL}>
-            {run}
-          </ModelSlot>
-        </div>
+          {/* WORKBENCH — the iteration loop, input beside output. */}
+          <div className={cn(COLUMN, "md:[grid-area:work-a]")}>
+            <ModelSlot step={3} label={labels?.run ?? "Input"} className={FILL}>
+              {run}
+            </ModelSlot>
+          </div>
 
-        <div className={cn(COLUMN, "md:[grid-area:work-b]")}>
-          <ModelSlot
-            step={4}
-            label={labels?.output ?? "Output"}
-            className={FILL}
-          >
-            {output}
-          </ModelSlot>
+          <div className={cn(COLUMN, "md:[grid-area:work-b]")}>
+            <ModelSlot
+              step={4}
+              label={labels?.output ?? "Output"}
+              className={FILL}
+            >
+              {output}
+            </ModelSlot>
+          </div>
         </div>
       </div>
-    </div>
+      {copy && <AboutPage copy={copy} />}
+    </>
   );
 }

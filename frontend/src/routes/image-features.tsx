@@ -41,6 +41,7 @@ import { useCameraFrames } from "@/hooks/useCameraFrames";
 import { useImageFeatures, type IndexEntry } from "@/hooks/useImageFeatures";
 import { useImagePick } from "@/hooks/useImagePick";
 import { useModelSelection } from "@/model/useModelSelection";
+import { copy } from "@/seo/copy/image-features";
 import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_FEATURE_MODEL,
@@ -179,12 +180,7 @@ useImagePick();
     <ModelPage
       icon={Fingerprint}
       title="Image Feature Extraction"
-      description={
-        <>
-          Turn pictures into vectors and search them by similarity — the index is
-          built in this tab and never leaves it.
-        </>
-      }
+      copy={copy}
       labels={{ output: "Nearest neighbours" }}
       select={
         <ModelPicker {...slots.picker} />

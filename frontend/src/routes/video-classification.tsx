@@ -58,6 +58,7 @@ import {
   VIDEO_SAMPLES,
   type VideoSample,
 } from "@/vision/video";
+import { copy } from "@/seo/copy/video-classification";
 
 const EChart = lazy(() => import("@/components/charts/EChart"));
 
@@ -159,6 +160,7 @@ function VideoClassificationPage() {
     <ModelPage
       icon={Clapperboard}
       title="Video Classification"
+      copy={copy}
       description={
         <>
           A <strong>frame-level baseline</strong>: frames are sampled from the

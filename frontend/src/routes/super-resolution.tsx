@@ -54,6 +54,7 @@ import {
   SUPER_RES_MODELS,
 } from "@/vision/superRes";
 import { planTiles } from "@/vision/tile";
+import { copy } from "@/seo/copy/super-resolution";
 
 export const Route = createFileRoute("/super-resolution")({
   component: SuperResolutionPage,
@@ -144,10 +145,10 @@ function SuperResolutionPage() {
     <ModelPage
       icon={Maximize2}
       title="Super Resolution"
+      copy={copy}
       description={
         <>
-          Double a picture's resolution on your own machine, one overlapping tile
-          at a time. This is the <span className="font-medium">image-to-image</span>{" "}
+          This is the <span className="font-medium">image-to-image</span>{" "}
           task's super-resolution half — editing and img2img are diffusion, and
           stay on a server.
         </>

@@ -43,6 +43,7 @@ import { useImagePick } from "@/hooks/useImagePick";
 import { usePose } from "@/hooks/usePose";
 import { useBackendProbe } from "@/model/useBackendProbe";
 import { useModelSelection } from "@/model/useModelSelection";
+import { copy } from "@/seo/copy/pose";
 import { useTaskSlots } from "@/model/useTaskSlots";
 import { drawPixels, OVERLAY_COLORS } from "@/vision/draw";
 import { downscale } from "@/vision/image";
@@ -149,12 +150,7 @@ useImagePick();
     <ModelPage
       icon={PersonStanding}
       title="Keypoint Detection"
-      description={
-        <>
-          Find every person and draw their skeleton — two models running back to
-          back on your own GPU, one to find people and one to pose them.
-        </>
-      }
+      copy={copy}
       labels={{ output: "Skeletons" }}
       aside={
         live && camera.fps != null ? (

@@ -55,6 +55,7 @@ import {
   type SamPoint,
 } from "@/vision/sam/types";
 import { IMAGE_SAMPLES } from "@/vision/samples";
+import { copy } from "@/seo/copy/mask-generation";
 
 export const Route = createFileRoute("/mask-generation")({
   component: MaskGenerationPage,
@@ -162,10 +163,11 @@ function MaskGenerationPage() {
     <ModelPage
       icon={Scissors}
       title="Mask Generation"
+      copy={copy}
       description={
         <>
-          Click anything in the picture and SAM cuts it out. The image is encoded
-          once; every click after that is a few milliseconds on your own GPU.
+          The image is encoded once; every click after that is a few
+          milliseconds on your own GPU.
         </>
       }
       labels={{ output: "Mask" }}

@@ -12,6 +12,8 @@
 
 import { describe, expect, it } from "vitest";
 
+import { SITE_PAGES } from "@/seo/pages";
+
 const routes = import.meta.glob<string>("../routes/*.tsx", {
   query: "?raw",
   import: "default",
@@ -317,5 +319,42 @@ describe("legal conventions (#62)", () => {
 
   it("renders the legal footer from the app shell", () => {
     expect(srcOf("components/layout/AppLayout.tsx")).toContain("<LegalFooter");
+  });
+});
+
+// #71: every task page renders its own words — the tagline in the header and
+// the about paragraphs below the workbench — from `seo/copy/<route>.ts`, the
+// same file the build writes into its static HTML. A route that hand-writes
+// its header instead drifts from what the crawler-facing HTML says, and one
+// that skips the about section has nothing of its own for Google to index.
+describe("page copy conventions (#71)", () => {
+  const taskPaths = SITE_PAGES.filter((p) => p.kind === "task").map((p) => p.path);
+
+  it("renders its own copy on every task route", () => {
+    const missing = taskPaths.filter((path) => {
+      const file = path.slice(1);
+      const src = srcOf(`routes/${file}.tsx`);
+      const imports = src.includes(`from "@/seo/copy/${file}"`);
+      const renders = /\bcopy=\{copy\}/.test(src) || src.includes("<AboutPage copy={copy}");
+      return !(imports && renders);
+    });
+    expect(missing).toEqual([]);
+  });
+
+  // The map of every page's copy is build-time data. Imported from the app it
+  // would put all of it in one chunk — the entry, if the importer is in it.
+  it("imports the whole copy map only from the build and tests", () => {
+    const importers = app
+      .filter(([path, src]) => path !== "seo/copy/index.ts" && /\bPAGE_COPY\b/.test(src))
+      .map(([path]) => path);
+    expect(importers).toEqual([]);
+  });
+
+  it("imports a route's copy only from that route", () => {
+    const strays = app
+      .filter(([path]) => !path.startsWith("routes/") && !path.startsWith("seo/copy/"))
+      .filter(([, src]) => /from "@\/seo\/copy\/(?!types")[^"]+"/.test(src))
+      .map(([path]) => path);
+    expect(strays).toEqual([]);
   });
 });

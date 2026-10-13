@@ -14,6 +14,7 @@ import { Fact } from "@/components/viz/readout";
 import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/graph";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { PanZoom } from "@/components/viz/PanZoom";
@@ -72,6 +73,7 @@ function GraphPage() {
     <ModelPage
       icon={Share2}
       title="Graph Machine Learning"
+      copy={copy}
       description={
         <>
           Semi-supervised node classification on <strong>Cora</strong> — 2708

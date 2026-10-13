@@ -30,6 +30,7 @@ import { Languages } from "lucide-react";
 import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/translation";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
@@ -115,6 +116,7 @@ function TranslationPage() {
     <ModelPage
       icon={Languages}
       title="Translation"
+      copy={copy}
       description={
         <>
           One language pair at a time, running in your browser. A Marian

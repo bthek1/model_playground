@@ -25,6 +25,7 @@ import { Fact, Score } from "@/components/viz/readout";
 import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/graph-classification";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { useGraphClassifier } from "@/hooks/useGraphClassifier";
@@ -79,6 +80,7 @@ function GraphClassificationPage() {
     <ModelPage
       icon={Boxes}
       title="Graph Classification"
+      copy={copy}
       description={
         <>
           One label for a whole graph rather than one per node.{" "}

@@ -56,6 +56,7 @@ import {
   retargetMasks,
   spliceFill,
 } from "@/text/mask";
+import { copy } from "@/seo/copy/fill-mask";
 
 export const Route = createFileRoute("/fill-mask")({
   component: FillMaskPage,
@@ -204,10 +205,10 @@ function FillMaskPage() {
     <ModelPage
       icon={SquareAsterisk}
       title="Fill Mask"
+      copy={copy}
       description={
         <>
-          Take a word out of a sentence and ask the model to put it back —
-          entirely in your browser, on your GPU (WebGPU) or CPU (WASM). This is
+          This is
           the objective these encoders were actually trained on, so what comes
           back is <strong>a measurement of the training text</strong>, not of
           the world.

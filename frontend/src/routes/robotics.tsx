@@ -34,6 +34,7 @@ import { Bot, Crosshair } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { RunButton } from "@/components/model/RunButton";
+import { AboutPage } from "@/components/model/AboutPage";
 import { InputPanel } from "@/components/model/InputPanel";
 import { CloningPage } from "@/components/robotics/CloningPage";
 import { ModelPage } from "@/components/model/ModelPage";
@@ -52,6 +53,7 @@ import { aboveThreshold } from "@/hooks/useObjectDetector";
 import { useBackendProbe } from "@/model/useBackendProbe";
 import { useModelSelection } from "@/model/useModelSelection";
 import { useTaskSlots } from "@/model/useTaskSlots";
+import { copy } from "@/seo/copy/robotics";
 import {
   colorForLabel,
   drawBoxes,
@@ -109,16 +111,22 @@ function RoboticsPage() {
   // cloning entry never mounts the grounding pair's two workers — and never
   // downloads a byte of them.
   if (session.model.kind === "cloning") {
+    // `CloningPage` builds its own shell, so the page's About section is
+    // appended here: both entries are one URL, and the words must not vanish
+    // when the picker changes.
     return (
-      <CloningPage
-        select={
-          <ModelPicker
-            models={ROBOTICS_ENTRIES}
-            value={session.model.id}
-            onChange={session.setModel}
-          />
-        }
-      />
+      <>
+        <CloningPage
+          select={
+            <ModelPicker
+              models={ROBOTICS_ENTRIES}
+              value={session.model.id}
+              onChange={session.setModel}
+            />
+          }
+        />
+        <AboutPage copy={copy} />
+      </>
     );
   }
   return <GroundingPage session={session} entry={session.model} />;
@@ -237,6 +245,7 @@ function GroundingPage({
     <ModelPage
       icon={Bot}
       title="Robotics"
+      copy={copy}
       description={
         <>
           Ground an instruction in what the camera sees: name a thing, and an

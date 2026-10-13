@@ -53,6 +53,7 @@ import {
   MAX_INFERENCE_SIDE,
   SEGMENTER_MODELS,
 } from "@/vision/segmentation";
+import { copy } from "@/seo/copy/segmentation";
 
 export const Route = createFileRoute("/segmentation")({
   component: SegmentationPage,
@@ -135,10 +136,11 @@ useImagePick();
     <ModelPage
       icon={Shapes}
       title="Image Segmentation"
+      copy={copy}
       description={
         <>
-          Label every pixel, not just the picture. Semantic segmentation in a Web
-          Worker on your own GPU — the image never leaves the machine.
+          Semantic segmentation in a Web Worker on your own GPU — the image never
+          leaves the machine.
         </>
       }
       labels={{ output: "Masks" }}

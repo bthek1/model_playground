@@ -18,6 +18,7 @@ import { Type } from "lucide-react";
 
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/text-classification";
 import { RunButton } from "@/components/model/RunButton";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
@@ -107,12 +108,11 @@ function TextClassificationPage() {
     <ModelPage
       icon={Type}
       title="Text Classification"
+      copy={copy}
       description={
         <>
-          Score a sentence with a sentiment classifier running entirely in your
-          browser — on your GPU (WebGPU) or CPU (WASM), in a Web Worker. The
-          text is never uploaded. Load a second model to see the same sentence
-          read two different ways.
+          The text is never uploaded. Load a second model to see the same
+          sentence read two different ways.
         </>
       }
       labels={{ run: "Text", output: "Scores" }}

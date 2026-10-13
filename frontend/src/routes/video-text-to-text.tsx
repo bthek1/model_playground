@@ -62,6 +62,7 @@ import {
   DEFAULT_VIDEO_VLM_MODEL,
   VIDEO_VLM_MODELS,
 } from "@/multimodal/types";
+import { copy } from "@/seo/copy/video-text-to-text";
 import { thumbnail, VIDEO_SAMPLES, type SampledFrame } from "@/vision/video";
 
 /**
@@ -181,9 +182,10 @@ function VideoTextToTextPage() {
     <ModelPage
       icon={Film}
       title="Video Text to Text"
+      copy={copy}
       description={
         <>
-          Ask a question about a clip. The model is a{" "}
+          The model is a{" "}
           <strong>frame sampler plus an image model</strong>: a handful of stills
           are taken from the video and read together — there is no motion in what
           it sees.

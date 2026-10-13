@@ -43,6 +43,8 @@ import {
 } from "@/theory/graphs";
 import { adjacencyPower, row, support } from "@/theory/walks";
 import { track } from "@/analytics";
+import { AboutPage } from "@/components/model/AboutPage";
+import { copy } from "@/seo/copy/discrete-maths";
 
 export const Route = createFileRoute("/discrete-maths")({
   component: DiscreteMathsPage,
@@ -70,174 +72,176 @@ function DiscreteMathsPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 md:h-full md:min-h-0">
-      <header className="min-w-0">
-        <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold">
-          <Waypoints className="size-6" /> Discrete Maths
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Walks, paths and the k-hop neighbourhood: step a breadth-first search
-          one layer at a time, and watch the power of the adjacency matrix beside
-          it pick out the same nodes — or, without the self-loop, not quite the
-          same ones. It is the arithmetic a graph neural network&apos;s receptive
-          field is made of.
-        </p>
-      </header>
+    <>
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 md:h-full md:min-h-0">
+        <header className="min-w-0">
+          <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold">
+            <Waypoints className="size-6" /> Discrete Maths
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {copy.tagline} The power of the adjacency matrix beside the search
+            picks out the same nodes — or, without the self-loop, not quite the
+            same ones. It is the arithmetic a graph neural network&apos;s receptive
+            field is made of.
+          </p>
+        </header>
 
-      {/* Three bands — see the note at the top of this file. */}
-      <div
-        className={cn(
-          "grid min-h-0 grid-cols-1 gap-6 md:flex-1",
-          "md:grid-cols-2 md:grid-rows-[auto_minmax(0,1fr)]",
-          "md:[grid-template-areas:'setup_setup'_'work-a_work-b']",
-          "xl:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)_minmax(0,1fr)]",
-          "xl:grid-rows-[minmax(0,1fr)]",
-          "xl:[grid-template-areas:'setup_work-a_work-b']",
-        )}
-      >
-        <div className="flex min-w-0 flex-col gap-5 rounded-lg border bg-muted/30 p-4 md:[grid-area:setup] md:flex-row md:gap-8 xl:max-h-full xl:flex-col xl:gap-5 xl:self-start xl:overflow-y-auto">
-          <ModelSlot step={1} label="Graph" dense className="min-w-0 md:flex-1 xl:flex-none">
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-1.5">
-                {SMALL_GRAPHS.map((g) => (
-                  <Button
-                    key={g.id}
-                    size="sm"
-                    variant={g.id === graph.id ? "default" : "outline"}
-                    aria-pressed={g.id === graph.id}
-                    onClick={() => chooseGraph(g.id)}
-                  >
-                    {g.label}
-                  </Button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground tabular-nums" data-testid="graph-facts">
-                {graph.n} nodes · {graph.edges.length} edges ·{" "}
-                <strong>{graph.bipartite ? "bipartite" : "not bipartite"}</strong>
-              </p>
-              <p className="text-xs leading-snug text-muted-foreground">{graph.note}</p>
-              {graph.source && (
-                <p className="text-xs leading-snug text-muted-foreground">
-                  Data: {graph.source}.
+        {/* Three bands — see the note at the top of this file. */}
+        <div
+          className={cn(
+            "grid min-h-0 grid-cols-1 gap-6 md:flex-1",
+            "md:grid-cols-2 md:grid-rows-[auto_minmax(0,1fr)]",
+            "md:[grid-template-areas:'setup_setup'_'work-a_work-b']",
+            "xl:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)_minmax(0,1fr)]",
+            "xl:grid-rows-[minmax(0,1fr)]",
+            "xl:[grid-template-areas:'setup_work-a_work-b']",
+          )}
+        >
+          <div className="flex min-w-0 flex-col gap-5 rounded-lg border bg-muted/30 p-4 md:[grid-area:setup] md:flex-row md:gap-8 xl:max-h-full xl:flex-col xl:gap-5 xl:self-start xl:overflow-y-auto">
+            <ModelSlot step={1} label="Graph" dense className="min-w-0 md:flex-1 xl:flex-none">
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {SMALL_GRAPHS.map((g) => (
+                    <Button
+                      key={g.id}
+                      size="sm"
+                      variant={g.id === graph.id ? "default" : "outline"}
+                      aria-pressed={g.id === graph.id}
+                      onClick={() => chooseGraph(g.id)}
+                    >
+                      {g.label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground tabular-nums" data-testid="graph-facts">
+                  {graph.n} nodes · {graph.edges.length} edges ·{" "}
+                  <strong>{graph.bipartite ? "bipartite" : "not bipartite"}</strong>
                 </p>
-              )}
-            </div>
-          </ModelSlot>
+                <p className="text-xs leading-snug text-muted-foreground">{graph.note}</p>
+                {graph.source && (
+                  <p className="text-xs leading-snug text-muted-foreground">
+                    Data: {graph.source}.
+                  </p>
+                )}
+              </div>
+            </ModelSlot>
 
-          <div
-            className="min-w-0 space-y-1.5 md:w-80 md:shrink-0 xl:w-auto"
-            data-testid="no-load-band"
-          >
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              Nothing to load
-            </p>
-            <p className="text-xs leading-snug text-muted-foreground">
-              Every other page here has a band for downloading weights or
-              fitting a model. This one has nothing to put in it: a breadth-first
-              search and a 34×34 matrix power are exact integer arithmetic that
-              finishes in microseconds, on the main thread, with no model, no
-              worker and no GPU.
-            </p>
+            <div
+              className="min-w-0 space-y-1.5 md:w-80 md:shrink-0 xl:w-auto"
+              data-testid="no-load-band"
+            >
+              <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                Nothing to load
+              </p>
+              <p className="text-xs leading-snug text-muted-foreground">
+                Every other page here has a band for downloading weights or
+                fitting a model. This one has nothing to put in it: a breadth-first
+                search and a 34×34 matrix power are exact integer arithmetic that
+                finishes in microseconds, on the main thread, with no model, no
+                worker and no GPU.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex min-h-0 min-w-0 flex-col md:overflow-y-auto md:[grid-area:work-a]">
+            <ModelSlot
+              step={2}
+              label="Traversal"
+              className="flex min-h-0 flex-1 flex-col [&>*:last-child]:min-h-0 [&>*:last-child]:flex-1"
+            >
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label htmlFor="bfs-source" className="text-xs font-medium">
+                    Source node
+                  </label>
+                  <select
+                    id="bfs-source"
+                    value={source}
+                    onChange={(e) => chooseSource(Number(e.target.value))}
+                    className="block w-40 rounded-md border bg-background px-2 py-1 text-sm tabular-nums"
+                  >
+                    {Array.from({ length: graph.n }, (_, v) => (
+                      <option key={v} value={v}>
+                        Node {v} (degree {neighbours(graph)[v].length})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs leading-snug text-muted-foreground">
+                    Choosing a graph or a source runs nothing — it starts a fresh
+                    search at step 0.
+                  </p>
+                </div>
+
+                <GraphDiagram graph={graph} source={source} dist={null} k={null} />
+
+                <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t bg-background/95 pt-3">
+                  <Button
+                    onClick={() => {
+                      track("feature_used", { feature: "bfs_step", family: graph.id });
+                      setK((prev) => Math.min((prev ?? 0) + 1, ecc));
+                    }}
+                    disabled={k != null && k >= ecc}
+                  >
+                    <StepForward className="size-4" /> Step
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setK(ecc)}
+                    disabled={k != null && k >= ecc}
+                  >
+                    <ChevronsRight className="size-4" /> Run to end
+                  </Button>
+                  <Button variant="ghost" onClick={() => setK(null)} disabled={k == null}>
+                    <RotateCcw className="size-4" /> Reset
+                  </Button>
+                  <span className="text-xs text-muted-foreground tabular-nums" data-testid="step-count">
+                    {k == null ? "step 0" : `step ${k}`} of {ecc}
+                  </span>
+                </div>
+              </div>
+            </ModelSlot>
+          </div>
+
+          <div className="flex min-h-0 min-w-0 flex-col md:overflow-y-auto md:[grid-area:work-b]">
+            <ModelSlot
+              step={3}
+              label="Result"
+              className="flex min-h-0 flex-1 flex-col [&>*:last-child]:min-h-0 [&>*:last-child]:flex-1"
+            >
+              <OutputPanel
+                title="The k-hop neighbourhood, two ways"
+                description={
+                  k == null ? undefined : `${graph.label} · from node ${source} · k = ${k}`
+                }
+                running={false}
+                empty={
+                  <span>
+                    Press <strong>Step</strong> to take one breadth-first layer. Each
+                    step shows which nodes are within k hops of the source, and the
+                    matching power of the adjacency matrix — whose row for the source
+                    counts the walks of length k to every node.
+                  </span>
+                }
+              >
+                {k != null && (
+                  <Result
+                    graph={graph}
+                    source={source}
+                    k={k}
+                    dist={traversal.dist}
+                    layers={traversal.layers}
+                    eccentricity={ecc}
+                    selfLoops={selfLoops}
+                    onSelfLoops={setSelfLoops}
+                  />
+                )}
+              </OutputPanel>
+            </ModelSlot>
           </div>
         </div>
-
-        <div className="flex min-h-0 min-w-0 flex-col md:overflow-y-auto md:[grid-area:work-a]">
-          <ModelSlot
-            step={2}
-            label="Traversal"
-            className="flex min-h-0 flex-1 flex-col [&>*:last-child]:min-h-0 [&>*:last-child]:flex-1"
-          >
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label htmlFor="bfs-source" className="text-xs font-medium">
-                  Source node
-                </label>
-                <select
-                  id="bfs-source"
-                  value={source}
-                  onChange={(e) => chooseSource(Number(e.target.value))}
-                  className="block w-40 rounded-md border bg-background px-2 py-1 text-sm tabular-nums"
-                >
-                  {Array.from({ length: graph.n }, (_, v) => (
-                    <option key={v} value={v}>
-                      Node {v} (degree {neighbours(graph)[v].length})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs leading-snug text-muted-foreground">
-                  Choosing a graph or a source runs nothing — it starts a fresh
-                  search at step 0.
-                </p>
-              </div>
-
-              <GraphDiagram graph={graph} source={source} dist={null} k={null} />
-
-              <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t bg-background/95 pt-3">
-                <Button
-                  onClick={() => {
-                    track("feature_used", { feature: "bfs_step", family: graph.id });
-                    setK((prev) => Math.min((prev ?? 0) + 1, ecc));
-                  }}
-                  disabled={k != null && k >= ecc}
-                >
-                  <StepForward className="size-4" /> Step
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setK(ecc)}
-                  disabled={k != null && k >= ecc}
-                >
-                  <ChevronsRight className="size-4" /> Run to end
-                </Button>
-                <Button variant="ghost" onClick={() => setK(null)} disabled={k == null}>
-                  <RotateCcw className="size-4" /> Reset
-                </Button>
-                <span className="text-xs text-muted-foreground tabular-nums" data-testid="step-count">
-                  {k == null ? "step 0" : `step ${k}`} of {ecc}
-                </span>
-              </div>
-            </div>
-          </ModelSlot>
-        </div>
-
-        <div className="flex min-h-0 min-w-0 flex-col md:overflow-y-auto md:[grid-area:work-b]">
-          <ModelSlot
-            step={3}
-            label="Result"
-            className="flex min-h-0 flex-1 flex-col [&>*:last-child]:min-h-0 [&>*:last-child]:flex-1"
-          >
-            <OutputPanel
-              title="The k-hop neighbourhood, two ways"
-              description={
-                k == null ? undefined : `${graph.label} · from node ${source} · k = ${k}`
-              }
-              running={false}
-              empty={
-                <span>
-                  Press <strong>Step</strong> to take one breadth-first layer. Each
-                  step shows which nodes are within k hops of the source, and the
-                  matching power of the adjacency matrix — whose row for the source
-                  counts the walks of length k to every node.
-                </span>
-              }
-            >
-              {k != null && (
-                <Result
-                  graph={graph}
-                  source={source}
-                  k={k}
-                  dist={traversal.dist}
-                  layers={traversal.layers}
-                  eccentricity={ecc}
-                  selfLoops={selfLoops}
-                  onSelfLoops={setSelfLoops}
-                />
-              )}
-            </OutputPanel>
-          </ModelSlot>
-        </div>
       </div>
-    </div>
+      <AboutPage copy={copy} />
+    </>
   );
 }
 

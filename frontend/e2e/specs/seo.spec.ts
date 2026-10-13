@@ -45,7 +45,7 @@ test.describe("SEO (static build)", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Automatic Speech Recognition");
     // The static <h1> is gone: createRoot replaced #root's children.
     await expect(page.locator("h1")).toHaveCount(1);
-    await expect(page).toHaveTitle("Automatic Speech Recognition in your browser · Model Playground");
+    await expect(page).toHaveTitle("Speech to Text with Whisper, in your browser · Model Playground");
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${ORIGIN}/asr`);
   });
 
@@ -55,14 +55,30 @@ test.describe("SEO (static build)", () => {
     await page.goto("/home");
     await page.getByRole("link", { name: "Depth Estimation" }).click();
     await expect(page).toHaveURL(/\/depth$/);
-    await expect(page).toHaveTitle("Depth Estimation in your browser · Model Playground");
+    await expect(page).toHaveTitle("Depth Estimation: a depth map from one photo · Model Playground");
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${ORIGIN}/depth`);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute(
       "content",
       /Depth Anything/,
     );
     const data = JSON.parse((await page.locator("#structured-data").textContent())!);
-    expect(data.itemListElement.at(-1).item).toBe(`${ORIGIN}/depth`);
+    expect(data["@graph"][0].url).toBe(`${ORIGIN}/depth`);
+    expect(data["@graph"][0].breadcrumb.itemListElement.at(-1).item).toBe(`${ORIGIN}/depth`);
+  });
+
+  // #71: Google indexes the rendered page, and createRoot replaces the static
+  // body — so the page's own words must be in the app as well as in the file.
+  test("a task page's own words survive the app mounting", async ({ page, request }) => {
+    const html = await (await request.get("/depth")).text();
+    expect(html).toContain("Turn one photo into a depth map, on your own GPU.");
+    expect(html).toContain("monocular depth estimation");
+
+    await page.goto("/depth");
+    await expect(page.getByTestId("slot-1")).toBeVisible();
+    await expect(page.getByText("Turn one photo into a depth map, on your own GPU.", { exact: false })).toBeVisible();
+    const about = page.getByTestId("about-page");
+    await expect(about.getByRole("heading", { name: "About this page" })).toBeAttached();
+    await expect(about).toContainText("monocular depth estimation");
   });
 
   test("home lists every task, and a breadcrumb leads back to its category", async ({ page }) => {
@@ -99,6 +115,35 @@ test.describe("SEO (static build)", () => {
     await expect(page).toHaveURL(/\/home$/);
     // Neither the served tag nor the not-found page's own survives the click.
     await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+  });
+
+  // #72: a note is readable with no JavaScript at all, the app mounts the same
+  // article over it, and the task pages it cites link back to it.
+  test("a note's whole article is in its HTML, and survives the app mounting", async ({
+    page,
+    request,
+  }) => {
+    const html = await (await request.get("/notes/ort-web-missing-required-scale")).text();
+    expect(html).toContain("Missing required scale");
+    expect(html).toContain("decoder_model_merged: &quot;fp32&quot;");
+    expect(html).toContain('"@type":"TechArticle"');
+
+    await page.goto("/notes/ort-web-missing-required-scale");
+    await expect(page.getByTestId("note-body")).toContainText("Missing required scale");
+    await expect(page.getByTestId("note-body").locator("pre code")).toContainText("decoder_model_merged");
+    const tryIt = page.locator("section", { has: page.getByRole("heading", { name: "Try it" }) });
+    await tryIt.getByRole("link", { name: "Translation" }).click();
+    await expect(page).toHaveURL(/\/translation$/);
+    const related = page.getByTestId("related-notes");
+    await expect(related.getByRole("link", { name: /Missing required scale/ })).toBeAttached();
+  });
+
+  test("the notes index lists every note and the home page links it", async ({ page }) => {
+    await page.goto("/notes");
+    await expect(page.getByTestId("notes-index").getByRole("link").first()).toBeVisible();
+    expect(await page.getByTestId("notes-index").getByRole("link").count()).toBeGreaterThanOrEqual(5);
+    await page.goto("/home");
+    await expect(page.locator("#notes").getByRole("link", { name: "Notes" })).toBeAttached();
   });
 
   // The routes the app has but search engines should not still get a 200.

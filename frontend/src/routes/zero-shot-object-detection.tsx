@@ -50,6 +50,7 @@ import {
   useZeroShotDetector,
 } from "@/hooks/useZeroShotDetector";
 import { useModelSelection } from "@/model/useModelSelection";
+import { copy } from "@/seo/copy/zero-shot-object-detection";
 import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   colorForLabel,
@@ -160,12 +161,8 @@ useImagePick();
     <ModelPage
       icon={ScanText}
       title="Zero-Shot Object Detection"
-      description={
-        <>
-          Describe what you are looking for and the model boxes it — no class
-          list, no fine-tuning. Runs on your own GPU in a Web Worker.
-        </>
-      }
+      copy={copy}
+      description="Runs on your own GPU in a Web Worker."
       labels={{ output: "Detections" }}
       aside={
         live && camera.fps != null ? (

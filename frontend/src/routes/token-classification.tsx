@@ -27,6 +27,7 @@ import { Check, Copy, ScanText } from "lucide-react";
 import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/token-classification";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
@@ -134,12 +135,11 @@ function TokenClassificationPage() {
     <ModelPage
       icon={ScanText}
       title="Token Classification"
+      copy={copy}
       description={
         <>
-          Find the people, places and organisations in a piece of text, and
-          redact them — entirely in your browser, on your GPU (WebGPU) or CPU
-          (WASM). The document is never uploaded, which is the whole reason to
-          want this one client-side.
+          The document is never uploaded, which is the whole reason to want
+          this one client-side.
         </>
       }
       labels={{ run: "Text", output: "Entities" }}

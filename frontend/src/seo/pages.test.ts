@@ -14,12 +14,14 @@ import {
 const tasks = taskCategories.flatMap((c) => c.tasks);
 
 describe("SITE_PAGES", () => {
-  it("lists home first, then every taxonomy task, then the legal pages", () => {
+  it("lists home first, then every taxonomy task, then about and the legal pages", () => {
     expect(SITE_PAGES[0].path).toBe("/home");
     expect(SITE_PAGES.filter((p) => p.kind === "task").map((p) => p.path)).toEqual(
       tasks.map((t) => t.to),
     );
     expect(SITE_PAGES.filter((p) => p.kind === "static").map((p) => p.path)).toEqual([
+      "/notes",
+      "/about",
       "/privacy",
       "/terms",
       "/licences",

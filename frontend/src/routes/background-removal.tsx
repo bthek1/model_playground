@@ -35,6 +35,7 @@ import { useCameraFrames } from "@/hooks/useCameraFrames";
 import { useImagePick } from "@/hooks/useImagePick";
 import { useBackendProbe } from "@/model/useBackendProbe";
 import { useModelSelection } from "@/model/useModelSelection";
+import { copy } from "@/seo/copy/background-removal";
 import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_MATTE_MODEL,
@@ -131,12 +132,8 @@ useImagePick();
     <ModelPage
       icon={Scissors}
       title="Background Removal"
-      description={
-        <>
-          Cut the subject out of a photo on your own machine. One forward pass
-          produces a soft alpha matte — the picture is never uploaded.
-        </>
-      }
+      copy={copy}
+      description="One forward pass produces a soft alpha matte — the picture is never uploaded."
       labels={{ output: "Cut-out" }}
       select={
         // The picker states the licence itself now (#62) — beside the choice,

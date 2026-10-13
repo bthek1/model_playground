@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { useTts } from "@/hooks/useTts";
 import { useModelSelection } from "@/model/useModelSelection";
 import { useTaskSlots } from "@/model/useTaskSlots";
+import { copy } from "@/seo/copy/text-to-speech";
 
 export const Route = createFileRoute("/text-to-speech")({
   component: TextToSpeechPage,
@@ -96,7 +97,8 @@ function TextToSpeechPage() {
     <ModelPage
       icon={Volume2}
       title="Text to Speech"
-      description="Turn text into speech entirely in your browser — the model runs on your GPU (WebGPU) or CPU (WASM) in a Web Worker. Nothing is uploaded."
+      copy={copy}
+      description="Nothing is uploaded."
       select={
         <ModelPicker
           {...slots.picker}

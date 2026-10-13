@@ -16,6 +16,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
     "icons": "node scripts/generate-icons.mjs",
+    "og": "node scripts/generate-og-cards.mjs",
     "check:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {

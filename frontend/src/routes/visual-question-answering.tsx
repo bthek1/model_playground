@@ -55,6 +55,7 @@ import { useBackendProbe } from "@/model/useBackendProbe";
 import { useModelSelection } from "@/model/useModelSelection";
 import { useTaskSlots } from "@/model/useTaskSlots";
 import { composePrompt } from "@/multimodal/prompt";
+import { copy } from "@/seo/copy/visual-question-answering";
 import {
   DEFAULT_VLM_MODEL,
   MAX_INFERENCE_SIDE,
@@ -164,10 +165,10 @@ function VisualQuestionAnsweringPage() {
     <ModelPage
       icon={HelpCircle}
       title="Visual Question Answering"
+      copy={copy}
       description={
         <>
-          Ask a picture a question with a short answer. Same vision-language
-          model as{" "}
+          Same vision-language model as{" "}
           <span className="font-medium">Image Text to Text</span> — the
           difference is the prompt, and this page shows you exactly what it
           sends.

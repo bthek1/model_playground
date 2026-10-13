@@ -660,7 +660,8 @@ function DepthPage() {
     <ModelPage
       icon={Mountain}
       title="Depth Estimation"
-      description="Relative depth from a single image, entirely in your browser."
+      copy={copy}   // src/seo/copy/depth.ts: the tagline + "About this page"
+      description="A single forward pass in a Web Worker — the picture is never uploaded."
       select={<ModelPicker {...slots.picker} />}
       load={<ModelStatus {...slots.status} />}
       run={
@@ -778,6 +779,24 @@ on the home page's task index and its search-result snippet (#64, #65), so
 write it for someone choosing a page. The route then needs adding to `ROUTES`
 in `infra/site/spa-rewrite.js` — `src/seo/edgeRoutes.test.ts` fails, naming it,
 until it is — or the static deploy serves it the generic shell.
+
+**The page's own words (#71).** Two more files, or the build throws and
+`conventions.test.ts` fails by name: a search title in
+[`src/seo/titles.ts`](../../frontend/src/seo/titles.ts) (≤ 51 characters, in
+the words people search with), and `src/seo/copy/<route>.ts` with a
+`tagline`, two to four `about` paragraphs (120–320 words: what the task is,
+the models and their **measured** sizes, what runs where, what the page cannot
+do) and the `aliases` people search for, each of which must appear in that
+text. Register it in `src/seo/copy/index.ts`, import it in the route and pass
+`copy={copy}` to `ModelPage` — the tagline opens the header (so `description`
+holds only what follows it) and the paragraphs render below the workbench. The
+build writes the same strings into the page's static HTML.
+
+**Its share card (#72).** Run `npm run og` (`just fe-og`) and commit the new
+`public/og/<route>.jpg`; `src/seo/render.test.ts` fails, naming the page, until
+you do. Re-run it whenever the page's heading or description changes. If a note
+in `src/notes/meta.ts` is about something the page demonstrates, add the route
+to that note's `related`, and the page links back to it.
 
 **The backend registry**, optionally. One `ModelCard` per checkpoint the page
 offers — but note that `task` is a **fixed choice set**
@@ -983,6 +1002,9 @@ structurally: the run controls simply do not work until the load machine says
 [ ] Route renders all four slots; autoLoad from the session; DOM order 1-4
 [ ] Task row (label + description) + REAL_ROUTES entry added; taxonomy test
     asserts the route; the route added to spa-rewrite.js's ROUTES
+[ ] Search title in seo/titles.ts; seo/copy/<route>.ts written, registered in
+    seo/copy/index.ts and passed to ModelPage as copy={copy}
+[ ] Share card rendered (`npm run og`) and public/og/<route>.jpg committed
 [ ] Added to model-page.spec.ts's route table, and to model-ids.spec.ts's imports
 [ ] ModelCard rows created if used; task is a ModelTask choice, not a pipeline
 [ ] Vitest contract asserted, including which controls re-derive and which re-run

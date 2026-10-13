@@ -31,6 +31,7 @@ import { HelpCircle, MessageCircleQuestion } from "lucide-react";
 import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/question-answering";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
@@ -130,13 +131,12 @@ function QuestionAnsweringPage() {
     <ModelPage
       icon={MessageCircleQuestion}
       title="Question Answering"
+      copy={copy}
       description={
         <>
-          Ask a question about a passage and watch the model point at the answer
-          — entirely in your browser, on your GPU (WebGPU) or CPU (WASM). This
-          is <span className="font-medium">extractive</span> QA: the model does
-          not write an answer, it selects a range of your text. Nothing is
-          uploaded.
+          This is <span className="font-medium">extractive</span> QA: the
+          model does not write an answer, it selects a range of your text.
+          Nothing is uploaded.
         </>
       }
       labels={{ run: "Passage & question", output: "Answer" }}

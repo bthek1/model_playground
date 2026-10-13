@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { useLiveAsr } from "@/hooks/useLiveAsr";
 import { useModelSelection } from "@/model/useModelSelection";
 import { useTaskSlots } from "@/model/useTaskSlots";
+import { copy } from "@/seo/copy/asr";
 
 export const Route = createFileRoute("/asr")({
   component: AsrPage,
@@ -138,10 +139,9 @@ function AsrPage() {
     <ModelPage
       icon={Mic}
       title="Automatic Speech Recognition"
+      copy={copy}
       description={
         <>
-          Real-time voice-to-text, entirely in your browser — a Whisper/Moonshine
-          ONNX model runs on your GPU (WebGPU) or CPU (WASM) in a Web Worker.
           Nothing is uploaded to a server. Load a model, press{" "}
           <span className="font-medium">Start listening</span>, and speak.
         </>
