@@ -29,6 +29,9 @@ import {
   type SitePage,
 } from "./pages";
 import type { PageCopy } from "./copy/types";
+import { parseInline } from "../notes/inline";
+import { NOTES, NOTES_PATH, notePath, notesFor } from "../notes/meta";
+import type { NoteBlock } from "../notes/types";
 
 const OG_IMAGE_PATH = "/og-image.png";
 
@@ -111,6 +114,9 @@ export function structuredData(page: SitePage, origin: string): object {
   if (page.category) {
     crumbs.push({ name: page.category, item: `${home}#${categoryAnchor(page.category)}` });
   }
+  if (page.kind === "note") {
+    crumbs.push({ name: "Notes", item: canonicalUrl(NOTES_PATH, origin) });
+  }
   const url = canonicalUrl(page.path, origin);
   crumbs.push({ name: page.heading, item: url });
   const breadcrumb = {
@@ -122,6 +128,27 @@ export function structuredData(page: SitePage, origin: string): object {
       item: c.item,
     })),
   };
+  if (page.kind === "note") {
+    return {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "TechArticle",
+          "@id": url,
+          url,
+          mainEntityOfPage: url,
+          headline: page.heading,
+          name: page.title,
+          description: page.description,
+          datePublished: page.published,
+          dateModified: page.modified,
+          author: author(origin),
+          isPartOf: { "@type": "WebApplication", name: APP_NAME, url: home },
+          breadcrumb,
+        },
+      ],
+    };
+  }
   if (page.path === ABOUT_PATH) {
     return {
       "@context": "https://schema.org",
@@ -186,6 +213,57 @@ function siblingLinks(pages: readonly SitePage[]): string {
   return `<ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm">${items}</ul>`;
 }
 
+/** A note's inline markup as HTML: escaped text, `code`, and links. */
+export function inlineHtml(text: string): string {
+  return parseInline(text)
+    .map((t) =>
+      t.kind === "code"
+        ? `<code class="rounded bg-muted px-1 font-mono text-[0.9em]">${escapeHtml(t.text)}</code>`
+        : t.kind === "link"
+          ? link(t.href, t.text)
+          : escapeHtml(t.text),
+    )
+    .join("");
+}
+
+/** A note's body, block by block — the whole article, so no crawler needs JS (#72). */
+export function noteBodyHtml(blocks: readonly NoteBlock[]): string {
+  return blocks
+    .map((b) => {
+      switch (b.kind) {
+        case "p":
+          return `<p>${inlineHtml(b.text)}</p>`;
+        case "h2":
+          return `<h2 class="text-lg font-medium">${inlineHtml(b.text)}</h2>`;
+        case "ul":
+          return `<ul class="list-disc space-y-1 pl-5">${b.items.map((i) => `<li>${inlineHtml(i)}</li>`).join("")}</ul>`;
+        case "code":
+          return `<pre class="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>${escapeHtml(b.text)}</code></pre>`;
+      }
+    })
+    .join("");
+}
+
+/** The notes that cite a task page, as links — the way back from page to write-up. */
+function relatedNotes(path: string): string {
+  const notes = notesFor(path);
+  if (notes.length === 0) return "";
+  const items = notes.map((n) => `<li>${link(notePath(n.slug), n.title)}</li>`).join("");
+  return `<section><h2 class="text-lg font-medium">${escapeHtml(NOTES_HEADING)}</h2><ul class="space-y-1 text-sm">${items}</ul></section>`;
+}
+
+/** Every note as a link and its description: the notes index, and home's section. */
+function notesList(): string {
+  const items = NOTES.map(
+    (n) =>
+      `<li>${link(notePath(n.slug), n.title)} <span class="text-muted-foreground">— ${escapeHtml(n.description)}</span></li>`,
+  ).join("");
+  return `<ul class="space-y-1 text-sm">${items}</ul>`;
+}
+
+/** The heading over a task page's related notes, shared with the app's `RelatedNotes`. */
+export const NOTES_HEADING = "Notes";
+
 /** A task page's own paragraphs, under the same heading the app gives them. */
 function aboutSection(copy: PageCopy): string {
   const paras = copy.about.map((p) => `<p>${escapeHtml(p)}</p>`).join("");
@@ -200,13 +278,14 @@ function aboutSection(copy: PageCopy): string {
  * page it says them in the same words: the tagline and the about paragraphs
  * are the strings the route renders (#71).
  */
-export function staticBody(page: SitePage, copy?: PageCopy): string {
+export function staticBody(page: SitePage, copy?: PageCopy, note?: readonly NoteBlock[]): string {
   const parts: string[] = [];
   if (page.kind !== "home") {
     const trail = [link("/home", APP_NAME)];
     if (page.category) {
       trail.push(link(`/home#${categoryAnchor(page.category)}`, page.category));
     }
+    if (page.kind === "note") trail.push(link(NOTES_PATH, "Notes"));
     trail.push(escapeHtml(page.heading));
     parts.push(
       `<nav aria-label="Breadcrumb" class="text-sm text-muted-foreground">${trail.join(" › ")}</nav>`,
@@ -218,7 +297,9 @@ export function staticBody(page: SitePage, copy?: PageCopy): string {
   parts.push(
     page.kind === "home"
       ? `<p class="text-muted-foreground">${escapeHtml(`${HOME_LEAD} ${HOME_PRIVACY}`)} (${link("/privacy", "privacy")}).</p>`
-      : `<p class="text-muted-foreground">${escapeHtml(copy?.tagline ?? page.description)}</p>`,
+      : page.kind === "note"
+        ? `<p class="text-xs text-muted-foreground">By ${escapeHtml(OPERATOR)} · <time datetime="${escapeHtml(page.published ?? "")}">${escapeHtml(page.published ?? "")}</time></p>`
+        : `<p class="text-muted-foreground">${escapeHtml(copy?.tagline ?? page.description)}</p>`,
   );
   parts.push(
     `<noscript><p>${escapeHtml(APP_NAME)} runs its models in your browser, so it needs JavaScript (and, for most models, WebGPU).</p></noscript>`,
@@ -231,8 +312,16 @@ export function staticBody(page: SitePage, copy?: PageCopy): string {
         `<section id="${categoryAnchor(category.label)}"><h2 class="text-lg font-medium">${escapeHtml(category.label)}</h2>${taskList(pages)}</section>`,
       );
     }
+    parts.push(
+      `<section id="notes"><h2 class="text-lg font-medium">${link(NOTES_PATH, "Notes")}</h2>${notesList()}</section>`,
+    );
+  } else if (page.kind === "note") {
+    if (note) parts.push(`<article class="space-y-3">${noteBodyHtml(note)}</article>`);
+  } else if (page.path === NOTES_PATH) {
+    parts.push(notesList());
   } else if (page.category) {
     if (copy) parts.push(aboutSection(copy));
+    parts.push(relatedNotes(page.path));
     parts.push(
       `<nav aria-label="More in ${escapeHtml(page.category)}"><h2 class="text-lg font-medium">More in ${escapeHtml(page.category)}</h2>${siblingLinks(siblingsOf(page))}</nav>`,
     );
@@ -249,6 +338,7 @@ export function renderPageHtml(
   page: SitePage,
   origin: string,
   copy?: PageCopy,
+  note?: readonly NoteBlock[],
 ): string {
   if (!/<title>[^<]*<\/title>/.test(template) || !template.includes('<div id="root"></div>')) {
     throw new Error("seo: index.html has no <title> or no empty #root to fill");
@@ -267,7 +357,7 @@ export function renderPageHtml(
     `<script type="application/ld+json" id="structured-data">${scriptJson(structuredData(page, origin))}</script>`,
   ];
   html = html.replace("</head>", () => `  ${head.join("\n    ")}\n  </head>`);
-  return html.replace('<div id="root"></div>', () => `<div id="root">${staticBody(page, copy)}</div>`);
+  return html.replace('<div id="root"></div>', () => `<div id="root">${staticBody(page, copy, note)}</div>`);
 }
 
 /**
@@ -299,13 +389,18 @@ const suffix404 = `Page not found · ${APP_NAME}`;
  * engine sees has. The build hashes this into `seo-manifest.json`, and the
  * IndexNow step (#69) submits only pages whose digest moved.
  */
-export function crawlableContent(page: SitePage, origin: string, copy?: PageCopy): string {
+export function crawlableContent(
+  page: SitePage,
+  origin: string,
+  copy?: PageCopy,
+  note?: readonly NoteBlock[],
+): string {
   return JSON.stringify([
     page.title,
     page.description,
     canonicalUrl(page.path, origin),
     structuredData(page, origin),
-    staticBody(page, copy),
+    staticBody(page, copy, note),
   ]);
 }
 
@@ -318,9 +413,10 @@ export function seoManifest(
   origin: string,
   hash: (text: string) => string,
   copyFor: (path: string) => PageCopy | undefined = () => undefined,
+  noteFor: (path: string) => readonly NoteBlock[] | undefined = () => undefined,
 ): Record<string, string> {
   return Object.fromEntries(
-    pages.map((p) => [p.path, hash(crawlableContent(p, origin, copyFor(p.path)))]),
+    pages.map((p) => [p.path, hash(crawlableContent(p, origin, copyFor(p.path), noteFor(p.path)))]),
   );
 }
 

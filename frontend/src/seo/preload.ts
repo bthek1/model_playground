@@ -23,8 +23,12 @@ export interface ChunkLike {
 
 export type BundleLike = Readonly<Record<string, ChunkLike>>;
 
-/** `/asr` → `asr`, `/privacy` → `privacy` (whose file is `privacy.lazy.tsx`). */
+/**
+ * `/asr` → `asr`, `/privacy` → `privacy` (whose file is `privacy.lazy.tsx`).
+ * Every note shares one route file, `notes_.$slug.tsx` (#72).
+ */
 export function routeFileStem(path: string): string {
+  if (/^\/notes\/[^/]+$/.test(path)) return "notes_.$slug";
   return path.replace(/^\//, "");
 }
 
@@ -70,6 +74,22 @@ export function routePreloads(bundle: BundleLike, path: string): string[] {
       `seo: no split chunk for ${path} — expected src/routes/${routeFileStem(path)}.tsx to be code-split (#66)`,
     );
   }
+  const already = closure(bundle, entry.fileName, new Set());
+  return [...closure(bundle, chunk.fileName, new Set())].filter((f) => !already.has(f));
+}
+
+/**
+ * The chunk whose facade is the module at `moduleSuffix` (e.g.
+ * `/src/notes/bodies/x.ts`) and its static imports, minus the entry's. Throws
+ * when no chunk has that facade — the module stopped being split out.
+ */
+export function modulePreloads(bundle: BundleLike, moduleSuffix: string): string[] {
+  const entry = Object.values(bundle).find((c) => c.type === "chunk" && c.isEntry);
+  if (!entry) throw new Error("seo: the bundle has no entry chunk");
+  const chunk = Object.values(bundle).find(
+    (c) => c.type === "chunk" && !c.isEntry && c.facadeModuleId?.split("?")[0].endsWith(moduleSuffix),
+  );
+  if (!chunk) throw new Error(`seo: no chunk of its own for ${moduleSuffix}`);
   const already = closure(bundle, entry.fileName, new Set());
   return [...closure(bundle, chunk.fileName, new Set())].filter((f) => !already.has(f));
 }

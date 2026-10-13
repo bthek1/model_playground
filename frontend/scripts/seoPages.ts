@@ -27,9 +27,16 @@ import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 
 import { SITE_URL } from "../src/lib/site";
+import { NOTE_BODIES } from "../src/notes/bodies";
+import { NOTES_PATH } from "../src/notes/meta";
 import { PAGE_COPY } from "../src/seo/copy";
 import { APP_ONLY_PATHS, SITE_PAGES } from "../src/seo/pages";
-import { addModulePreloads, type BundleLike, routePreloads } from "../src/seo/preload";
+import {
+  addModulePreloads,
+  type BundleLike,
+  modulePreloads,
+  routePreloads,
+} from "../src/seo/preload";
 import {
   absolutiseImages,
   renderNotFoundHtml,
@@ -40,6 +47,11 @@ import {
 } from "../src/seo/render";
 
 const ROUTES = new Set(SITE_PAGES.map((p) => p.path));
+
+/** A note page's body, by path (#72): `/notes/<slug>` → its blocks. */
+function noteFor(path: string) {
+  return path.startsWith(`${NOTES_PATH}/`) ? NOTE_BODIES[path.slice(NOTES_PATH.length + 1)] : undefined;
+}
 const APP_ONLY = new Set(APP_ONLY_PATHS);
 
 export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugin {
@@ -86,8 +98,16 @@ export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugi
       for (const page of SITE_PAGES) {
         const dir = join(outDir, page.path);
         mkdirSync(dir, { recursive: true });
-        const html = renderPageHtml(template, page, origin, PAGE_COPY[page.path]);
-        const preloads = routePreloads(bundle as unknown as BundleLike, page.path);
+        const html = renderPageHtml(template, page, origin, PAGE_COPY[page.path], noteFor(page.path));
+        const chunks = bundle as unknown as BundleLike;
+        // A note's body is its own chunk, loaded by the route's loader: preload
+        // it too, or the app mounts over the static article with nothing to
+        // show until it arrives. First, so the route chunk stays the last link.
+        const body =
+          page.kind === "note"
+            ? modulePreloads(chunks, `/src/notes/bodies/${page.path.slice(NOTES_PATH.length + 1)}.ts`)
+            : [];
+        const preloads = [...new Set([...body, ...routePreloads(chunks, page.path)])];
         writeFileSync(join(dir, "index.html"), addModulePreloads(html, preloads, base));
       }
       writeFileSync(join(outDir, "sitemap.xml"), renderSitemap(SITE_PAGES, origin));
@@ -96,7 +116,7 @@ export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugi
       const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
       writeFileSync(
         join(outDir, "seo-manifest.json"),
-        `${JSON.stringify(seoManifest(SITE_PAGES, origin, sha256, (path) => PAGE_COPY[path]), null, 2)}\n`,
+        `${JSON.stringify(seoManifest(SITE_PAGES, origin, sha256, (path) => PAGE_COPY[path], noteFor), null, 2)}\n`,
       );
     },
   };

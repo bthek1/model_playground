@@ -1,3 +1,4 @@
+import { RelatedNotes } from "@/components/notes/RelatedNotes";
 import type { PageCopy } from "@/seo/copy/types";
 import { ABOUT_HEADING } from "@/seo/render";
 
@@ -28,6 +29,7 @@ export function AboutPage({ copy }: { copy: PageCopy }) {
           {p}
         </p>
       ))}
+      <RelatedNotes />
     </section>
   );
 }

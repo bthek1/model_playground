@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 
 const LEGAL_LINKS = [
   { to: "/about", label: "About" },
+  { to: "/notes", label: "Notes" },
   { to: "/privacy", label: "Privacy" },
   { to: "/terms", label: "Terms" },
   { to: "/licences", label: "Licences" },

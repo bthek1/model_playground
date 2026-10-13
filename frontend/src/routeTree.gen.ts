@@ -41,6 +41,7 @@ import { Route as QuestionAnsweringRouteImport } from './routes/question-answeri
 import { Route as PoseRouteImport } from './routes/pose'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as ObjectDetectionRouteImport } from './routes/object-detection'
+import { Route as NotesRouteImport } from './routes/notes'
 import { Route as MaskGenerationRouteImport } from './routes/mask-generation'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LinkPredictionRouteImport } from './routes/link-prediction'
@@ -59,6 +60,7 @@ import { Route as AudioToAudioRouteImport } from './routes/audio-to-audio'
 import { Route as AudioClassificationRouteImport } from './routes/audio-classification'
 import { Route as AsrRouteImport } from './routes/asr'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as NotesSlugRouteImport } from './routes/notes_.$slug'
 
 const TermsLazyRouteImport = createFileRoute('/terms')()
 const PrivacyLazyRouteImport = createFileRoute('/privacy')()
@@ -242,6 +244,11 @@ const ObjectDetectionRoute = ObjectDetectionRouteImport.update({
   path: '/object-detection',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotesRoute = NotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MaskGenerationRoute = MaskGenerationRouteImport.update({
   id: '/mask-generation',
   path: '/mask-generation',
@@ -332,6 +339,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotesSlugRoute = NotesSlugRouteImport.update({
+  id: '/notes_/$slug',
+  path: '/notes/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -352,6 +364,7 @@ export interface FileRoutesByFullPath {
   '/link-prediction': typeof LinkPredictionRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
+  '/notes': typeof NotesRoute
   '/object-detection': typeof ObjectDetectionRoute
   '/playground': typeof PlaygroundRoute
   '/pose': typeof PoseRoute
@@ -387,6 +400,7 @@ export interface FileRoutesByFullPath {
   '/licences': typeof LicencesLazyRoute
   '/privacy': typeof PrivacyLazyRoute
   '/terms': typeof TermsLazyRoute
+  '/notes/$slug': typeof NotesSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -407,6 +421,7 @@ export interface FileRoutesByTo {
   '/link-prediction': typeof LinkPredictionRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
+  '/notes': typeof NotesRoute
   '/object-detection': typeof ObjectDetectionRoute
   '/playground': typeof PlaygroundRoute
   '/pose': typeof PoseRoute
@@ -442,6 +457,7 @@ export interface FileRoutesByTo {
   '/licences': typeof LicencesLazyRoute
   '/privacy': typeof PrivacyLazyRoute
   '/terms': typeof TermsLazyRoute
+  '/notes/$slug': typeof NotesSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -463,6 +479,7 @@ export interface FileRoutesById {
   '/link-prediction': typeof LinkPredictionRoute
   '/login': typeof LoginRoute
   '/mask-generation': typeof MaskGenerationRoute
+  '/notes': typeof NotesRoute
   '/object-detection': typeof ObjectDetectionRoute
   '/playground': typeof PlaygroundRoute
   '/pose': typeof PoseRoute
@@ -498,6 +515,7 @@ export interface FileRoutesById {
   '/licences': typeof LicencesLazyRoute
   '/privacy': typeof PrivacyLazyRoute
   '/terms': typeof TermsLazyRoute
+  '/notes_/$slug': typeof NotesSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -520,6 +538,7 @@ export interface FileRouteTypes {
     | '/link-prediction'
     | '/login'
     | '/mask-generation'
+    | '/notes'
     | '/object-detection'
     | '/playground'
     | '/pose'
@@ -555,6 +574,7 @@ export interface FileRouteTypes {
     | '/licences'
     | '/privacy'
     | '/terms'
+    | '/notes/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -575,6 +595,7 @@ export interface FileRouteTypes {
     | '/link-prediction'
     | '/login'
     | '/mask-generation'
+    | '/notes'
     | '/object-detection'
     | '/playground'
     | '/pose'
@@ -610,6 +631,7 @@ export interface FileRouteTypes {
     | '/licences'
     | '/privacy'
     | '/terms'
+    | '/notes/$slug'
   id:
     | '__root__'
     | '/'
@@ -630,6 +652,7 @@ export interface FileRouteTypes {
     | '/link-prediction'
     | '/login'
     | '/mask-generation'
+    | '/notes'
     | '/object-detection'
     | '/playground'
     | '/pose'
@@ -665,6 +688,7 @@ export interface FileRouteTypes {
     | '/licences'
     | '/privacy'
     | '/terms'
+    | '/notes_/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -686,6 +710,7 @@ export interface RootRouteChildren {
   LinkPredictionRoute: typeof LinkPredictionRoute
   LoginRoute: typeof LoginRoute
   MaskGenerationRoute: typeof MaskGenerationRoute
+  NotesRoute: typeof NotesRoute
   ObjectDetectionRoute: typeof ObjectDetectionRoute
   PlaygroundRoute: typeof PlaygroundRoute
   PoseRoute: typeof PoseRoute
@@ -721,6 +746,7 @@ export interface RootRouteChildren {
   LicencesLazyRoute: typeof LicencesLazyRoute
   PrivacyLazyRoute: typeof PrivacyLazyRoute
   TermsLazyRoute: typeof TermsLazyRoute
+  NotesSlugRoute: typeof NotesSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -970,6 +996,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ObjectDetectionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notes': {
+      id: '/notes'
+      path: '/notes'
+      fullPath: '/notes'
+      preLoaderRoute: typeof NotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mask-generation': {
       id: '/mask-generation'
       path: '/mask-generation'
@@ -1096,6 +1129,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notes_/$slug': {
+      id: '/notes_/$slug'
+      path: '/notes/$slug'
+      fullPath: '/notes/$slug'
+      preLoaderRoute: typeof NotesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -1118,6 +1158,7 @@ const rootRouteChildren: RootRouteChildren = {
   LinkPredictionRoute: LinkPredictionRoute,
   LoginRoute: LoginRoute,
   MaskGenerationRoute: MaskGenerationRoute,
+  NotesRoute: NotesRoute,
   ObjectDetectionRoute: ObjectDetectionRoute,
   PlaygroundRoute: PlaygroundRoute,
   PoseRoute: PoseRoute,
@@ -1153,6 +1194,7 @@ const rootRouteChildren: RootRouteChildren = {
   LicencesLazyRoute: LicencesLazyRoute,
   PrivacyLazyRoute: PrivacyLazyRoute,
   TermsLazyRoute: TermsLazyRoute,
+  NotesSlugRoute: NotesSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

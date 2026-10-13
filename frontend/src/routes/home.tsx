@@ -8,6 +8,7 @@ import { AnalyticsNote } from "@/components/analytics/AnalyticsNote";
 import { BenchmarkCard } from "@/components/home/BenchmarkCard";
 import { GpuCapabilitiesCard } from "@/components/home/GpuCapabilitiesCard";
 import { ModelCatalogCard } from "@/components/home/ModelCatalogCard";
+import { NotesIndex } from "@/components/home/NotesIndex";
 import { TaskIndex } from "@/components/home/TaskIndex";
 import { BACKEND_ENABLED } from "@/lib/features";
 import { HOME_LEAD, HOME_PRIVACY } from "@/seo/pages";
@@ -42,6 +43,7 @@ function HomePage() {
       {BACKEND_ENABLED && <ModelCatalogCard />}
 
       <TaskIndex />
+      <NotesIndex />
     </div>
   );
 }

@@ -13,9 +13,10 @@
 
 import { taskCategories } from "../components/layout/taskTaxonomy";
 import { APP_NAME, SITE_DESCRIPTION, SITE_URL } from "../lib/site";
+import { NOTES, NOTES_PATH, notePath } from "../notes/meta";
 import { TASK_TITLES } from "./titles";
 
-export type PageKind = "home" | "task" | "static";
+export type PageKind = "home" | "task" | "note" | "static";
 
 export interface SitePage {
   /** The route, e.g. `/asr`. Lower-case, no trailing slash. */
@@ -29,6 +30,9 @@ export interface SitePage {
   description: string;
   /** The owning taxonomy category, for a task page. */
   category?: string;
+  /** A note's ISO dates (#72), for its `TechArticle` JSON-LD. */
+  published?: string;
+  modified?: string;
 }
 
 /** The home page's title: the product, then what it does. */
@@ -56,6 +60,32 @@ export function categoryAnchor(label: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 }
+
+/**
+ * The notes index and one page per note (#72). The index is a static page;
+ * each article is a `note`, whose body the build writes in full.
+ */
+const NOTE_PAGES: SitePage[] = [
+  {
+    path: NOTES_PATH,
+    kind: "static",
+    title: suffixTitle("Notes on running ML in the browser"),
+    heading: "Notes",
+    description:
+      "Short write-ups of problems found running ML models in the browser: ONNX Runtime Web errors, Transformers.js gaps, WebGPU and quantization.",
+  },
+  ...NOTES.map(
+    (n): SitePage => ({
+      path: notePath(n.slug),
+      kind: "note",
+      title: suffixTitle(n.title),
+      heading: n.title,
+      description: n.description,
+      published: n.published,
+      modified: n.modified,
+    }),
+  ),
+];
 
 const STATIC_PAGES: SitePage[] = [
   {
@@ -142,6 +172,7 @@ export const SITE_PAGES: readonly SitePage[] = [
       }),
     ),
   ),
+  ...NOTE_PAGES,
   ...STATIC_PAGES,
 ];
 

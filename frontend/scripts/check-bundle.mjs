@@ -198,18 +198,24 @@ for (const [name, pattern] of MUST_STAY_SPLIT) {
 // Per route (#66), read off each page's own HTML.
 const preloads = (html) =>
   [...html.matchAll(/<link rel="modulepreload"[^>]*href="\/assets\/([^"]+)"/g)].map((m) => m[1]);
-const routePages = readdirSync(join(root, "dist"), { withFileTypes: true })
-  .filter((d) => d.isDirectory() && d.name !== "assets")
-  .map((d) => join(root, "dist", d.name, "index.html"))
-  .filter((f) => existsSync(f));
+// Recursive: a note is `dist/notes/<slug>/index.html` (#72), one level down.
+function* pageFiles(dir, prefix = "") {
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    if (!d.isDirectory() || (prefix === "" && d.name === "assets")) continue;
+    const route = `${prefix}/${d.name}`;
+    const file = join(dir, d.name, "index.html");
+    if (existsSync(file)) yield { route, file };
+    yield* pageFiles(join(dir, d.name), route);
+  }
+}
+const routePages = [...pageFiles(join(root, "dist"))];
 if (routePages.length === 0) {
   fail("no dist/<route>/index.html — the seo-pages plugin did not run");
 }
 let largest = { route: "", gzipKb: 0 };
 let routesFailed = 0;
-for (const page of routePages) {
-  const route = `/${page.split("/").at(-2)}`;
-  const own = preloads(readFileSync(page, "utf8")).filter((f) => !entryFiles.has(f));
+for (const { route, file } of routePages) {
+  const own = preloads(readFileSync(file, "utf8")).filter((f) => !entryFiles.has(f));
   if (own.length === 0) {
     routesFailed += 1;
     fail(`${route} preloads no chunk of its own — is its route still code-split?`);

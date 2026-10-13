@@ -14,6 +14,5 @@ export const copy: PageCopy = {
     "SmolVLM",
     "ask questions about an image",
     "describe an image",
-    "OCR",
   ],
 };
