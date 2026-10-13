@@ -312,6 +312,14 @@ describe("absolutiseImages", () => {
 });
 
 describe("renderSitemap / renderRobots", () => {
+  // scripts/indexnow-submit.sh adds each <lastmod> after the deploy by matching
+  // this exact shape (#72); a reformatted sitemap would silently stay undated.
+  it("writes one <url><loc>…</loc></url> per line, undated, for the deploy to date", () => {
+    const xml = renderSitemap(SITE_PAGES, ORIGIN);
+    expect(xml).not.toContain("<lastmod>");
+    expect(xml.match(/<url><loc>[^<]*<\/loc><\/url>/g)).toHaveLength(SITE_PAGES.length);
+  });
+
   it("lists every indexable page by absolute URL", () => {
     const xml = renderSitemap(SITE_PAGES, ORIGIN);
     const locs = [...xml.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);

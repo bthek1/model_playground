@@ -432,8 +432,12 @@ export function seoManifest(
 }
 
 /**
- * The sitemap. No `<lastmod>`: every page would carry the build date whether
- * or not it changed, and Google ignores a lastmod that is not accurate.
+ * The sitemap, undated. The build cannot know when a page last changed —
+ * stamping the build date on every page is a lastmod Google learns to ignore —
+ * so `scripts/indexnow-submit.sh` re-uploads it after the deploy with a
+ * `<lastmod>` per URL, from the date each page's `seo-manifest.json` digest
+ * last moved (#72). Keep the `<url><loc>…</loc></url>` shape on one line: that
+ * script matches it.
  */
 export function renderSitemap(pages: readonly SitePage[], origin: string): string {
   const urls = pages
