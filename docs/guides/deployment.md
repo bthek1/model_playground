@@ -565,15 +565,22 @@ the build writes what they need (`frontend/scripts/seoPages.ts`, from the
 pure `frontend/src/seo/`):
 
 - **`dist/<route>/index.html`** for every page in `SITE_PAGES` — home, every
-  taxonomy task, the four legal pages — with its own title, description,
-  canonical, `og:url`, absolute `og:image`, JSON-LD (`WebApplication` on home,
-  a `WebPage` with its breadcrumb on a task page, a `BreadcrumbList` on a legal
-  page) and a static body inside `#root`, which `createRoot` replaces when the
-  app mounts. Sign-in and sign-up are not in it: an account form is not a
-  search result.
-- **`dist/sitemap.xml`** (no `lastmod` — it would be the build date on every
-  page, and Google ignores an inaccurate one) and **`dist/robots.txt`** (allow
-  all but `/ingest/`, and name the sitemap).
+  taxonomy task, the notes index and each note (`dist/notes/<slug>/index.html`),
+  `/about` and the four legal pages — with its own title, description,
+  canonical, `og:url`, an absolute `og:image` pointing at **its own card**
+  (`/og/<path>.jpg`, #72), JSON-LD (`WebApplication` with its `author` on home,
+  a `WebPage` with its breadcrumb on a task page, a `TechArticle` on a note, an
+  `AboutPage` on `/about`, a `BreadcrumbList` on a legal page) and a static body
+  inside `#root`, which `createRoot` replaces when the app mounts. A note's
+  static body is the **whole article**. Sign-in and sign-up are not in it: an
+  account form is not a search result.
+- **`dist/sitemap.xml`**, undated — the build cannot know when a page last
+  changed, and the build date on every page is a lastmod Google ignores. The
+  IndexNow step dates it after the deploy (below). And **`dist/robots.txt`**
+  (allow all but `/ingest/`, and name the sitemap).
+- **Share cards** are not build output: `npm run og` renders `public/og/*.jpg`
+  and `og-image.png`, committed, from `SITE_PAGES`. `render.test.ts` fails when
+  one is missing or stale. They upload with the other public files (`$DAY`).
 
 `SITE_PAGES` is built from the sidebar taxonomy, whose entries now carry a
 one-line `description`; a task's `<title>` comes from `src/seo/titles.ts`,
@@ -649,6 +656,16 @@ is also why `deploy-frontend.sh` never uploads the manifest itself. It
 manifest skips the run rather than resubmitting everything. CI sends only the
 site's own public URLs, so the privacy notice does not change. Check what was
 received in Bing Webmaster Tools → IndexNow.
+
+**`<lastmod>` comes from the same diff (#72).** The manifest the script records
+is `{ path: { digest, modified } }`: a page whose digest held still keeps its
+date, a new or changed page gets today (UTC), and a manifest from before this
+(`{ path: digest }`) seeds today once — recorded even when nothing is
+submitted, or every deploy would re-seed it. The built sitemap is then
+re-uploaded with a `<lastmod>` per URL and the deploy's own headers, on every
+run that reaches the diff, whether or not IndexNow is called or succeeds. If
+the step cannot get that far (no key, the old manifest unreachable), the
+deploy's undated sitemap stays live — no date is better than a wrong one.
 
 ### 10.9 How it is tested
 

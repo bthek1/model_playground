@@ -792,6 +792,12 @@ text. Register it in `src/seo/copy/index.ts`, import it in the route and pass
 holds only what follows it) and the paragraphs render below the workbench. The
 build writes the same strings into the page's static HTML.
 
+**Its share card (#72).** Run `npm run og` (`just fe-og`) and commit the new
+`public/og/<route>.jpg`; `src/seo/render.test.ts` fails, naming the page, until
+you do. Re-run it whenever the page's heading or description changes. If a note
+in `src/notes/meta.ts` is about something the page demonstrates, add the route
+to that note's `related`, and the page links back to it.
+
 **The backend registry**, optionally. One `ModelCard` per checkpoint the page
 offers — but note that `task` is a **fixed choice set**
 (`llm` · `vision` · `embedding` · `audio` · `custom`, see
@@ -998,6 +1004,7 @@ structurally: the run controls simply do not work until the load machine says
     asserts the route; the route added to spa-rewrite.js's ROUTES
 [ ] Search title in seo/titles.ts; seo/copy/<route>.ts written, registered in
     seo/copy/index.ts and passed to ModelPage as copy={copy}
+[ ] Share card rendered (`npm run og`) and public/og/<route>.jpg committed
 [ ] Added to model-page.spec.ts's route table, and to model-ids.spec.ts's imports
 [ ] ModelCard rows created if used; task is a ModelTask choice, not a pipeline
 [ ] Vitest contract asserted, including which controls re-derive and which re-run

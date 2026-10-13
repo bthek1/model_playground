@@ -1921,6 +1921,35 @@ CloudFront at https://playground.benedictthekkel.com, infrastructure in Pulumi
   route that skips its copy or an app module that imports the whole map, and
   `seo/copy/copy.test.ts` checks lengths, uniqueness across pages and that every
   alias is actually used. A new task needs a copy file and a title.
+- **The site names its author, keeps notes, and gives each page its own card (#72).**
+  `/about` says who builds the site, how models are chosen (the measured
+  feasibility bar) and how pages are checked; home's `WebApplication` JSON-LD
+  carries an `author` `Person` (`sameAs` the GitHub profile) and its
+  `SoftwareSourceCode`, and `/about` is an `AboutPage` whose `mainEntity` is the
+  same `Person` — all from `legal/site.ts` (`OPERATOR`, `AUTHOR_URL`,
+  `SOURCE_URL`). **Notes** (`src/notes/`) are short write-ups led by the exact
+  error string a developer searches for: metadata in `notes/meta.ts` (small —
+  `SITE_PAGES` reads it, so it is in the entry), each body plain-data blocks in
+  `notes/bodies/<slug>.ts` (inline `` `code` `` and `[label](/path)` only,
+  parsed once by `notes/inline.ts` for both the build's HTML and the app's
+  elements). The build writes the **whole article** into
+  `dist/notes/<slug>/index.html` with `TechArticle` JSON-LD; the app's
+  `notes_.$slug.tsx` loads the body through its loader (`import.meta.glob`, one
+  chunk per note, so `notes/bodies/index.ts` is **build-only** — a static import
+  of it in app code makes the glob's dynamic imports no-ops) and each page's HTML
+  preloads its body chunk *before* the route chunk, or the app mounts an empty
+  article over the static one. Each note names `related` task pages, which link
+  back (`RelatedNotes` under "About this page", reading the path through
+  `useRouter({ warn: false })` so router-less route tests render nothing).
+  `notes.test.ts` holds every note to a 51-character title, a 70–150-character
+  description, 350+ words and links that resolve. A route with a parameter
+  (`/notes/$slug`) is one `ROUTES` line **per slug**, and `spa-rewrite.test.ts`
+  matches the router's `$param` shape against them. **Share cards**: `npm run og`
+  (`scripts/generate-og-cards.mjs`, Vite's module runner + the E2E Chromium)
+  renders `public/og/<path>.jpg` per page and `og-image.png`; `render.test.ts`
+  fails, naming the page, on a missing or a stale card — so a new page, or a
+  changed heading or description, needs `npm run og`. `SITE_DESCRIPTION` is
+  pinned equal in all three `index.html` description tags and the manifest.
 - **The static HTML is the first paint, so it decides LCP and CLS (#67).**
   LCP is the largest text block painted, and `createRoot` replaces `#root`'s
   static summary once the entry chunk has run — 1.8 s later on a throttled
@@ -1958,6 +1987,12 @@ CloudFront at https://playground.benedictthekkel.com, infrastructure in Pulumi
   diff would be empty. The key file `frontend/public/<32 hex>.txt` is public
   by design. Every problem is a warning annotation with exit 0; a network
   failure fetching the old manifest skips rather than resubmitting all pages.
+  It also **dates the sitemap** (#72): the recorded manifest is
+  `{ path: { digest, modified } }`, an unchanged digest keeps its date, and the
+  built (undated) sitemap is re-uploaded with a `<lastmod>` per URL on every
+  run that reaches the diff. The build never dates it — the build date on every
+  page is a lastmod Google learns to ignore — and the script matches
+  `renderSitemap`'s one-line `<url><loc>…</loc></url>` shape, pinned by a test.
 
 Full procedure, backups and troubleshooting: `docs/guides/deployment.md` (§10 for
 the static deploy).
