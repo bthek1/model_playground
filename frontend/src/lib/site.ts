@@ -20,9 +20,11 @@ export const APP_NAME = "Model Playground";
 export const SITE_URL = "https://playground.benedictthekkel.com";
 
 /**
- * The site-wide meta description. `index.html` carries the same text (a test
- * keeps them equal), and it is what a page with no description of its own —
- * sign-in, a 404 — falls back to.
+ * The site-wide meta description. `index.html` carries the same text in its
+ * description, `og:description` and `twitter:description`, and so does
+ * `site.webmanifest` — a test keeps all four equal (#72), because only the
+ * first used to be checked and the other three drifted. It is what a page
+ * with no description of its own — sign-in, a 404 — falls back to.
  */
 export const SITE_DESCRIPTION =
-  "Run machine-learning models for speech, vision and graphs in your browser, on your own GPU. Nothing you feed it leaves the machine.";
+  "Run machine-learning models in your browser on your own GPU: speech, vision, text, graphs, tables and RL. Your inputs stay on your device.";

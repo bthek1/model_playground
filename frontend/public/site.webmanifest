@@ -1,8 +1,8 @@
 {
   "name": "Model Playground",
   "short_name": "Playground",
-  "description": "Run machine-learning models in your browser on your own GPU.",
-  "start_url": "/",
+  "description": "Run machine-learning models in your browser on your own GPU: speech, vision, text, graphs, tables and RL. Your inputs stay on your device.",
+  "start_url": "/home",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",

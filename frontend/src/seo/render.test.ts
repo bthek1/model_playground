@@ -26,8 +26,20 @@ const meta = (doc: Document, sel: string) =>
   doc.querySelector<HTMLMetaElement>(`meta[${sel}]`)?.content;
 
 describe("index.html", () => {
-  it("carries the same description the app falls back to", () => {
-    expect(meta(parse(TEMPLATE), 'name="description"')).toBe(SITE_DESCRIPTION);
+  // All three, plus the manifest: only the first used to be pinned, and the
+  // other copies kept describing the site as it was two categories ago (#72).
+  it("carries the same description the app falls back to, in every tag", () => {
+    const doc = parse(TEMPLATE);
+    expect(meta(doc, 'name="description"')).toBe(SITE_DESCRIPTION);
+    expect(meta(doc, 'property="og:description"')).toBe(SITE_DESCRIPTION);
+    expect(meta(doc, 'name="twitter:description"')).toBe(SITE_DESCRIPTION);
+  });
+
+  it("is described the same way by the web app manifest", () => {
+    const manifest = JSON.parse(readFileSync(join(__dirname, "../../public/site.webmanifest"), "utf8"));
+    expect(manifest.description).toBe(SITE_DESCRIPTION);
+    // `/` is a 301 at the edge; launching the installed app should not cost one.
+    expect(manifest.start_url).toBe("/home");
   });
 });
 
