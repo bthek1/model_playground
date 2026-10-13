@@ -4,6 +4,8 @@
 
 <br clear="left" />
 
+**Live: [playground.benedictthekkel.com](https://playground.benedictthekkel.com)** — every model runs in your browser; nothing you give it is uploaded.
+
 
 Run machine-learning models — LLMs, computer vision, and custom networks —
 **directly in the browser on your GPU via raw WebGPU** (WGSL compute shaders, no
