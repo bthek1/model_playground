@@ -31,6 +31,7 @@ import { LineChart } from "lucide-react";
 
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/tabular-regression";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { ColumnPicker } from "@/components/tabular/ColumnPicker";
 import { DatasetPanel } from "@/components/tabular/DatasetPanel";
@@ -147,6 +148,7 @@ function TabularRegressionPage() {
     <ModelPage
       icon={LineChart}
       title="Tabular Regression"
+      copy={copy}
       description={
         <>
           Predict a number from a spreadsheet, in this tab, on your own data —

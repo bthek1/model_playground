@@ -567,15 +567,28 @@ pure `frontend/src/seo/`):
 - **`dist/<route>/index.html`** for every page in `SITE_PAGES` — home, every
   taxonomy task, the four legal pages — with its own title, description,
   canonical, `og:url`, absolute `og:image`, JSON-LD (`WebApplication` on home,
-  a `BreadcrumbList` elsewhere) and a static `<h1>`, description and links
-  inside `#root`, which `createRoot` replaces when the app mounts. Sign-in and
-  sign-up are not in it: an account form is not a search result.
+  a `WebPage` with its breadcrumb on a task page, a `BreadcrumbList` on a legal
+  page) and a static body inside `#root`, which `createRoot` replaces when the
+  app mounts. Sign-in and sign-up are not in it: an account form is not a
+  search result.
 - **`dist/sitemap.xml`** (no `lastmod` — it would be the build date on every
   page, and Google ignores an inaccurate one) and **`dist/robots.txt`** (allow
   all but `/ingest/`, and name the sitemap).
 
 `SITE_PAGES` is built from the sidebar taxonomy, whose entries now carry a
-one-line `description`. The function's `ROUTES` is a **copy**, because the
+one-line `description`; a task's `<title>` comes from `src/seo/titles.ts`,
+written in search vocabulary rather than the Hub task name (#71).
+
+**A task page's static body is that page's own words (#71):** breadcrumb,
+`<h1>`, its tagline, an "About this page" section of two to four paragraphs
+from `src/seo/copy/<route>.ts`, then its siblings as **bare links**. The route
+renders the same strings — the tagline in its header, the paragraphs below the
+workbench — because Google indexes the *rendered* page, after `createRoot` has
+replaced the static body; text only in the static HTML would never be indexed
+by Google. The siblings lost their descriptions because they made each page
+mostly its neighbours' text (Google quoted the Depth Estimation sentence as
+Mask Generation's snippet). `seo-manifest.json` digests the copy too, so
+rewording one page re-submits that page alone through IndexNow. The function's `ROUTES` is a **copy**, because the
 edge has no module system; `frontend/src/seo/edgeRoutes.test.ts` fails,
 naming the difference, when they disagree. A page missing from `ROUTES` is
 served the generic shell; a route listed with no file answers 403.

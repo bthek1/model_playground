@@ -76,6 +76,28 @@ describe("renderPageHtml", () => {
     expect(p?.querySelector("a")?.getAttribute("href")).toBe("/privacy");
   });
 
+  // #71: the page's own words, the same strings its route renders, and its
+  // siblings as bare links — their descriptions made each page mostly theirs.
+  it("paints a task's tagline and about paragraphs, and its siblings as bare links", () => {
+    const copy = {
+      tagline: "Turn speech into text.",
+      about: ["First paragraph.", "Second & last."],
+      aliases: [],
+    };
+    const doc = parse(renderPageHtml(TEMPLATE, pageForPath("/asr")!, ORIGIN, copy));
+    const root = doc.getElementById("root")!;
+    expect(root.querySelector("h1 + p")?.textContent).toBe("Turn speech into text.");
+    const paras = [...root.querySelectorAll("section p")].map((p) => p.textContent);
+    expect(paras).toEqual(["First paragraph.", "Second & last."]);
+    expect(root.textContent).not.toContain(pageForPath("/vad")!.description);
+    expect(root.querySelector('a[href="/vad"]')?.textContent).toBe("Voice Activity Detection");
+  });
+
+  it("falls back to the description for a page with no copy", () => {
+    const doc = parse(renderPageHtml(TEMPLATE, pageForPath("/asr")!, ORIGIN));
+    expect(doc.querySelector("#root h1 + p")?.textContent).toBe(pageForPath("/asr")!.description);
+  });
+
   it("links a task to home, its category and its siblings", () => {
     const doc = parse(renderPageHtml(TEMPLATE, pageForPath("/asr")!, ORIGIN));
     const hrefs = [...doc.querySelectorAll("#root a")].map((a) => a.getAttribute("href"));
@@ -124,11 +146,32 @@ describe("structuredData", () => {
     expect(data.offers).toEqual({ "@type": "Offer", price: "0", priceCurrency: "USD" });
   });
 
+  it("gives a static page a breadcrumb only", () => {
+    const data = structuredData(pageForPath("/privacy")!, ORIGIN) as Record<string, unknown>;
+    expect(data["@type"]).toBe("BreadcrumbList");
+  });
+
+  // #71: the task page itself is the thing described, with its own title and
+  // description, as part of the app — not only a position in a breadcrumb.
+  it("describes a task as a WebPage that is part of the app", () => {
+    const page = pageForPath("/depth")!;
+    const data = structuredData(page, ORIGIN) as { "@graph": Record<string, unknown>[] };
+    const [webPage] = data["@graph"];
+    expect(webPage).toMatchObject({
+      "@type": "WebPage",
+      "@id": `${ORIGIN}/depth`,
+      url: `${ORIGIN}/depth`,
+      name: page.title,
+      description: page.description,
+      isPartOf: { "@type": "WebApplication", url: `${ORIGIN}/home` },
+    });
+  });
+
   it("gives a task a three-step breadcrumb: home, category, task", () => {
     const data = structuredData(pageForPath("/super-resolution")!, ORIGIN) as {
-      itemListElement: { position: number; name: string; item: string }[];
+      "@graph": { breadcrumb: { itemListElement: unknown[] } }[];
     };
-    expect(data.itemListElement).toEqual([
+    expect(data["@graph"][0].breadcrumb.itemListElement).toEqual([
       { "@type": "ListItem", position: 1, name: "Model Playground", item: `${ORIGIN}/home` },
       { "@type": "ListItem", position: 2, name: "Computer Vision", item: `${ORIGIN}/home#computer-vision` },
       { "@type": "ListItem", position: 3, name: "Image to Image", item: `${ORIGIN}/super-resolution` },

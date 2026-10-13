@@ -50,6 +50,7 @@ import {
   type PairSample,
 } from "@/text/catalogue";
 import { truncate, truncationSteps } from "@/text/embed";
+import { copy } from "@/seo/copy/sentence-similarity";
 
 export const Route = createFileRoute("/sentence-similarity")({
   component: SentenceSimilarityPage,
@@ -166,10 +167,10 @@ function SentenceSimilarityPage() {
     <ModelPage
       icon={GitCompareArrows}
       title="Sentence Similarity"
+      copy={copy}
       description={
         <>
-          How close two sentences are, as a cosine between their embeddings —
-          computed in your browser. The score is only meaningful against other
+          The score is only meaningful against other
           scores, so the page ranks a set of pairs rather than showing one number
           on its own.
         </>

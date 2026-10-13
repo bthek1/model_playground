@@ -29,6 +29,7 @@ import { useAudioClassifier } from "@/hooks/useAudioClassifier";
 import { useAudioPick } from "@/hooks/useAudioPick";
 import { useModelSelection } from "@/model/useModelSelection";
 import { useTaskSlots } from "@/model/useTaskSlots";
+import { copy } from "@/seo/copy/audio-classification";
 
 export const Route = createFileRoute("/audio-classification")({
   component: AudioClassificationPage,
@@ -89,7 +90,8 @@ function AudioClassificationPage() {
     <ModelPage
       icon={Tags}
       title="Audio Classification"
-      description="Tag a sound entirely in your browser. Fixed-label models return the most likely tags; CLAP scores the clip against your own text prompts. The model runs on your GPU (WebGPU) or CPU (WASM) in a Web Worker — nothing is uploaded."
+      copy={copy}
+      description="Fixed-label models return the most likely tags; CLAP scores the clip against your own text prompts. The model runs on your GPU (WebGPU) or CPU (WASM) in a Web Worker — nothing is uploaded."
       select={
         <ModelPicker {...slots.picker} />
       }

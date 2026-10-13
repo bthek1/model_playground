@@ -288,6 +288,25 @@ These mirror the "General Rules" and "Absolute Don'ts" in the Copilot instructio
   mirrors the edge (route→file, 404s) so the static E2E pass tests what ships.
   The Search Console TXT record at the zone apex is **hand-made, not Pulumi** —
   deleting it un-verifies the property. See deployment.md §10.8c.
+- **Every task page carries its own words, in the app *and* the static HTML (#71).**
+  `src/seo/copy/<route>.ts` holds a `tagline` (the header's first sentence),
+  2–4 `about` paragraphs and the `aliases` people search with; `src/seo/titles.ts`
+  holds the search `<title>` (≤ 51 characters plus the suffix — "Speech to Text
+  with Whisper", not the Hub's "Automatic Speech Recognition"). The route
+  imports its own file and passes `copy={copy}` to `ModelPage` (a hand-built
+  header renders `copy.tagline` and `<AboutPage copy={copy} />`), and the build
+  writes the same strings into `dist/<route>/index.html`. **Both halves are
+  needed**: Google indexes the page *after* rendering it, and `createRoot`
+  replaces the static `#root`, so text only in the static HTML is never indexed
+  by Google; text only in the app is invisible to every crawler that runs no
+  JavaScript. Sibling links in the static body are **titles only** — with
+  descriptions, a page was mostly its neighbours' text and Google quoted the
+  Depth Estimation sentence as Mask Generation's snippet. `PAGE_COPY`
+  (`seo/copy/index.ts`) is build-only and `render.ts` takes copy as an argument,
+  because the entry imports `render.ts`; `conventions.test.ts` fails by name on a
+  route that skips its copy or an app module that imports the whole map, and
+  `seo/copy/copy.test.ts` checks lengths, uniqueness across pages and that every
+  alias is actually used. A new task needs a copy file and a title.
 - **The static HTML is the first paint, so it decides LCP and CLS (#67).**
   LCP is the largest text block painted, and `createRoot` replaces `#root`'s
   static summary once the entry chunk has run — 1.8 s later on a throttled

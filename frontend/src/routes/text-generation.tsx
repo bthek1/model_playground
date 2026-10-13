@@ -57,6 +57,7 @@ import {
   TEXTGEN_SAMPLES,
 } from "@/text/catalogue";
 import type { Decoding } from "@/text/textgenTypes";
+import { copy } from "@/seo/copy/text-generation";
 
 export const Route = createFileRoute("/text-generation")({
   component: TextGenerationPage,
@@ -199,10 +200,9 @@ function TextGenerationPage() {
     <ModelPage
       icon={Sparkles}
       title="Text Generation"
+      copy={copy}
       description={
         <>
-          A language model writing, in your browser — and the{" "}
-          <strong>decoding strategy</strong> as the thing you actually change.
           Greedy decoding is reproducible and loops; sampling reads better and
           cannot be repeated. The interesting question is not which model, it is
           which strategy.

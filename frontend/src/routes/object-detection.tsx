@@ -57,6 +57,7 @@ import {
 } from "@/vision/draw";
 import { downscale } from "@/vision/image";
 import { IMAGE_SAMPLES } from "@/vision/samples";
+import { copy } from "@/seo/copy/object-detection";
 
 export const Route = createFileRoute("/object-detection")({
   component: ObjectDetectionPage,
@@ -145,12 +146,8 @@ useImagePick();
     <ModelPage
       icon={ScanSearch}
       title="Object Detection"
-      description={
-        <>
-          Find and box every object in a picture — or in your webcam, frame by
-          frame — on your own GPU. Nothing leaves the machine.
-        </>
-      }
+      copy={copy}
+      description="Nothing leaves the machine."
       labels={{ output: "Detections" }}
       aside={
         live && camera.fps != null ? (

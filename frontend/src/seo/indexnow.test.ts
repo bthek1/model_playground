@@ -34,7 +34,7 @@ describe("seoManifest", () => {
   it("is built from what a crawler reads, never from the asset references", () => {
     const content = crawlableContent(pageForPath("/asr")!, ORIGIN);
     expect(content).not.toMatch(/\/assets\//);
-    expect(content).toContain("Automatic Speech Recognition in your browser");
+    expect(content).toContain("Speech to Text with Whisper, in your browser");
     expect(content).toContain(`${ORIGIN}/asr`);
   });
 
@@ -54,11 +54,23 @@ describe("seoManifest", () => {
   });
 
   // A sibling's link sits in this page's static body, so renaming one task
-  // re-submits its neighbours too — correctly, since their HTML changed.
-  it("covers its siblings' links, so a renamed neighbour re-submits it", () => {
+  // re-submits its neighbours too — correctly, since their HTML changed. Its
+  // description does not (#71), so rewording one page re-submits only itself.
+  it("covers its siblings' links but not their descriptions", () => {
     const vad = pageForPath("/vad")!;
     const asrBody = crawlableContent(asr, ORIGIN);
-    expect(asrBody).toContain(vad.description);
+    expect(asrBody).toContain(vad.heading);
+    expect(asrBody).not.toContain(vad.description);
+  });
+
+  // The page's own copy is what a crawler reads most of, so rewording it must
+  // re-submit the page — and the manifest only sees it if the build passes it.
+  it("moves when the page's own copy changes", () => {
+    const copy = { tagline: "One sentence of tagline.", about: ["A paragraph."], aliases: [] };
+    const reworded = { ...copy, about: ["A different paragraph."] };
+    const one = seoManifest([asr], ORIGIN, sha256, () => copy);
+    const two = seoManifest([asr], ORIGIN, sha256, () => reworded);
+    expect(one["/asr"]).not.toBe(two["/asr"]);
   });
 
   it("depends on the origin, since canonicals do", () => {

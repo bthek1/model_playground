@@ -36,6 +36,7 @@ import { FileText, ShieldQuestion } from "lucide-react";
 import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/summarization";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
@@ -156,11 +157,11 @@ function SummarizationPage() {
     <ModelPage
       icon={FileText}
       title="Summarization"
+      copy={copy}
       description={
         <>
-          Shorten an article in your browser — and compare it against the first{" "}
-          {LEAD_N} sentences of that same article, which is a harder baseline
-          than it sounds. News is written so the answer comes first.
+          That is a harder baseline than it sounds: news is written so the
+          answer comes first.
         </>
       }
       labels={{ run: "Article", output: "Summary" }}

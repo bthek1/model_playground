@@ -55,6 +55,7 @@ import {
   type Bm25Params,
 } from "@/text/bm25";
 import { DEFAULT_RRF_K, fuse, rankOf } from "@/text/rrf";
+import { copy } from "@/seo/copy/text-ranking";
 
 export const Route = createFileRoute("/text-ranking")({
   component: TextRankingPage,
@@ -182,10 +183,9 @@ function TextRankingPage() {
     <ModelPage
       icon={ListOrdered}
       title="Text Ranking"
+      copy={copy}
       description={
         <>
-          The whole retrieval stack, in your browser: keyword search, dense
-          embeddings, a hybrid fusion of the two, and a cross-encoder rerank.{" "}
           <strong>Two of the four stages need no model at all</strong>, which is
           the most useful thing this page has to say.
         </>

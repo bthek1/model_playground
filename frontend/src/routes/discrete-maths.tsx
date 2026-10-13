@@ -43,6 +43,8 @@ import {
 } from "@/theory/graphs";
 import { adjacencyPower, row, support } from "@/theory/walks";
 import { track } from "@/analytics";
+import { AboutPage } from "@/components/model/AboutPage";
+import { copy } from "@/seo/copy/discrete-maths";
 
 export const Route = createFileRoute("/discrete-maths")({
   component: DiscreteMathsPage,
@@ -76,9 +78,8 @@ function DiscreteMathsPage() {
           <Waypoints className="size-6" /> Discrete Maths
         </h1>
         <p className="text-sm text-muted-foreground">
-          Walks, paths and the k-hop neighbourhood: step a breadth-first search
-          one layer at a time, and watch the power of the adjacency matrix beside
-          it pick out the same nodes — or, without the self-loop, not quite the
+          {copy.tagline} The power of the adjacency matrix beside the search
+          picks out the same nodes — or, without the self-loop, not quite the
           same ones. It is the arithmetic a graph neural network&apos;s receptive
           field is made of.
         </p>
@@ -237,6 +238,8 @@ function DiscreteMathsPage() {
           </ModelSlot>
         </div>
       </div>
+
+      <AboutPage copy={copy} />
     </div>
   );
 }

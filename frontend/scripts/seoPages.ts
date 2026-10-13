@@ -27,6 +27,7 @@ import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 
 import { SITE_URL } from "../src/lib/site";
+import { PAGE_COPY } from "../src/seo/copy";
 import { APP_ONLY_PATHS, SITE_PAGES } from "../src/seo/pages";
 import { addModulePreloads, type BundleLike, routePreloads } from "../src/seo/preload";
 import {
@@ -85,7 +86,7 @@ export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugi
       for (const page of SITE_PAGES) {
         const dir = join(outDir, page.path);
         mkdirSync(dir, { recursive: true });
-        const html = renderPageHtml(template, page, origin);
+        const html = renderPageHtml(template, page, origin, PAGE_COPY[page.path]);
         const preloads = routePreloads(bundle as unknown as BundleLike, page.path);
         writeFileSync(join(dir, "index.html"), addModulePreloads(html, preloads, base));
       }
@@ -95,7 +96,7 @@ export function seoPages({ origin = SITE_URL }: { origin?: string } = {}): Plugi
       const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
       writeFileSync(
         join(outDir, "seo-manifest.json"),
-        `${JSON.stringify(seoManifest(SITE_PAGES, origin, sha256), null, 2)}\n`,
+        `${JSON.stringify(seoManifest(SITE_PAGES, origin, sha256, (path) => PAGE_COPY[path]), null, 2)}\n`,
       );
     },
   };

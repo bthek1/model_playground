@@ -28,12 +28,12 @@ test.describe("branding", () => {
 
     await page.goto("/object-detection");
     await expect(page).toHaveTitle(
-      "Object Detection in your browser · Model Playground",
+      "Object Detection in your browser, on your GPU · Model Playground",
     );
 
     await page.goto("/asr");
     await expect(page).toHaveTitle(
-      "Automatic Speech Recognition in your browser · Model Playground",
+      "Speech to Text with Whisper, in your browser · Model Playground",
     );
   });
 

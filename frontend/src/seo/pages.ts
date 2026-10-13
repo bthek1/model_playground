@@ -13,6 +13,7 @@
 
 import { taskCategories } from "../components/layout/taskTaxonomy";
 import { APP_NAME, SITE_DESCRIPTION, SITE_URL } from "../lib/site";
+import { TASK_TITLES } from "./titles";
 
 export type PageKind = "home" | "task" | "static";
 
@@ -20,7 +21,7 @@ export interface SitePage {
   /** The route, e.g. `/asr`. Lower-case, no trailing slash. */
   path: string;
   kind: PageKind;
-  /** The `<title>` — for a task, the label plus "in your browser". */
+  /** The `<title>` — for a task, its search title from `titles.ts` (#71). */
   title: string;
   /** The page's `<h1>`: the taxonomy label, or the static page's name. */
   heading: string;
@@ -38,9 +39,14 @@ export function suffixTitle(name: string): string {
   return `${name} · ${APP_NAME}`;
 }
 
-/** A task's title: the Hub task name first, so open tabs stay distinguishable. */
-export function taskTitle(label: string): string {
-  return suffixTitle(`${label} in your browser`);
+/**
+ * A task's title: its search title (#71), in the words people search with.
+ * Throws for a route with none, so a new task cannot ship under a placeholder.
+ */
+export function taskTitle(path: string): string {
+  const title = TASK_TITLES[path];
+  if (!title) throw new Error(`seo: no search title for ${path} in seo/titles.ts`);
+  return suffixTitle(title);
 }
 
 /** `"Computer Vision"` → `"computer-vision"`, the home page's anchor for it. */
@@ -121,7 +127,7 @@ export const SITE_PAGES: readonly SitePage[] = [
       (t): SitePage => ({
         path: t.to,
         kind: "task",
-        title: taskTitle(t.label),
+        title: taskTitle(t.to),
         heading: t.label,
         description: t.description,
         category: category.label,

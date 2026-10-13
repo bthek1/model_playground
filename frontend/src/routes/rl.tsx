@@ -33,6 +33,7 @@ import { Gamepad2, GitCompare, Play, Square } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { RunButton } from "@/components/model/RunButton";
+import { AboutPage } from "@/components/model/AboutPage";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelSlot } from "@/components/model/ModelPage";
 import { OutputPanel } from "@/components/model/OutputPanel";
@@ -42,6 +43,7 @@ import { ReturnChart } from "@/components/rl/ReturnChart";
 import { Button } from "@/components/ui/button";
 import { type RlRunRecord, runKey, useRlTraining } from "@/hooks/useRlTraining";
 import { cn } from "@/lib/utils";
+import { copy } from "@/seo/copy/rl";
 import { ACTION_NAMES, GridWorld, MAPS } from "@/rl/envs/gridWorld";
 import { DEFAULT_SPEED, MAX_EPISODES, SPEEDS } from "@/rl/limits";
 import { EPSILON_FLOOR, greedyRollout, QTable } from "@/rl/qLearning";
@@ -198,12 +200,14 @@ function RlPage() {
   const shownMap = render?.kind === "grid" ? render.map : map;
 
   return (
+    <>
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 md:h-full md:min-h-0">
       <header className="min-w-0">
         <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold">
           <Gamepad2 className="size-6" /> Reinforcement Learning
         </h1>
         <p className="text-sm text-muted-foreground">
+          {copy.tagline}{" "}
           Agents trained in front of you, on environments transcribed from
           Gymnasium: tabular Q-learning on FrozenLake, where the whole model is
           a table and you watch its arrows turn toward the goal — and REINFORCE
@@ -448,6 +452,8 @@ function RlPage() {
         </div>
       </div>
     </div>
+    <AboutPage copy={copy} />
+    </>
   );
 }
 

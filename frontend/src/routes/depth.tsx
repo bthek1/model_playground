@@ -44,6 +44,7 @@ import { useImagePick } from "@/hooks/useImagePick";
 import { sizeEstimate } from "@/model/size";
 import { useModelSelection } from "@/model/useModelSelection";
 import { useTaskSlots } from "@/model/useTaskSlots";
+import { copy } from "@/seo/copy/depth";
 import {
   DEFAULT_DEPTH_MODEL,
   DEPTH_MODELS,
@@ -172,12 +173,8 @@ useImagePick();
     <ModelPage
       icon={Mountain}
       title="Depth Estimation"
-      description={
-        <>
-          Turn one photo into a depth map, on your own GPU. A single forward pass
-          in a Web Worker — the picture is never uploaded.
-        </>
-      }
+      copy={copy}
+      description="A single forward pass in a Web Worker — the picture is never uploaded."
       labels={{ output: "Depth map" }}
       select={
         <ModelPicker {...slots.picker} />

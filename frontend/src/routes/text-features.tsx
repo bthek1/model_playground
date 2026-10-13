@@ -48,6 +48,7 @@ import {
   FEATURE_TEXT_SAMPLES,
 } from "@/text/catalogue";
 import { truncate, truncationSteps } from "@/text/embed";
+import { copy } from "@/seo/copy/text-features";
 
 export const Route = createFileRoute("/text-features")({
   component: TextFeaturesPage,
@@ -125,10 +126,10 @@ function TextFeaturesPage() {
     <ModelPage
       icon={Waypoints}
       title="Text Features"
+      copy={copy}
       description={
         <>
-          Turn a sentence into a vector, in your browser, on your GPU (WebGPU) or
-          CPU (WASM). Nothing about the vector is meaningful on its own — it is
+          Nothing about the vector is meaningful on its own — it is
           meaningful <em>relative to other vectors</em>, which is what{" "}
           <a className="underline" href="/sentence-similarity">
             Sentence Similarity

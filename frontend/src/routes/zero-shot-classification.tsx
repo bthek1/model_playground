@@ -36,6 +36,7 @@ import { AlertTriangle, Tags, X } from "lucide-react";
 import { RunButton } from "@/components/model/RunButton";
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/zero-shot-classification";
 import { ModelPicker } from "@/components/model/ModelPicker";
 import { ModelStatus } from "@/components/model/ModelStatus";
 import { OutputPanel } from "@/components/model/OutputPanel";
@@ -173,11 +174,11 @@ function ZeroShotClassificationPage() {
     <ModelPage
       icon={Tags}
       title="Zero-Shot Classification"
+      copy={copy}
       description={
         <>
-          Classify text against labels you invent here — no training, no
-          fine-tuning, no head that has ever seen them. An entailment model runs
-          in your browser, on your GPU (WebGPU) or CPU (WASM), and it runs{" "}
+          An entailment model runs in your browser, on your GPU (WebGPU) or CPU
+          (WASM), and it runs{" "}
           <strong>once per label</strong>.
         </>
       }

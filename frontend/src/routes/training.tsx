@@ -10,6 +10,7 @@ import {
 import { lazy, Suspense, useMemo, useState } from "react";
 
 import { RunButton } from "@/components/model/RunButton";
+import { AboutPage } from "@/components/model/AboutPage";
 import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { DatasetDialog } from "@/components/training/DatasetDialog";
 import { HyperparamsDialog } from "@/components/training/HyperparamsDialog";
@@ -29,6 +30,7 @@ import {
 import { useTheme } from "@/hooks/useTheme";
 import { useWebGPU } from "@/hooks/useWebGPU";
 import { getCSSVar } from "@/lib/theme";
+import { copy } from "@/seo/copy/training";
 
 const EChart = lazy(() => import("@/components/charts/EChart"));
 
@@ -85,171 +87,174 @@ function TrainingPage() {
         : "idle";
 
   return (
-    <div className="relative -m-6 h-[calc(100%+3rem)] w-[calc(100%+3rem)] overflow-hidden">
-      {/* Background: a pan/zoom canvas holding the architecture schematic */}
-      <PanZoom className="absolute inset-0">
-        <div className="w-max p-8">
-          <ModelArchitecture
-            weights={snapshot?.weights ?? EMPTY_WEIGHTS}
-            bias={snapshot?.bias}
-            epoch={snapshot?.epoch}
+    <>
+      <div className="relative -m-6 h-[calc(100%+3rem)] w-[calc(100%+3rem)] overflow-hidden">
+        {/* Background: a pan/zoom canvas holding the architecture schematic */}
+        <PanZoom className="absolute inset-0">
+          <div className="w-max p-8">
+            <ModelArchitecture
+              weights={snapshot?.weights ?? EMPTY_WEIGHTS}
+              bias={snapshot?.bias}
+              epoch={snapshot?.epoch}
+            />
+          </div>
+        </PanZoom>
+
+        {/* Foreground HUD ------------------------------------------------- */}
+        {/* Top-left: title, status, live stats */}
+        <div className="pointer-events-none absolute top-4 left-4 max-w-[min(90vw,26rem)] space-y-3">
+          <div className="pointer-events-auto rounded-xl border bg-card/70 p-4 backdrop-blur-md">
+            <div className="mb-1 flex items-center gap-2">
+              <h1 className="text-lg font-semibold">Linear Model Training</h1>
+              <StatusPill status={status} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {copy.tagline} A softmax classifier (784&nbsp;→&nbsp;10); edges
+              are pooled weights — red pushes for a digit, blue
+              against — sharpening live as training runs.
+            </p>
+          </div>
+
+          {(latest || result) && (
+            <div className="pointer-events-auto grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Stat
+                label="Epoch"
+                value={latest ? `${latest.epoch + 1}` : "—"}
+                sub={
+                  latest ? `step ${latest.step}/${latest.totalSteps}` : undefined
+                }
+              />
+              <Stat
+                label="Batch loss"
+                value={latest ? latest.loss.toFixed(4) : "—"}
+              />
+              <Stat
+                label="Train acc"
+                value={lastEval?.trainAcc != null ? pct(lastEval.trainAcc) : "—"}
+              />
+              <Stat
+                label="Test acc"
+                value={
+                  result
+                    ? pct(result.testAcc)
+                    : lastEval?.testAcc != null
+                      ? pct(lastEval.testAcc)
+                      : "—"
+                }
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Top-right: settings popups */}
+        <div className="pointer-events-auto absolute top-4 right-4 flex gap-2">
+          <DatasetDialog
+            trigger={
+              <Button variant="outline" size="sm" className="bg-card/70 backdrop-blur-md">
+                <Settings2 className="size-4" /> Dataset
+              </Button>
+            }
+            settings={settings}
+            set={set}
+            disabled={training}
+            datasetStatus={datasetStatus}
+            datasetProgress={datasetProgress}
+            datasetError={datasetError}
+            poolCount={poolCount}
+            loadData={loadData}
+          />
+          <HyperparamsDialog
+            trigger={
+              <Button variant="outline" size="sm" className="bg-card/70 backdrop-blur-md">
+                <SlidersHorizontal className="size-4" /> Tune
+              </Button>
+            }
+            settings={settings}
+            set={set}
+            disabled={training}
           />
         </div>
-      </PanZoom>
 
-      {/* Foreground HUD ------------------------------------------------- */}
-      {/* Top-left: title, status, live stats */}
-      <div className="pointer-events-none absolute top-4 left-4 max-w-[min(90vw,26rem)] space-y-3">
-        <div className="pointer-events-auto rounded-xl border bg-card/70 p-4 backdrop-blur-md">
-          <div className="mb-1 flex items-center gap-2">
-            <h1 className="text-lg font-semibold">Linear Model Training</h1>
-            <StatusPill status={status} />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            A softmax classifier (784&nbsp;→&nbsp;10) trained on MNIST in your
-            browser. Edges are pooled weights — red pushes for a digit, blue
-            against — sharpening live as training runs.
-          </p>
-        </div>
-
-        {(latest || result) && (
-          <div className="pointer-events-auto grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Stat
-              label="Epoch"
-              value={latest ? `${latest.epoch + 1}` : "—"}
-              sub={
-                latest ? `step ${latest.step}/${latest.totalSteps}` : undefined
-              }
-            />
-            <Stat
-              label="Batch loss"
-              value={latest ? latest.loss.toFixed(4) : "—"}
-            />
-            <Stat
-              label="Train acc"
-              value={lastEval?.trainAcc != null ? pct(lastEval.trainAcc) : "—"}
-            />
-            <Stat
-              label="Test acc"
-              value={
-                result
-                  ? pct(result.testAcc)
-                  : lastEval?.testAcc != null
-                    ? pct(lastEval.testAcc)
-                    : "—"
-              }
-            />
+        {/* The LOAD stage, such as it is: this route downloads no weights, so
+            "can it run" is a device probe. Same component the tensor route uses in
+            its LOAD band — see model-page-pattern.md §7 for why this page keeps its
+            own layout rather than the four-band shell. */}
+        {!gpuLoading && !supported && (
+          <div className="pointer-events-auto absolute top-20 left-1/2 max-w-md -translate-x-1/2 backdrop-blur-md">
+            <DeviceStatus capabilities={capabilities} loading={false} />
           </div>
         )}
-      </div>
 
-      {/* Top-right: settings popups */}
-      <div className="pointer-events-auto absolute top-4 right-4 flex gap-2">
-        <DatasetDialog
-          trigger={
-            <Button variant="outline" size="sm" className="bg-card/70 backdrop-blur-md">
-              <Settings2 className="size-4" /> Dataset
-            </Button>
-          }
-          settings={settings}
-          set={set}
-          disabled={training}
-          datasetStatus={datasetStatus}
-          datasetProgress={datasetProgress}
-          datasetError={datasetError}
-          poolCount={poolCount}
-          loadData={loadData}
-        />
-        <HyperparamsDialog
-          trigger={
-            <Button variant="outline" size="sm" className="bg-card/70 backdrop-blur-md">
-              <SlidersHorizontal className="size-4" /> Tune
-            </Button>
-          }
-          settings={settings}
-          set={set}
-          disabled={training}
-        />
-      </div>
-
-      {/* The LOAD stage, such as it is: this route downloads no weights, so
-          "can it run" is a device probe. Same component the tensor route uses in
-          its LOAD band — see model-page-pattern.md §7 for why this page keeps its
-          own layout rather than the four-band shell. */}
-      {!gpuLoading && !supported && (
-        <div className="pointer-events-auto absolute top-20 left-1/2 max-w-md -translate-x-1/2 backdrop-blur-md">
-          <DeviceStatus capabilities={capabilities} loading={false} />
+        {/* Bottom-center: transport controls */}
+        <div className="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full border bg-card/70 p-2 pl-4 backdrop-blur-md">
+          {datasetStatus !== "ready" && (
+            <span className="text-xs text-muted-foreground">
+              Open <span className="font-medium">Dataset</span> to load MNIST →
+            </span>
+          )}
+          <RunButton
+            onRun={() => start(settings)}
+            disabled={!canStart}
+            size="sm"
+            icon={Play}
+            running={training}
+            runningLabel="Training…"
+          >
+            Start
+          </RunButton>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={stop}
+            disabled={!training}
+          >
+            <Square className="size-4" /> Stop
+          </Button>
+          {trainError && (
+            <span className="max-w-48 truncate text-xs text-destructive">
+              {trainError}
+            </span>
+          )}
         </div>
-      )}
 
-      {/* Bottom-center: transport controls */}
-      <div className="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full border bg-card/70 p-2 pl-4 backdrop-blur-md">
-        {datasetStatus !== "ready" && (
-          <span className="text-xs text-muted-foreground">
-            Open <span className="font-medium">Dataset</span> to load MNIST →
-          </span>
-        )}
-        <RunButton
-          onRun={() => start(settings)}
-          disabled={!canStart}
-          size="sm"
-          icon={Play}
-          running={training}
-          runningLabel="Training…"
-        >
-          Start
-        </RunButton>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={stop}
-          disabled={!training}
-        >
-          <Square className="size-4" /> Stop
-        </Button>
-        {trainError && (
-          <span className="max-w-48 truncate text-xs text-destructive">
-            {trainError}
-          </span>
-        )}
+        {/* Bottom-right: collapsible charts panel */}
+        <div className="pointer-events-auto absolute right-4 bottom-4 flex gap-2">
+          {metrics.length > 0 && (
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="bg-card/70 backdrop-blur-md"
+                  />
+                }
+              >
+                <BarChart3 className="size-4" /> Charts
+              </PopoverTrigger>
+              <PopoverContent
+                side="top"
+                align="end"
+                className="w-[min(92vw,44rem)]"
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <ChartPanel title="Loss" description="Cross-entropy per batch">
+                    <LossChart metrics={metrics} />
+                  </ChartPanel>
+                  <ChartPanel
+                    title="Accuracy"
+                    description="Per-epoch train vs test"
+                  >
+                    <AccuracyChart metrics={metrics} />
+                  </ChartPanel>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
       </div>
-
-      {/* Bottom-right: collapsible charts panel */}
-      <div className="pointer-events-auto absolute right-4 bottom-4 flex gap-2">
-        {metrics.length > 0 && (
-          <Popover>
-            <PopoverTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="bg-card/70 backdrop-blur-md"
-                />
-              }
-            >
-              <BarChart3 className="size-4" /> Charts
-            </PopoverTrigger>
-            <PopoverContent
-              side="top"
-              align="end"
-              className="w-[min(92vw,44rem)]"
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
-                <ChartPanel title="Loss" description="Cross-entropy per batch">
-                  <LossChart metrics={metrics} />
-                </ChartPanel>
-                <ChartPanel
-                  title="Accuracy"
-                  description="Per-epoch train vs test"
-                >
-                  <AccuracyChart metrics={metrics} />
-                </ChartPanel>
-              </div>
-            </PopoverContent>
-          </Popover>
-        )}
-      </div>
-    </div>
+      <AboutPage copy={copy} />
+    </>
   );
 }
 

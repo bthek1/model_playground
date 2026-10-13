@@ -26,6 +26,7 @@ import { Fact, Score } from "@/components/viz/readout";
 import { DeviceStatus } from "@/components/model/DeviceStatus";
 import { ErrorNote } from "@/components/model/ErrorNote";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/link-prediction";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { Button } from "@/components/ui/button";
 import { PanZoom } from "@/components/viz/PanZoom";
@@ -127,6 +128,7 @@ function LinkPredictionPage() {
     <ModelPage
       icon={Share2}
       title="Link Prediction"
+      copy={copy}
       description={
         <>
           The same <strong>Cora</strong> citation graph as node classification,

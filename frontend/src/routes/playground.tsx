@@ -6,7 +6,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Cpu } from "lucide-react";
 
 import { ModelCatalogCard } from "@/components/home/ModelCatalogCard";
+import { AboutPage } from "@/components/model/AboutPage";
 import { BACKEND_ENABLED } from "@/lib/features";
+import { copy } from "@/seo/copy/playground";
 import {
   Card,
   CardContent,
@@ -47,8 +49,7 @@ function PlaygroundPage() {
       <div>
         <h1 className="mb-1 text-2xl font-semibold">Playground</h1>
         <p className="text-sm text-muted-foreground">
-          Pick a model and run inference in the browser. See your GPU details on
-          the{" "}
+          {copy.tagline} See your GPU details on the{" "}
           <a href="/home" className="underline">
             Home dashboard
           </a>
@@ -93,6 +94,8 @@ function PlaygroundPage() {
           </p>
         </CardContent>
       </Card>
+
+      <AboutPage copy={copy} />
     </div>
   );
 }

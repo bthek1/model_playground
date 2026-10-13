@@ -36,6 +36,7 @@ import { useAudioPick } from "@/hooks/useAudioPick";
 import { useEnhance } from "@/hooks/useEnhance";
 import { useModelSelection } from "@/model/useModelSelection";
 import { useTaskSlots } from "@/model/useTaskSlots";
+import { copy } from "@/seo/copy/audio-to-audio";
 
 export const Route = createFileRoute("/audio-to-audio")({
   component: AudioToAudioPage,
@@ -117,11 +118,11 @@ function AudioToAudioPage() {
     <ModelPage
       icon={AudioWaveform}
       title="Audio to Audio"
+      copy={copy}
       description={
         <>
-          Remove background noise from speech with DeepFilterNet3, at its native
-          48&nbsp;kHz. The model runs on your GPU (WebGPU) or CPU (WASM) in a Web
-          Worker — the audio never leaves your machine.
+          The model runs on your GPU (WebGPU) or CPU (WASM) in a Web Worker — the
+          audio never leaves your machine.
         </>
       }
       select={

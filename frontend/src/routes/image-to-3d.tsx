@@ -43,6 +43,7 @@ import { useImagePick } from "@/hooks/useImagePick";
 import { usePointCloudView } from "@/hooks/usePointCloudView";
 import { useBackendProbe } from "@/model/useBackendProbe";
 import { useModelSelection } from "@/model/useModelSelection";
+import { copy } from "@/seo/copy/image-to-3d";
 import { useTaskSlots } from "@/model/useTaskSlots";
 import { useWebGPU } from "@/hooks/useWebGPU";
 import {
@@ -163,12 +164,12 @@ useImagePick();
     <ModelPage
       icon={Boxes}
       title="Image to 3D"
+      copy={copy}
       description={
         <>
-          Turn one photo into a point cloud you can orbit. Depth runs in a Web
-          Worker, the cloud renders through hand-written WGSL — this is the
-          depth-to-cloud half of image-to-3D; full reconstruction is diffusion
-          and stays on a server.
+          Depth runs in a Web Worker, the cloud renders through hand-written
+          WGSL — this is the depth-to-cloud half of image-to-3D; full
+          reconstruction is diffusion and stays on a server.
         </>
       }
       labels={{ output: "Point cloud" }}

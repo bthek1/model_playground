@@ -45,7 +45,7 @@ test.describe("SEO (static build)", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Automatic Speech Recognition");
     // The static <h1> is gone: createRoot replaced #root's children.
     await expect(page.locator("h1")).toHaveCount(1);
-    await expect(page).toHaveTitle("Automatic Speech Recognition in your browser · Model Playground");
+    await expect(page).toHaveTitle("Speech to Text with Whisper, in your browser · Model Playground");
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${ORIGIN}/asr`);
   });
 
@@ -55,14 +55,30 @@ test.describe("SEO (static build)", () => {
     await page.goto("/home");
     await page.getByRole("link", { name: "Depth Estimation" }).click();
     await expect(page).toHaveURL(/\/depth$/);
-    await expect(page).toHaveTitle("Depth Estimation in your browser · Model Playground");
+    await expect(page).toHaveTitle("Depth Estimation: a depth map from one photo · Model Playground");
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${ORIGIN}/depth`);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute(
       "content",
       /Depth Anything/,
     );
     const data = JSON.parse((await page.locator("#structured-data").textContent())!);
-    expect(data.itemListElement.at(-1).item).toBe(`${ORIGIN}/depth`);
+    expect(data["@graph"][0].url).toBe(`${ORIGIN}/depth`);
+    expect(data["@graph"][0].breadcrumb.itemListElement.at(-1).item).toBe(`${ORIGIN}/depth`);
+  });
+
+  // #71: Google indexes the rendered page, and createRoot replaces the static
+  // body — so the page's own words must be in the app as well as in the file.
+  test("a task page's own words survive the app mounting", async ({ page, request }) => {
+    const html = await (await request.get("/depth")).text();
+    expect(html).toContain("Turn one photo into a depth map, on your own GPU.");
+    expect(html).toContain("monocular depth estimation");
+
+    await page.goto("/depth");
+    await expect(page.getByTestId("slot-1")).toBeVisible();
+    await expect(page.getByText("Turn one photo into a depth map, on your own GPU.", { exact: false })).toBeVisible();
+    const about = page.getByTestId("about-page");
+    await expect(about.getByRole("heading", { name: "About this page" })).toBeAttached();
+    await expect(about).toContainText("monocular depth estimation");
   });
 
   test("home lists every task, and a breadcrumb leads back to its category", async ({ page }) => {

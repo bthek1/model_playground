@@ -30,6 +30,7 @@ import {
   IMAGE_CLASSIFIER_MODELS,
 } from "@/vision/classification";
 import { IMAGE_SAMPLES } from "@/vision/samples";
+import { copy } from "@/seo/copy/image-classification";
 
 export const Route = createFileRoute("/image-classification")({
   component: ImageClassificationPage,
@@ -81,11 +82,11 @@ useImagePick();
     <ModelPage
       icon={ImageIcon}
       title="Image Classification"
+      copy={copy}
       description={
         <>
-          Label a picture entirely in your browser. An ImageNet-1k classifier
-          runs on your GPU (WebGPU) or CPU (WASM) in a Web Worker — the image is
-          never uploaded.
+          An ImageNet-1k classifier runs on your GPU (WebGPU) or CPU (WASM) in a
+          Web Worker — the image is never uploaded.
         </>
       }
       labels={{ output: "Predictions" }}

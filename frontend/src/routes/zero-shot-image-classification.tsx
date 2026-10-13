@@ -53,6 +53,7 @@ import {
   TEMPLATES,
   ZERO_SHOT_MODELS,
 } from "@/vision/zeroShot";
+import { copy } from "@/seo/copy/zero-shot-image-classification";
 
 export const Route = createFileRoute("/zero-shot-image-classification")({
   component: ZeroShotImageClassificationPage,
@@ -133,12 +134,8 @@ useImagePick();
     <ModelPage
       icon={Tags}
       title="Zero-Shot Image Classification"
-      description={
-        <>
-          Type your own labels and let CLIP score the picture against them — no
-          training, no fixed class list. It runs on your GPU in a Web Worker.
-        </>
-      }
+      copy={copy}
+      description="It runs on your GPU in a Web Worker."
       labels={{ output: "Scores" }}
       select={
         <ModelPicker {...slots.picker} />

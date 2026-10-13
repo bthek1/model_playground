@@ -27,6 +27,7 @@ import { Table } from "lucide-react";
 
 import { InputPanel } from "@/components/model/InputPanel";
 import { ModelPage } from "@/components/model/ModelPage";
+import { copy } from "@/seo/copy/tabular-classification";
 import { OutputPanel } from "@/components/model/OutputPanel";
 import { ColumnPicker } from "@/components/tabular/ColumnPicker";
 import { ConfusionMatrixView } from "@/components/tabular/ConfusionMatrixView";
@@ -163,6 +164,7 @@ function TabularClassificationPage() {
     <ModelPage
       icon={Table}
       title="Tabular Classification"
+      copy={copy}
       description={
         <>
           Fit four kinds of model to a spreadsheet and see which one wins — a

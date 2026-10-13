@@ -45,6 +45,7 @@ import { useVlm } from "@/hooks/useVlm";
 import { supportsShaderF16 } from "@/model/backend";
 import { useBackendProbe } from "@/model/useBackendProbe";
 import { useModelSelection } from "@/model/useModelSelection";
+import { copy } from "@/seo/copy/image-text-to-text";
 import { useTaskSlots } from "@/model/useTaskSlots";
 import {
   DEFAULT_VLM_MODEL,
@@ -152,12 +153,7 @@ function ImageTextToTextPage() {
     <ModelPage
       icon={MessagesSquare}
       title="Image Text to Text"
-      description={
-        <>
-          Ask a question about a picture and get an answer in prose — a vision
-          encoder and a language decoder, both running on your own GPU.
-        </>
-      }
+      copy={copy}
       labels={{ output: "Answer" }}
       aside={
         result ? (

@@ -10,7 +10,10 @@
  * description, canonical, Open Graph tags, JSON-LD and a short static summary
  * of the page, and the app then mounts over it exactly as it did before.
  *
- * Pure and relative-imported for the same reason as `pages.ts`.
+ * Pure and relative-imported for the same reason as `pages.ts`. A task page's
+ * own words (`seo/copy/`) are passed **in** rather than imported: the app
+ * imports this module for `structuredData`, so an import here would put every
+ * page's copy in the entry chunk (#71).
  */
 
 import { APP_NAME } from "../lib/site";
@@ -24,6 +27,7 @@ import {
   siblingsOf,
   type SitePage,
 } from "./pages";
+import type { PageCopy } from "./copy/types";
 
 const OG_IMAGE_PATH = "/og-image.png";
 
@@ -55,7 +59,11 @@ export function absolutiseImages(html: string, origin: string): string {
   return setMeta(setMeta(html, "property", "og:image", image), "name", "twitter:image", image);
 }
 
-/** Schema.org data for the page: the app itself on home, a breadcrumb elsewhere. */
+/**
+ * Schema.org data for the page: the app itself on home; elsewhere a breadcrumb,
+ * and on a task page the page itself as a `WebPage` that is part of the app
+ * (#71), so its title and description are claims about *this* URL.
+ */
 export function structuredData(page: SitePage, origin: string): object {
   const home = canonicalUrl("/home", origin);
   if (page.kind === "home") {
@@ -77,9 +85,9 @@ export function structuredData(page: SitePage, origin: string): object {
   if (page.category) {
     crumbs.push({ name: page.category, item: `${home}#${categoryAnchor(page.category)}` });
   }
-  crumbs.push({ name: page.heading, item: canonicalUrl(page.path, origin) });
-  return {
-    "@context": "https://schema.org",
+  const url = canonicalUrl(page.path, origin);
+  crumbs.push({ name: page.heading, item: url });
+  const breadcrumb = {
     "@type": "BreadcrumbList",
     itemListElement: crumbs.map((c, i) => ({
       "@type": "ListItem",
@@ -87,6 +95,22 @@ export function structuredData(page: SitePage, origin: string): object {
       name: c.name,
       item: c.item,
     })),
+  };
+  if (page.kind !== "task") return { "@context": "https://schema.org", ...breadcrumb };
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": url,
+        url,
+        name: page.title,
+        headline: page.heading,
+        description: page.description,
+        isPartOf: { "@type": "WebApplication", name: APP_NAME, url: home },
+        breadcrumb,
+      },
+    ],
   };
 }
 
@@ -110,12 +134,30 @@ function taskList(pages: readonly SitePage[]): string {
 }
 
 /**
+ * A task page's siblings as bare links. Their descriptions used to come too,
+ * and made each page mostly other pages' text: Google then quoted the Depth
+ * Estimation sentence as the snippet for Mask Generation (#71).
+ */
+function siblingLinks(pages: readonly SitePage[]): string {
+  const items = pages.map((p) => `<li>${link(p.path, p.heading)}</li>`).join("");
+  return `<ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm">${items}</ul>`;
+}
+
+/** A task page's own paragraphs, under the same heading the app gives them. */
+function aboutSection(copy: PageCopy): string {
+  const paras = copy.about.map((p) => `<p>${escapeHtml(p)}</p>`).join("");
+  return `<section class="space-y-2 text-sm"><h2 class="text-lg font-medium">${escapeHtml(ABOUT_HEADING)}</h2>${paras}</section>`;
+}
+
+/**
  * What a crawler that runs no JavaScript sees, and what everyone sees for the
  * moment before the app mounts over it. `createRoot().render` replaces the
  * children of `#root` (this is not hydration), so none of it has to match the
- * React tree — but it must say the same things the page does.
+ * React tree — but it must say the same things the page does, and on a task
+ * page it says them in the same words: the tagline and the about paragraphs
+ * are the strings the route renders (#71).
  */
-export function staticBody(page: SitePage): string {
+export function staticBody(page: SitePage, copy?: PageCopy): string {
   const parts: string[] = [];
   if (page.kind !== "home") {
     const trail = [link("/home", APP_NAME)];
@@ -133,7 +175,7 @@ export function staticBody(page: SitePage): string {
   parts.push(
     page.kind === "home"
       ? `<p class="text-muted-foreground">${escapeHtml(`${HOME_LEAD} ${HOME_PRIVACY}`)} (${link("/privacy", "privacy")}).</p>`
-      : `<p class="text-muted-foreground">${escapeHtml(page.description)}</p>`,
+      : `<p class="text-muted-foreground">${escapeHtml(copy?.tagline ?? page.description)}</p>`,
   );
   parts.push(
     `<noscript><p>${escapeHtml(APP_NAME)} runs its models in your browser, so it needs JavaScript (and, for most models, WebGPU).</p></noscript>`,
@@ -147,15 +189,24 @@ export function staticBody(page: SitePage): string {
       );
     }
   } else if (page.category) {
+    if (copy) parts.push(aboutSection(copy));
     parts.push(
-      `<section><h2 class="text-lg font-medium">More in ${escapeHtml(page.category)}</h2>${taskList(siblingsOf(page))}</section>`,
+      `<nav aria-label="More in ${escapeHtml(page.category)}"><h2 class="text-lg font-medium">More in ${escapeHtml(page.category)}</h2>${siblingLinks(siblingsOf(page))}</nav>`,
     );
   }
   return `<main class="mx-auto max-w-3xl space-y-4 p-8">${parts.join("")}</main>`;
 }
 
+/** The about section's heading, shared with the app's `AboutPage`. */
+export const ABOUT_HEADING = "About this page";
+
 /** The built `index.html`, rewritten for one route. Throws on a template it cannot read. */
-export function renderPageHtml(template: string, page: SitePage, origin: string): string {
+export function renderPageHtml(
+  template: string,
+  page: SitePage,
+  origin: string,
+  copy?: PageCopy,
+): string {
   if (!/<title>[^<]*<\/title>/.test(template) || !template.includes('<div id="root"></div>')) {
     throw new Error("seo: index.html has no <title> or no empty #root to fill");
   }
@@ -173,7 +224,7 @@ export function renderPageHtml(template: string, page: SitePage, origin: string)
     `<script type="application/ld+json" id="structured-data">${scriptJson(structuredData(page, origin))}</script>`,
   ];
   html = html.replace("</head>", () => `  ${head.join("\n    ")}\n  </head>`);
-  return html.replace('<div id="root"></div>', () => `<div id="root">${staticBody(page)}</div>`);
+  return html.replace('<div id="root"></div>', () => `<div id="root">${staticBody(page, copy)}</div>`);
 }
 
 /**
@@ -205,23 +256,29 @@ const suffix404 = `Page not found · ${APP_NAME}`;
  * engine sees has. The build hashes this into `seo-manifest.json`, and the
  * IndexNow step (#69) submits only pages whose digest moved.
  */
-export function crawlableContent(page: SitePage, origin: string): string {
+export function crawlableContent(page: SitePage, origin: string, copy?: PageCopy): string {
   return JSON.stringify([
     page.title,
     page.description,
     canonicalUrl(page.path, origin),
     structuredData(page, origin),
-    staticBody(page),
+    staticBody(page, copy),
   ]);
 }
 
-/** Page path → digest of its crawlable content. The hash is injected: this module also runs in the browser. */
+/**
+ * Page path → digest of its crawlable content. The hash and the page copy are
+ * injected: this module also runs in the browser, where neither belongs.
+ */
 export function seoManifest(
   pages: readonly SitePage[],
   origin: string,
   hash: (text: string) => string,
+  copyFor: (path: string) => PageCopy | undefined = () => undefined,
 ): Record<string, string> {
-  return Object.fromEntries(pages.map((p) => [p.path, hash(crawlableContent(p, origin))]));
+  return Object.fromEntries(
+    pages.map((p) => [p.path, hash(crawlableContent(p, origin, copyFor(p.path)))]),
+  );
 }
 
 /**
